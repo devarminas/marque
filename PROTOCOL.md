@@ -195,6 +195,17 @@ and both look like client bugs.
 4. A connection whose send queue is full is closed. It is never waited on. The tick loop must
    not be blocked by a slow client.
 
+**Two ways a slow client dies, and which one wins is currently undeclared.** A write that
+blocks past the write timeout reports one reason; a send queue that fills first reports
+another. Which happens depends on frame size and broadcast rate, not on anything either the
+code or this file states. In M0 the queue always wins, in microseconds, because frames are
+small and frequent. If M1 adds larger or rarer frames, the same stalled client could start
+reporting a broken socket instead of a slow one, and anything downstream that distinguishes
+"too slow" from "socket broke" would silently change meaning without a single line of code
+changing. **Decide which is authoritative before M1 adds its first new message.** This is a
+semantics decision, not a code change, and it is cheap now and expensive after something
+depends on it.
+
 **Client.** Appliers are idempotent, because a redundant message is cheaper to tolerate than to
 prevent.
 
