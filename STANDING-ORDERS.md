@@ -71,6 +71,14 @@ Full detail in `NOTES.md`. Summary:
 
 - **M0**, pilot. Two clients connect, click to move, see each other walk. Stubbed straight-line
   pathing, no DB, no items, hardcoded player ids. JSON event log wired from tick zero.
+  Split into three units, one PR each, per **Unit sizing** below.
+  - **M0a**, Go server, complete and self-verifying. Protocol, tick loop, stubbed pathing,
+    event log, WebSocket hub, two-real-client integration test. Merges on its own.
+  - **M0b**, Godot to Go interop. The smallest Godot project that connects, sends a scripted
+    `move_to`, and asserts on `welcome` and `path`. Headless, no camera, no rendering. Exists
+    to retire the highest-risk assumption in the program in the smallest diff that can.
+  - **M0c**, the playable client. Scene, orbiting camera, click-to-move, avatars walking
+    polylines. This is where "see each other walk" is proven.
 - **M1**, MVP. One item on the ground, two clients click it, exactly one gets it. Pickup and
   drop. In-memory store. Survives a server restart is out of scope until Postgres.
 - **M2**. Reconnect. Sequence numbers and server-side dedupe.
@@ -92,13 +100,48 @@ none of them exist. What survives the collapse, because it is what actually catc
 
 Reintroduce the store only if the queue outgrows a single drain. It has not.
 
+## Unit sizing
+
+A unit is one PR, one writer, one branch, one review sitting. Cut units on these lines, in
+order, and prefer more small PRs over fewer large ones.
+
+1. **Never put two languages or two toolchains in one PR.** A reviewer switching between Go
+   concurrency and Godot scene authoring inside one diff reviews neither well. `server/` and
+   `client/` do not appear in the same PR.
+2. **Every unit must be independently verifiable on merge day**, with a behavioral verdict, not
+   `type-check-only`. A unit that can only be checked once a later unit lands is mis-cut.
+3. **Cut on the risk axis before the layer axis.** Given a choice, the smaller PR is the one
+   that retires the scariest assumption. A tiny diff that proves two systems can talk is worth
+   more than a large one that assumes it.
+4. **Split where the verification cost changes.** Headless-verifiable work and work that needs
+   a display are different units, because they are different verify recipes.
+
+A fixed written protocol is what makes small units safe. Once the coordinator has specified
+the contract in the brief, separate writers cannot diverge, so "they would each guess it" stops
+being a reason to merge units. Specify the contract, then cut.
+
+## Pasting these orders
+
+Paste this file verbatim into every worker spawn and every resume, and **name the commit SHA
+the paste came from**. This file changes as the program learns, so an unpinned paste silently
+drifts from the file on disk and the worker cannot tell which one binds. On conflict, the file
+in the repo wins and the worker reports the drift.
+
 ## Program state
 
 Bookkeeping from the previous session is landed. The 3D, 150ms, and desktop-only decisions are
 recorded in `NOTES.md`, along with the ground-plane `(x, z)` coordinate convention that the 3D
 decision left ambiguous.
 
-- **M0** is the pilot and is in flight. It exists to falsify the brief template and the verify
-  recipe while that costs one worker instead of ten. Fix the contract from what it teaches
-  before any fan-out.
+- **M0a** is the pilot and is in flight. It exists to falsify the brief template, the verify
+  recipe, and the unit size while that costs one worker instead of ten. Fix the contract from
+  what it teaches before any fan-out.
+- **M0b** and **M0c** are scoped but not spawned. They wait for M0a to merge, because the pilot
+  runs alone by design and because both verify against a real server rather than a stub.
 - **M1** and **M2** are not scoped yet and must not be until M0 lands.
+
+A first attempt at M0 as a single server-plus-client unit was spawned and killed before it
+committed. The cut was wrong: it put two toolchains in one PR, and the reason given for
+merging them (that separate writers would guess the protocol and diverge) was already void,
+because the coordinator had fixed the protocol in the brief. **Unit sizing** above is the rule
+that came out of it.
