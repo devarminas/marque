@@ -27,9 +27,19 @@ usable, not good.
 
 ## Movement feel
 
-- **Walk speed.** Server-side, in world units per second, sent in the `speed` field of the path
-  message. RuneScape's walk is deliberate and unhurried on purpose. We have not decided whether
-  Marque matches that or moves faster.
+- **Walk speed, currently `3.0` world units per second** in `game.WalkSpeed`, broadcast in the
+  `speed` field of every path message. RuneScape's walk is deliberate and unhurried on purpose.
+  We have not decided whether Marque matches that or moves faster. Changing it is one constant.
+- **`MinPathLength`, currently `1e-3` world units.** How near a click has to be to your feet
+  before the server says "you are already there" instead of walking you. Wrong feels like small
+  positional adjustments being silently swallowed.
+- **Send buffer, currently `64` frames per connection.** How far a lagging client may fall
+  behind before the server drops it. Wrong feels like players on poor connections being kicked
+  during busy moments. This is a real tradeoff and not just a number: the buffer exists so a
+  slow client can never block the tick loop.
+- **Spawn point, currently the origin for everyone.** Fine for M0's two capsules, visibly wrong
+  the first time five people connect and stack inside each other. There is no collision in M0,
+  so nothing prevents it.
 - **Click-to-first-step latency.** One server round trip by design (see NOTES.md, Movement). If
   it reads as sluggish, the documented escape hatch is cosmetic client-side pathing that
   reconciles when the server path lands. Do not build that until it actually feels bad.
