@@ -124,7 +124,7 @@ Bookkeeping from the previous session is landed. The 3D, 150ms, and desktop-only
 recorded in `NOTES.md`, along with the ground-plane `(x, z)` coordinate convention that the 3D
 decision left ambiguous.
 
-Five units merged, each with a verdict recorded in its PR body, which is the ledger.
+Six units merged, each with a verdict recorded in its PR body, which is the ledger.
 
 | Unit | PR | Verdict | What |
 |---|---|---|---|
@@ -133,14 +133,12 @@ Five units merged, each with a verdict recorded in its PR body, which is the led
 | M0d | #3 | `live-ui-verified` | Tick clock, polyline walker, player avatar |
 | M0f | #4 | `unit-test-verified` | The two untested tick-loop protections |
 | M0b | #5 | `unit-test-verified` | Godot to Go interop, client networking layer |
+| M0g | #6 | `unit-test-verified` | The event log records what a joining client was told |
 
 **Godot and Go demonstrably interoperate.** `scripts/interop_test.ps1` builds the server, binds
 a free port, runs the whole Godot suite against a live `marqued`, and shuts it down. That is
 the command to run to know the stack is alive.
 
-- **M0g** is in flight on `m0g-replay-log`. Closes the gap where a path replayed to a joining
-  client produced no event-log line at all, so the log could not reconstruct what that client
-  was told.
 - **M0e** is the last unit. Wiring: network state drives avatar spawn and despawn, avatars walk
   their paths, a ground click sends a `move_to`. This is where "two clients see each other
   walk" gets proven and M0 is done.
