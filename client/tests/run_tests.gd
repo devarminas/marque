@@ -29,8 +29,17 @@ extends SceneTree
 ## 2. The tests hang. Same ending, same false pass.
 ## 3. A suite runs but asserts nothing. Zero assertions and zero failures is
 ##    indistinguishable from a pass unless the count is checked.
+## 4. The main loop ends before the run reported at all, which is what
+##    [code]--quit-after[/code] does when it is set below
+##    [constant WATCHDOG_FRAMES]. The engine quits normally and the process
+##    exits 0 having proven nothing.
 ##
-## All three are watched below and all three exit 1.
+## All four are watched below and all four exit 1. 4 is caught in
+## [method _finalize], which runs however the main loop ended and can still set
+## the exit code, because [method SceneTree.quit] is the only way to set one:
+## Godot 4.7 does not expose [code]OS.exit_code[/code]. That makes the watchdog
+## sitting below the documented [code]--quit-after[/code] a second defence
+## rather than the only one.
 
 ## Suites that need no scene tree. Order is the order they run in.
 const TREE_FREE_SUITES: Array = [
@@ -51,6 +60,10 @@ const TREE_FREE_SUITES: Array = [
 const SCENE_SUITES: Array = [
 	{"name": "world and camera", "scene": "res://tests/test_world.tscn"},
 	{"name": "player avatar", "scene": "res://tests/test_avatar.tscn"},
+	# Last because it is the only suite that talks to another process. Its
+	# decoding half runs with no server; its live half needs MARQUE_WS_URL and
+	# is what scripts/interop_test.ps1 exists to provide.
+	{"name": "interop", "scene": "res://tests/test_interop.tscn"},
 ]
 
 const Assertions := preload("res://tests/assertions.gd")
@@ -96,6 +109,15 @@ func _initialize() -> void:
 		return
 	process_frame.connect(_on_process_frame)
 	_start_scene_suite(0)
+
+
+## The last thing the main loop does, whatever ended it. A run that ends without
+## having reported is a run that proved nothing, and the exit code has to say so.
+func _finalize() -> void:
+	if _finished:
+		return
+	push_error("tests did not run to completion: the main loop ended after %d frames" % _frames)
+	quit(1)
 
 
 ## Returns false when a suite failed so badly that the scene suites are not worth
