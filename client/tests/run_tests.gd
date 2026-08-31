@@ -60,10 +60,17 @@ const TREE_FREE_SUITES: Array = [
 const SCENE_SUITES: Array = [
 	{"name": "world and camera", "scene": "res://tests/test_world.tscn"},
 	{"name": "player avatar", "scene": "res://tests/test_avatar.tscn"},
-	# Last because it is the only suite that talks to another process. Its
-	# decoding half runs with no server; its live half needs MARQUE_WS_URL and
-	# is what scripts/interop_test.ps1 exists to provide.
+	# The two suites that talk to another process come last. Each has a half
+	# that runs with no server and a half that needs MARQUE_WS_URL, which is
+	# what scripts/interop_test.ps1 exists to provide.
+	#
+	# Interop before wiring, and the order is load-bearing: interop asserts that
+	# it is the first client on a fresh server, on ids assigned from 1 and on a
+	# world containing only its own clients. Wiring makes the opposite
+	# assumption and learns every id from a welcome, so it can follow anything
+	# but cannot be followed by that.
 	{"name": "interop", "scene": "res://tests/test_interop.tscn"},
+	{"name": "wiring", "scene": "res://tests/test_wiring.tscn"},
 ]
 
 const Assertions := preload("res://tests/assertions.gd")
@@ -71,13 +78,19 @@ const Assertions := preload("res://tests/assertions.gd")
 ## Frames to allow for the deferred scene change before checking it took.
 const STARTUP_GRACE_FRAMES := 10
 
-## Upper bound on the whole run. A stuck-run detector, not a performance budget:
-## the suites here settle in well under 200 frames.
+## Upper bound on the whole run. A stuck-run detector, not a performance budget.
 ##
 ## Deliberately below the [code]--quit-after 900[/code] in the documented
 ## command. [code]--quit-after[/code] exits 0, so a watchdog above it would let a
 ## hung run report success — the exact false pass this runner exists to catch.
-const WATCHDOG_FRAMES := 600
+## That relationship is the invariant; the number itself only has to sit above
+## what a healthy run costs.
+##
+## Raised from 600 for the wiring suite, whose live half walks a real avatar
+## across real seconds behind a 60 fps cap: a healthy full run against a live
+## server measures around 550 frames, which left no room to tell a slow machine
+## from a hung one.
+const WATCHDOG_FRAMES := 850
 
 var _frames := 0
 var _suite_frames := 0

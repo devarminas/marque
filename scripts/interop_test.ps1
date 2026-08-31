@@ -17,9 +17,16 @@
     guessed interval, and the line cannot appear before the listener is bound,
     because the server binds before it announces.
 
-    The suite skips itself when MARQUE_WS_URL is unset, so a green Godot exit is
-    not on its own proof that anything was tested. This script requires the
-    suite's "INTEROP RAN" line and fails without it.
+    The suites that need a server skip themselves when MARQUE_WS_URL is unset,
+    so a green Godot exit is not on its own proof that anything was tested. This
+    script requires each of their "RAN" lines, and the runner's own "PASS:" line,
+    and fails without any of them.
+
+    It also requires the server to still be running when the suite ends. A
+    marqued that panicked after the last frame the suite awaited satisfies every
+    assertion above it, so the shutdown is the only place that can notice, and
+    anything on the server's stderr is a failure for the same reason: the event
+    log is stdout, and nothing routine is written to stderr.
 
 .PARAMETER Godot
     The Godot 4 executable. Defaults to $env:GODOT, then "godot" on PATH.
@@ -82,6 +89,10 @@ try {
         -ArgumentList "-addr", "127.0.0.1:0" `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
+    # Touching Handle caches it. Without it a -PassThru process object reads its
+    # ExitCode back as empty once the process is gone, and the message below
+    # about a server that died would not be able to say what it died of.
+    $null = $server.Handle
 
     $address = $null
     $deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
@@ -130,33 +141,63 @@ try {
         $failures.Add("the Godot suite exited $($godotRun.ExitCode)")
     }
 
-    # A green exit proves nothing on its own: the interop suite skips when it
-    # has no URL, and a skip that nothing checks is a suite that quietly stopped
+    # A green exit proves nothing on its own: a suite can quit before asserting
+    # anything and still exit 0, and the server-backed suites skip when they
+    # have no URL. A skip that nothing checks is a suite that quietly stopped
     # running.
     $transcript = ""
     if (Test-Path $godotOut) { $transcript = Get-Content -Path $godotOut -Raw }
-    if ($transcript -match "INTEROP SKIPPED") {
-        $failures.Add("the interop suite skipped itself despite MARQUE_WS_URL being set")
-    }
-    if ($transcript -match "INTEROP RAN: (\d+) assertions, (\d+) failed") {
-        $ran = [int]$Matches[1]
-        $failed = [int]$Matches[2]
+
+    # The runner's own verdict. STANDING-ORDERS.md requires this line rather
+    # than the exit code, because the exit code is what the false passes look
+    # like.
+    if ($transcript -match "PASS: (\d+) assertion\(s\) held across (\d+) suite\(s\)") {
         Write-Host ""
-        Write-Host "==> interop: $ran assertions, $failed failed"
-        if ($ran -lt 1) { $failures.Add("the interop suite ran no assertions") }
-        if ($failed -ne 0) { $failures.Add("$failed interop assertion(s) failed") }
+        Write-Host "==> runner: PASS, $($Matches[1]) assertions across $($Matches[2]) suites"
     } else {
-        $failures.Add("the interop suite never reported (no 'INTEROP RAN' line)")
+        $failures.Add("the Godot runner never printed a 'PASS:' line")
+    }
+
+    foreach ($suite in @("INTEROP", "WIRING")) {
+        if ($transcript -match "$suite SKIPPED") {
+            $failures.Add("the $suite suite skipped itself despite MARQUE_WS_URL being set")
+        }
+        if ($transcript -match "$suite RAN: (\d+) assertions, (\d+) failed") {
+            $ran = [int]$Matches[1]
+            $failed = [int]$Matches[2]
+            Write-Host "==> $suite`: $ran assertions, $failed failed"
+            if ($ran -lt 1) { $failures.Add("the $suite suite ran no assertions") }
+            if ($failed -ne 0) { $failures.Add("$failed $suite assertion(s) failed") }
+        } else {
+            $failures.Add("the $suite suite never reported (no '$suite RAN' line)")
+        }
     }
 } catch {
     # The location matters: most of what can go wrong here is environmental
     # (no Go, no Godot, a port that vanished) and the line number says which.
     $failures.Add("$($_.Exception.Message) [$($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())]")
 } finally {
-    if ($null -ne $server -and -not $server.HasExited) {
-        Write-Host "==> stopping marqued (pid $($server.Id))"
-        Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-        $server.WaitForExit(5000) | Out-Null
+    if ($null -ne $server) {
+        if ($server.HasExited) {
+            # The server outliving the suite is part of the contract, and this
+            # is the only place that can check it. A marqued that panics after
+            # the last frame the suite awaited satisfies every assertion above
+            # and would otherwise be reported as a clean run.
+            $failures.Add("marqued exited on its own with code $($server.ExitCode); it must outlive the suite")
+        } else {
+            Write-Host "==> stopping marqued (pid $($server.Id))"
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+            $server.WaitForExit(5000) | Out-Null
+        }
+    }
+    # The event log is stdout. Nothing routine goes to stderr, so anything here
+    # is a panic or a fatal, whether or not the process is still alive.
+    if (Test-Path $serverErr) {
+        $stderrText = Get-Content -Path $serverErr -Raw
+        if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+            $firstLine = $stderrText.Trim() -split "`r?`n" | Select-Object -First 1
+            $failures.Add("marqued wrote to stderr: $firstLine")
+        }
     }
     Show-File "marqued event log" $serverOut
     Show-File "marqued stderr" $serverErr
