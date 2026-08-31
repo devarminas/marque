@@ -7,24 +7,28 @@ extends Node
 ## exactly the one a mock would assume away: that Godot's [WebSocketPeer] and
 ## the Go server can talk to each other at all.
 ##
-## [b]Requires a server.[/b] The websocket URL comes from the environment
-## variable named by [constant URL_ENV], and the server must be freshly started
-## with no other clients attached: the suite asserts on sequentially assigned
-## player ids and on a world containing only its own clients. Run the whole
-## thing with
+## Two halves. The [b]decoding[/b] half needs nothing and always runs: frames
+## are handed to the client by hand, which is also the only way to reach the
+## shapes a conforming server never sends. The [b]live[/b] half needs a server,
+## and skips loudly without one.
+##
+## [b]The live half's server[/b] must be freshly started with no other clients
+## attached: it asserts on sequentially assigned player ids and on a world
+## containing only its own clients. Its websocket URL comes from the environment
+## variable named by [constant URL_ENV]. Run the whole thing with
 ##
 ## [codeblock]
 ## powershell -ExecutionPolicy Bypass -File scripts/interop_test.ps1
 ## [/codeblock]
 ##
 ## which builds the server, starts it on a free port, exports the variable, runs
-## the suite, and shuts the server down. With the variable unset the suite skips
-## loudly and the run stays green, so the plain
-## [code]--script res://tests/run_tests.gd[/code] command still works without a
-## server; that script checks for the skip and fails on it.
+## the suite, and shuts the server down. It also fails a run whose suite skipped,
+## so that the plain [code]--script res://tests/run_tests.gd[/code] command can
+## stay green without a server without that green ever being mistaken for
+## interop having been tested.
 ##
-## Reports through `finished` and `passed` rather than quitting the tree. See
-## `run_tests.gd`.
+## Reports through the runner's suite contract rather than quitting the tree.
+## See `run_tests.gd`.
 
 ## Names the environment variable carrying the websocket URL.
 const URL_ENV := "MARQUE_WS_URL"
@@ -177,12 +181,10 @@ class Peer:
 		return out
 
 
-## Set once the suite is done; read by `run_tests.gd`. See its suite contract.
-var finished := false
-var passed := false
+const Assertions := preload("res://tests/assertions.gd")
 
-var _failures: Array[String] = []
-var _assertions := 0
+var _assertions := Assertions.new()
+var _finished := false
 var _peers: Array[Peer] = []
 var _restore_max_fps := 0
 ## Reported at the end so the margin against the runner's watchdog is visible
@@ -190,20 +192,40 @@ var _restore_max_fps := 0
 var _frames := 0
 
 
+## Suite contract, polled by `run_tests.gd`. This suite reports its result and
+## does not quit; the runner owns the exit code.
+func is_finished() -> bool:
+	return _finished
+
+
+func get_failures() -> PackedStringArray:
+	return _assertions.failures
+
+
+func get_assertion_count() -> int:
+	return _assertions.assertion_count
+
+
 func _process(_delta: float) -> void:
 	_frames += 1
 
 
 func _ready() -> void:
+	# Always runs. The decoder is entirely client-side, so a frame injected by
+	# hand exercises it exactly as a frame off the socket does, and this half of
+	# the suite is what keeps a serverless run from asserting nothing at all.
+	print("== interop: decoding ==")
+	_test_decoding_without_a_server()
+
 	var url := OS.get_environment(URL_ENV)
 	if url.is_empty():
 		# Loud, greppable, and checked for by scripts/interop_test.ps1. A skip
 		# that nothing checks is a suite that quietly stopped running.
 		print("INTEROP SKIPPED: %s is unset; run scripts/interop_test.ps1 to exercise it" % URL_ENV)
-		_finish()
+		_finished = true
 		return
 
-	print("== interop: %s ==" % url)
+	print("== interop: live against %s ==" % url)
 	_restore_max_fps = Engine.max_fps
 	Engine.max_fps = MAX_FPS
 
@@ -214,9 +236,141 @@ func _ready() -> void:
 		peer.net.close()
 	print(
 		"INTEROP RAN: %d assertions, %d failed, %d frames"
-		% [_assertions, _failures.size(), _frames]
+		% [_assertions.assertion_count, _assertions.failures.size(), _frames]
 	)
-	_finish()
+	_finished = true
+
+
+## Every message the protocol defines, decoded from a hand-written frame.
+##
+## Needs no server, and covers the two things the live half cannot reach: the
+## message shapes this server never emits (a one-element halt path, an `error`
+## with no `re`), and the compatibility rules, since a conforming server sends
+## nothing that would trip them.
+func _test_decoding_without_a_server() -> void:
+	var probe := Peer.new("D")
+	_peers.append(probe)
+	add_child(probe.net)
+
+	probe.net.ingest_text_frame(
+		'{"welcome":{"you":7,"tick_ms":150,"tick":142,'
+		+ '"players":[{"id":7,"x":1.5,"z":-2.5},{"id":9,"x":0.0,"z":0.0}]}}'
+	)
+	_check(not probe.welcome.is_empty(), "welcome decodes")
+	if probe.welcome.is_empty():
+		return
+	_check(int(probe.welcome["you"]) == 7, "welcome.you is 7")
+	# The trap PROTOCOL.md names: every JSON number arrives as a float, so a
+	# tick compared with == against an int is wrong unless it was converted.
+	_check(
+		typeof(probe.welcome["tick"]) == TYPE_INT and probe.welcome["tick"] == 142,
+		"welcome.tick is the int 142, not a float (got %s)" % [probe.welcome["tick"]],
+	)
+	_check(
+		typeof(probe.welcome["tick_ms"]) == TYPE_INT and probe.welcome["tick_ms"] == 150,
+		"welcome.tick_ms is the int 150",
+	)
+	var ids: PackedInt64Array = probe.welcome["ids"]
+	var positions: PackedVector2Array = probe.welcome["positions"]
+	_check(Array(ids) == [7, 9], "welcome.players ids are [7, 9], got %s" % [ids])
+	_check(positions.size() == 2, "welcome.players carries two positions")
+	if positions.size() == 2:
+		# The object encoding, {"id":..,"x":..,"z":..}.
+		_check(_near(positions[0], Vector2(1.5, -2.5)), "welcome position unpacks x and z")
+		_check(
+			is_equal_approx(positions[0].y, -2.5),
+			"Vector2.y carries world Z, not world Y (got %f)" % positions[0].y,
+		)
+
+	# Compatibility rule 2: a sender may add fields, including M2's seq.
+	probe.net.ingest_text_frame('{"spawn":{"id":9,"x":3.0,"z":4.0,"seq":5,"colour":"red"}}')
+	_check(probe.spawns.size() == 1, "spawn decodes past unknown fields in a known body")
+	if probe.spawns.size() == 1:
+		_check(int(probe.spawns[0]["id"]) == 9, "spawn.id is 9")
+		_check(
+			_near(probe.spawns[0]["position"], Vector2(3.0, 4.0)), "spawn position unpacks to (3, 4)"
+		)
+
+	probe.net.ingest_text_frame('{"despawn":{"id":9}}')
+	_check(probe.despawns == [9], "despawn decodes to [9], got %s" % [probe.despawns])
+
+	# The array encoding, [[x, z], ...]. Deliberately different from spawn's,
+	# and the second place a client gets coordinates subtly wrong.
+	probe.net.ingest_text_frame(
+		'{"path":{"id":7,"start_tick":143,"points":[[1.5,-2.5],[10.0,20.0]],"speed":3.0}}'
+	)
+	_check(probe.paths.size() == 1, "path decodes")
+	if probe.paths.size() == 1:
+		var path: Dictionary = probe.paths[0]
+		_check(
+			typeof(path["start_tick"]) == TYPE_INT and path["start_tick"] == 143,
+			"path.start_tick is the int 143, not a float",
+		)
+		var points: PackedVector2Array = path["points"]
+		_check(points.size() == 2, "path.points has two points")
+		if points.size() == 2:
+			_check(_near(points[0], Vector2(1.5, -2.5)), "path.points[0] unpacks from [x, z]")
+			_check(_near(points[1], Vector2(10.0, 20.0)), "path.points[1] unpacks from [x, z]")
+		_check(is_equal_approx(float(path["speed"]), 3.0), "path.speed is 3.0")
+
+	# One point means "halt here", and is the whole of "stop walking". This
+	# server only emits it for a degenerate click mid-walk, which the live half
+	# does not provoke.
+	probe.net.ingest_text_frame('{"path":{"id":7,"start_tick":144,"points":[[1.5,-2.5]],"speed":3.0}}')
+	_check(probe.paths.size() == 2, "a one-element halt path is accepted")
+	if probe.paths.size() == 2:
+		_check(
+			(probe.paths[1]["points"] as PackedVector2Array).size() == 1,
+			"the halt path keeps its single point",
+		)
+
+	probe.net.ingest_text_frame('{"error":{"re":"move_to","msg":"out of bounds"}}')
+	_check(probe.errors.size() == 1, "error decodes")
+	if probe.errors.size() == 1:
+		_check(String(probe.errors[0]["re"]) == "move_to", "error.re is carried through")
+
+	# "re" is absent, not null, when the frame could not be attributed.
+	probe.net.ingest_text_frame('{"error":{"msg":"text frames only"}}')
+	_check(probe.errors.size() == 2, "an error with no re still decodes")
+	if probe.errors.size() == 2:
+		_check(
+			String(probe.errors[1]["re"]) == "",
+			'a missing error.re reads as "", got "%s"' % String(probe.errors[1]["re"]),
+		)
+
+	# Compatibility rule 1: unknown top-level key, logged loudly and ignored.
+	probe.net.ingest_text_frame('{"tick":{"t":9001}}')
+	_check(
+		Array(probe.unknown_keys) == ["tick"],
+		'an unknown key is reported as "tick", got %s' % [probe.unknown_keys],
+	)
+
+	# Compatibility rule 3, plus the frames a parser gives back as null or as a
+	# non-object. None of them may reach a signal.
+	var before := _signal_tally(probe)
+	probe.net.ingest_text_frame("{}")
+	probe.net.ingest_text_frame('{"spawn":{"id":1,"x":0,"z":0},"despawn":{"id":1}}')
+	probe.net.ingest_text_frame("not json at all")
+	probe.net.ingest_text_frame('["spawn"]')
+	probe.net.ingest_text_frame('{"spawn":42}')
+	probe.net.ingest_text_frame('{"path":{"id":7,"start_tick":1,"points":[],"speed":3.0}}')
+	probe.net.ingest_text_frame('{"spawn":{"id":1,"x":0}}')
+	_check(
+		_signal_tally(probe) == before,
+		"seven malformed frames emit nothing (%s then %s)" % [before, _signal_tally(probe)],
+	)
+
+
+## Everything the probe has heard, as one comparable value.
+func _signal_tally(peer: Peer) -> Array:
+	return [
+		peer.welcome.size(),
+		peer.spawns.size(),
+		peer.despawns.size(),
+		peer.paths.size(),
+		peer.errors.size(),
+		peer.unknown_keys.size(),
+	]
 
 
 func _run(url: String) -> void:
@@ -626,18 +780,4 @@ func _distance_to_segment(from: Vector2, to: Vector2, point: Vector2) -> float:
 
 
 func _check(condition: bool, message: String) -> void:
-	_assertions += 1
-	if condition:
-		print("  ok    " + message)
-		return
-	_failures.append(message)
-	print("  FAIL  " + message)
-
-
-func _finish() -> void:
-	if not _failures.is_empty():
-		printerr("FAIL: interop, %d assertion(s) failed" % _failures.size())
-		for failure in _failures:
-			printerr("  - " + failure)
-	passed = _failures.is_empty()
-	finished = true
+	_assertions.check(condition, message)
