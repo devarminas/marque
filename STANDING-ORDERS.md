@@ -241,6 +241,20 @@ about code it did not write, especially already-merged code, is the case where a
 story travels furthest before anyone checks. Do not promote one into this file until it has
 been reproduced against the merged artifact.
 
+**That rule was written and then immediately violated, so here is the sharper version.**
+`PROTOCOL.md` was given the sentence "in M0 the queue always wins, in microseconds, because
+frames are small and frequent", taken from the M0f writer's report. Its verifier probed a real
+stalled peer and found the opposite: M0's frames are small but *infrequent*, since M0 has no
+per-tick broadcasts and no heartbeat, so ordinary traffic loses that race and dies by timeout
+minutes later. The race also turned out to have a third outcome nobody had named.
+
+**Reproduce quantitative claims. Structural ones are cheaper to trust.** "This function is only
+reachable from that goroutine" is checkable by reading and hard to get wrong. "This always
+happens", "in microseconds", "this can never occur", and any specific magnitude are claims
+about runtime behaviour under conditions nobody enumerated, and they are what belongs in a
+probe before they belong in a contract file. Both times this program has written a falsehood
+into a contract, it was a quantitative claim accepted from a report.
+
 ## Pasting these orders
 
 Paste this file verbatim into every worker spawn and every resume, and **name the commit SHA

@@ -210,16 +210,23 @@ and both look like client bugs.
 4. A connection whose send queue is full is closed. It is never waited on. The tick loop must
    not be blocked by a slow client.
 
-**Two ways a slow client dies, and which one wins is currently undeclared.** A write that
-blocks past the write timeout reports one reason; a send queue that fills first reports
-another. Which happens depends on frame size and broadcast rate, not on anything either the
-code or this file states. In M0 the queue always wins, in microseconds, because frames are
-small and frequent. If M1 adds larger or rarer frames, the same stalled client could start
-reporting a broken socket instead of a slow one, and anything downstream that distinguishes
-"too slow" from "socket broke" would silently change meaning without a single line of code
-changing. **Decide which is authoritative before M1 adds its first new message.** This is a
-semantics decision, not a code change, and it is cheap now and expensive after something
-depends on it.
+**Three ways a slow client dies, and which one wins is undeclared.** A send queue that fills
+reports one reason. A write that blocks past the write timeout reports another. And when that
+timed-out write tears the connection down, the read pump can reach the close first and report
+a third, a read error, for what was actually a slow client.
+
+Which one you get depends on the send rate into a jammed socket, not on anything the code or
+this file states. Measured against a real stalled peer: sustained traffic above roughly
+thirteen frames per second fills the 64-slot queue inside the write timeout's window, so the
+queue wins. Below that the timeout wins, and it can surface as a read error. **M0's ordinary
+traffic is the slow case**, because M0 has no per-tick broadcasts and no heartbeat, so a
+stalled client jams nothing for minutes and then dies by timeout. The queue branch is reached
+in the test suite only by a deliberate flood of oversized frames.
+
+**Decide which reason is authoritative before M1 adds its first new message.** This is a
+semantics decision rather than a code change, it is cheap now, and it is expensive once
+anything branches on the reason string. Nothing in M0 does, which is the only reason this is
+not urgent.
 
 **Client.** Appliers are idempotent, because a redundant message is cheaper to tolerate than to
 prevent.
