@@ -19,12 +19,15 @@ extends Node3D
 ##
 ## [codeblock]
 ## godot --path client -- --server ws://127.0.0.1:8080/ws \
-##     --shots C:/tmp/marque/a --click 0.30,0.72
+##     --shots C:/tmp/marque/a --click 0.30,0.72 --phase 1
 ## [/codeblock]
 ##
-## Which waits until it can see another player, captures a frame, clicks the
-## ground, waits, and captures a second frame, printing a greppable line per
-## capture and per body it drew. `scripts/two_client_demo.ps1` runs two of them.
+## Which waits until it can see another player, then runs two phases. In its own
+## phase it clicks the ground and walks; in the other phase it stands still and
+## watches. It captures a frame near the start and near the end of each phase,
+## printing a greppable line per capture and per body it drew.
+## `scripts/two_client_demo.ps1` runs two of them on opposite phases, so each
+## client is the walker once and the watcher once.
 ##
 ## The flags do nothing when they are absent, so the shipped scene is unchanged
 ## by their existence. [method OS.get_cmdline_user_args] is everything after the
@@ -48,6 +51,19 @@ const SHOTS_FLAG := "--shots"
 ## Click the ground at a viewport fraction, as `--click 0.30,0.72`.
 const CLICK_FLAG := "--click"
 
+## Which of the demo's phases this client walks in, as `--phase 1`. Absent or 0
+## means it never walks.
+##
+## The phases exist so that the two clients take turns. While one walks the
+## other stands still, and a client that stands still has a camera that stands
+## still, which is what makes its two frames comparable pixel for pixel. Both
+## clients walk over the run, so both directions of "each sees the other walk"
+## are captured, and each direction gets its still-camera window.
+const PHASE_FLAG := "--phase"
+
+## How many phases the demo runs. One per client.
+const DEMO_PHASES := 2
+
 ## Frames to let the renderer settle before capturing. The first frame has no
 ## shadows and no sky resolved yet, so a capture there proves nothing.
 const SCREENSHOT_WARMUP_FRAMES := 15
@@ -60,18 +76,38 @@ const DEMO_MIN_PLAYERS := 2
 ## other process starting Godot, importing, and connecting.
 const DEMO_JOIN_TIMEOUT_MSEC := 20000
 
-## Milliseconds between the click and the first capture.
+## Milliseconds between a phase's click and that phase's first capture.
 ##
 ## The capture is deliberately after the click rather than before it. Everyone
 ## spawns at the origin in M0, so a frame taken before anybody has walked shows
 ## two capsules standing inside each other, which is a picture of one capsule.
-## Letting the walker get clear first is what makes both frames show two bodies.
-const DEMO_SETTLE_MSEC := 600
+## Letting the walker get clear first is what makes every frame show two bodies.
+const DEMO_SETTLE_MSEC := 400
 
-## Milliseconds between the two captures. At the server's 3.0 units per second
-## this is several world units of travel, which is a displacement nobody has to
-## squint at.
-const DEMO_WALK_MSEC := 1200
+## Milliseconds between a phase's two captures. At the server's 3.0 units per
+## second this is several world units of travel, which is a displacement nobody
+## has to squint at.
+const DEMO_WALK_MSEC := 1400
+
+## Milliseconds between one phase's last capture and the next phase's click.
+##
+## Long enough that the previous phase's walker has stopped, so that exactly one
+## player is moving in any capture window — and then longer again, because the
+## camera rig chases its target with exponential damping and keeps producing
+## distinct positions for a while after the target stops. A frame captured while
+## the rig is still converging is not a still-camera frame, and the pixel
+## control in `scripts/two_client_demo.ps1` measured exactly that at 300ms.
+const DEMO_PHASE_GAP_MSEC := 1200
+
+## Milliseconds to stay connected after the last capture.
+##
+## The two clients keep time independently, off an event they both observe, and
+## they drift by a few hundred milliseconds over four captures because their
+## windows do not render at exactly the same rate. Without this hold the client
+## that finishes first quits, the server despawns it, and the other client's
+## last frame has one body in it instead of two. Generous: it costs nothing and
+## the failure it prevents is the whole point of the run.
+const DEMO_HOLD_MSEC := 2000
 
 
 func _ready() -> void:
@@ -111,23 +147,34 @@ func _run_demo(args: Array) -> void:
 
 	# Both clients cross the "somebody else is here" line within a frame or two
 	# of each other — one learns it from `welcome`, the other from the `spawn`
-	# that same join produced — so timing both captures off that line keeps two
-	# separate processes' frames comparable without either knowing about the
-	# other's schedule.
+	# that same join produced — so timing every phase off that line keeps two
+	# separate processes in step without either knowing about the other's
+	# schedule, and without a phase message existing on the wire.
 	var click := _argument_after(args, CLICK_FLAG)
-	if not click.is_empty():
-		_click_ground_at(_parse_fraction(click))
+	var my_phase := _argument_after(args, PHASE_FLAG).to_int()
+	var shot := 0
 
-	await _wait_msec(DEMO_SETTLE_MSEC)
-	if not await _capture(session, prefix, 1):
-		get_tree().quit(1)
-		return
+	for phase in range(1, DEMO_PHASES + 1):
+		if phase > 1:
+			await _wait_msec(DEMO_PHASE_GAP_MSEC)
+		if phase == my_phase and not click.is_empty():
+			_click_ground_at(_parse_fraction(click))
 
-	await _wait_msec(DEMO_WALK_MSEC)
-	if not await _capture(session, prefix, 2):
-		get_tree().quit(1)
-		return
+		await _wait_msec(DEMO_SETTLE_MSEC)
+		shot += 1
+		if not await _capture(session, prefix, shot):
+			get_tree().quit(1)
+			return
 
+		await _wait_msec(DEMO_WALK_MSEC)
+		shot += 1
+		if not await _capture(session, prefix, shot):
+			get_tree().quit(1)
+			return
+
+	# Held connected, not idle: the other client may still be composing its last
+	# frame, and this one leaving would empty a body out of it.
+	await _wait_msec(DEMO_HOLD_MSEC)
 	print("DEMO done")
 	get_tree().quit(0)
 
