@@ -29,6 +29,23 @@ const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 
 var _failures: Array[String] = []
 var _clicked_coordinates: Array[Vector2] = []
+var _assertion_count := 0
+var _finished := false
+
+
+## Suite contract, polled by [code]run_tests.gd[/code]. This suite reports its
+## result and does not quit: the runner owns the exit code, because a suite that
+## quits is a suite no later suite can run after.
+func is_finished() -> bool:
+	return _finished
+
+
+func get_failures() -> PackedStringArray:
+	return PackedStringArray(_failures)
+
+
+func get_assertion_count() -> int:
+	return _assertion_count
 
 
 func _ready() -> void:
@@ -50,14 +67,7 @@ func _ready() -> void:
 	await _test_left_click_emits_ground_clicked()
 	_test_ray_at_sky_returns_no_hit()
 
-	if _failures.is_empty():
-		print("PASS: all assertions held")
-		get_tree().quit(0)
-		return
-	printerr("FAIL: %d assertion(s) failed" % _failures.size())
-	for failure in _failures:
-		printerr("  - " + failure)
-	get_tree().quit(1)
+	_finished = true
 
 
 ## The nodes later units attach to must exist and must be authored, not built.
@@ -266,6 +276,7 @@ func _on_ground_clicked(x: float, z: float) -> void:
 
 
 func _check(condition: bool, message: String) -> void:
+	_assertion_count += 1
 	if condition:
 		print("  ok    " + message)
 		return

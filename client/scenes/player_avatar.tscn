@@ -1,0 +1,32 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/player_avatar.gd" id="1_avatar"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_avatar"]
+albedo_color = Color(0.16, 0.42, 0.88, 1)
+roughness = 0.75
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_body"]
+material = SubResource("StandardMaterial3D_avatar")
+radius = 0.4
+height = 1.8
+
+[sub_resource type="BoxMesh" id="BoxMesh_facing"]
+material = SubResource("StandardMaterial3D_avatar")
+size = Vector3(0.18, 0.18, 0.36)
+
+[node name="PlayerAvatar" type="Node3D"]
+script = ExtResource("1_avatar")
+ground_y = 0.0
+face_travel_direction = true
+turn_degrees_per_second = 540.0
+
+[node name="Body" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+cast_shadow = 1
+mesh = SubResource("CapsuleMesh_body")
+
+[node name="Facing" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, -0.42)
+cast_shadow = 1
+mesh = SubResource("BoxMesh_facing")
