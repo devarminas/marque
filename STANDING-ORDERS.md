@@ -65,6 +65,19 @@ authenticated as `devarminas`. git 2.55.
 
 Absent: `bun`, so the orch CLI is unavailable. Absent: Postgres, not needed until after M1.
 
+**Absent: any C compiler, so `go test -race` cannot run.** Go's race detector needs cgo, cgo
+needs a C toolchain, and `gcc`, `clang`, `cc`, `x86_64-w64-mingw32-gcc`, `zig`, and `tcc` are
+all missing from PATH and from the usual MSYS2, MinGW, TDM, LLVM, and Strawberry install
+locations. This is a **program-level gap, not a per-unit defect**. It affects every Go unit,
+and it specifically means the single-goroutine-ownership invariant is verified by construction
+and by concurrency tests rather than by the tool that actually proves it. Do not fail a Go unit
+for it and do not make a worker try to install one.
+
+Fix once, centrally, with `winget install --id MartinStorsjo.LLVM-MinGW.UCRT` or MSYS2
+mingw-w64, then re-verify every merged Go unit under `-race` in a single pass. Until then, a Go
+unit's verify recipe drops `-race` and its ledger row says so explicitly rather than silently
+omitting it.
+
 ## Milestones
 
 Full detail in `NOTES.md`. Summary:
@@ -130,6 +143,32 @@ order, and prefer more small PRs over fewer large ones.
 A fixed written protocol is what makes small units safe. Once the coordinator has specified
 the contract in the brief, separate writers cannot diverge, so "they would each guess it" stops
 being a reason to merge units. Specify the contract, then cut.
+
+## Writing a brief
+
+Learned from what the M0a and M0c writers reported back. Each line is here because a real
+worker lost real time to its absence.
+
+1. **Point at the contract file. Do not restate it.** `PROTOCOL.md` is the wire contract.
+   Enumerating its contents in a brief or a message creates a second, lossier contract, and the
+   two drift. The M0a amendment message listed six items and said five bind the unit; the file
+   carried a seventh binding rule the message never mentioned, and only the writer's diligence
+   caught it. Say "read the file", name the commit SHA, and stop.
+2. **Test files are the writer's.** A fixed file layout that lists only non-test files leaves a
+   writer unsure whether adding tests is a deviation. Say so explicitly.
+3. **A "known gotchas" section is where a plausible but false claim costs the most.** The M0a
+   brief asserted that a `move_to` could carry `NaN`. JSON cannot encode `NaN` as a literal, so
+   the writer built a test for a case that cannot occur. Verify a gotcha or mark it unverified.
+4. **Acceptance criteria must be achievable with the tooling that exists.** `-race` was required
+   and is impossible here. A criterion no one can satisfy trains writers to negotiate with the
+   acceptance list, which is the habit that ruins every verdict downstream.
+5. **A screenshot criterion must name the specific thing that would be missing.** "Shows
+   lighting" was passed by a build whose sun pointed at the sky, lit by ambient alone. "Shows a
+   cast shadow" would have failed it instantly.
+6. **Require the test runner to fail loudly on "tests did not run" and "tests did not finish".**
+   A runner that exits 0 because the test script failed to compile reports success for a build
+   that never executed. That is the worst thing a unit can hand a coordinator, and it shipped
+   once already.
 
 ## Pasting these orders
 
