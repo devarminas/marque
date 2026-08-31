@@ -41,6 +41,25 @@ usable, not good.
   the first time five people connect and stack inside each other. There is no collision in M0,
   so nothing prevents it.
 
+## What a first playtest will ask about
+
+Found by M0e, the unit that first rendered two real players at once.
+
+- **Everyone spawns at the origin, so two fresh clients are literally inside each other.**
+  Already parked under Movement feel as a number, but it now has a concrete consequence: the
+  milestone screenshot had to be re-timed to happen after somebody walked, because a frame taken
+  at join time photographs two coincident capsules as one. It is the first thing a human will
+  notice.
+- **The local player is visually identical to everyone else.** RuneScape distinguishes you by
+  name colour and a minimap dot. Marque has neither, so there is currently no way to tell which
+  capsule is you except by clicking and watching what moves.
+- **Nothing is drawn at the clicked point.** So a rejected click, a click on your own feet, and
+  a dropped frame all look identical to the player, which is nothing happening. The server's
+  `error` reply already reaches the client and currently becomes a log warning. This is the
+  cheapest large improvement in the list.
+- **`follow_damping` at 12.0 visibly trails at the start of a walk** in the demo captures. It
+  might be right. It needs someone watching it move rather than looking at a still.
+
 ## Scale cliffs, not tuning
 
 Not feel, but parked here for the same reason: real, unreachable today, and expensive to
