@@ -26,6 +26,37 @@ godot --headless --path . --script res://tests/run_tests.gd
 - Visual checks: game screenshots itself, don't automate the desktop.
   `get_viewport().get_texture().get_image().save_png("user://shot.png")`
 
+## Godot authoring traps
+
+Found the hard way while building the M0c scene. Every one is **silent**: no error, no warning,
+just a wrong result surfacing far from its cause. Read this before hand-authoring a `.tscn` or
+adding a headless test.
+
+- **`Transform3D(...)` in a `.tscn` takes nine basis floats row-major**, not three axis vectors.
+  Writing it as `(basis.x, basis.y, basis.z, origin)` gives you the transpose. A sun authored
+  that way pointed at the sky, and the scene still looked lit because sky ambient was doing the
+  work. Generate the string instead of hand-writing it:
+  `print(var_to_str(Transform3D(Basis.from_euler(...), origin)))`.
+- **`@export var camera: Camera3D` needs `node_paths=PackedStringArray("camera")` on the
+  `[node]` header.** Without it the assigned `NodePath` resolves to `null`. Nothing warns.
+- **Do not put `uid="uid://..."` on `ext_resource` lines.** Resolving them needs
+  `.godot/uid_cache.bin`, which only an editor scan writes, and `.godot/` is gitignored. A fresh
+  clone prints `invalid UID` warnings and falls back to the path. Reference by path.
+- **Global `class_name` types do not resolve without the editor cache.** On a fresh clone,
+  `godot --headless --path client --script ...` fails to *parse* any script that names such a
+  type and then cascades into a wall of unrelated inference errors. Use
+  `const Foo := preload("res://...")` as the type, or run `godot --headless --path client
+  --editor --quit` once first to build the cache.
+- **A headless test runner exits 0 when the test script fails to compile.** Zero assertions ran
+  and the run looks green. A runner must fail loudly on both "tests did not run" and "tests did
+  not finish", or it reports success for a build that never executed.
+- **A raycast needs the physics space to have stepped at least once.** Querying
+  `direct_space_state` during the first `_ready()` returns nothing useful and looks exactly like
+  a broken raycast. Collision layers and masks also default in ways that quietly exclude your
+  geometry; set them explicitly.
+- **"The screenshot shows lighting" is too weak an assertion.** A build with the sun pointing
+  the wrong way passes it, lit by ambient alone. Assert a **cast shadow**.
+
 ## JSON mode
 
 Autoload singleton, everything emits through it. NDJSON to stdout, one object per line:
@@ -72,7 +103,14 @@ follows the player's position; it never drives it.
 
 ## Color as semantics, not decoration
 
-Flat unlit materials, fixed palette:
+**Lit materials, fixed palette.** This said "flat unlit" and that was wrong for a 3D orbiting
+camera. Unlit geometry ignores the `DirectionalLight3D` entirely, so there is no cast shadow,
+and without a shadow a capsule standing on a plane has no readable contact point or depth.
+The palette's job is that a screenshot is legible at a glance, by a human and by an agent
+reading a captured PNG, and lighting serves that job rather than fighting it. The colors below
+are unchanged and remain semantic, not decorative.
+
+Fixed palette:
 
 | Color | Meaning |
 |---|---|

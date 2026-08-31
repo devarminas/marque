@@ -8,12 +8,22 @@ human can judge it in one sitting instead of rediscovering the context.
 
 ## Camera feel
 
-- **Orbit sensitivity, pitch clamp, zoom range.** Placeholder values chosen to be usable, not
-  good. Wrong feels like the camera fighting you when you try to look at something.
-- **Follow damping.** How hard the camera chases the player. Zero damping is rigid and slightly
-  nauseating, too much is soupy and hides where you are.
-- **Default pitch and distance on first spawn.** This is the first frame a player ever sees, so
-  it deserves an opinion rather than a default.
+Shipped values, all `@export` on `CameraRig` in `client/scripts/camera_rig.gd` and editable in
+the inspector on the `CameraRig` node of `client/scenes/main.tscn`. Every one was picked to be
+usable, not good.
+
+| Name | Value | What wrong feels like |
+|---|---|---|
+| `orbit_degrees_per_pixel` | `0.35` | The camera fights you when you try to look at something. |
+| `zoom_step` | `1.5` | Wheel notches too coarse, or too slow to matter. |
+| `follow_damping` | `12.0` | Rigid and slightly nauseating high, soupy and disorienting low. |
+| `pitch_min_degrees` | `-80.0` | Near top-down. Legal, probably not wanted. |
+| `pitch_max_degrees` | `-12.0` | Nearly level. The ground fills two pixels. |
+| `distance_min` | `4.0` | Clipping into the player capsule. |
+| `distance_max` | `32.0` | The player is a speck. |
+| `default_yaw_degrees` | `30.0` | The first frame a player ever sees. |
+| `default_pitch_degrees` | `-35.0` | Same. |
+| `default_distance` | `14.0` | Same. |
 
 ## Movement feel
 
@@ -34,7 +44,24 @@ human can judge it in one sitting instead of rediscovering the context.
 
 ## Art direction
 
-- The palette in NOTES.md is diagnostic, not aesthetic. Magenta-for-missing and flat unlit
-  capsules exist so an agent can read a screenshot. None of it is a look.
+- The palette in NOTES.md is diagnostic, not aesthetic. Magenta-for-missing and blue capsules
+  exist so an agent can read a screenshot. None of it is a look.
 - **When the human wants a look**, that is a separate pass over materials and lighting, and it
   should not touch the semantic colors used by the debug palette.
+
+Shipped values from M0c, all in `client/scenes/main.tscn`:
+
+- Camera `fov` `60.0`.
+- `Sun.light_energy` `1.2`, sun angle pitch `-50` yaw `-35`. This sets shadow direction and
+  length, which is what makes ground contact readable.
+- Ground checker `color_a` `(0.44, 0.44, 0.45)`, `color_b` `(0.33, 0.33, 0.34)`,
+  `square_size` `1.0`.
+- Player albedo `(0.16, 0.42, 0.88)`.
+- `ProceduralSkyMaterial` colors.
+- Ground extent `100x100`, and `GroundPicker.ray_length` `4096.0`, which has to stay larger
+  than the diagonal from any legal camera position.
+
+**The lit-versus-unlit call.** `NOTES.md` originally prescribed flat unlit materials and now
+prescribes lit ones, because unlit ignores the directional light and kills the cast shadow that
+makes a capsule look like it is standing on the ground rather than floating. That reasoning is
+about legibility, not beauty, so the look pass should revisit it on its own terms.
