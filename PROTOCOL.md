@@ -34,6 +34,21 @@ that was written before those messages existed.
 3. **A frame with zero or more than one top-level key is a protocol error.** Reply with
    `error` and close. This is not forward compatibility, it is a malformed frame.
 
+**Rules 1 to 3 are written from the server's side. The client's side is not symmetric.** The
+server may close on a bad frame because a misbehaving client is one of many and costs nothing.
+A client cannot close on a bad frame from the server, because the server is its only peer,
+`error` is server-to-client only so it has nothing to reply with, and M0 has no reconnect, so
+one malformed frame would cost the player the whole session.
+
+**A client logs loudly and drops the single offending frame, keeping the connection.** That
+applies to a frame that is not valid JSON, is not an object, carries zero or several top-level
+keys, or is a known message whose body will not parse. Unknown top-level keys still follow
+rule 1 and are ordinary forward compatibility, not errors.
+
+This is deliberately a different rule from the server's, and it is the one place in this file
+where the two ends of the socket are told to do opposite things. Revisit it when M2 adds
+reconnect, because a client that can cheaply recover has the option of being stricter.
+
 ## Clock
 
 The tick counter is the clock. Nothing in game logic reads wall-clock time.

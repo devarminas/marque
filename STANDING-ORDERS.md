@@ -156,9 +156,15 @@ worker lost real time to its absence.
    caught it. Say "read the file", name the commit SHA, and stop.
 2. **Test files are the writer's.** A fixed file layout that lists only non-test files leaves a
    writer unsure whether adding tests is a deviation. Say so explicitly.
-3. **A "known gotchas" section is where a plausible but false claim costs the most.** The M0a
-   brief asserted that a `move_to` could carry `NaN`. JSON cannot encode `NaN` as a literal, so
-   the writer built a test for a case that cannot occur. Verify a gotcha or mark it unverified.
+3. **A "known gotchas" section is where a plausible but false claim costs the most, and the
+   commonest form is a correct behaviour paired with an API that does not exist.** The M0a
+   brief asserted a `move_to` could carry `NaN`; JSON cannot encode `NaN` as a literal, so the
+   writer built a test for a case that cannot occur. The M0b brief said to set
+   `WebSocketPeer.write_mode` explicitly; the behaviour was right, binary frames really are
+   rejected, but that property was removed in Godot 4.7 while its enum survived, so assigning
+   it is a parse-time error and the first run never opened a socket. **Verify the API, not just
+   the behaviour**, and mark a gotcha unverified rather than dressing a guess as knowledge.
+   Two for two on this so far, both costing a worker its first run.
 4. **Acceptance criteria must be achievable with the tooling that exists.** `-race` was required
    and is impossible here. A criterion no one can satisfy trains writers to negotiate with the
    acceptance list, which is the habit that ruins every verdict downstream.
@@ -174,6 +180,17 @@ worker lost real time to its absence.
    saying "get them from `origin/main`" is not enough; a worker will read what is in front of
    it. **Have the worker run `git merge origin/main` into its branch before it writes anything**,
    and say so as a step rather than as a caveat.
+8. **Write FORBIDDEN's merge ban as "no merge *to `main`*".** A bare "no merge" collides
+   head-on with rule 7, and the M0b writer hit exactly that: `main` moved under it mid-unit,
+   its acceptance list required M0d's assertions to still pass, and satisfying that required
+   the merge its own FORBIDDEN section prohibited. It merged, said so, and explained the
+   reasoning, which was the right call. The brief should not have made it choose. Merging
+   `origin/main` **into** a branch is required; merging a branch into `main` is the
+   coordinator's job alone.
+9. **A brief that names sibling files must name the SHA they exist at.** The M0b brief listed
+   two files it must not modify that did not exist yet at its branch point. That is confusing
+   at best, and at worst it is the first hint that `main` has moved, arriving as a puzzle
+   rather than as a fact.
 
 ## Verifying a verification
 

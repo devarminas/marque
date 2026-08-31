@@ -56,6 +56,24 @@ adding a headless test.
   geometry; set them explicitly.
 - **"The screenshot shows lighting" is too weak an assertion.** A build with the sun pointing
   the wrong way passes it, lit by ambient alone. Assert a **cast shadow**.
+- **`WebSocketPeer.write_mode` does not exist in Godot 4.7.** The `WriteMode` enum survives,
+  which makes stale advice look current. Assigning the property is a *parse-time* error, so the
+  script never loads and the socket never opens. Worse, the defaults frame as **binary**: both
+  `PacketPeer.put_packet()` and `WebSocketPeer.send()`'s default argument send binary, and this
+  server answers a binary frame with an error and a close. The only two safe calls are
+  `send_text(s)` and `send(bytes, WebSocketPeer.WRITE_MODE_TEXT)`. Name the mode at the send
+  site; do not trust a default.
+- **`OS.exit_code` does not exist in Godot 4.7 either.** `SceneTree.quit(code)` is the only way
+  to set a process exit code. It does still work from `MainLoop._finalize()`, verified, which
+  is how a runner can fail loudly even when `--quit-after` would otherwise exit 0.
+- **Headless Godot runs uncapped**, measured at roughly 146 fps on this machine. A frame budget
+  is therefore a machine-dependent amount of wall time, and a fast machine can burn a whole
+  budget on one network handshake. Pin `Engine.max_fps` for the duration of any time-sensitive
+  suite and restore it after.
+
+**Verify a Godot API exists in 4.7 before writing it into a brief or a gotcha list.** Two
+briefs have now named plausible APIs that do not exist in the target version, and both cost a
+worker real time. `WebSocketPeer.new().get_property_list()` settles it in one line.
 
 ## JSON mode
 
