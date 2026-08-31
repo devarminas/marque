@@ -120,11 +120,8 @@ in the repo wins and the worker reports the drift.
 
 ## Program state
 
-Bookkeeping from the previous session is landed. The 3D, 150ms, and desktop-only decisions are
-recorded in `NOTES.md`, along with the ground-plane `(x, z)` coordinate convention that the 3D
-decision left ambiguous.
-
-Six units merged, each with a verdict recorded in its PR body, which is the ledger.
+**M0 is complete.** Seven units, seven PRs, each with a verdict recorded in its PR body, which
+is the ledger.
 
 | Unit | PR | Verdict | What |
 |---|---|---|---|
@@ -134,18 +131,31 @@ Six units merged, each with a verdict recorded in its PR body, which is the ledg
 | M0f | #4 | `unit-test-verified` | The two untested tick-loop protections |
 | M0b | #5 | `unit-test-verified` | Godot to Go interop, client networking layer |
 | M0g | #6 | `unit-test-verified` | The event log records what a joining client was told |
+| M0e | #7 | `live-ui-verified` | Wiring. The milestone, both directions, by observation |
 
-**Godot and Go demonstrably interoperate.** `scripts/interop_test.ps1` builds the server, binds
-a free port, runs the whole Godot suite against a live `marqued`, and shuts it down. That is
-the command to run to know the stack is alive.
+**The milestone sentence holds by observation, not inference.** Two Godot clients connect to the
+Go server, click the ground to move, and each sees the other walk. Each client is measured
+watching the other move while its own camera is provably still, the two walks are 8.435 units
+apart so neither can be mistaken for the other, and the demo fails loudly if either direction is
+stationary.
 
-- **M0e** is the last unit. Wiring: network state drives avatar spawn and despawn, avatars walk
-  their paths, a ground click sends a `move_to`. This is where "two clients see each other
-  walk" gets proven and M0 is done.
-- **M1** and **M2** are not scoped yet and must not be until M0e lands.
+Two commands tell you the stack is alive:
 
-**Outstanding, needs the human, not blocking anything.** No C compiler, so `-race` has never
-run against the server. See *Verified tooling*.
+- `powershell -ExecutionPolicy Bypass -File scripts/interop_test.ps1` builds the server, binds a
+  free port, runs the whole Godot suite against a live `marqued`, and shuts it down. 321
+  assertions across 6 suites.
+- `powershell -ExecutionPolicy Bypass -File scripts/two_client_demo.ps1` runs two real windowed
+  clients and proves the milestone.
+
+**Known flake, recorded so nobody debugs it twice.** The demo's still-camera control asserts
+byte-exactness over the top quarter of a GPU-rendered frame. One flip was observed on a fully
+static frame across eighteen measured windows, explicable only by render nondeterminism. It
+fails in the safe direction, never a false pass. If the demo fails on only "the background is
+not a control" with a still fraction near zero, rerun before investigating.
+
+**Outstanding, needs the human, not blocking anything.** No C compiler, so `-race` has never run
+against the server. See *Verified tooling*. `FOLLOW-UPS.md` holds everything parked for you,
+including four things a first playtest will ask about.
 
 ## Picking this up in a new session
 
@@ -153,33 +163,22 @@ Everything a coordinator needs is in this repo. Nothing lives only in a chat tra
 this file, then `COORDINATION.md`, `PROTOCOL.md`, `NOTES.md`, and `FOLLOW-UPS.md`. Each merged
 PR body is that unit's ledger row: verdict, head SHA, and the commands actually run.
 
-**Exactly one thing is in flight.**
+**Nothing is in flight. M0 is closed and `main` is green.**
 
-`m0e-wiring` at `413c329`. It is the last unit of M0 and it is written, pushed, and partly
-verified.
+The next milestone is **M1, contested pickup**: one item on the ground, two clients click it,
+exactly one gets it. It is unscoped on purpose, because M0's own findings are its inputs. Before
+scoping it, read:
 
-- At `8fae131` it earned two verdicts from two independent Fable verifiers: `milestone-holds`
-  and `conformance-holds`. Those verdicts are recorded here and nowhere else yet, because the
-  PR is not open.
-- `413c329` adds a bidirectional two-client demo on top. The original demo proved client B
-  watches A walk, but the milestone sentence is "each sees the other walk", and the reverse
-  direction rested on inference rather than observation.
+- `PROTOCOL.md` end to end. It was amended eight times from real findings and it is the contract.
+  Its **M2** markers name what is reserved rather than forgotten.
+- M0e's PR body, whose `what M1 inherits` section is the handover. Its sharpest point: the client
+  believes the world is made of players and only players. There is no second registry, no second
+  container, and no applier that is not about a body that walks.
+- `COORDINATION.md`, which records how briefs and verifications go wrong here, including three
+  occasions when a claim about a dependency was written into a contract file as fact and had to
+  be corrected.
+- The two protocol decisions `PROTOCOL.md` says to settle **before M1 adds its first message**:
+  which slow-client death reason is authoritative, and how item messages name their entity type.
 
-**The next action**, in order:
-
-1. `git diff 8fae131 413c329 --stat`. If it touches only `scripts/two_client_demo.ps1`, the
-   conformance verdict extends, because that file is disjoint from everything that verdict
-   examined. If it touches anything else, both verdicts are void and the full verification runs
-   again. **Show the disjointness; do not assert it.**
-2. Re-run the milestone half against `413c329`, since the demo is exactly what changed. Confirm
-   both directions now show a moving other player, and that the script fails if either is
-   stationary. A verifier on a different model family than Opus.
-3. Open the PR with both SHAs in the ledger and a note saying which half was re-run and why the
-   other extended. Merge on a verdict better than `type-check-only`.
-4. That closes M0. Scope M1 only after it lands, using what M0b and M0e reported about the wire
-   format and what `FOLLOW-UPS.md` records.
-
-**Do not** re-derive M0's decisions from scratch. `PROTOCOL.md` is the contract and it has been
-amended six times from real findings. `COORDINATION.md` records how briefs and verifications go
-wrong here, including three occasions when a claim about a dependency was written into a
-contract file as fact and had to be corrected.
+**Do not re-derive M0's decisions from scratch.** They are written down, with the reasoning and
+the evidence, in the files above.
