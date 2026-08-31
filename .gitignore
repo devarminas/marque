@@ -14,3 +14,6 @@ export_presets.cfg
 # Local
 .env
 *.local
+
+# Agent worktrees
+.claude/worktrees/
