@@ -40,6 +40,20 @@ usable, not good.
 - **Spawn point, currently the origin for everyone.** Fine for M0's two capsules, visibly wrong
   the first time five people connect and stack inside each other. There is no collision in M0,
   so nothing prevents it.
+
+## Scale cliffs, not tuning
+
+Not feel, but parked here for the same reason: real, unreachable today, and expensive to
+discover the hard way.
+
+- **A joining client is dropped at the door once roughly 63 players are walking.** `welcome`
+  plus one replayed path per mid-walk player enqueue as a single atomic step into a fixed
+  64-slot send queue, and a full queue closes the connection. So the join burst scales with the
+  number of walkers while the buffer does not. `PROTOCOL.md` declares no connection limit in M0,
+  which makes this a silent contradiction rather than a stated one. Unreachable at two capsules.
+  The first load test that joins a crowded world hits it immediately, and the symptom will look
+  like a networking flake rather than a capacity limit. The fix is either a join-sized buffer or
+  a chunked join, and it is a decision, not a number.
 - **Click-to-first-step latency.** One server round trip by design (see NOTES.md, Movement). If
   it reads as sluggish, the documented escape hatch is cosmetic client-side pathing that
   reconciles when the server path lands. Do not build that until it actually feels bad.
