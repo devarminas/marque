@@ -190,3 +190,31 @@ had learned went with it. Respawned as two agents, one asking "is it genuine" an
 - **Tell each half explicitly what its sibling owns**, so neither pays for the other's work.
 - A cap-hit is a scope problem. Respawn smaller, per the retry policy; retrying the same brief
   as-is buys another cap-hit.
+
+## Three things the M0e verification taught
+
+**A verifier's numbers should differ from the writer's, and that is evidence.** M0e's milestone
+verifier measured 3.504 units of displacement at tick 22 where the writer reported 3.954 at tick
+13. It read the discrepancy correctly: wall-clock capture timing differs per run, so a number
+that changes between runs is being computed live rather than replayed from a fixture. **If a
+verifier reproduces a writer's figures exactly, ask whether it re-ran anything or read the
+transcript.** Identical numbers on a timing-dependent measurement are the suspicious outcome,
+not the reassuring one.
+
+**An inference is not an observation, especially about the headline claim.** M0e proved that
+client B watches client A walk. The milestone sentence is "each sees the other walk", and the
+reverse direction rested on both clients running the same program plus a suite that proves
+watcher mechanics. That inference is sound. It was still an inference, standing in for the one
+sentence the entire milestone is defined by, and closing it cost one follow-up message against a
+worker that still had full context. **Where the deliverable is a sentence, verify the sentence,
+not a proposition that implies it.**
+
+**A verdict can be extended across a disjoint delta, but never assumed across any delta.** A new
+head SHA voids a verdict; that rule stands and exists because a branch that moves after
+verification is not the branch that was verified. But re-running a full verification for a
+one-file follow-up is waste when that file is provably outside everything the verdict examined.
+The honest middle: diff the new SHA against the verified one, confirm the change is disjoint
+from what the verdict covered, re-verify only the part that moved, and record in the ledger both
+SHAs and which half was re-run. **Extending requires showing the disjointness, not asserting
+it.** If the delta touches anything the verdict reasoned about, the verdict is void and the
+verification runs again.

@@ -108,6 +108,14 @@ renegotiating every intent's contract.
 The first message on every connection. `you` is this client's own id. `players` is every player
 in the world **including itself**, at its position as of `tick`.
 
+**A repeated `welcome` is a full restatement of the world, not a patch.** The server sends
+exactly one today, so nothing depends on this yet. But "first message on every connection"
+constrains position and never constrained multiplicity, and M2's reconnect makes the answer
+load-bearing. A client receiving a second `welcome` frees every body, re-anchors its clock, and
+rebuilds from the list. That is the only reading consistent with `welcome` being the whole world
+restated: anything the client believed beforehand is stale by definition. It also hands M2's
+reconnect its re-anchoring for free.
+
 Immediately after, the server sends one `path` per player currently mid-walk, so a joining
 client learns in-flight movement through the same code path as live movement. There is no
 separate snapshot format for paths.
@@ -155,6 +163,14 @@ current position, split by whether the player is moving:
   clicked point.** Those differ by up to the epsilon, and `points[0]` is the position at
   `start_tick` exactly rather than approximately. A client that draws a click marker at the
   clicked point and the avatar at `points[0]` will see them disagree by that much, correctly.
+
+**A `path` for an unknown id is dropped with a loud log.** Under the ordering guarantees below,
+a conforming server cannot produce this: `spawn` precedes any path for that player, `welcome`
+and its replays are atomic, and paths never follow a `despawn`. So this clause is **defense
+against a broken peer, not an expected flow**, and it is written down so nobody later "fixes"
+it into lazily conjuring an avatar from a `path`. Doing that would invent a player the server
+never announced. Closing instead would violate the client's never-close rule. Dropping is the
+least wrong of three bad options for a case that should not occur.
 
 **A halted player is not mid-walk**, so a late joiner receives no path replay for them. They
 appear only as a position in `welcome.players`. A client that creates an avatar's walker lazily
@@ -245,6 +261,18 @@ There is no connection limit in M0.
 
 **M2.** Reconnect requires mapping a connection to a durable identity before per-identity
 sequence dedupe means anything. That mapping does not exist yet and M0 must not pretend it does.
+
+## When the connection dies
+
+**A client freezes the world it has and logs loudly. It does not clear it.**
+
+The compatibility rules above govern frames. This governs the socket itself, which they never
+did. M0 has no reconnect, so a dead socket is terminal for that session.
+
+Clearing the world on disconnect asserts something the server never said, namely that everyone
+logged out. Frozen state is stale, but M0 has no UI to explain either condition, and stale-and-
+announced beats false-and-silent. Revisit with M2, which is the first milestone where a client
+can do something better than freeze.
 
 ## Decoding notes for the Godot side
 
