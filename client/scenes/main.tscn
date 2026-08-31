@@ -1,0 +1,97 @@
+[gd_scene load_steps=13 format=3 uid="uid://bbk0w4hee5gof"]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="2_checker"]
+[ext_resource type="Script" path="res://scripts/camera_rig.gd" id="3_camera_rig"]
+[ext_resource type="Script" path="res://scripts/ground_picker.gd" id="4_ground_picker"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+sky_top_color = Color(0.38, 0.5, 0.68, 1)
+sky_horizon_color = Color(0.68, 0.72, 0.76, 1)
+ground_bottom_color = Color(0.24, 0.24, 0.26, 1)
+ground_horizon_color = Color(0.68, 0.72, 0.76, 1)
+
+[sub_resource type="Sky" id="Sky_world"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 2
+sky = SubResource("Sky_world")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ground"]
+shader = ExtResource("2_checker")
+shader_parameter/color_a = Color(0.44, 0.44, 0.45, 1)
+shader_parameter/color_b = Color(0.33, 0.33, 0.34, 1)
+shader_parameter/square_size = 1.0
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
+size = Vector2(100, 100)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
+size = Vector3(100, 1, 100)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_player"]
+albedo_color = Color(0.16, 0.42, 0.88, 1)
+roughness = 0.75
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_player"]
+material = SubResource("StandardMaterial3D_player")
+radius = 0.4
+height = 1.8
+
+[node name="Main" type="Node3D"]
+script = ExtResource("1_main")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_world")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.81915206, 0.43938506, -0.36868784, 0, 0.64278764, 0.76604444, 0.57357645, -0.62750685, 0.5265408, 0, 12, 0)
+light_energy = 1.2
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 0
+
+[node name="Mesh" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("PlaneMesh_ground")
+material_override = SubResource("ShaderMaterial_ground")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("BoxShape3D_ground")
+
+[node name="Player" type="Node3D" parent="."]
+
+[node name="Mesh" type="MeshInstance3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+mesh = SubResource("CapsuleMesh_player")
+
+[node name="RemotePlayers" type="Node3D" parent="."]
+
+[node name="CameraRig" type="Node3D" parent="." node_paths=PackedStringArray("target", "camera")]
+transform = Transform3D(0.8660254, -0.28678823, 0.40957603, 0, 0.81915206, 0.57357645, -0.5, -0.49673176, 0.7094065, 0, 0, 0)
+script = ExtResource("3_camera_rig")
+target = NodePath("../Player")
+camera = NodePath("Camera3D")
+orbit_degrees_per_pixel = 0.35
+zoom_step = 1.5
+follow_damping = 12.0
+pitch_min_degrees = -80.0
+pitch_max_degrees = -12.0
+distance_min = 4.0
+distance_max = 32.0
+default_yaw_degrees = 30.0
+default_pitch_degrees = -35.0
+default_distance = 14.0
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 14)
+fov = 60.0
+
+[node name="GroundPicker" type="Node" parent="." node_paths=PackedStringArray("camera")]
+script = ExtResource("4_ground_picker")
+camera = NodePath("../CameraRig/Camera3D")
+ray_length = 4096.0
+ground_collision_mask = 1
