@@ -1,8 +1,17 @@
 # Game Notes
 
 Game: RuneScape-like point-and-click farming/crafting, multiplayer, persistent inventory.
-Client: Godot 4.x, GDScript. Server: Go. Single server for now.
-Nothing installed yet — `winget install GodotEngine.GodotEngine`
+Codename: Project Marque.
+
+Client is Godot 4.7, GDScript, **3D with an orbiting camera** above and behind the player.
+**Forward+ renderer, desktop only.** Browser export is not a goal, so nothing is constrained
+by WebGL limits or by download size.
+Server is Go 1.27, single authoritative server. Transport is WebSocket carrying JSON.
+
+Settled decisions that are closed to re-litigation live in
+[STANDING-ORDERS.md](STANDING-ORDERS.md). This file holds the design detail behind them.
+
+Installed and verified: Godot 4.7.2, Go 1.27.0, git 2.55, gh 2.97.0.
 
 ## Headless testing
 
@@ -47,6 +56,20 @@ Run scenario headless → diff event log vs expected. That's a gameplay regressi
 
 Without this two identical runs produce different logs and every diff is noise.
 
+## Camera
+
+**3D, orbiting, above and behind the player.** Right-drag or middle-drag orbits the yaw,
+the pitch is clamped to a sane arc, and the wheel zooms within a fixed range. The camera
+follows the player's position; it never drives it.
+
+- The camera is authored in the scene, never built in `_ready()`. It is static content.
+- Camera state is pure client presentation. The server does not know it exists and never
+  receives a camera message. Nothing in the protocol references a facing or a view direction.
+- Point-and-click needs a ground raycast from the cursor. That raycast is the one place the
+  camera touches gameplay input, and it produces an `(x, z)` intent, not a movement.
+- Exact orbit speed, zoom limits, pitch clamp, and follow damping are feel, not architecture.
+  They live in `FOLLOW-UPS.md` until a human can sit down and tune them.
+
 ## Color as semantics, not decoration
 
 Flat unlit materials, fixed palette:
@@ -84,9 +107,17 @@ The game is a database with a game attached; Go has the ecosystem for that (pgx)
 ## Movement — client sends click, server returns polyline
 
 ```
-→ {"move_to":{"x":42.3,"y":17.8}}
+→ {"move_to":{"x":42.3,"z":17.8}}
 ← {"path":[[10.0,4.0],[14.2,6.1],[42.3,17.8]],"speed":3.0}
 ```
+
+**Coordinates are ground-plane `(x, z)`, floats, in Godot's world units with `y` up.** The world
+is 3D but movement is not: the server stores and paths over two axes, and `y` is whatever the
+ground is at that point. The server never sends `y`. This keeps the navmesh, the polyline, and
+every future position broadcast two-dimensional, which is both smaller on the wire and the
+reason a 2D A* is sufficient. RuneScape does the same thing, a plane with per-tile height.
+Revisitable if verticality ever becomes a game rule rather than scenery, which would mean
+bridges you can walk under. It does not today.
 
 - Pathfinding lives **only on the server**. No client pathfinder, no duplication, no divergence.
 - Client walks the polyline and interpolates → smooth movement regardless of tick rate.
@@ -111,9 +142,15 @@ Bake in the Godot editor → export vertices/polygons as JSON → Go loads at bo
 
 ## Tick rate
 
+**Decided: 150ms.** One named constant on the server, revisitable exactly once, when there is
+enough gameplay to feel it. Nothing else in the codebase may hardcode a tick duration.
+
 - Tick rate and movement smoothness are independent. Client interpolation handles smoothness.
 - Fast ticks are only needed when sub-tick position changes a game rule (PvP collision, hitboxes). Not this game.
-- 600ms = RuneScape's deliberate mechanical feel. ~100-150ms = modern responsive. Pick on feel, not tech.
+- 600ms is RuneScape's deliberate mechanical feel and 150ms reads as modern and responsive.
+  We took responsive. The farming and crafting loop is the draw here, not combat timing, so the
+  tick is a scheduling grain rather than a skill expression. The cost is 4x the broadcast volume
+  of a 600ms tick, which is irrelevant at this player count.
 - Discrete ticks make the server replayable: record inputs → feed a fresh server → diff state. Build the tick loop with replay in mind from tick zero.
 - Positions are floats now, so replay diffs need epsilon compare, not equality.
 
