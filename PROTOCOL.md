@@ -124,10 +124,27 @@ origin.
 
 The server sends waypoints, never per-tick positions.
 
-**Degenerate paths.** The server does not emit a path whose total length is below an epsilon.
-Clicking the ground you are already standing on produces no `path` and one log line. The client
-walker still treats a zero-length segment as instantly complete, because two defenses cost
-nothing and a divide-by-zero-length produces a NaN position that is painful to trace.
+**`points` always has at least one element. A one-element path means "halt here".** The walker
+holds at the final point of a polyline, so a polyline of one point is a complete, valid
+instruction to stand still at that point. No separate `stop` message exists or is needed.
+
+**Degenerate clicks**, meaning a click that resolves to within an epsilon of the player's
+current position, split by whether the player is moving:
+
+- **Stationary.** Nothing changes, so no `path` is broadcast. The clicking client receives
+  `{"error":{"re":"move_to","msg":"already there"}}` and the server logs one line. Without that
+  reply the click is indistinguishable from a dropped frame, which is exactly the confusion the
+  `error` message exists to remove.
+- **Walking.** A one-element halt path at the player's current interpolated position,
+  broadcast to everyone as any other path is.
+
+This is what makes "stop walking" representable. It costs a carve-out now and would otherwise
+be discovered in M1, where "you were interrupted" and "the item is gone, stop walking" both
+need it, after a client walker had already been built assuming paths always run to completion.
+
+The client walker still treats a zero-length segment as instantly complete, because two
+defenses cost nothing and a divide by zero length produces a NaN position that is painful to
+trace.
 
 ### `error`
 
@@ -187,6 +204,26 @@ There is no connection limit in M0.
 
 **M2.** Reconnect requires mapping a connection to a durable identity before per-identity
 sequence dedupe means anything. That mapping does not exist yet and M0 must not pretend it does.
+
+## Decoding notes for the Godot side
+
+Reported by the writer of the Go server, which had to produce all of this. Each one is a place
+a GDScript client will get it subtly wrong.
+
+- **`JSON.parse_string` returns every JSON number as a `float`.** `welcome.tick` and
+  `path.start_tick` are 64-bit integers on the wire and arrive as floats. Convert with `int(...)`
+  before comparing. No precision is lost, since a float64 holds tick counts exactly for far
+  longer than this project will run, but a GDScript `==` against an int will bite someone.
+- **Coordinates have two encodings, deliberately.** `welcome.players[]` and `spawn` use
+  `{"id":..,"x":..,"z":..}` because they carry an id. `path.points` uses `[[x,z],...]` because
+  an array is materially smaller for a polyline. So a client writes `Vector2(d.x, d.z)` in one
+  place and `Vector2(p[0], p[1])` in the other for the same idea. This is a real cost, accepted
+  knowingly; it is written here so the second one gets written correctly.
+- **`error.re` is absent rather than null when the frame could not be attributed.** Use
+  `d.get("re", "")`. A malformed frame yields `{"error":{"msg":"text frames only"}}` with no
+  `re` key at all.
+- **`x` and `z` are ground-plane world coordinates.** When they land in a `Vector2`, the
+  `Vector2.y` component holds world **Z**. This has caught people already.
 
 ## Deliberately absent
 
