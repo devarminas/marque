@@ -180,21 +180,49 @@ worker lost real time to its absence.
 A sabotage test only covers the failure modes you thought to list.
 
 The M0c test runner was verified by an independent verifier that broke it three ways, a syntax
-error, a false assertion, and a hang, and confirmed a loud failure each time. The M0d writer
-then found a **fourth** hole the list had missed: a soft compile failure in a tree-free suite,
-where a `const` initialised from a non-constant expression left the suite unrunnable while the
-runner printed `PASS` and exited 0. It also found that the runner's 3000-frame watchdog sat
-above the `--quit-after 900` in the documented command, and `--quit-after` exits 0, so under
-the command anyone actually runs the watchdog could never fire.
+error, a false assertion, and a hang, and confirmed a loud failure each time. The M0d verifier,
+told to invent modes nobody had tried, found two more, both real and both in the newer runner:
 
-Two rules from that:
+- **A scene suite calling `get_tree().quit(0)` in `_ready` exits 0** with zero assertions run
+  and no `PASS` line. Anything keying on exit code reads green.
+- **An infinite loop in a tree-free suite runs during `_initialize`**, before any main-loop
+  iteration, so neither the frame watchdog nor `--quit-after` ever counts a frame. Only an
+  external timeout ends it.
 
+Four rules:
+
+- **A verify recipe must require the runner's `PASS:` line, not merely exit 0.** Exit code
+  alone cannot distinguish a green run from a run that quit before asserting anything. This
+  costs one `grep` and closes the worst of the two modes above at the recipe level.
 - **Any bound a test runner enforces must be below the `--quit-after` it runs under**, or the
   harness exits successfully before the bound is reached and the bound is decorative.
 - **Treat a passed sabotage suite as evidence about the modes tested, not about the runner.**
-  When a later unit finds a new hole, add that mode to the list rather than treating the earlier
-  verification as having been wrong. The verification was correct and incomplete, which is the
-  normal state of every verification.
+  When a later unit finds a new hole, add that mode to the list rather than treating the
+  earlier verification as having been wrong. The verification was correct and incomplete,
+  which is the normal state of every verification.
+- **Reproduce a claim about another unit's code before writing it down as fact.** See below.
+
+### A correction, and the rule that came from it
+
+An earlier version of this section stated that M0c's merged runner printed `PASS` and exited 0
+on a soft compile failure, and that its watchdog could never fire. **Both were false, and the
+coordinator wrote them here from a worker's report without reproducing either.**
+
+The M0d verifier reproduced both against M0c's actual merged code. The soft-compile failure is
+not reachable in that runner at all: it has no tree-free lane, so a broken `const` makes the
+whole script fail to load and the frame-10 grace check catches it, exit 1. And `--quit-after
+900` did not exist in M0c; its documented command carried no such flag, and under that command
+the watchdog demonstrably fired. The M0c verifier's report was accurate all along.
+
+What was true is the engineering. The `can_instantiate()` guard M0d added is correct and
+load-bearing for the tree-free architecture M0d itself introduced, and a bound above a
+`--quit-after` is genuinely decorative now that the recipe documents that flag.
+
+**The rule: a worker's claim about a sibling unit's code is a hypothesis until someone
+reproduces it.** A claim about its own work is evidence, because the worker ran it. A claim
+about code it did not write, especially already-merged code, is the case where a plausible
+story travels furthest before anyone checks. Do not promote one into this file until it has
+been reproduced against the merged artifact.
 
 ## Pasting these orders
 
