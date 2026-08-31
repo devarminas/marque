@@ -209,14 +209,23 @@ Bookkeeping from the previous session is landed. The 3D, 150ms, and desktop-only
 recorded in `NOTES.md`, along with the ground-plane `(x, z)` coordinate convention that the 3D
 decision left ambiguous.
 
-- **M0a** and **M0c** are in flight concurrently, on `m0a-server` and `m0c-scene`. They touch
-  disjoint paths and cannot conflict. Between them they are the pilot: they falsify the brief
-  template, the verify recipe, and the unit size across both toolchains at once.
-- **M0b** and **M0d** are scoped and unspawned. Both need M0c's project skeleton, and M0b also
-  needs M0a's server, because it verifies against a real server rather than a stub.
-- **M0e** is the join and runs last.
+- **M0c merged**, PR #1, verdict `live-ui-verified`. Godot world, orbiting camera, ground
+  raycast. 27 assertions, zero `add_child`, cast shadow confirmed by an independent verifier
+  that also broke the test runner three ways.
+- **M0a merged**, PR #2, verdict `unit-test-verified`. Go server, tick loop, WebSocket hub,
+  event log. 59 tests, the concurrency-sensitive ones re-run 20 times with no flake, and a
+  single-ownership audit done by reading because `-race` is unavailable.
+- **M0d** is verified and awaiting merge on `m0d-walker`. Tick clock, polyline walker, player
+  avatar. 142 assertions.
+- **M0b** is in flight on `m0b-interop`. Godot to Go interop plus the client networking layer.
+- **M0f** is in flight on `m0f-server-tests`. Closes the two coverage gaps M0a's verifier
+  filed: the bounded tick catch-up and the slow-client drop, both enforced but untested.
+- **M0e** is the join and runs last. It needs everything above.
 - **M1** and **M2** are not scoped yet and must not be until M0's protocol friction is known.
-  What M0a and M0b report about the wire format is the input to M1's design.
+  What M0b reports after real frames cross a real socket is the last input to M1's design.
+
+**Outstanding, needs the human, not blocking anything.** No C compiler, so `-race` has never
+run against the server. See *Verified tooling*.
 
 A first attempt at M0 as a single server-plus-client unit was spawned and killed before it
 committed. The cut was wrong: it put two toolchains in one PR, and the reason given for
