@@ -255,6 +255,25 @@ about runtime behaviour under conditions nobody enumerated, and they are what be
 probe before they belong in a contract file. Both times this program has written a falsehood
 into a contract, it was a quantitative claim accepted from a report.
 
+## Sizing a verification
+
+A verifier is an agent with a budget like any other, and a check list is scope.
+
+The M0b verification was written as one agent with eight checks covering re-runs, harness
+sabotage, three engine-API claims, protocol conformance, the seam, merge mechanics, and a
+hunt for server defects. It died on a session cap with one claim confirmed, and everything it
+had learned went with it. Respawned as two agents, one asking "is it genuine" and one asking
+"is it correct", both finished.
+
+- **Split a verification when its checks exceed roughly four, or when they span re-running,
+  reading, and adversarial probing at once.** Those are different activities with different
+  costs, and bundling them makes a single expensive agent whose failure loses all of it.
+- **Give each half a verdict of its own** rather than making one agent produce a single verdict
+  over unrelated evidence. The merge decision is the coordinator's to assemble.
+- **Tell each half explicitly what its sibling owns**, so neither pays for the other's work.
+- A cap-hit is a scope problem. Respawn smaller, per the retry policy; retrying the same brief
+  as-is buys another cap-hit.
+
 ## Pasting these orders
 
 Paste this file verbatim into every worker spawn and every resume, and **name the commit SHA
@@ -268,20 +287,20 @@ Bookkeeping from the previous session is landed. The 3D, 150ms, and desktop-only
 recorded in `NOTES.md`, along with the ground-plane `(x, z)` coordinate convention that the 3D
 decision left ambiguous.
 
-- **M0c merged**, PR #1, verdict `live-ui-verified`. Godot world, orbiting camera, ground
-  raycast. 27 assertions, zero `add_child`, cast shadow confirmed by an independent verifier
-  that also broke the test runner three ways.
-- **M0a merged**, PR #2, verdict `unit-test-verified`. Go server, tick loop, WebSocket hub,
-  event log. 59 tests, the concurrency-sensitive ones re-run 20 times with no flake, and a
-  single-ownership audit done by reading because `-race` is unavailable.
-- **M0d** is verified and awaiting merge on `m0d-walker`. Tick clock, polyline walker, player
-  avatar. 142 assertions.
-- **M0b** is in flight on `m0b-interop`. Godot to Go interop plus the client networking layer.
-- **M0f** is in flight on `m0f-server-tests`. Closes the two coverage gaps M0a's verifier
-  filed: the bounded tick catch-up and the slow-client drop, both enforced but untested.
-- **M0e** is the join and runs last. It needs everything above.
+Four units merged, each with a verdict recorded in its PR body, which is the ledger.
+
+| Unit | PR | Verdict | What |
+|---|---|---|---|
+| M0c | #1 | `live-ui-verified` | Godot world, orbiting camera, ground raycast |
+| M0a | #2 | `unit-test-verified` | Go server, tick loop, WebSocket hub, event log |
+| M0d | #3 | `live-ui-verified` | Tick clock, polyline walker, player avatar |
+| M0f | #4 | `unit-test-verified` | The two untested tick-loop protections |
+
+- **M0b** is written and pushed on `m0b-interop` at `acdc326`, unverified and unmerged. Godot
+  to Go interop plus the client networking layer. Its verification is split across two agents
+  because a single broad one hit a session cap.
+- **M0e** is the join and runs last. It needs M0b merged.
 - **M1** and **M2** are not scoped yet and must not be until M0's protocol friction is known.
-  What M0b reports after real frames cross a real socket is the last input to M1's design.
 
 **Outstanding, needs the human, not blocking anything.** No C compiler, so `-race` has never
 run against the server. See *Verified tooling*.
