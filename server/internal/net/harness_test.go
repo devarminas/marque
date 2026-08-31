@@ -43,12 +43,35 @@ const (
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
+
+	// hook, when set, runs on the goroutine doing the write, with the line just
+	// written. The world goroutine is the only thing that writes this log, so a
+	// hook that blocks is the one lever a test has on how long that goroutine
+	// spends away from its ticker. TestCatchUpBoundHoldsUnderAStalledLoop is
+	// the only user; nothing else needs the tick loop to fall behind.
+	hook func(line []byte)
 }
 
 func (s *syncBuffer) Write(p []byte) (int, error) {
 	s.mu.Lock()
+	hook := s.hook
+	n, err := s.buf.Write(p)
+	s.mu.Unlock()
+
+	// Outside the lock, and after the line has landed: a blocking hook must not
+	// also block String, which the test goroutine polls while it waits.
+	if hook != nil {
+		hook(p)
+	}
+	return n, err
+}
+
+// onWrite installs the write hook. Called from the test goroutine before the
+// world has anything to say.
+func (s *syncBuffer) onWrite(hook func(line []byte)) {
+	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.buf.Write(p)
+	s.hook = hook
 }
 
 func (s *syncBuffer) String() string {
