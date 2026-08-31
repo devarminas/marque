@@ -422,6 +422,28 @@ func (c *client) awaitPath(id mnet.PlayerID) mnet.Path {
 	return mnet.Path{}
 }
 
+// awaitHaltPath reads until a one-point path for the given player arrives.
+//
+// Getting a walking player to halt takes a click that lands inside one tick, so
+// an observer sees the ordinary paths of the attempts that missed before it
+// sees the halt.
+func (c *client) awaitHaltPath(id mnet.PlayerID) mnet.Path {
+	c.t.Helper()
+
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(readTimeout)
+		if !ok {
+			break
+		}
+		if f.Path != nil && f.Path.ID == id && len(f.Path.Points) == 1 {
+			return *f.Path
+		}
+	}
+	c.t.Fatalf("client %s: no halt path for player %d within %v", c.name, id, readTimeout)
+	return mnet.Path{}
+}
+
 // expectSilence asserts that nothing arrives for the length of the silence
 // window. Proving a broadcast did not happen is the only way to test a
 // rejection, and no positive assertion can show it.

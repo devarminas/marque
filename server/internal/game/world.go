@@ -54,10 +54,10 @@ const WalkSpeed = 3.0
 // finite, not chosen to be right.
 const WorldHalfExtent = 128.0
 
-// MinPathLength is the shortest path the server will assign. Below it, the
-// click is ignored: a zero-length segment makes the client's interpolator
-// divide by zero and produce a NaN position, which is painful to trace back
-// here from there.
+// MinPathLength is how near a click has to land before it counts as a click on
+// the ground the player is already standing on. Below it, no walk is assigned:
+// a zero-length segment makes the client's interpolator divide by zero and
+// produce a NaN position, which is painful to trace back here from there.
 //
 // One millimetre of world. Nobody intends a walk that short, and it is far
 // enough above 32-bit float noise near the world edge to be meaningful there.
@@ -374,18 +374,26 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo) {
 	dest := Point{X: msg.X, Z: msg.Z}
 	points := StraightLine(p.pos, dest)
 
-	// Clicking the ground you are already standing on is a no-op, not a
-	// zero-length walk. Nothing is sent and nothing changes, so a player who
-	// was already walking keeps walking and the client's view still matches.
+	// A click that resolves to where the player already is means one of two
+	// different things, and which one depends on whether they are moving.
 	if length(points) < MinPathLength {
-		w.log.Event(w.tick, EvIntentIgnored, gamelog.Fields{
-			"player": p.id,
-			"re":     mnet.MsgMoveTo,
-			"reason": string(mnet.ReasonDegenerate),
-			"x":      msg.X,
-			"z":      msg.Z,
-		})
-		return
+		if !p.walking() {
+			// Standing still and asked to stand still. Nothing changes, so
+			// there is nothing to broadcast; the sender is told, because
+			// otherwise the click is indistinguishable from a dropped frame.
+			w.refuse(p, &mnet.RejectError{
+				Reason:      mnet.ReasonDegenerate,
+				Detail:      "already there",
+				Re:          mnet.MsgMoveTo,
+				Disposition: mnet.ReplyError,
+			})
+			return
+		}
+		// Walking and asked to stop. A walker holds at the final point of its
+		// polyline, so a polyline of one point is a complete instruction to
+		// stand still there. This is the whole of "stop walking": no separate
+		// message exists, and none is needed.
+		points = []Point{p.pos}
 	}
 
 	p.remaining = points[1:]

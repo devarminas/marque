@@ -272,10 +272,11 @@ func TestNaNMoveIsRejected(t *testing.T) {
 	}
 }
 
-// TestDegenerateClickProducesNoPath covers clicking the ground you are already
-// standing on. Somebody does this in the first minute of any demo, and a
-// zero-length segment is a divide-by-zero in the client's interpolator.
-func TestDegenerateClickProducesNoPath(t *testing.T) {
+// TestDegenerateClickWhileStationaryIsAnswered covers clicking the ground you
+// are already standing on while standing still. Somebody does this in the first
+// minute of any demo. Nothing changes, so nothing is broadcast, but the sender
+// is told: without a reply the click is indistinguishable from a dropped frame.
+func TestDegenerateClickWhileStationaryIsAnswered(t *testing.T) {
 	h := newHarness(t)
 
 	alice := h.dial("alice")
@@ -288,19 +289,160 @@ func TestDegenerateClickProducesNoPath(t *testing.T) {
 	alice.moveTo(0, 0)
 	alice.moveTo(game.MinPathLength/2, 0)
 
-	ignored := h.awaitEvents(game.EvIntentIgnored, 2)
-	for _, ev := range ignored {
-		if got := ev["reason"]; got != string(mnet.ReasonDegenerate) {
-			t.Fatalf("ignored for %v, want %q", got, mnet.ReasonDegenerate)
+	for i := range 2 {
+		refusal := alice.errorFrame()
+		if refusal.Re != mnet.MsgMoveTo {
+			t.Fatalf("click %d: error attributed to %q, want %q", i, refusal.Re, mnet.MsgMoveTo)
+		}
+		if refusal.Msg != "already there" {
+			t.Fatalf("click %d: error says %q, want %q", i, refusal.Msg, "already there")
 		}
 	}
 
-	// No path, and no error either: this is a no-op, not a failure.
+	rejected := h.awaitEvents(game.EvMoveToRejected, 2)
+	if len(rejected) != 2 {
+		t.Fatalf("logged %d rejections, want 2: %+v", len(rejected), rejected)
+	}
+	for i, ev := range rejected {
+		if got := ev["reason"]; got != string(mnet.ReasonDegenerate) {
+			t.Fatalf("rejection %d reason %v, want %q", i, got, mnet.ReasonDegenerate)
+		}
+	}
+
+	// Nothing changed, so nobody is told anything.
 	alice.expectSilence()
 	bob.expectSilence()
 	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
-		t.Fatalf("a degenerate click assigned a path: %+v", assigned)
+		t.Fatalf("a degenerate click by a stationary player assigned a path: %+v", assigned)
 	}
+}
+
+// TestDegenerateClickWhileWalkingHalts covers the other branch: the same click
+// from a player who is moving means stop. It is broadcast like any other path,
+// because everyone watching has to stop drawing her walking.
+func TestDegenerateClickWhileWalkingHalts(t *testing.T) {
+	h := newHarness(t)
+
+	alice := h.dial("alice")
+	aliceWelcome := alice.welcome()
+	bob := h.dial("bob")
+	bob.welcome()
+	alice.spawn()
+
+	halt := haltMidWalk(t, alice)
+
+	if len(halt.Points) != 1 {
+		t.Fatalf("halt path has %d points, want exactly 1: %v", len(halt.Points), halt.Points)
+	}
+	if halt.ID != aliceWelcome.You {
+		t.Fatalf("halt path is for player %d, want alice (%d)", halt.ID, aliceWelcome.You)
+	}
+
+	// Everyone including the mover, as with any other path.
+	seen := bob.awaitHaltPath(aliceWelcome.You)
+	if seen.Points[0] != halt.Points[0] {
+		t.Fatalf("bob was told alice halts at %v, alice was told %v", seen.Points[0], halt.Points[0])
+	}
+	if seen.StartTick != halt.StartTick {
+		t.Fatalf("bob got start_tick %d, alice got %d; it is one broadcast", seen.StartTick, halt.StartTick)
+	}
+}
+
+// TestHaltedPlayerStaysHalted is the assertion that makes a halt a halt: no
+// further path, and a position that stops advancing.
+//
+// The position is read back through a third client's welcome, because welcome
+// reports every player's position as of the current tick and is the only way to
+// ask the server where somebody is without moving them.
+func TestHaltedPlayerStaysHalted(t *testing.T) {
+	h := newHarness(t)
+
+	alice := h.dial("alice")
+	aliceWelcome := alice.welcome()
+	bob := h.dial("bob")
+	bob.welcome()
+	alice.spawn()
+
+	halt := haltMidWalk(t, alice)
+	bob.drain()
+
+	// Several ticks pass. Had she still been walking she would have covered
+	// four steps in this time.
+	time.Sleep(4 * game.TickDuration)
+
+	alice.expectSilence()
+	bob.expectSilence()
+
+	carol := h.dial("carol")
+	carolWelcome := carol.welcome()
+	if carolWelcome.Tick <= halt.StartTick {
+		t.Fatalf("carol joined at tick %d, not after the halt at %d; the test proved nothing",
+			carolWelcome.Tick, halt.StartTick)
+	}
+
+	var alicePos mnet.PlayerState
+	found := false
+	for _, p := range carolWelcome.Players {
+		if p.ID == aliceWelcome.You {
+			alicePos, found = p, true
+		}
+	}
+	if !found {
+		t.Fatalf("carol's welcome does not list alice: %+v", carolWelcome.Players)
+	}
+	if alicePos.X != halt.Points[0].X() || alicePos.Z != halt.Points[0].Z() {
+		t.Fatalf("alice is at [%v %v] several ticks after halting at %v; she is still moving",
+			alicePos.X, alicePos.Z, halt.Points[0])
+	}
+
+	// A halted player is not mid-walk, so there is no in-flight path to replay.
+	carol.expectSilence()
+}
+
+// haltMidWalk gets a walking player to stop and returns the halt path.
+//
+// Stopping means clicking within an epsilon of where the player is, and the
+// only position a black-box test knows exactly is the one the server just
+// reported in points[0] of a fresh path. That position is only current until
+// the next tick, so the click has to land in the same tick that reported it.
+// On loopback it does; when it does not, the click is an ordinary move and the
+// attempt simply repeats.
+func haltMidWalk(t *testing.T, c *client) mnet.Path {
+	t.Helper()
+
+	const attempts = 20
+	for range attempts {
+		// A destination far enough away that she is still walking when the
+		// second click arrives.
+		c.moveTo(30, 0)
+		walking := c.path()
+		if len(walking.Points) != 2 {
+			t.Fatalf("expected an ordinary two-point walk, got %v", walking.Points)
+		}
+
+		// Click exactly where the server just said she is.
+		here := walking.Points[0]
+		c.moveTo(here.X(), here.Z())
+
+		halt := c.path()
+		if len(halt.Points) != 1 {
+			// The tick turned over between the two frames, so the click was an
+			// ordinary move to where she used to be. Try again.
+			continue
+		}
+		if halt.Points[0] != here {
+			t.Fatalf("halt point %v, want the position the server reported, %v", halt.Points[0], here)
+		}
+		if halt.StartTick != walking.StartTick {
+			t.Fatalf("halt at tick %d but the position was reported at tick %d; "+
+				"a one-point path can only mean a position that has not moved",
+				halt.StartTick, walking.StartTick)
+		}
+		return halt
+	}
+
+	t.Fatalf("could not land a click inside one tick in %d attempts", attempts)
+	return mnet.Path{}
 }
 
 // TestUnknownMessageIsIgnored covers compatibility rule 1: a message this

@@ -78,6 +78,11 @@ type Despawn struct {
 // processes the message late can still place the walker correctly by counting
 // ticks. Speed is world units per second and is constant across the whole
 // polyline. The server never sends per-tick positions.
+//
+// Points always has at least one element. A walker holds at the final point of
+// its polyline, so a one-element path is a complete instruction to stand still
+// there: that is how "stop walking" is expressed, and why no stop message
+// exists (PROTOCOL.md, "path").
 type Path struct {
 	ID        PlayerID `json:"id"`
 	StartTick int64    `json:"start_tick"`
