@@ -136,7 +136,15 @@ current position, split by whether the player is moving:
   reply the click is indistinguishable from a dropped frame, which is exactly the confusion the
   `error` message exists to remove.
 - **Walking.** A one-element halt path at the player's current interpolated position,
-  broadcast to everyone as any other path is.
+  broadcast to everyone as any other path is. **It carries the player's own position, not the
+  clicked point.** Those differ by up to the epsilon, and `points[0]` is the position at
+  `start_tick` exactly rather than approximately. A client that draws a click marker at the
+  clicked point and the avatar at `points[0]` will see them disagree by that much, correctly.
+
+**A halted player is not mid-walk**, so a late joiner receives no path replay for them. They
+appear only as a position in `welcome.players`. A client that creates an avatar's walker lazily
+on the first `path` handles this correctly by accident. A client that expects one `path` per
+listed player will wait forever for one that is never coming.
 
 This is what makes "stop walking" representable. It costs a carve-out now and would otherwise
 be discovered in M1, where "you were interrupted" and "the item is gone, stop walking" both
