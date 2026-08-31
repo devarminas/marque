@@ -169,6 +169,32 @@ worker lost real time to its absence.
    A runner that exits 0 because the test script failed to compile reports success for a build
    that never executed. That is the worst thing a unit can hand a coordinator, and it shipped
    once already.
+7. **A worker branching off an unmerged sibling branch reads stale shared docs.** Its worktree
+   has the sibling's copy of `NOTES.md` and `PROTOCOL.md`, not `main`'s. Naming the files and
+   saying "get them from `origin/main`" is not enough; a worker will read what is in front of
+   it. **Have the worker run `git merge origin/main` into its branch before it writes anything**,
+   and say so as a step rather than as a caveat.
+
+## Verifying a verification
+
+A sabotage test only covers the failure modes you thought to list.
+
+The M0c test runner was verified by an independent verifier that broke it three ways, a syntax
+error, a false assertion, and a hang, and confirmed a loud failure each time. The M0d writer
+then found a **fourth** hole the list had missed: a soft compile failure in a tree-free suite,
+where a `const` initialised from a non-constant expression left the suite unrunnable while the
+runner printed `PASS` and exited 0. It also found that the runner's 3000-frame watchdog sat
+above the `--quit-after 900` in the documented command, and `--quit-after` exits 0, so under
+the command anyone actually runs the watchdog could never fire.
+
+Two rules from that:
+
+- **Any bound a test runner enforces must be below the `--quit-after` it runs under**, or the
+  harness exits successfully before the bound is reached and the bound is decorative.
+- **Treat a passed sabotage suite as evidence about the modes tested, not about the runner.**
+  When a later unit finds a new hole, add that mode to the list rather than treating the earlier
+  verification as having been wrong. The verification was correct and incomplete, which is the
+  normal state of every verification.
 
 ## Pasting these orders
 

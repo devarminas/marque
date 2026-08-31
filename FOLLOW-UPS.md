@@ -46,6 +46,24 @@ usable, not good.
 - **Interpolation between ticks.** At a 150ms tick, the client is interpolating most of the
   time. Whether it lerps position or also smooths turning is a feel call.
 
+## Avatar movement feel
+
+Exported on the player avatar, from M0d.
+
+- **`turn_degrees_per_second`, currently `540`.** How fast an avatar swings to face its
+  direction of travel. Wrong feels like the body skating sideways through a corner, or like it
+  snapping instantly.
+- **Whether facing leads or trails the turn.** The body currently turns toward the segment it
+  is already on, so it starts turning at the corner rather than before it. RuneScape turns on
+  the spot before moving; Marque does not, and nobody has decided whether it should.
+- **`face_travel_direction` can be switched off entirely.** Position is unaffected either way,
+  and there is a test asserting exactly that.
+- **Whether an avatar has any arrival or idle state at all.** It currently just stops. There is
+  an `is_idle_at_tick()` hook to hang something off.
+- **The facing marker box.** A small box in front of the capsule, because a capsule is radially
+  symmetric and its rotation is otherwise invisible in a screenshot. A debug affordance, not
+  art. It should go when there is a real model.
+
 ## Tick rate
 
 - **150ms is decided and deliberately revisitable exactly once**, when there is enough gameplay
