@@ -146,3 +146,40 @@ the command to run to know the stack is alive.
 
 **Outstanding, needs the human, not blocking anything.** No C compiler, so `-race` has never
 run against the server. See *Verified tooling*.
+
+## Picking this up in a new session
+
+Everything a coordinator needs is in this repo. Nothing lives only in a chat transcript. Read
+this file, then `COORDINATION.md`, `PROTOCOL.md`, `NOTES.md`, and `FOLLOW-UPS.md`. Each merged
+PR body is that unit's ledger row: verdict, head SHA, and the commands actually run.
+
+**Exactly one thing is in flight.**
+
+`m0e-wiring` at `413c329`. It is the last unit of M0 and it is written, pushed, and partly
+verified.
+
+- At `8fae131` it earned two verdicts from two independent Fable verifiers: `milestone-holds`
+  and `conformance-holds`. Those verdicts are recorded here and nowhere else yet, because the
+  PR is not open.
+- `413c329` adds a bidirectional two-client demo on top. The original demo proved client B
+  watches A walk, but the milestone sentence is "each sees the other walk", and the reverse
+  direction rested on inference rather than observation.
+
+**The next action**, in order:
+
+1. `git diff 8fae131 413c329 --stat`. If it touches only `scripts/two_client_demo.ps1`, the
+   conformance verdict extends, because that file is disjoint from everything that verdict
+   examined. If it touches anything else, both verdicts are void and the full verification runs
+   again. **Show the disjointness; do not assert it.**
+2. Re-run the milestone half against `413c329`, since the demo is exactly what changed. Confirm
+   both directions now show a moving other player, and that the script fails if either is
+   stationary. A verifier on a different model family than Opus.
+3. Open the PR with both SHAs in the ledger and a note saying which half was re-run and why the
+   other extended. Merge on a verdict better than `type-check-only`.
+4. That closes M0. Scope M1 only after it lands, using what M0b and M0e reported about the wire
+   format and what `FOLLOW-UPS.md` records.
+
+**Do not** re-derive M0's decisions from scratch. `PROTOCOL.md` is the contract and it has been
+amended six times from real findings. `COORDINATION.md` records how briefs and verifications go
+wrong here, including three occasions when a claim about a dependency was written into a
+contract file as fact and had to be corrected.
