@@ -71,14 +71,25 @@ Full detail in `NOTES.md`. Summary:
 
 - **M0**, pilot. Two clients connect, click to move, see each other walk. Stubbed straight-line
   pathing, no DB, no items, hardcoded player ids. JSON event log wired from tick zero.
-  Split into three units, one PR each, per **Unit sizing** below.
+  Split into five units, one PR each, per **Unit sizing** below.
   - **M0a**, Go server, complete and self-verifying. Protocol, tick loop, stubbed pathing,
-    event log, WebSocket hub, two-real-client integration test. Merges on its own.
-  - **M0b**, Godot to Go interop. The smallest Godot project that connects, sends a scripted
-    `move_to`, and asserts on `welcome` and `path`. Headless, no camera, no rendering. Exists
-    to retire the highest-risk assumption in the program in the smallest diff that can.
-  - **M0c**, the playable client. Scene, orbiting camera, click-to-move, avatars walking
-    polylines. This is where "see each other walk" is proven.
+    event log, WebSocket hub, two-real-client integration test. Depends on nothing.
+  - **M0c**, Godot world and camera. Scene with ground, lighting, camera rig, and the empty
+    container avatars will hang off. Orbit controller and click-to-ground raycast. Zero
+    networking. Depends on nothing, so it runs alongside M0a.
+  - **M0b**, Godot to Go interop. The smallest possible script that connects to the real
+    server, sends a scripted `move_to`, and asserts on `welcome` and `path`. Headless, no
+    rendering. Exists to retire the highest-risk assumption in the program in the smallest
+    diff that can. Needs M0a and M0c.
+  - **M0d**, the polyline walker. A node that interpolates a position from `points`,
+    `start_tick`, and `speed`. Pure client logic, unit-tested headless against a fake path
+    with no server involved. Needs M0c.
+  - **M0e**, wiring. Network state drives avatar spawn and despawn, avatars walk their paths,
+    a ground click sends a `move_to`. This is where "two clients see each other walk" is
+    proven. Needs everything above.
+
+  M0a and M0c have no dependency on each other and run concurrently. M0b and M0d likewise.
+  Only M0e is a genuine join.
 - **M1**, MVP. One item on the ground, two clients click it, exactly one gets it. Pickup and
   drop. In-memory store. Survives a server restart is out of scope until Postgres.
 - **M2**. Reconnect. Sequence numbers and server-side dedupe.
@@ -133,12 +144,14 @@ Bookkeeping from the previous session is landed. The 3D, 150ms, and desktop-only
 recorded in `NOTES.md`, along with the ground-plane `(x, z)` coordinate convention that the 3D
 decision left ambiguous.
 
-- **M0a** is the pilot and is in flight. It exists to falsify the brief template, the verify
-  recipe, and the unit size while that costs one worker instead of ten. Fix the contract from
-  what it teaches before any fan-out.
-- **M0b** and **M0c** are scoped but not spawned. They wait for M0a to merge, because the pilot
-  runs alone by design and because both verify against a real server rather than a stub.
-- **M1** and **M2** are not scoped yet and must not be until M0 lands.
+- **M0a** and **M0c** are in flight concurrently, on `m0a-server` and `m0c-scene`. They touch
+  disjoint paths and cannot conflict. Between them they are the pilot: they falsify the brief
+  template, the verify recipe, and the unit size across both toolchains at once.
+- **M0b** and **M0d** are scoped and unspawned. Both need M0c's project skeleton, and M0b also
+  needs M0a's server, because it verifies against a real server rather than a stub.
+- **M0e** is the join and runs last.
+- **M1** and **M2** are not scoped yet and must not be until M0's protocol friction is known.
+  What M0a and M0b report about the wire format is the input to M1's design.
 
 A first attempt at M0 as a single server-plus-client unit was spawned and killed before it
 committed. The cut was wrong: it put two toolchains in one PR, and the reason given for
