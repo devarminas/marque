@@ -75,7 +75,30 @@ Full detail in `NOTES.md`. Summary:
   drop. In-memory store. Survives a server restart is out of scope until Postgres.
 - **M2**. Reconnect. Sequence numbers and server-side dedupe.
 
-## First act
+## Coordination, deliberately collapsed
 
-The 3D, 150ms, and desktop-only decisions above are **not yet committed** to `NOTES.md`.
-Land them there, commit this file, then run M0 as the pilot.
+This program is roughly four units across two tracks. That is well under the size where a
+state store, a computed merge frontier, and per-track sub-coordinators pay for themselves, so
+none of them exist. What survives the collapse, because it is what actually catches defects:
+
+- The brief template. Every worker spawn fills goal, scope, context, acceptance, verify,
+  timebox, forbidden, and report. A field you cannot fill is a unit you have not scoped.
+- One writer per branch, isolated in its own worktree, pushing to origin before it reports.
+- A verifier on a different model family from the writer, for any unit whose verification is
+  expensive or judgment-laden.
+- No merge without a verdict. **The PR body is the ledger.** It records the verdict, the head
+  SHA it applies to, and the commands actually run. A new head SHA voids the verdict, so a
+  branch that moves after verification gets re-verified before it merges.
+
+Reintroduce the store only if the queue outgrows a single drain. It has not.
+
+## Program state
+
+Bookkeeping from the previous session is landed. The 3D, 150ms, and desktop-only decisions are
+recorded in `NOTES.md`, along with the ground-plane `(x, z)` coordinate convention that the 3D
+decision left ambiguous.
+
+- **M0** is the pilot and is in flight. It exists to falsify the brief template and the verify
+  recipe while that costs one worker instead of ten. Fix the contract from what it teaches
+  before any fan-out.
+- **M1** and **M2** are not scoped yet and must not be until M0 lands.
