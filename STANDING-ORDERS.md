@@ -248,12 +248,29 @@ stalled peer and found the opposite: M0's frames are small but *infrequent*, sin
 per-tick broadcasts and no heartbeat, so ordinary traffic loses that race and dies by timeout
 minutes later. The race also turned out to have a third outcome nobody had named.
 
-**Reproduce quantitative claims. Structural ones are cheaper to trust.** "This function is only
-reachable from that goroutine" is checkable by reading and hard to get wrong. "This always
-happens", "in microseconds", "this can never occur", and any specific magnitude are claims
-about runtime behaviour under conditions nobody enumerated, and they are what belongs in a
-probe before they belong in a contract file. Both times this program has written a falsehood
-into a contract, it was a quantitative claim accepted from a report.
+**Reproduce claims about a dependency's behaviour. Claims about our own code are cheaper to
+trust.** That is the sharper cut, and it took three falsehoods to find. All three were about
+something we did not write:
+
+1. That a `move_to` could carry `NaN`. That was about Go's `encoding/json`, and JSON has no
+   `NaN` literal.
+2. That the send queue "always wins, in microseconds". That was about the server's timing under
+   load conditions nobody had enumerated, and the opposite is true for M0's actual traffic.
+3. That assigning `WebSocketPeer.write_mode` is a parse-time error. That was about Godot's
+   parser, and it is a runtime error: the script loads fine and the failure happens later, so
+   the process looks alive while nothing works.
+
+An earlier version of this rule said to reproduce *quantitative* claims. That caught the second
+one and would have missed the first and third, both of which are mechanism claims with no
+number in them. The reliable signal is not the shape of the claim, it is who owns the behaviour.
+"This function is only reachable from that goroutine" is about our code and a reader can settle
+it. "This library rejects that input", "this engine fails at parse time", "this always finishes
+in microseconds" are about someone else's code under conditions nobody enumerated, and they
+belong in a probe before they belong in a contract file.
+
+A worker asserting one of these is usually right about the *behaviour* and wrong about the
+*mechanism*, which is the worst combination, because the symptom it describes really does
+happen and that makes the explanation feel confirmed.
 
 ## Sizing a verification
 
