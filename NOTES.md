@@ -57,8 +57,10 @@ adding a headless test.
 - **"The screenshot shows lighting" is too weak an assertion.** A build with the sun pointing
   the wrong way passes it, lit by ambient alone. Assert a **cast shadow**.
 - **`WebSocketPeer.write_mode` does not exist in Godot 4.7.** The `WriteMode` enum survives,
-  which makes stale advice look current. Assigning the property is a *parse-time* error, so the
-  script never loads and the socket never opens. Worse, the defaults frame as **binary**: both
+  which makes stale advice look current. Assigning the property is a **runtime** error, not a
+  parse error: the script loads fine and `can_instantiate()` returns true, then the assignment
+  aborts the function it sits in. Everything before that line runs, so the process looks alive
+  while the socket never opens. Worse, the defaults frame as **binary**: both
   `PacketPeer.put_packet()` and `WebSocketPeer.send()`'s default argument send binary, and this
   server answers a binary frame with an error and a close. The only two safe calls are
   `send_text(s)` and `send(bytes, WebSocketPeer.WRITE_MODE_TEXT)`. Name the mode at the send
