@@ -1,0 +1,16 @@
+# Godot
+.godot/
+.import/
+export.cfg
+export_presets.cfg
+*.translation
+
+# Go
+/server/bin/
+*.exe
+*.test
+*.out
+
+# Local
+.env
+*.local
