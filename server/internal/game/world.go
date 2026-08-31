@@ -83,6 +83,29 @@ const (
 	EvPathAssigned   = "path_assigned"
 	EvArrived        = "arrived"
 	EvTicksDropped   = "ticks_dropped"
+
+	// EvPathReplayed is one path frame sent to a joining client to describe a
+	// walk that was already in flight. It carries the same fields as
+	// EvPathAssigned plus "to", the player it was sent to, because a replay is
+	// unicast to the newcomer where an assignment is broadcast to everyone.
+	//
+	// Deliberately not EvPathAssigned with a marker field. Nothing was decided
+	// here: no intent arrived, no path was chosen, and the values differ from
+	// the ones the original assignment recorded. A reader counting
+	// EvPathAssigned to ask "how many times did the server choose a path" must
+	// get the right answer without knowing to exclude anything, and the two
+	// events do not have the same field set. The cost is that reconstructing
+	// every path frame a client received means reading two event names instead
+	// of one; the field names are shared so that is the whole of the cost.
+	// Revisitable.
+	EvPathReplayed = "path_replayed"
+
+	// EvFrameDropped is a frame the world refused without answering it. Only
+	// the unknown-sender branch reaches it, and only if the hub's ordering
+	// contract has broken. It is not EvMoveToRejected: nothing there has read
+	// the frame's kind yet, so naming one would be a claim the code cannot
+	// make.
+	EvFrameDropped = "frame_dropped"
 )
 
 // Transport is the world's view of the network: a stream of connection events.
@@ -257,12 +280,22 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 	// path message, so a joining client learns in-flight movement through the
 	// same code path it uses for live movement. There is no snapshot format for
 	// paths, and there is nothing here for the newcomer to special-case.
+	//
+	// Every replay is logged, once per walker. Without that the log records
+	// neither the re-anchored values nor the fact that a replay happened, and
+	// the only way back to what the newcomer was told is to re-simulate the
+	// walk from its original path_assigned -- which nothing in the log would
+	// tell a reader was necessary.
 	for _, c := range w.order {
 		other := w.players[c]
 		if !other.walking() {
 			continue
 		}
-		w.send(p, w.pathMessage(other))
+		replay := w.pathMessage(other)
+		fields := pathLogFields(replay)
+		fields["to"] = p.id
+		w.log.Event(w.tick, EvPathReplayed, fields)
+		w.send(p, replay)
 	}
 
 	w.broadcast(mnet.Spawn{ID: p.id, X: p.pos.X, Z: p.pos.Z}, conn)
@@ -299,8 +332,10 @@ func (w *World) handleFrame(ev mnet.Event) {
 	if !ok {
 		// The hub emits EventConnected before any frame, so this is defensive.
 		// It is logged rather than dropped because reaching it means the
-		// ordering contract broke.
-		w.log.Event(w.tick, EvMoveToRejected, gamelog.Fields{
+		// ordering contract broke. The frame's kind has not been read at this
+		// point and may not be a move_to at all, which is why the event does
+		// not name one.
+		w.log.Event(w.tick, EvFrameDropped, gamelog.Fields{
 			"reason": string(mnet.ReasonUnknownSender),
 			"remote": ev.Conn.Remote(),
 		})
@@ -404,13 +439,22 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo) {
 		Points:    wirePoints(points),
 		Speed:     WalkSpeed,
 	}
-	w.log.Event(w.tick, EvPathAssigned, gamelog.Fields{
-		"player":     p.id,
-		"start_tick": out.StartTick,
-		"points":     out.Points,
-		"speed":      out.Speed,
-	})
+	w.log.Event(w.tick, EvPathAssigned, pathLogFields(out))
 	w.broadcast(out, nil)
+}
+
+// pathLogFields describes one path frame for the event log.
+//
+// Both events that carry a path build their fields here, so the two cannot
+// drift apart on a key name and a reader who has learned one shape has learned
+// the other. EvPathReplayed adds "to" on top.
+func pathLogFields(msg mnet.Path) gamelog.Fields {
+	return gamelog.Fields{
+		"player":     msg.ID,
+		"start_tick": msg.StartTick,
+		"points":     msg.Points,
+		"speed":      msg.Speed,
+	}
 }
 
 // validate decides whether a destination may enter world state, and returns the
