@@ -321,10 +321,33 @@ taken without further argument. The consequence worth stating is that a pickup i
 action on the server*, not an instantaneous one, and that is the whole reason the M1 milestone
 is a contest rather than a lookup.
 
-- `pickup` for a live item assigns a path to that item's position exactly as `move_to` does,
-  broadcasts that path to everyone, and records a pending pickup against the mover. If the
-  player is already within `PickupRange` of the item, no path is assigned and the pickup
-  resolves on the next tick.
+- **`pickup` is `move_to` at the item's position, plus a pending pickup.** The same path
+  construction, the same broadcast, the same degenerate rules. **There is no distance carve-out
+  in path assignment.**
+- The one difference from `move_to`: **a degenerate pickup by a stationary player is not an
+  error.** `move_to` answers "already there" because nothing is left to do. A pickup standing on
+  its own item has something left to do, so it assigns no path, broadcasts nothing, and lets the
+  pending pickup resolve on the next tick.
+- **`PickupRange` governs resolution only, never path assignment.** It is the distance at which
+  the tick loop hands you the item. It is not, and must never become, a distance at which the
+  server declines to walk you.
+
+  **This clause was wrong when first written and the M1a writer found it by watching a test
+  hang.** The original said that a player already within `PickupRange` gets no path at all. That
+  is fine for a player standing still and broken for a player walking: the earlier walk is never
+  replaced, the player leaves the range on the next tick, and the pending pickup never resolves
+  for the rest of the session. The writer patched it by halting the walker, which works and
+  which was the right call for a worker holding a hanging test.
+
+  The rule above is a different fix, and it is the one that binds. It deletes the carve-out
+  instead of adding a second one under it. **It also dissolves a coupling the same writer flagged
+  as real and unenforced**: with `PickupRange` deciding whether to walk, `PickupRange` had to
+  stay above `WalkSpeed * TickDuration`, or a walker could step over an item in one tick and
+  never be handed it. Those two numbers are `0.5` and `0.45`, which is a five-hundredth of a
+  world unit of margin protecting a silent failure, guarded by nothing. Path assignment keys on
+  `MinPathLength` instead, at `1e-3`, and the invariant stops existing rather than being
+  enforced. A rule with one fewer special case is a rule with one fewer place to be wrong, which
+  is the whole lesson of the paragraph above it.
 - **A pending pickup resolves inside the tick loop, in `step`, after movement has advanced.**
   Removing the item from the world, writing it to the player's inventory, broadcasting
   `item_despawn`, and sending that player their new `inventory` all happen in that one tick on
