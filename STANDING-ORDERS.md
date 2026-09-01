@@ -158,93 +158,25 @@ the paste came from**. This file changes as the program learns, so an unpinned p
 drifts from the file on disk and the worker cannot tell which one binds. On conflict, the file
 in the repo wins and the worker reports the drift.
 
-## Program state
-
-**M0 is complete.** Seven units, seven PRs, each with a verdict recorded in its PR body, which
-is the ledger.
-
-| Unit | PR | Verdict | What |
-|---|---|---|---|
-| M0c | #1 | `live-ui-verified` | Godot world, orbiting camera, ground raycast |
-| M0a | #2 | `unit-test-verified` | Go server, tick loop, WebSocket hub, event log |
-| M0d | #3 | `live-ui-verified` | Tick clock, polyline walker, player avatar |
-| M0f | #4 | `unit-test-verified` | The two untested tick-loop protections |
-| M0b | #5 | `unit-test-verified` | Godot to Go interop, client networking layer |
-| M0g | #6 | `unit-test-verified` | The event log records what a joining client was told |
-| M0e | #7 | `live-ui-verified` | Wiring. The milestone, both directions, by observation |
-
-**The milestone sentence holds by observation, not inference.** Two Godot clients connect to the
-Go server, click the ground to move, and each sees the other walk. Each client is measured
-watching the other move while its own camera is provably still, the two walks are 8.435 units
-apart so neither can be mistaken for the other, and the demo fails loudly if either direction is
-stationary.
-
-Two commands tell you the stack is alive:
-
-- `powershell -ExecutionPolicy Bypass -File scripts/interop_test.ps1` builds the server, binds a
-  free port, runs the whole Godot suite against a live `marqued`, and shuts it down. **443
-  assertions across 8 suites** as of M1c merging. This number goes stale every time a unit adds
-  a suite, so treat it as "what it was last time somebody looked" and report the number you got.
-- `powershell -ExecutionPolicy Bypass -File scripts/two_client_demo.ps1` runs two real windowed
-  clients. **Read the next paragraph before you believe what it tells you.**
-
-**`two_client_demo.ps1` asserts nothing about the server, and that is a live defect.** Every one
-of its roughly twenty assertions reads a client's stdout or a client's PNG. It contains no
-reference to `arrived`, `path_assigned`, `move_to`, `client_connected`, or the event log at all,
-and it deletes the server's log at teardown.
-
-An independent verifier proved the consequence rather than arguing it. It made the tick loop
-skip its movement step, so the server assigned and broadcast paths and then never moved anybody
-and never emitted a single `arrived`. **The demo printed `TWO CLIENT DEMO OK` with displacements
-byte-identical to a healthy run.** Clients interpolate the polylines they are handed, so a
-frozen server still produces moving pixels on every screen. That is the exact hazard the project
-already knew about and had written down, and the demo was never checked against it.
-
-M0's milestone verdict still stands, because M0e's verifier read the event log itself and the
-interop suite carries ninety server-side assertions. **The demo alone does not.** It is a
-client-rendering check that has been described here as a milestone proof, and this paragraph is
-the correction. A fix unit is open; until it lands, treat a green demo as evidence about pixels
-and read the event log yourself for anything about server state.
-
-This matters more for M1 than it did for M0. "Exactly one client gets the item" is a purely
-server-side fact, and a client-side-only demo cannot see it at all.
-
-**Known flake, recorded so nobody debugs it twice.** The demo's still-camera control asserts
-byte-exactness over the top quarter of a GPU-rendered frame. One flip was observed on a fully
-static frame across eighteen measured windows, explicable only by render nondeterminism. It
-fails in the safe direction, never a false pass. If the demo fails on only "the background is
-not a control" with a still fraction near zero, rerun before investigating.
-
-**Outstanding, needs the human, not blocking anything.** No C compiler, so `-race` has never run
-against the server. See *Verified tooling*. `FOLLOW-UPS.md` holds everything parked for you,
-including four things a first playtest will ask about.
-
 ## Picking this up in a new session
 
-Everything a coordinator needs is in this repo. Nothing lives only in a chat transcript. Read
-this file, then `COORDINATION.md`, `PROTOCOL.md`, `NOTES.md`, and `FOLLOW-UPS.md`. Each merged
-PR body is that unit's ledger row: verdict, head SHA, and the commands actually run.
+Everything a coordinator needs is in this repo. Nothing lives only in a chat transcript.
 
-**M0 is closed and `main` is green. M1 is scoped and open.**
+**Read this file, then [COORDINATION.md](COORDINATION.md), then `PROTOCOL.md`, `NOTES.md`, and
+`FOLLOW-UPS.md`.** `COORDINATION.md` carries the program state: which units are merged, what
+verdict each PR body records, what the two liveness commands actually prove, and every lesson
+about writing briefs and sizing verifications. Each merged PR body is that unit's ledger row.
 
-The two protocol decisions that were due before M1's first message are **both settled and
-written into `PROTOCOL.md`**, with their reasoning:
+**This file is the worker contract and nothing else.** It used to also carry the program's
+running state, and it grew by half in one session until it was mostly history a worker must skim
+past to reach the rules it has to obey. The paragraph above about pasting it verbatim is why
+that matters: every line here is paid for on every spawn. Program state moved to
+`COORDINATION.md`, which is coordinator-facing and never pasted.
 
-- *Which reason is authoritative* when a slow client dies. The cause is authoritative, never the
-  detector, and the first condemnation latches so a consequence cannot overwrite a cause.
-- *Entity naming*. Every entity family gets its own message names and its own id space. The
-  compatibility rules chose it: a `kind` field on `spawn` would make an M0 client render an
-  acorn as a walking blue capsule, where a new top-level key makes it render nothing.
+**Two protocol decisions were due before M1's first message and both are settled**, with their
+reasoning, in `PROTOCOL.md`. The cause is authoritative when a slow client dies, never the
+detector, and the first condemnation latches. Every entity family gets its own message names and
+its own id space.
 
-M1's whole wire contract is now in `PROTOCOL.md` under the **M1** markers, and its five units
-are listed under *Milestones*. Read the contract rather than re-deriving it.
-
-Still worth reading before touching M1: M0e's PR body, whose sharpest handover is that **the
-client believes the world is made of players and only players** — no second registry, no second
-container, no applier that is not about a body that walks. That is exactly what M1c builds. And
-`COORDINATION.md`, which records how briefs and verifications go wrong here, including three
-occasions when a claim about a dependency was written into a contract file as fact and had to be
-corrected.
-
-**Do not re-derive M0's decisions from scratch.** They are written down, with the reasoning and
-the evidence, in the files above.
+**Do not re-derive settled decisions from scratch.** They are written down, with the reasoning
+and the evidence, in the files above.
