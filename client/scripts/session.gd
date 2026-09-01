@@ -41,6 +41,13 @@ extends Node
 ## a launcher or a connect screen; M0 has neither, and STANDING-ORDERS.md
 ## forbids adding one.
 ##
+## [b]Two registries, and they share nothing.[/b] Players live in
+## [member _avatars] and ground items in [member _items]. Item ids and player
+## ids are separate sequences in separate spaces (PROTOCOL.md, "Identity"), so
+## item 1 and player 1 are unrelated things and no lookup here is reachable from
+## the wrong one. One dictionary keyed by a bare integer would have made that
+## bug free to write and expensive to find.
+##
 ## Typed by [code]preload[/code] rather than by global [code]class_name[/code]
 ## throughout, per NOTES.md, "Godot authoring traps".
 
@@ -48,6 +55,8 @@ const NetClientScript := preload("res://scripts/net_client.gd")
 const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const PlayerAvatarScene := preload("res://scenes/player_avatar.tscn")
+const GroundItemScript := preload("res://scripts/ground_item.gd")
+const GroundItemScene := preload("res://scenes/ground_item.tscn")
 const TickClock := preload("res://scripts/tick_clock.gd")
 
 ## Command-line flag naming the websocket URL, as `--server <url>` after the
@@ -75,6 +84,11 @@ signal move_to_requested(x: float, z: float)
 @export var local_player: Node3D
 ## Container the remote bodies are instanced into.
 @export var remote_players: Node3D
+## Container the ground item bodies are instanced into. Authored in
+## [code]main.tscn[/code] alongside [member remote_players], because there is
+## exactly one of it per world and static content belongs in the scene file
+## (CLAUDE.md). Its [i]children[/i] are runtime, which is why they are instanced.
+@export var ground_items: Node3D
 ## The [code]ground_picker.gd[/code] node whose clicks become intents.
 @export var ground_picker: Node
 
@@ -89,6 +103,9 @@ var _tick_ms := 0
 ## Player id to [code]player_avatar.gd[/code]. The local player is in here too,
 ## under its own id, pointing at the authored node.
 var _avatars := {}
+## Item id to [code]ground_item.gd[/code]. A separate space from
+## [member _avatars]: see the class docs.
+var _items := {}
 
 
 func _ready() -> void:
@@ -103,11 +120,17 @@ func _ready() -> void:
 	if remote_players == null:
 		push_error("Session.remote_players must point at a container node")
 		return
+	if ground_items == null:
+		push_error("Session.ground_items must point at a container node")
+		return
 
 	_net.welcomed.connect(_on_welcomed)
+	_net.welcome_items.connect(_on_welcome_items)
 	_net.spawned.connect(_on_spawned)
 	_net.despawned.connect(_on_despawned)
 	_net.path_assigned.connect(_on_path_assigned)
+	_net.item_spawned.connect(_on_item_spawned)
+	_net.item_despawned.connect(_on_item_despawned)
 	_net.server_error.connect(_on_server_error)
 	_net.disconnected.connect(_on_disconnected)
 
@@ -155,6 +178,23 @@ func avatar_for(id: int) -> PlayerAvatarScript:
 ## Every player id this session currently has a body for, ascending.
 func known_ids() -> Array:
 	var ids := _avatars.keys()
+	ids.sort()
+	return ids
+
+
+## The ground item body for [param id], or null if this session has never heard
+## of it.
+##
+## [param id] is an item id. Handing this a player id is a category error and
+## finds nothing, which is the point of the two registries being separate.
+func item_for(id: int) -> GroundItemScript:
+	var item: GroundItemScript = _items.get(id)
+	return item
+
+
+## Every item id this session currently has a body for, ascending.
+func known_item_ids() -> Array:
+	var ids := _items.keys()
 	ids.sort()
 	return ids
 
@@ -219,6 +259,64 @@ func _on_welcomed(
 
 	print("session: joined as %d at tick %d, %d player(s)" % [_you, tick, _avatars.size()])
 	joined.emit(_you)
+
+
+## The ground items `welcome` listed. **M1.**
+##
+## Arrives immediately after [method _on_welcomed], which has already freed
+## every body this session held. So this only builds; there is nothing left to
+## clear and nothing here to make idempotent.
+func _on_welcome_items(
+	item_ids: PackedInt64Array,
+	item_kinds: PackedStringArray,
+	item_positions: PackedVector2Array,
+) -> void:
+	if item_ids.size() != item_kinds.size() or item_ids.size() != item_positions.size():
+		push_error("session: welcome.items ids, kinds and positions disagree in length; ignoring")
+		return
+
+	for index in item_ids.size():
+		var body := _ensure_item(int(item_ids[index]), item_kinds[index])
+		if body == null:
+			continue
+		var ground := item_positions[index]
+		body.place_at(ground.x, ground.y)
+
+	if not _items.is_empty():
+		print("session: %d ground item(s) in the world" % _items.size())
+
+
+## `item_spawn`. **M1.** Idempotent: an item id already known is replaced, never
+## doubled (PROTOCOL.md, "Ordering and the join race").
+##
+## Replacing rather than repositioning is deliberate. A repeat may carry a
+## different `kind`, and a body that kept its old material would draw an acorn
+## where the server said something else lies.
+func _on_item_spawned(id: int, kind: String, spawn_position: Vector2) -> void:
+	# Nothing reaches a connection before its `welcome` (PROTOCOL.md, "Ordering
+	# and the join race"), so this is defence against a broken peer rather than
+	# a flow. Building the body anyway would put something in the world that no
+	# `welcome` has yet described, and the next one would silently free it.
+	if not _clock.is_anchored():
+		push_error("session: item_spawn for %d before welcome; ignoring" % id)
+		return
+	if _items.has(id):
+		push_warning("session: item_spawn for known item %d replaces the existing body" % id)
+		_forget_item(id)
+	var body := _ensure_item(id, kind)
+	if body == null:
+		return
+	body.place_at(spawn_position.x, spawn_position.y)
+
+
+## `item_despawn`. **M1.** An unknown item id is logged and ignored, never an
+## error: a client that took an item and a client that watched it be taken can
+## both be told, and only one of them is surprised.
+func _on_item_despawned(id: int) -> void:
+	if not _items.has(id):
+		push_warning("session: item_despawn for unknown item %d; ignoring" % id)
+		return
+	_forget_item(id)
 
 
 ## `spawn`. Idempotent: an id already known is replaced, never doubled
@@ -336,9 +434,65 @@ func _forget(id: int) -> void:
 	avatar.queue_free()
 
 
+## The body for item [param id], creating it if this session has not seen it
+## before.
+##
+## Every item body is an instance of [code]ground_item.tscn[/code] parented
+## under [member ground_items]; there is no authored one, because unlike the
+## local player there is never guaranteed to be an item and nothing follows one.
+##
+## An unknown [param kind] is not refused. It is handed to the body, which draws
+## it magenta and keeps going (PROTOCOL.md, `item_spawn`), because unknown kinds
+## are how content is added without a client release and a client that dropped
+## them would render an incomplete world silently.
+func _ensure_item(id: int, kind: String) -> GroundItemScript:
+	var existing: GroundItemScript = _items.get(id)
+	if existing != null:
+		return existing
+	if id <= 0:
+		push_error("session: item ids start at 1, got %d" % id)
+		return null
+
+	var body := GroundItemScene.instantiate() as GroundItemScript
+	if body == null:
+		push_error("session: ground_item.tscn did not instantiate as a GroundItem")
+		return null
+	body.name = "Item%d" % id
+	# Configured before it enters the tree, so it is never drawn for a frame in
+	# the wrong colour.
+	body.configure(id, kind)
+	ground_items.add_child(body)
+	_items[id] = body
+	return body
+
+
+## Drops one item body. Unlike a player body there is no authored case: every
+## one of these was instanced here, so every one is freed here.
+func _forget_item(id: int) -> void:
+	var body: GroundItemScript = _items.get(id)
+	if body == null:
+		return
+	_items.erase(id)
+	# Removed from the tree before it is queued, so a caller that counts
+	# GroundItems' children in the same frame sees the truth.
+	var parent := body.get_parent()
+	if parent != null:
+		parent.remove_child(body)
+	body.queue_free()
+
+
+## Everything this session believes about the world, dropped.
+##
+## Called only from [method _on_welcomed]. A `welcome` is the whole world
+## restated, so it frees every item body as well as every player body: anything
+## believed beforehand is stale by definition (PROTOCOL.md, `welcome`). M0 never
+## sends a second `welcome` and M2's reconnect will, which is why this is written
+## and tested now rather than discovered then.
 func _forget_everyone() -> void:
 	for id: int in _avatars.keys():
 		_forget(id)
+	for id: int in _items.keys():
+		_forget_item(id)
 
 
 ## The websocket URL from `--server <url>`, or "" when it was not given.
