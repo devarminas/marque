@@ -3,7 +3,8 @@
     The M0 milestone, on screen and in both directions: two real windowed
     clients on one real server, each clicking the ground in turn while the other
     watches. Each client screenshots itself four times. Exits 0 only if each
-    client saw two bodies in every frame and saw *the other* player move.
+    client saw two bodies in every frame, saw *the other* player move, and the
+    server's own event log says it moved them.
 
 .DESCRIPTION
     This is the visual half of M0e. `scripts/interop_test.ps1` proves the same
@@ -30,6 +31,23 @@
     eye, and both the still-camera and the moving-camera pair are measured so
     the contrast between them is visible rather than claimed.
 
+    Two evidence layers, and the milestone needs both. Everything above is the
+    client layer: pixels and `DEMO pos` lines, which prove what each client
+    *drew*. They cannot prove what the server *believes*, because the server
+    sends waypoints once and never per-tick positions, so every client
+    interpolates its polylines by itself. A tick loop that stopped advancing
+    players would still hand out paths and still produce moving pixels on every
+    screen — and this script passed exactly that sabotage, with displacements
+    byte-identical to a healthy run, before the GAMELOG block below existed.
+
+    So the second layer reads the server's NDJSON event log and asserts, per
+    player id resolved from that client's `DEMO joined` line: `client_connected`,
+    a `move_to`, a `path_assigned`, and an `arrived` whose coordinates match that
+    path's endpoint. `arrived` is the one event a frozen server cannot fake: the
+    tick loop emits it only after it has actually walked a player to the end of
+    its polyline. The two layers are then tied together — the point the server
+    says the phase-1 walker stopped at is the point both clients drew it at.
+
     Two traps this script exists to step around, both from NOTES.md:
 
     - Two Godot processes share one `user://` directory and would overwrite
@@ -46,8 +64,16 @@
     The Godot 4 executable. Defaults to $env:GODOT, then "godot" on PATH.
 
 .PARAMETER OutDir
-    Where the eight PNGs land, four per client. Defaults to a marque-two-client
-    directory under the system temp. Printed on the way out either way.
+    The evidence directory: the eight PNGs, both clients' stdout and stderr, and
+    the server's event log and stderr. Defaults to a marque-two-client directory
+    under the system temp. Printed on the way out either way, and never deleted —
+    the GAMELOG in it is the only server-side proof this run produces.
+
+    Emptied at startup, because every check this script makes on a PNG (it
+    exists, it is over 4KB) is satisfied by a stale frame from a previous run,
+    and the default path is fixed rather than timestamped. A directory this
+    script did not write is refused rather than emptied: it drops a
+    `.marque-evidence` marker into the ones it owns and will only clear those.
 
 .PARAMETER ClickA
 .PARAMETER ClickB
@@ -96,13 +122,23 @@ $repo = Split-Path -Parent $PSScriptRoot
 $serverDir = Join-Path $repo "server"
 $clientDir = Join-Path $repo "client"
 
+# Scratch, deleted at teardown: the built binary and the warm-up logs, nothing
+# anybody would want afterwards. Every observable goes to $OutDir instead.
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("marque-demo-" + [guid]::NewGuid().ToString("n"))
 New-Item -ItemType Directory -Path $work | Out-Null
-if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir | Out-Null }
 
 $binary = Join-Path $work "marqued.exe"
-$serverOut = Join-Path $work "server.stdout.log"
-$serverErr = Join-Path $work "server.stderr.log"
+$serverOut = Join-Path $OutDir "server.stdout.ndjson"
+$serverErr = Join-Path $OutDir "server.stderr.log"
+# Presence marks a directory as this script's to empty. Content is for whoever
+# finds it and wonders.
+$evidenceMarker = Join-Path $OutDir ".marque-evidence"
+
+# How far the server's own world may disagree with what a client drew, in world
+# units, before the two layers count as describing different runs. The walker
+# stops exactly on the polyline's last point on both sides, so this is slack for
+# float printing and a frame of interpolation, not for a real discrepancy.
+$MaxLayerDisagreement = 0.05
 
 $server = $null
 $failures = New-Object System.Collections.Generic.List[string]
@@ -199,7 +235,56 @@ function Get-JoinedId([string] $path) {
     return -1
 }
 
+# The server's NDJSON event log, parsed. One object per "GAMELOG "-prefixed
+# line; anything else on that stream is runtime noise and is skipped.
+function Read-GameLog([string] $path) {
+    $events = New-Object System.Collections.Generic.List[object]
+    if (-not (Test-Path $path)) { return , $events }
+    foreach ($line in Get-Content -Path $path) {
+        if (-not $line.StartsWith("GAMELOG ")) { continue }
+        $events.Add(($line.Substring(8) | ConvertFrom-Json))
+    }
+    # Comma: a List of one would otherwise unroll to that one element.
+    return , $events
+}
+
+# Every event of one kind naming one player, oldest first.
+function Select-PlayerEvents($events, [string] $kind, [int] $player) {
+    $hits = New-Object System.Collections.Generic.List[object]
+    foreach ($event in $events) {
+        if ($event.ev -ne $kind) { continue }
+        if ($event.PSObject.Properties.Name -notcontains "player") { continue }
+        if ([int]$event.player -ne $player) { continue }
+        $hits.Add($event)
+    }
+    return , $hits
+}
+
+function Get-Distance([double] $ax, [double] $az, [double] $bx, [double] $bz) {
+    return [math]::Sqrt([math]::Pow($ax - $bx, 2) + [math]::Pow($az - $bz, 2))
+}
+
 try {
+    # A stale PNG satisfies both frame checks below, so a run that captured
+    # nothing would be proven healthy by the last run's leftovers. The default
+    # -OutDir is a fixed path reused forever, which is exactly the exposure.
+    if (Test-Path $OutDir) {
+        $stale = @(Get-ChildItem -LiteralPath $OutDir -Force)
+        if ($stale.Count -gt 0) {
+            if (-not (Test-Path $evidenceMarker)) {
+                throw ("$OutDir is not empty and carries no .marque-evidence marker, so this " +
+                       "script did not write it; refusing to clear it or to run beside it. " +
+                       "Pass -OutDir somewhere else, or empty it yourself.")
+            }
+            Write-Host "==> clearing $($stale.Count) leftover item(s) from $OutDir"
+            Remove-Item -LiteralPath $stale.FullName -Recurse -Force
+        }
+    } else {
+        New-Item -ItemType Directory -Path $OutDir | Out-Null
+    }
+    Set-Content -LiteralPath $evidenceMarker -Encoding utf8 `
+        -Value "Evidence from scripts/two_client_demo.ps1. Its next run empties this directory."
+
     Write-Host "==> building marqued"
     # Built outside the repository: server/ is not this unit's to write to.
     Push-Location $serverDir
@@ -216,9 +301,11 @@ try {
     $warm = Start-Process -FilePath $Godot `
         -ArgumentList @("--headless", "--path", ('"' + $clientDir + '"'), "--quit-after", "20") `
         -NoNewWindow -PassThru -Wait `
-        -RedirectStandardOutput (Join-Path $work "warm.stdout.log") `
-        -RedirectStandardError (Join-Path $work "warm.stderr.log")
-    if ($warm.ExitCode -ne 0) { throw "the Godot warm-up run exited $($warm.ExitCode)" }
+        -RedirectStandardOutput (Join-Path $OutDir "warm.stdout.log") `
+        -RedirectStandardError (Join-Path $OutDir "warm.stderr.log")
+    if ($warm.ExitCode -ne 0) {
+        throw "the Godot warm-up run exited $($warm.ExitCode); see warm.stderr.log in $OutDir"
+    }
 
     Write-Host "==> starting marqued on a free port"
     $server = Start-Process -FilePath $binary `
@@ -259,8 +346,8 @@ try {
     $running = @()
     foreach ($client in $clients) {
         $prefix = Join-Path $OutDir $client.Label
-        $stdout = Join-Path $work ("client-" + $client.Label + ".stdout.log")
-        $stderr = Join-Path $work ("client-" + $client.Label + ".stderr.log")
+        $stdout = Join-Path $OutDir ("client-" + $client.Label + ".stdout.log")
+        $stderr = Join-Path $OutDir ("client-" + $client.Label + ".stderr.log")
         $godotArgs = @(
             "--path", ('"' + $clientDir + '"'),
             "--position", $client.Position,
@@ -286,6 +373,11 @@ try {
             Stderr = $stderr
             Prefix = $prefix
             Phase = $client.Phase
+            # Empty means this client only ever watches, so the server owes it a
+            # connection and nothing else.
+            Click = $client.Click
+            Id = -1
+            Positions = $null
         }
     }
 
@@ -348,6 +440,7 @@ try {
         }
 
         $positions = Read-Positions $client.Stdout
+        $client.Positions = $positions
         foreach ($index in 1, 2, 3, 4) {
             if (-not $positions.ContainsKey($index)) {
                 $failures.Add("client $label reported no bodies for shot $index")
@@ -434,6 +527,108 @@ try {
             $failures.Add("client $label's walking frames differ only $([math]::Round($movingPair.Fraction / $stillPair.Fraction, 1))x as much as its standing-still frames")
         }
     }
+
+    # ------------------------------------------------------------------
+    # Layer two: what the server believes.
+    #
+    # Every assertion above reads a client. Clients interpolate the polylines
+    # they are handed, so a tick loop that had stopped advancing players would
+    # satisfy all of them — that sabotage was run against this script and it
+    # printed its OK marker with displacements byte-identical to a healthy run.
+    # The event log is the only evidence in this run that a frozen server
+    # cannot produce.
+    # ------------------------------------------------------------------
+    $events = Read-GameLog $serverOut
+    Write-Host "==> GAMELOG: $($events.Count) event(s) in $serverOut"
+    if ($events.Count -eq 0) {
+        # Without this, every assertion below passes over an empty set.
+        $failures.Add("the server wrote no GAMELOG events to $serverOut; this run contains no server-side evidence at all")
+    }
+
+    $arrivedAt = @{}
+    foreach ($client in $running) {
+        $label = $client.Label
+        if ($client.Id -lt 1) { continue }
+        $id = $client.Id
+
+        if ((Select-PlayerEvents $events "client_connected" $id).Count -lt 1) {
+            $failures.Add("client $label reported joining as player $id but the server logged no client_connected for it")
+        }
+        # A watcher was never asked to walk, so the server owes it nothing else.
+        if ([string]::IsNullOrWhiteSpace($client.Click)) { continue }
+
+        if ((Select-PlayerEvents $events "move_to" $id).Count -lt 1) {
+            $failures.Add("client $label clicked but the server logged no move_to for player $id; the intent never reached it")
+        }
+
+        $assigned = Select-PlayerEvents $events "path_assigned" $id
+        if ($assigned.Count -lt 1) {
+            $failures.Add("the server assigned player $id (client $label) no path; there was nothing for anyone to walk")
+            continue
+        }
+        # The last one. A mid-walk click replaces the path, and it is the walk
+        # the run ends on that an arrival has to match.
+        $path = $assigned[$assigned.Count - 1]
+        if ($path.points.Count -lt 2) {
+            $failures.Add("player $id's path_assigned carries $($path.points.Count) point(s); a walk needs at least two")
+            continue
+        }
+        $from = $path.points[0]
+        $to = $path.points[$path.points.Count - 1]
+        $span = Get-Distance ([double]$from[0]) ([double]$from[1]) ([double]$to[0]) ([double]$to[1])
+        if ($span -lt $MinDisplacement) {
+            $failures.Add("player $id's assigned path spans only $([math]::Round($span, 3)) units; the server did not plan the walk the client asked for")
+        }
+
+        # The assertion this block exists for. The tick loop emits arrived only
+        # after it has advanced a player onto the last point of its polyline. A
+        # server that validates move_to, assigns a path, broadcasts it and then
+        # never moves anybody writes every other event in this log and not this
+        # one.
+        $arrived = $null
+        foreach ($candidate in (Select-PlayerEvents $events "arrived" $id)) {
+            if ($candidate.t -le $path.start_tick) { continue }
+            if ((Get-Distance ([double]$candidate.x) ([double]$candidate.z) ([double]$to[0]) ([double]$to[1])) -gt 1e-6) { continue }
+            $arrived = $candidate
+            break
+        }
+        if ($null -eq $arrived) {
+            $seen = (Select-PlayerEvents $events "arrived" $id).Count
+            $failures.Add(("the server never recorded player $id (client $label) arriving at " +
+                "($([math]::Round([double]$to[0], 3)), $([math]::Round([double]$to[1], 3))), the endpoint of the path it assigned " +
+                "at tick $($path.start_tick); the whole log holds $seen arrived event(s) for that player. " +
+                "The clients walked the polyline they were handed, but the server's world never moved."))
+            continue
+        }
+        Write-Host ("==> server: player {0} got a {1:N3}-unit path at tick {2} and arrived at ({3:N3}, {4:N3}) on tick {5}" -f `
+            $id, $span, $path.start_tick, [double]$arrived.x, [double]$arrived.z, $arrived.t)
+        $arrivedAt[$id] = [double[]] @([double]$arrived.x, [double]$arrived.z)
+    }
+
+    # The two layers tied to each other. The phase-1 walker's ~2.0s walk is long
+    # finished by shot 4, which comes 4.8s after its click, so by then every
+    # client must be drawing that body exactly where the server says it stopped.
+    # Displacement alone says both sides saw motion; this says they saw the same
+    # motion.
+    $walker1 = $walkerOfPhase[1]
+    if ($null -ne $walker1 -and $arrivedAt.ContainsKey($walker1)) {
+        $end = $arrivedAt[$walker1]
+        foreach ($client in $running) {
+            if ($null -eq $client.Positions) { continue }
+            if (-not $client.Positions.ContainsKey(4)) { continue }
+            if (-not $client.Positions[4].ContainsKey($walker1)) { continue }
+            $drawn = $client.Positions[4][$walker1]
+            $gap = Get-Distance $drawn[0] $drawn[1] $end[0] $end[1]
+            Write-Host ("==> client {0} drew player {1} {2:N4} units from where the server says it stopped" -f `
+                $client.Label, $walker1, $gap)
+            if ($gap -gt $MaxLayerDisagreement) {
+                $failures.Add(("client $($client.Label) drew player $walker1 at " +
+                    "($([math]::Round($drawn[0], 3)), $([math]::Round($drawn[1], 3))) in shot 4, but the server recorded it " +
+                    "arriving at ($([math]::Round($end[0], 3)), $([math]::Round($end[1], 3))): " +
+                    "$([math]::Round($gap, 3)) units apart"))
+            }
+        }
+    }
 } catch {
     $failures.Add("$($_.Exception.Message) [$($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())]")
 } finally {
@@ -456,12 +651,15 @@ try {
             $failures.Add("marqued wrote to stderr: $firstLine")
         }
     }
-    Show-File "marqued event log" $serverOut
+    Show-File "marqued event log ($serverOut)" $serverOut
+    # Scratch only: the built binary. Every observable is in $OutDir and stays
+    # there, because the GAMELOG this run's server-side assertions read is the
+    # only copy of the server's account of it.
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
 
 Write-Host ""
-Write-Host "screenshots: $OutDir"
+Write-Host "evidence (screenshots, client logs, server event log): $OutDir"
 if ($failures.Count -eq 0) {
     Write-Host "TWO CLIENT DEMO OK"
     exit 0

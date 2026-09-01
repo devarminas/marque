@@ -153,7 +153,7 @@ Shipped from M1a. Every number here was chosen to be usable, not good.
 
 | Name | Value | Where | What wrong feels like |
 |---|---|---|---|
-| `PickupRange` | `0.5` | `server/internal/game/items.go` | Too small and a player who looks like they are standing on an acorn does not take it. Too large and they take it from visibly beside it, then slide the rest of the way. It has to stay above one tick of walking, `WalkSpeed * TickDuration` = `0.45`, or a walker can step over the item without ever entering the range. |
+| `PickupRange` | `0.5` | `server/internal/game/items.go` | Too small and a player who looks like they are standing on an acorn does not take it. Too large and they take it from visibly beside it, then slide the rest of the way. **The only constraint is `PickupRange >= MinPathLength` (`1e-3`)**, a five-hundred-fold margin, because the underfoot case assigns no path and so is never closed by walking. |
 | `InventorySize` | `28` | `server/internal/game/store.go` | RuneScape's number. Not really a tuning knob; listed because it is on the wire and a client draws the grid it is told to draw. |
 
 Decisions M1a made that a human may want to overturn:
@@ -165,3 +165,37 @@ Decisions M1a made that a human may want to overturn:
 - **Join order decides a contested pickup**, which is decidable rather than fair. The first
   player to have connected wins every race they are in. Revisit the first time it feels unfair
   to a human, which needs a human playing.
+
+**This table used to claim `PickupRange` had to stay above `WalkSpeed * TickDuration` = `0.45`,
+or a walker could step over an item without entering range.** That was true of the rule M1a was
+originally written against, and it died when `PROTOCOL.md` deleted the distance carve-out from
+path assignment: a pending pickup's path now terminates at the item and `Advance` lands the
+walker exactly on the final waypoint, so resolution happens at latest on the arrival tick for
+any range. The old constraint left `0.5` guarded by five hundredths of a unit against a silent
+failure. It is corrected here rather than left standing, because this file's whole audience is a
+human tuning a number, and a dead constraint is the worst thing to hand them.
+
+## Ground items (M1c)
+
+Shipped values, all in `client/scenes/ground_item.tscn`. Every one was picked to be legible in
+a screenshot, not to look like anything.
+
+- **Item box `0.5 x 0.5 x 0.5`, sitting at `y` `0` to `0.5`.** Chosen against the player
+  capsule's `1.8` height so the two are not confusable at a glance. Wrong feels like an item you
+  have to hunt for on the ground, or one that reads as a crate rather than a thing you pick up.
+- **Known-kind albedo `(0.18, 0.72, 0.26)`, unknown-kind albedo `(0.95, 0.08, 0.85)`.** Green is
+  Pickup and magenta is missing-asset in `NOTES.md`'s palette, so these are semantics rather
+  than art and the look pass should leave the *meaning* alone even if it changes the shade.
+- **One mesh for every kind.** M1 ships one kind, so kind currently only picks a colour. The
+  moment a second kind ships with its own silhouette, `KNOWN_KINDS` in
+  `client/scripts/ground_item.gd` should become a kind-to-appearance table — mesh and material
+  per kind, with magenta as the miss — rather than a const array that grows. It is a const array
+  today because one entry is not yet a table.
+
+## Ground height, in two places
+
+`ground_y` is now an `@export` on both `player_avatar.tscn` and `ground_item.tscn`, both `0.0`,
+because `y` never crosses the wire and the M0 world is a flat plane. They are two copies of one
+fact. When terrain lands, both become a query against the same ground service, and they should
+move together: an item resting at a different height from the player standing over it is the
+failure this note exists to prevent.
