@@ -22,6 +22,7 @@
         client-b.stderr.log
         a_1.png .. a_4.png      client a's four self-captures
         b_1.png .. b_4.png      client b's
+        .marque-evidence        this harness's claim on the directory
 
     VERIFY HARNESS OK asserts structure only: the server announced itself,
     outlived the clients, and kept a silent stderr; each client joined, printed
@@ -38,7 +39,15 @@
 
 .PARAMETER EvidenceDir
     Where the evidence lands. Defaults to a fresh timestamped directory under
-    $env:TEMP\marque-verify. Created if absent, never cleaned up.
+    $env:TEMP\marque-verify. Never cleaned up after the run.
+
+    Emptied at startup, because the only checks made on a frame here are that it
+    exists and is over 4KB, and a stale PNG from an earlier run satisfies both:
+    reusing a directory would otherwise let a client that captured nothing be
+    proven healthy by the previous run's leftovers. The default path is fresh
+    every run, so this bites only a caller-supplied one. A directory this script
+    did not write is refused rather than emptied — it drops a `.marque-evidence`
+    marker into the ones it owns and clears only those.
 #>
 [CmdletBinding()]
 param(
@@ -63,7 +72,6 @@ if ([string]::IsNullOrWhiteSpace($EvidenceDir)) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $EvidenceDir = Join-Path $env:TEMP ("marque-verify\" + $stamp + "-" + [guid]::NewGuid().ToString("n").Substring(0, 6))
 }
-New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
 
 # Scratch state lives apart from the evidence so cleanup can never eat a proof.
 $work = Join-Path $env:TEMP ("marque-verify-work-" + [guid]::NewGuid().ToString("n"))
@@ -72,6 +80,9 @@ New-Item -ItemType Directory -Path $work | Out-Null
 $binary = Join-Path $work "marqued.exe"
 $serverOut = Join-Path $EvidenceDir "server.stdout.ndjson"
 $serverErr = Join-Path $EvidenceDir "server.stderr.log"
+# Presence marks a directory as this script's to empty. Content is for whoever
+# finds it and wonders.
+$evidenceMarker = Join-Path $EvidenceDir ".marque-evidence"
 
 $server = $null
 $failures = New-Object System.Collections.Generic.List[string]
@@ -85,6 +96,26 @@ function Get-DemoLine([string] $path, [string] $pattern) {
 }
 
 try {
+    # New-Item -Force creates-if-absent; it does not empty. A caller reusing an
+    # -EvidenceDir would otherwise inherit the last run's frames, and every
+    # frame check here is satisfied by a stale one.
+    if (Test-Path $EvidenceDir) {
+        $stale = @(Get-ChildItem -LiteralPath $EvidenceDir -Force)
+        if ($stale.Count -gt 0) {
+            if (-not (Test-Path $evidenceMarker)) {
+                throw ("$EvidenceDir is not empty and carries no .marque-evidence marker, so this " +
+                       "harness did not write it; refusing to clear it or to run beside it. " +
+                       "Pass a different -EvidenceDir, or empty it yourself.")
+            }
+            Write-Host "==> clearing $($stale.Count) leftover item(s) from $EvidenceDir"
+            Remove-Item -LiteralPath $stale.FullName -Recurse -Force
+        }
+    } else {
+        New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
+    }
+    Set-Content -LiteralPath $evidenceMarker -Encoding utf8 `
+        -Value "Evidence from .claude/skills/verify-marque/run.ps1. Its next run empties this directory."
+
     Write-Host "==> building marqued"
     Push-Location $serverDir
     try {

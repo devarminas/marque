@@ -1,15 +1,16 @@
 # Leaving the world
 
 When a client's connection ends, everyone else sees that player vanish: the server
-broadcasts `despawn` and logs `client_disconnected` with a single authoritative
-reason. A client whose own socket died freezes the world it has and logs loudly — M0
+broadcasts `despawn` and logs `client_disconnected` with one `reason`, whichever the
+hub reported. A client whose own socket died freezes the world it has and logs
+loudly — M0
 has no reconnect, so it neither clears the world nor pretends.
 
 ## Sub-features
 
 - `leave-despawn` — survivors' worlds drop the leaver's body.
-- `leave-reason` — the GAMELOG reason is the cause (`peer_gone`, `slow_client`),
-  latched at first condemnation; a detector firing later never overwrites it.
+- `leave-reason` — the GAMELOG carries a `reason`, one of the six the server
+  actually defines (see Gotchas).
 - `leave-freeze` — a client that lost the server keeps its last world, frozen, and
   logs loudly rather than clearing.
 
@@ -47,7 +48,29 @@ Preconditions:
   one of its clients mid-run makes the survivor's own run fail its capture contract.
   Expect exit 1 from the survivor and judge the claim on the logs and frames, not on
   its exit code.
-- Which slow-client detector fires (queue full vs write timeout) is a race by
-  design; assert on the latched `reason`, never on the `detail` field.
+- **Assert the reasons the server defines, not the ones `PROTOCOL.md` names.** The
+  `Disconnect*` constants in `server/internal/net/hub.go` are the whole list:
+
+  | Constant | Logged `reason` | When |
+  |---|---|---|
+  | `DisconnectClosed` | `closed` | the peer closed the connection |
+  | `DisconnectReadError` | `read_error` | the connection failed while reading |
+  | `DisconnectWriteError` | `write_error` | the connection failed while writing |
+  | `DisconnectSlow` | `send_buffer_full` | the client could not keep up |
+  | `DisconnectShutdown` | `server_shutdown` | the server is going away |
+  | `DisconnectProtocol` | `protocol_error` | the frame was uninterpretable |
+
+  A scripted client that quits on its own schedule lands on `read_error`, and that
+  is what every healthy `run.ps1` and `two_client_demo.ps1` run logs today.
+
+  `PROTOCOL.md`'s M1 section names `peer_gone` and `slow_client` instead. **Neither
+  string exists anywhere under `server/`.** They belong to a recorded decision — the
+  cause is authoritative over the detector, and the first condemnation latches —
+  that unit M1f will implement and nothing implements yet. An agent asserting the
+  protocol's names against today's server reports a defect that is not one, or
+  worse, "fixes" the server to match a document describing the future.
+- Nothing latches yet, and `client_disconnected` carries only `player` and `reason`.
+  There is no `detail` field on it to assert or to avoid; `detail` exists on
+  `move_to_rejected` and nowhere else.
 - M0's ordinary traffic is too sparse to fill the send queue; a stalled client dies
   by timeout minutes later. Do not wait for it in a bounded run.

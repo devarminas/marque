@@ -28,6 +28,16 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
 | each scripted client | `DEMO done` on its stdout |
 
+**A marker line is not proof either. Require both, and read the tail.** A `PASS:`
+line is unauthenticated text that any suite can print about itself. M1c's verifier
+made a failing suite print `PASS: 999 assertion(s) held across 8 suite(s)` from
+inside itself, ran the real interop harness against it, and watched the transcript
+parser believe the forgery; only the separate exit-code check turned the run red. So
+the rule is exit code **and** the marker, never either alone. Better still, take the
+marker from the **last line** of the output instead of grepping for it: all three
+PowerShell harnesses here print theirs last, and a grep matches a forgery buried
+anywhere in the middle.
+
 **Two evidence layers, and a behavioural claim usually needs both.** The client walks
 polylines by itself: the server sends waypoints once and never per-tick positions, so
 after a `path` broadcast the pixels and `DEMO pos` lines prove what the *client
@@ -137,12 +147,43 @@ It builds marqued, warms the caches, starts the server on a free port, runs clie
 leaves the evidence directory behind — the path is printed, defaulting under
 `$env:TEMP\marque-verify\`.
 
+**Both harnesses empty their output directory before they run**, because the only
+checks either makes on a frame are that it exists and is over 4KB, and a stale PNG
+from a previous run satisfies both. `run.ps1`'s default path is fresh every run, so
+this bites only a reused `-EvidenceDir`; `two_client_demo.ps1`'s default is the
+fixed `$env:TEMP\marque-two-client`, reused forever. Each drops a `.marque-evidence`
+marker into the directories it owns and **refuses to run into a non-empty directory
+that lacks one** rather than deleting somebody else's files. So: do not point either
+harness at a directory you care about, and do not treat files in an evidence
+directory as belonging to the run you are reading unless that run's own output
+printed them.
+
 `VERIFY HARNESS OK` asserts only structure: the server announced itself, outlived the
 clients, and wrote nothing to stderr; both clients joined, printed `DEMO done`,
 exited 0, and wrote four >4KB frames each. **It deliberately asserts nothing
 behavioural.** Your claim is proven by your own assertions against the evidence
-files. For the fixed M0 milestone scenario with its assertions already written, run
+files — and per the two-layer rule above, a movement claim needs the GAMELOG as well
+as the pixels, because a frozen server still earns `VERIFY HARNESS OK`.
+
+For the fixed M0 milestone scenario with its assertions already written, run
 `scripts/two_client_demo.ps1` instead; this harness exists for every other scenario.
+
+### What `scripts/two_client_demo.ps1` proves
+
+Both layers, since M1g. Its client layer is the pixels and the `DEMO pos`
+displacements; its server layer asserts, per player id resolved from that client's
+`DEMO joined` line, a `client_connected`, a `move_to`, a `path_assigned` spanning at
+least 2.0 units, and an **`arrived` after that path's `start_tick` whose coordinates
+match its endpoint** — the one event a server that hands out paths and never moves
+anybody cannot produce. It then ties the layers together: the phase-1 walker's
+`arrived` point must be within 0.05 units of where both clients drew that body in
+shot 4.
+
+Until M1g it asserted **nothing** about the server. All twenty-odd of its checks read
+a client's stdout or a client's PNG, and it deleted the server's log at teardown, so
+`game.World.step` losing its movement line earned `TWO CLIENT DEMO OK` with
+displacements byte-identical to a healthy run. If you are reading a demo transcript
+from before this section existed, it is evidence about pixels only.
 
 ### Raw protocol probes
 
@@ -163,7 +204,19 @@ Everything a `run.ps1` drive can prove lands in its evidence directory:
 | `server.stdout.ndjson` | The GAMELOG: the server's ground truth. One JSON object per line, keyed by tick `t`, greppable. |
 | `server.stderr.log` | Empty on a healthy run. Anything here is a panic or a fatal. |
 | `client-a.stdout.log`, `client-b.stdout.log` | The `DEMO` lines (grammar below), plus anything the client logged loudly. |
+| `client-a.stderr.log`, `client-b.stderr.log` | **Where a client failure actually lands.** `push_error` and `printerr` go here, not to stdout. |
 | `a_1.png` … `a_4.png`, `b_1.png` … `b_4.png` | Self-captures. Shots 1–2 bracket phase 1 (a's walk), shots 3–4 bracket phase 2 (b's walk). |
+| `.marque-evidence` | The harness's claim on the directory. Its presence is what lets the next run empty it. |
+
+`scripts/two_client_demo.ps1` writes the same set, under its `-OutDir`, with the
+same names.
+
+**Read the stderr files first when a client failed.** The most diagnostic message in
+this whole skill goes there and nowhere else: reproducing the frozen-server sabotage
+produced `DEMO TIMEOUT: fewer than 2 players after 20000ms` in a 50-byte
+`client-a.stderr.log`, while `client-a.stdout.log` simply stopped after
+`session: connecting`. An agent reading only stdout sees a client that trailed off
+and has to guess.
 
 **GAMELOG vocabulary (M0):** `server_started`, `server_stopping`, `client_connected`,
 `client_disconnected` (with a latched, cause-authoritative `reason`), `move_to`,
@@ -210,15 +263,18 @@ must sit below the `--quit-after` it runs under** — `--quit-after` exits 0, so
 watchdog above it can never fire and is decorative. The server-backed suites skip
 themselves when `MARQUE_WS_URL` is unset, so a green run with no `INTEROP RAN:` line
 tested far less than it appears to. `scripts/interop_test.ps1` enforces all of this
-and is the canonical full-stack pass: on a healthy checkout it reports 321 assertions
-across 6 suites.
+and is the canonical full-stack pass: on `main` after M1c it reports 443 assertions
+across 8 suites, of which `INTEROP RAN:` is 90 and `WIRING RAN:` is 89.
 
 ## Cleanup
 
 - `run.ps1` and both canonical scripts stop only the processes they started, by PID,
   and remove only their own scratch working directories.
-- The evidence directory is never part of cleanup. Proof artifacts survive the run at
-  the printed path; delete them yourself only after the claim is recorded.
+- The evidence directory is never cleaned up *after* a run. Proof artifacts survive
+  at the printed path; delete them yourself only after the claim is recorded.
+- It is emptied at the *start* of the next run of that harness, so copy anything you
+  intend to keep somewhere else before rerunning. A directory the harness did not
+  write is refused rather than emptied.
 - A crashed or interrupted run can strand a windowed client or the server; kill them
   by the PIDs from the harness output, never by image name — `godot.exe` may be the
   user's own editor.
@@ -237,6 +293,13 @@ across 6 suites.
   the real mouse. What the flag path cannot reach, a raw protocol probe must.
 - **One shared `user://`.** Anything two clients both write must go to absolute
   paths.
+- **A starved display fails every visual assertion at once.** Each capture waits 15
+  rendered frames; measured under load on this machine, one took about 4.4 seconds,
+  longer than the 2.07-second walk it brackets, so both frames of a phase showed the
+  walker already arrived and every displacement read 0. Six client-side failures
+  together with a healthy GAMELOG is that, not a broken build. Confirm it from the
+  server's clock — the two `move_to` events sit ~23 ticks apart on a healthy run and
+  sat 81 apart here — and free the display before believing anything visual.
 
 ## Known flake
 

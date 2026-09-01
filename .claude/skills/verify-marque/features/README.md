@@ -20,10 +20,14 @@ is documented in [../SKILL.md](../SKILL.md).
 - Screenshot prefixes are absolute host paths; two clients share one `user://`.
 - Resolve player ids from each client's `DEMO joined` line, never from launch order —
   the clients race to connect.
-- A run passed only if its marker line printed (`VERIFY HARNESS OK`,
-  `TWO CLIENT DEMO OK`, `INTEROP OK`, `PASS:`); exit codes alone prove nothing.
+- A run passed only if it exited 0 **and** its marker line printed
+  (`VERIFY HARNESS OK`, `TWO CLIENT DEMO OK`, `INTEROP OK`, `PASS:`). Neither alone
+  proves anything — a suite can print `PASS:` about itself, and one here did. Take
+  the marker from the last line of the output rather than from a grep.
 - Treat every command as literal; keep flags and quoting unchanged.
-- Do not remove proof artifacts during cleanup.
+- Do not remove proof artifacts during cleanup. The harness that wrote them empties
+  its own output directory at the start of its *next* run, so copy anything worth
+  keeping before rerunning.
 
 ## Proof and skip reporting
 
@@ -50,7 +54,8 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
 - [Click to move](./click-to-move.md) — the ground click, the path, the walk, the
   arrival.
 - [Two clients see each other walk](./two-clients-see-each-other.md) — the M0
-  milestone, both directions, with the still-camera pixel control.
+  milestone, both directions, with the still-camera pixel control and the server's
+  own `arrived` events.
 - [Rejected and malformed intents](./rejected-intents.md) — validation, `error`
   frames, and what the log records.
 - [Leaving the world](./disconnect-despawn.md) — despawn on the survivor's screen
