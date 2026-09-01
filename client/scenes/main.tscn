@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3 uid="uid://bbk0w4hee5gof"]
+[gd_scene load_steps=15 format=3 uid="uid://bbk0w4hee5gof"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="2_checker"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://scenes/player_avatar.tscn" id="5_avatar"]
 [ext_resource type="Script" path="res://scripts/session.gd" id="6_session"]
 [ext_resource type="Script" path="res://scripts/net_client.gd" id="7_net_client"]
+[ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.38, 0.5, 0.68, 1)
@@ -87,14 +88,63 @@ script = ExtResource("4_ground_picker")
 camera = NodePath("../CameraRig/Camera3D")
 ray_length = 4096.0
 ground_collision_mask = 1
+item_collision_mask = 2
 
-[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "ground_picker")]
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="InventoryPanel" type="PanelContainer" parent="UI" node_paths=PackedStringArray("slot_grid", "heading")]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -16.0
+offset_top = -16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 0
+grow_vertical = 0
+visible = false
+mouse_filter = 2
+script = ExtResource("8_inventory_panel")
+slot_grid = NodePath("Margin/Rows/Slots")
+heading = NodePath("Margin/Rows/Heading")
+unknown_heading = "Inventory —"
+
+[node name="Margin" type="MarginContainer" parent="UI/InventoryPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="Rows" type="VBoxContainer" parent="UI/InventoryPanel/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Heading" type="Label" parent="UI/InventoryPanel/Margin/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 14
+text = "Inventory —"
+
+[node name="Slots" type="GridContainer" parent="UI/InventoryPanel/Margin/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+columns = 4
+
+[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "ground_picker", "inventory_panel")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
 remote_players = NodePath("../RemotePlayers")
 ground_items = NodePath("../GroundItems")
 ground_picker = NodePath("../GroundPicker")
+inventory_panel = NodePath("../UI/InventoryPanel")
 
 [node name="Net" type="Node" parent="Session"]
 script = ExtResource("7_net_client")

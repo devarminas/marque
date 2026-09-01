@@ -1,12 +1,26 @@
-extends Node3D
+extends StaticBody3D
 
 ## One ground item's body. Instanced once per live item id by `session.gd`.
 ##
 ## The scene is [code]res://scenes/ground_item.tscn[/code]. How many items are
 ## lying on the ground is genuine runtime information, so instancing it in
 ## script is the case CLAUDE.md's scene-authoring rule explicitly allows. Its
-## [i]contents[/i] — the mesh, its size, and both materials — are authored in
-## the scene file and nothing here builds a node.
+## [i]contents[/i] — the mesh, its collision shape, its size, and both materials
+## — are authored in the scene file and nothing here builds a node.
+##
+## [b]It is a body so that a click can land on it.[/b] **M1d.** The root is a
+## [StaticBody3D] on collision layer 2, the ground is on layer 1, and
+## [code]ground_picker.gd[/code] casts one ray against both: the nearest surface
+## wins, so a cursor over an item resolves to the item and a cursor beside it
+## resolves to the ground. That is a physics fact rather than a rule anybody
+## wrote, which is why the picker does not have to guess afterwards which of the
+## two a click meant. Layer 2 is not decoration: `pick_ground()` still queries
+## layer 1 alone and still answers "where is the ground under this cursor",
+## which is a different question and stays available to the demo scripts.
+##
+## The collision box matches the drawn box exactly. A generous click target
+## would be kinder to a player and would also be a lie about where the item is,
+## and the first time those two disagree the bug is invisible.
 ##
 ## [b]This is not an avatar.[/b] It never walks, so it owns no
 ## [code]polyline_walker.gd[/code], no clock, and no facing. Item ids and player
@@ -28,15 +42,10 @@ extends Node3D
 ## Typed by [code]preload[/code] rather than by global [code]class_name[/code],
 ## per NOTES.md, "Godot authoring traps".
 
-## Item type names this client has art for.
-##
-## M1 ships exactly one (PROTOCOL.md, `item_spawn`). Anything else renders
-## magenta rather than nothing, because a missing asset must scream (NOTES.md,
-## "Color as semantics") and because unknown kinds are how content is added
-## without a client release. That path is the one that has to work when a server
-## learns a second kind before this client does, so it is tested rather than
-## assumed.
-const KNOWN_KINDS: PackedStringArray = ["acorn"]
+## The kinds this client has art for. **M1d** moved the list to its own file
+## because the inventory panel draws the same kinds this body does, and two
+## copies could disagree about one of them.
+const ItemKinds := preload("res://scripts/item_kinds.gd")
 
 ## Server item id, or 0 before [method configure]. Item ids are assigned from 1
 ## (PROTOCOL.md, "Identity"), so 0 means unconfigured.
@@ -103,7 +112,7 @@ func place_at(x: float, z: float) -> void:
 
 ## True when this client has art for [member kind].
 func is_kind_known() -> bool:
-	return kind in KNOWN_KINDS
+	return ItemKinds.is_known(kind)
 
 
 ## The colour this body is actually drawing, as opposed to the one it meant to.

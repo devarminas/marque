@@ -57,6 +57,7 @@ const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const PlayerAvatarScene := preload("res://scenes/player_avatar.tscn")
 const GroundItemScript := preload("res://scripts/ground_item.gd")
 const GroundItemScene := preload("res://scenes/ground_item.tscn")
+const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 
 ## Command-line flag naming the websocket URL, as `--server <url>` after the
@@ -75,6 +76,21 @@ signal joined(you: int)
 ## different test.
 signal move_to_requested(x: float, z: float)
 
+## Emitted whenever a click on an item is forwarded as a `pickup`. **M1.**
+##
+## [param item_id] is an item id, and it is a key of [member _items] rather than
+## anything read off the node the click landed on: see [method _on_item_clicked].
+## A click on a body this session has no registry entry for emits nothing at
+## all, so this signal firing is itself the claim that the id is one the server
+## named.
+signal pickup_requested(item_id: int)
+
+## Emitted whenever a click on an occupied inventory slot is forwarded as a
+## `drop`. **M1.**
+##
+## [param slot] is a slot index, never an item id (`PROTOCOL.md`, `drop`).
+signal drop_requested(slot: int)
+
 ## The [code]net_client.gd[/code] node. Authored as this node's child in
 ## [code]main.tscn[/code]; it needs to be in the tree because it polls its
 ## socket from [method Node._process].
@@ -91,9 +107,15 @@ signal move_to_requested(x: float, z: float)
 @export var ground_items: Node3D
 ## The [code]ground_picker.gd[/code] node whose clicks become intents.
 @export var ground_picker: Node
+## The [code]inventory_panel.gd[/code] node the `inventory` message drives.
+## Authored in [code]main.tscn[/code] under the [code]UI[/code] layer, because
+## there is exactly one inventory panel per world (CLAUDE.md). Only its slots
+## are runtime, and the panel builds those itself.
+@export var inventory_panel: Node
 
 var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
+var _panel: InventoryPanelScript = null
 var _local: PlayerAvatarScript = null
 var _clock := TickClock.new()
 ## This client's own player id, or 0 before `welcome`.
@@ -131,6 +153,7 @@ func _ready() -> void:
 	_net.path_assigned.connect(_on_path_assigned)
 	_net.item_spawned.connect(_on_item_spawned)
 	_net.item_despawned.connect(_on_item_despawned)
+	_net.inventory_changed.connect(_on_inventory_changed)
 	_net.server_error.connect(_on_server_error)
 	_net.disconnected.connect(_on_disconnected)
 
@@ -139,6 +162,13 @@ func _ready() -> void:
 		push_error("Session.ground_picker must point at a node running ground_picker.gd")
 	else:
 		_picker.ground_clicked.connect(_on_ground_clicked)
+		_picker.item_clicked.connect(_on_item_clicked)
+
+	_panel = inventory_panel as InventoryPanelScript
+	if _panel == null:
+		push_error("Session.inventory_panel must point at a node running inventory_panel.gd")
+	else:
+		_panel.slot_activated.connect(_on_slot_activated)
 
 	var url := _server_from_command_line()
 	if not url.is_empty():
@@ -211,6 +241,53 @@ func request_move_to(x: float, z: float) -> void:
 	_net.send_move_to(x, z)
 
 
+## Sends `pickup` for a ground item, as a click on that item's body would. **M1.**
+##
+## [param item_id] must already be in this session's item registry. An id the
+## server has not named is refused here, loudly, and nothing reaches the wire:
+## the client has zero authority and inventing an id is the purest form of
+## claiming some.
+##
+## [b]Nothing else happens.[/b] No path is drawn, no body is removed, and no
+## inventory slot is filled. A pickup is a walk plus a pending action on the
+## server (`PROTOCOL.md`, *Pickup*), so the walk arrives as an ordinary `path`
+## and the item leaves the world when `item_despawn` says it did. A client that
+## took the body away on click would be right most of the time and would show
+## the loser of a contested pickup an item vanishing that they never got.
+##
+## Public so that a scripted client can drive the same path a click drives
+## without synthesising an input event.
+func request_pickup(item_id: int) -> void:
+	if item_for(item_id) == null:
+		push_warning("session: pickup for item %d, which this client does not know; ignoring"
+			% item_id)
+		return
+	pickup_requested.emit(item_id)
+	if _net == null or not _net.is_open():
+		push_warning("session: pickup of item %d dropped, the socket is not open" % item_id)
+		return
+	_net.send_pickup(item_id)
+
+
+## Sends `drop` for an inventory slot, as a click on that slot would. **M1.**
+##
+## [param slot] is an index into the inventory this client was last told it has,
+## never an item id: the server looks up what is actually there, which is the
+## intents-never-facts rule at its most load-bearing (`PROTOCOL.md`, `drop`).
+##
+## The panel is not changed here. It changes when the `inventory` the server
+## sends back says it changed, and not before.
+func request_drop(slot: int) -> void:
+	if slot < 0:
+		push_error("session: drop for slot %d; slot indices start at 0" % slot)
+		return
+	drop_requested.emit(slot)
+	if _net == null or not _net.is_open():
+		push_warning("session: drop of slot %d dropped, the socket is not open" % slot)
+		return
+	_net.send_drop(slot)
+
+
 ## `welcome`. The whole world, restated.
 ##
 ## Applied by rebuilding rather than by patching: `welcome` is the complete
@@ -235,6 +312,13 @@ func _on_welcomed(
 		return
 
 	_forget_everyone()
+	# The inventory is not part of `welcome` — it is private to one player and
+	# arrives as its own message inside the same atomic step (PROTOCOL.md,
+	# `welcome`) — so the panel is emptied here and refilled a frame later by
+	# the `inventory` that follows. Leaving the old one up would show a previous
+	# session's contents as if the server had just restated them.
+	if _panel != null:
+		_panel.clear()
 	_you = you
 	_tick_ms = tick_ms
 	# PROTOCOL.md, "Clock": anchored from welcome against a monotonic source,
@@ -384,6 +468,50 @@ func _on_ground_clicked(x: float, z: float) -> void:
 	request_move_to(x, z)
 
 
+## A left click that met a ground item before it met the ground. **M1.**
+##
+## [b]The id comes from the registry, not from the node.[/b] The picker hands
+## over the body it hit and this looks that body up in [member _items], so the
+## id that reaches the wire is a key the server itself named in a `welcome`,
+## `item_spawn`, or `welcome.items`. Reading an `item_id` property off the node
+## instead would put whatever that node claimed on the wire, and a body this
+## session never registered — one left behind by a bug, or built by a test —
+## would become a `pickup` for an item that may belong to somebody else's id
+## space entirely.
+func _on_item_clicked(body: Node3D) -> void:
+	var item := body as GroundItemScript
+	if item == null:
+		push_error("session: the picker reported a click on %s, which is not a ground item" % body)
+		return
+	var id := _id_of_item_body(item)
+	if id == 0:
+		push_warning(
+			"session: clicked an item body this session has no registry entry for (%s); ignoring"
+			% item.name
+		)
+		return
+	request_pickup(id)
+
+
+## A click on an occupied inventory slot. **M1.**
+func _on_slot_activated(slot: int) -> void:
+	request_drop(slot)
+
+
+## `inventory`. **M1.** This client's own inventory, restated in full.
+##
+## Handed straight to the panel. Nothing is cached here: a second copy of the
+## inventory in this script would be a cache of a cache, and the panel is
+## already only a view of what the server last said.
+func _on_inventory_changed(
+	size: int, slot_indices: PackedInt32Array, slot_kinds: PackedStringArray
+) -> void:
+	if _panel == null:
+		push_error("session: inventory arrived with no panel to draw it")
+		return
+	_panel.apply(size, slot_indices, slot_kinds)
+
+
 ## The body for [param id], creating it if this session has not seen it before.
 ##
 ## The local body is the authored node; every other body is an instance of
@@ -464,6 +592,19 @@ func _ensure_item(id: int, kind: String) -> GroundItemScript:
 	ground_items.add_child(body)
 	_items[id] = body
 	return body
+
+
+## The item id [param body] is registered under, or 0 when it is registered
+## under none. Item ids start at 1 (PROTOCOL.md, "Identity"), so 0 is not one.
+##
+## A linear scan over at most a world's worth of ground items, run once per
+## click on one. Keying a second dictionary by body would be a second thing to
+## keep in step with the first, for a saving nobody can measure.
+func _id_of_item_body(body: GroundItemScript) -> int:
+	for id: int in _items:
+		if _items[id] == body:
+			return id
+	return 0
 
 
 ## Drops one item body. Unlike a player body there is no authored case: every
