@@ -300,25 +300,43 @@ watching the other move while its own camera is provably still, the two walks ar
 apart so neither can be mistaken for the other, and the demo fails loudly if either direction is
 stationary.
 
-## M1, in flight
+## M1
 
-Four units merged, each with a verdict in its PR body.
+**The milestone holds. Two Godot clients race for one item on the ground and exactly one gets
+it, proven by observation.** Measured on `main` at `87f2a82` by the coordinator, not inferred:
+
+```
+==> server: player 1 took item 1 into slot 0 on tick 52; player 2 lost it on tick 52
+==> server: the contest resolved on tick 52 and was lost on tick 52; gap 0 tick(s)
+CONTESTED PICKUP DEMO OK
+```
+
+Seven units merged, each with a verdict in its PR body, which is the ledger.
 
 | Unit | PR | Verdicts | What |
 |---|---|---|---|
 | M1c | #8 | `live-ui-verified`, `conformance-holds-with-findings` | The second registry: ground item bodies, green for a known kind and magenta for an unknown one |
-| M1h | #11 | `unit-test-verified` | Client stops asserting on a session-wide accumulator, and accepts a `null` list |
 | M1g | #9 | `live-ui-verified` | The demo asserts server state, plus the `verify-marque` skill |
 | M1a | #10 | `unit-test-verified`, `conformance-holds-with-findings` | `Store`, ground items, inventory, `pickup`, contested resolution |
+| M1h | #11 | `unit-test-verified` | Client stops asserting on a session-wide accumulator, and accepts a `null` list |
+| M1b | #12 | `unit-test-verified` | `drop`, pickup's reverse transaction, and a new id every time |
+| M1d | #13 | `live-ui-verified` | Clicking an item picks it up; the inventory panel |
+| M1e | #14 | `live-ui-verified`, `sabotage-holds-with-findings` | **The milestone.** Two clients, one item, exactly one holder |
 
-Open, in dependency order. **M1b** and **M1d** are the critical path to **M1e**, the milestone.
-**M1f** (the slow-client condemnation latch), **M1j** (the demo's plausibility assertion and a
-false causal claim in `SKILL.md`), and **M1i** (`hub_test.go`'s background-goroutine `*testing.T`
-use) are independent and unscheduled.
+**Three units still open, none blocking.** **M1j** hardens the demos: `two_client_demo.ps1` still
+passes a teleporting server, `contested_pickup_demo.ps1` asserts no player position so a
+teleported loser passes it, its aim check refuses about 29% of runs on a one-tick anchor skew,
+and `SKILL.md` carries a false causal claim about the frozen-server sabotage. **M1k** makes the
+inventory panel opaque, which is a live product defect proven against a windowed client. **M1f**
+implements the slow-client condemnation latch the contract records and nothing yet builds, and
+absorbs **M1i**, `hub_test.go`'s background-goroutine `*testing.T` use.
 
-**Verified green on `main` at `ef5eda8`**, by the coordinator rather than by inference: interop
-`PASS: 463 assertion(s) held across 8 suite(s)` with `INTEROP OK`, the demo `TWO CLIENT DEMO OK`
-with its server-side layer, and `go test ./...` clean across all three packages.
+**What M1 cost beyond its plan.** It was cut as five units and ran to ten. Every addition came
+from a verifier finding something real, never from the plan growing: a client assertion that
+blocked a sibling, a demo that could not tell a frozen server from a live one, a panel that walks
+the player, a contract decision nobody had implemented, and a test-only defect found while
+reading. **That ratio is the argument for the verification discipline**, not the ceremony around
+it. Five verifiers each invented a false pass nobody had listed, and four of the five were real.
 
 Two commands tell you the stack is alive:
 
