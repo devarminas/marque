@@ -60,3 +60,6 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
   frames, and what the log records.
 - [Leaving the world](./disconnect-despawn.md) — despawn on the survivor's screen
   and the latched disconnect reason.
+- [Two clients race for one item](./contested-pickup.md) — the M1 milestone: one item,
+  two clicks on the same server tick, exactly one winner; plus the drop and the
+  `item_spawned` coordinates nothing else in this repo asserts.

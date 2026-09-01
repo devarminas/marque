@@ -37,6 +37,7 @@ const SessionScript := preload("res://scripts/session.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const NetClientScript := preload("res://scripts/net_client.gd")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
+const PickupDemoScript := preload("res://scripts/pickup_demo.gd")
 
 ## One capture to [constant SCREENSHOT_PATH], then quit. M0c's visual check.
 const SCREENSHOT_FLAG := "--screenshot"
@@ -76,6 +77,27 @@ const CLICK_FLAG := "--click"
 ## clients walk over the run, so both directions of "each sees the other walk"
 ## are captured, and each direction gets its still-camera window.
 const PHASE_FLAG := "--phase"
+
+## Three captures around a contested pickup, written to `<prefix>_1.png` through
+## `<prefix>_3.png`. **M1e**, the milestone.
+##
+## A mode of its own rather than a phase inside [constant SHOTS_FLAG]. That one
+## is a choreography of ground clicks whose whole point is that exactly one
+## player moves per capture window, so that a still camera can be the pixel
+## control. This is the opposite scenario by construction: two players click the
+## same item on the same server tick, and there is no still camera anywhere in
+## it. `pickup_demo.gd` drives it and documents each beat.
+##
+## The prefix is an absolute host path, for [constant SHOTS_FLAG]'s reason.
+const PICKUP_SHOTS_FLAG := "--pickup-shots"
+
+## Where the winner of that contest clicks the ground before dropping the item,
+## as a viewport fraction: `--drop-click 0.30,0.62`. **M1e.**
+##
+## The walk is not decoration. A drop lands the item at the dropper's position,
+## and telling a truthful coordinate from a zeroed one needs a dropper standing
+## somewhere that is neither the origin nor where the item was picked up.
+const DROP_CLICK_FLAG := "--drop-click"
 
 ## How many phases the demo runs. One per client.
 const DEMO_PHASES := 2
@@ -132,6 +154,9 @@ func _ready() -> void:
 	# a scripted world is only a starting state, and a live server's frames
 	# arrive on top of it exactly as they would on top of an empty one.
 	_feed_scripted_frames(args)
+	if PICKUP_SHOTS_FLAG in args:
+		await _run_pickup_demo(args)
+		return
 	if SHOTS_FLAG in args:
 		await _run_demo(args)
 		return
@@ -200,6 +225,40 @@ func _print_world_contents() -> void:
 		"main: world holds %d player body(s), %d item body(s), %d/%d inventory slot(s) filled"
 		% [session.known_ids().size(), session.known_item_ids().size(), carried, slots]
 	)
+
+
+## The contested-pickup check, from this client's side. **M1e.**
+##
+## Parses the flags here, where every other flag is parsed, and hands typed
+## values to `pickup_demo.gd`, which owns the choreography. The exit code is
+## that script's: it is the only thing in this path that knows whether the run
+## reached its own preconditions.
+func _run_pickup_demo(args: Array) -> void:
+	var prefix := _argument_after(args, PICKUP_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % PICKUP_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+	# Refused rather than defaulted. [method _parse_fraction] centres a fraction
+	# it cannot read, which keeps the M0 demo producing comparable frames; here
+	# the fraction decides where an item is dropped and a silent centre would
+	# make this run measure a destination nobody asked for.
+	var drop_click := _argument_after(args, DROP_CLICK_FLAG)
+	if drop_click.split(",").size() != 2:
+		push_error("%s needs a viewport fraction after it, like 0.30,0.62" % DROP_CLICK_FLAG)
+		get_tree().quit(1)
+		return
+
+	var session := get_node_or_null("Session") as SessionScript
+	var panel := get_node_or_null("UI/InventoryPanel") as InventoryPanelScript
+	if session == null or panel == null:
+		push_error("main.tscn is missing the Session or UI/InventoryPanel node to drive")
+		get_tree().quit(1)
+		return
+
+	var demo := PickupDemoScript.new()
+	var code: int = await demo.run(self, session, panel, prefix, _parse_fraction(drop_click))
+	get_tree().quit(code)
 
 
 ## The two-client visual check, from this client's side.
