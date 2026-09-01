@@ -80,6 +80,29 @@ right. None blocks anything.
   point" above, and it will read the same way: the player cannot tell an item apart from scenery
   except by clicking it. RuneScape has hover text and a right-click menu. Marque has a green box.
 
+## The inventory panel, and a compromise forced by the test harness
+
+From M1d. Read the headless-viewport entry in `NOTES.md` first; this is its consequence.
+
+- **A click on the panel's margin, or between two slots, currently walks your character.** The
+  panel's chrome is click-transparent and only the slot widgets take input. RuneScape's sidebar
+  is opaque and nothing behind it is reachable, which is obviously what a player expects.
+  **This is not a design choice, it is a workaround.** The headless viewport is 64x64 whatever
+  the project settings say, a 28-slot panel covers all of it, and an opaque panel broke three
+  other suites. The fix is a click-blocking background on the panel plus a way for the headless
+  suite to test the world without the panel over it, and it cannot be verified headless today.
+- **An empty panel hides itself**, for the same reason and with the same smell.
+- **Nothing sizes the UI to the window.** The panel is laid out for 1280x720 and there is no
+  stretch mode. That is a project-wide decision rather than a number, and it should be made once
+  rather than per-element.
+- **The click target for a ground item is exactly the drawn 0.5 cube.** RuneScape gives a
+  dropped item a generous hitbox precisely because hunting for a pixel is miserable. Feel, so
+  parked, but it is the first thing a player will swear at.
+- **`apply` frees and rebuilds all 28 slot widgets on every `inventory` message.** Correct, not
+  free, and not yet worth measuring at M1's traffic.
+- **No hover text, no tooltip, no drag between slots, no right-click menu.** RuneScape has all
+  four. None is M1, and all four are what make an inventory feel like an inventory.
+
 ## Scale cliffs, not tuning
 
 Not feel, but parked here for the same reason: real, unreachable today, and expensive to

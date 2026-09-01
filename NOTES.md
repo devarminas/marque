@@ -73,6 +73,34 @@ adding a headless test.
   budget on one network handshake. Pin `Engine.max_fps` for the duration of any time-sensitive
   suite and restore it after.
 
+- **The headless viewport is 64x64, whatever the project says, and it lies to you about it.**
+  Measured against 4.7.2, in one run:
+
+  | Probe | Result |
+  |---|---|
+  | viewport size during `_initialize` | `(100, 100)` |
+  | `root.size = Vector2i(1280, 720)`, read back on the next line | `(1280, 720)` |
+  | viewport size on the **first frame** | `(64, 64)` |
+  | `DisplayServer.window_get_size()` | `(0, 0)` |
+  | `window_set_size(1280, 720)` then read back | `(0, 0)` |
+  | `display/window/size/viewport_width` in project settings | `1280` |
+
+  **The assignment appears to succeed.** It reads back as the value you set, and reverts by the
+  time any frame runs, so a test that sets the size and asserts it immediately passes while the
+  suite it protects runs at 64x64. `DisplayServer` is simply absent: it neither sets nor reports.
+
+  This is not a curiosity, it changed the product. A 28-slot inventory panel laid out for
+  1280x720 covers an entire 64x64 viewport, so under headless test it swallows every click meant
+  for the world. M1d shipped the panel's chrome as `MOUSE_FILTER_IGNORE` with only the slot
+  widgets taking clicks, and made an empty panel hide itself, both to keep other suites passing.
+  **A click on the panel's margin currently walks the player**, which RuneScape's opaque sidebar
+  would never do. That is a real compromise forced by a test-environment artifact, and it is
+  parked in `FOLLOW-UPS.md` rather than pretended to be a design choice.
+
+  Corollary: a click outside the 64x64 rect reaches no `Control` at all, so a headless UI test
+  must aim inside it. And `Control.mouse_filter` defaults are not what you would guess.
+  `ColorRect` and `Panel` default to `STOP` (`0`); only `Label` defaults to `IGNORE` (`2`). A
+  `ColorRect` background swallows its own children's clicks.
 - **`%v` in a GDScript format string accepts only vector types, and a `Color` fails it at
   runtime while leaving the assertion green.** Reproduced against 4.7.2, verbatim:
 
