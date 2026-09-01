@@ -257,7 +257,10 @@ either shipped, which is the only place it could have been found cheaply.
 So, two rules that overlap on purpose:
 
 - **A sender never emits `null` for a list.** Initialise the slice; do not rely on the marshaller.
-- **A receiver treats `null` as an absent key**, meaning empty, and logs loudly. This is the
+- **A receiver treats `null` as an empty list**, and logs loudly. Not as an absent key: those
+  differ for `inventory.slots`, where absent is malformed and stays a dropped frame, because
+  `inventory` and `slots` were born in the same contract revision so no sender legitimately
+  omits it. `welcome.items` may legitimately be absent, from a pre-M1 server. This is the
   client's lenient side again, and the reasoning is the same one that forbids it closing on a
   bad frame: the server is its only peer, so the cost of being strict is the whole session, and
   the cost of being lenient is a log line naming a server bug.

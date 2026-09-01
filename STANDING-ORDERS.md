@@ -133,11 +133,19 @@ Full detail in `NOTES.md`. Summary:
     deleting the event log, stop both harnesses running into a dirty output directory, and land
     the verification skill that PR #9 failed on. **Blocks M1e**, which otherwise inherits a demo
     that cannot tell a frozen server from a live one.
-  - **M1h**, Godot. Two over-tight assertions in `client/tests/test_interop.gd` accumulate
-    unknown top-level keys across a whole session and assert the accumulator holds exactly
-    `["tick"]`. Any M1 message trips them and `inventory` does. Also the receiver's half of the
-    null-list rule. **Blocks M1a's merge**, and must merge first, because the corrected
-    assertion passes against both the old server and the new one.
+  - **M1h**, Godot. Merged, PR #11, `unit-test-verified`. Two over-tight assertions in
+    `client/tests/test_interop.gd` asserted on a session-wide accumulator of unknown top-level
+    keys, plus the receiver's half of the null-list rule.
+
+    **The sentence that used to be here said "any M1 message trips them and `inventory` does".
+    That was false, and it was already false when it was committed.** `inventory` became a
+    *known* message when M1c merged at 11:16:11, so it never reaches the unknown path at all;
+    this line landed at 11:16:56, forty-five seconds later. The write and the merge raced and
+    the write lost. M1a saw those assertions fail only because its branch predated the merge.
+    The assertions were still worth fixing, because any genuinely unknown key breaks them, but
+    M1a's real exposure was the null rule alone. Recorded because a coordinator writing program
+    state from a worker's report, forty-five seconds after the thing that falsified it, is a
+    failure mode worth naming.
   - **M1i**, Go, small and unscheduled. `hub_test.go:752` calls a `*testing.T`-touching helper
     from a background goroutine, which the harness's own comment forbids. Pre-existing,
     test-only, found while reading. Not blocking anything.
