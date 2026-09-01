@@ -5,6 +5,16 @@ export.cfg
 export_presets.cfg
 *.translation
 
+# Editor-generated resource id sidecars. Only the six from the first unit that
+# ran the editor were ever tracked, so every later worker was told to build the
+# editor cache and then found a dirty worktree full of files that looked
+# committable. Probed before removing them: nothing here resolves a resource by
+# uid, the two `uid://` strings in the repo are `[gd_scene]` self-declarations
+# rather than `ext_resource` references, and with every .uid deleted the suite
+# is green at 217 assertions with no `invalid UID` warning. Godot regenerates
+# them on the next editor pass.
+*.uid
+
 # Go
 /server/bin/
 *.exe
