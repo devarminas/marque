@@ -69,10 +69,11 @@ signal welcomed(
 ## listener. Emission here is synchronous and in that order, so it does not.
 ##
 ## Emitted on every `welcome`: one carrying items, one carrying an empty `items`
-## array, and one from a pre-M1 server with no `items` key at all. The last two
-## mean the same thing — the world has no ground items — and a listener that
-## only heard about items when there were some could never clear the ones it
-## already had.
+## array, one from a pre-M1 server with no `items` key at all, and one whose
+## `items` is `null` because a server marshalled an empty slice badly. The last
+## three mean the same thing — the world has no ground items — and a listener
+## that only heard about items when there were some could never clear the ones
+## it already had. Only the `null` one logs; see [method _is_null_list].
 ##
 ## The three arrays are index aligned.
 signal welcome_items(
@@ -347,10 +348,15 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 	var item_kinds := PackedStringArray()
 	var item_positions := PackedVector2Array()
 	if body.has("items"):
-		if typeof(body["items"]) != TYPE_ARRAY:
+		var raw: Variant = body["items"]
+		if _is_null_list(raw, "welcome.items", text):
+			# Logged and accommodated: `null` means empty, exactly as an absent
+			# key does.
+			raw = []
+		if typeof(raw) != TYPE_ARRAY:
 			push_error("net_client: welcome.items is not an array: %s" % text)
 			return
-		for entry: Variant in body["items"] as Array:
+		for entry: Variant in raw as Array:
 			var item := _item_state(entry, "welcome.items entry", text)
 			if item.is_empty():
 				return
@@ -436,13 +442,20 @@ func _on_inventory(body: Dictionary, text: String) -> void:
 	if size < 0:
 		push_error("net_client: inventory.size is negative (%d): %s" % [size, text])
 		return
-	if typeof(body.get("slots")) != TYPE_ARRAY:
+	var raw: Variant = body.get("slots")
+	# `null` means empty and is logged. An absent `slots` is still missing: no
+	# sender legitimately omits it, `inventory` has no pre-M1 form to be
+	# compatible with, and the guard on `has` is what keeps the two apart —
+	# `Dictionary.get` hands back the null rather than its default.
+	if body.has("slots") and _is_null_list(raw, "inventory.slots", text):
+		raw = []
+	if typeof(raw) != TYPE_ARRAY:
 		push_error("net_client: inventory.slots is missing or not an array: %s" % text)
 		return
 
 	var indices := PackedInt32Array()
 	var kinds := PackedStringArray()
-	for entry: Variant in body["slots"] as Array:
+	for entry: Variant in raw as Array:
 		if typeof(entry) != TYPE_DICTIONARY:
 			push_error("net_client: inventory.slots entry is not an object: %s" % text)
 			return
@@ -520,6 +533,42 @@ func _send(message: Dictionary) -> Error:
 		return ERR_UNCONFIGURED
 	var payload := JSON.stringify(message).to_utf8_buffer()
 	return _peer.send(payload, WebSocketPeer.WRITE_MODE_TEXT)
+
+
+## True when a list-valued field arrived as JSON [code]null[/code], which means
+## empty. Logs loudly when it does, and is silent otherwise.
+##
+## [b]`null` is a server bug, and this is the one place it is accommodated.[/b]
+## A Go server holding a slice that was never appended to marshals it as
+## [code]null[/code] rather than [code][][/code], and it does so silently. A
+## receiver that read that as "not an array" would drop the whole frame, and for
+## `welcome` that means the client never joins and sits frozen forever with
+## nothing wrong on either side. `PROTOCOL.md`, `inventory`, binds both halves:
+## a sender never emits `null` for a list, and a receiver treats it as an absent
+## key, meaning empty, and logs. That is the same call this file already makes
+## about a malformed frame — the server is this client's only peer and M0 has no
+## reconnect, so strictness costs the whole session and leniency costs a log line
+## naming somebody else's defect.
+##
+## It buys nothing else. Every non-array that is not `null` returns false here
+## and the caller refuses it exactly as before.
+##
+## [b]The check has to be this one.[/b] A JSON `null` reaches GDScript from
+## [method JSON.parse_string] as a key that is [i]present[/i] and holds
+## [constant TYPE_NIL], so [method Dictionary.has] is true and the default
+## argument of [method Dictionary.get] is never reached. Verified against 4.7.2:
+## for `{"items":null}`, `has("items")` is `true`, `typeof(d["items"])` is
+## `TYPE_NIL`, and `d.get("items", [])` returns the null, not the `[]`.
+static func _is_null_list(value: Variant, where: String, text: String) -> bool:
+	if typeof(value) != TYPE_NIL:
+		return false
+	push_error(
+		(
+			"net_client: %s is null, which is a server bug; an empty list is []"
+			+ " and never null. Read as empty: %s"
+		) % [where, text]
+	)
+	return true
 
 
 ## True when every named key is present and numeric. Logs which one was not.
