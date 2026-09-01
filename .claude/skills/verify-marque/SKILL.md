@@ -24,6 +24,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | Headless suite runner | `PASS: N assertion(s) held across M suite(s)` on stdout |
 | `scripts/interop_test.ps1` | `INTEROP OK`, plus the `INTEROP RAN:` and `WIRING RAN:` lines |
 | `scripts/two_client_demo.ps1` | `TWO CLIENT DEMO OK` |
+| `scripts/contested_pickup_demo.ps1` | `CONTESTED PICKUP DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
 | each scripted client | `DEMO done` on its stdout |
@@ -127,6 +128,8 @@ anything looks off.
 | `--shots <abs-prefix>` | Enter scripted demo mode; write `<prefix>_1.png` … `<prefix>_4.png`. **Absolute host path required**: two Godot processes share one `user://` and would overwrite each other's frames. |
 | `--click fx,fy` | Where this client clicks the ground, as viewport fractions, e.g. `0.30,0.72`. |
 | `--phase 1\|2` | Which of the two phases this client clicks in. Absent or 0: it never walks, only watches and captures. |
+| `--pickup-shots <abs-prefix>` | Enter the contested-pickup demo mode (`pickup_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M1e.** Both clients run this with identical arguments; neither is told who wins. Absolute host path required, for `--shots`' reason. |
+| `--drop-click fx,fy` | Where the winner of that contest clicks the ground before dropping, as viewport fractions. Required alongside `--pickup-shots`, and refused rather than defaulted if it will not parse. |
 | `--screenshot` | No server needed: render `main.tscn`, save one frame to `user://shot.png`, print its absolute path, quit. The single-client visual baseline. |
 
 Scripted demo mode waits for **two** players (`DEMO_MIN_PLAYERS` in `main.gd`), so a
@@ -147,15 +150,16 @@ It builds marqued, warms the caches, starts the server on a free port, runs clie
 leaves the evidence directory behind — the path is printed, defaulting under
 `$env:TEMP\marque-verify\`.
 
-**Both harnesses empty their output directory before they run**, because the only
-checks either makes on a frame are that it exists and is over 4KB, and a stale PNG
+**All three harnesses empty their output directory before they run**, because the only
+checks any of them makes on a frame are that it exists and is over 4KB, and a stale PNG
 from a previous run satisfies both. `run.ps1`'s default path is fresh every run, so
-this bites only a reused `-EvidenceDir`; `two_client_demo.ps1`'s default is the
-fixed `$env:TEMP\marque-two-client`, reused forever. Each drops a `.marque-evidence`
-marker into the directories it owns and **refuses to run into a non-empty directory
-that lacks one** rather than deleting somebody else's files. So: do not point either
-harness at a directory you care about, and do not treat files in an evidence
-directory as belonging to the run you are reading unless that run's own output
+this bites only a reused `-EvidenceDir`; `two_client_demo.ps1`'s default is the fixed
+`$env:TEMP\marque-two-client` and `contested_pickup_demo.ps1`'s the fixed
+`$env:TEMP\marque-contested-pickup`, both reused forever. Each drops a
+`.marque-evidence` marker into the directories it owns and **refuses to run into a
+non-empty directory that lacks one** rather than deleting somebody else's files. So: do
+not point any of them at a directory you care about, and do not treat files in an
+evidence directory as belonging to the run you are reading unless that run's own output
 printed them.
 
 `VERIFY HARNESS OK` asserts only structure: the server announced itself, outlived the
@@ -184,6 +188,46 @@ a client's stdout or a client's PNG, and it deleted the server's log at teardown
 `game.World.step` losing its movement line earned `TWO CLIENT DEMO OK` with
 displacements byte-identical to a healthy run. If you are reading a demo transcript
 from before this section existed, it is evidence about pixels only.
+
+### What `scripts/contested_pickup_demo.ps1` proves
+
+The M1 milestone, on three layers. `features/contested-pickup.md` is the full recipe;
+this is what the harness itself asserts and why the shape differs from the M0 demo's.
+
+**The claim is server-side and no arrangement of pixels can carry it.** "Exactly one
+client gets the item" is a fact about the server's store. Two clients that both drew an
+empty patch of ground look identical whether the item went to one player, to both, or
+to neither. So the load-bearing assertions are one `pickup_resolved` and one
+`pickup_lost` for the same item id naming different players, two `pickup` intents from
+two distinct players, and no `pickup_rejected` or `pickup_no_room`.
+
+**It also asserts every walk is plausible, which the M0 demo does not.** That demo
+proves the server *finished* a walk — it matches an `arrived` against the endpoint of
+the path it assigned — and a tick loop whose per-tick distance is 1000.0 crosses the
+whole polyline in one tick and produces a perfectly formed `arrived`. This one checks
+`arrived.t - start_tick` against `ceil(span / (WalkSpeed * TickDuration))` within two
+ticks. Healthy figures on this machine: 16 ticks for a 7.071-unit walk, 13 for a
+5.567-unit one, both exactly the ideal. That closes the open half of unit M1j at the
+layer that depends on it.
+
+**It is the only thing in this repo that asserts `item_spawned`'s coordinates.** For
+the seed, against what `-item` asked for; for the drop, against where the dropper's
+`arrived` says it stood, plus a floor on the distance from the origin and from where
+the item was seeded — so a run whose coordinates were zeroed cannot pass by having the
+walk also end at zero. A verifier logged those coordinates zeroed while the store and
+the wire stayed truthful and all 93 Go tests stayed green; anything that reads the log
+as ground truth, this harness included, was wrong with no way to say so.
+
+**There is no `item_despawn` event in the event log.** The despawn is a wire message
+only (`items.go`, `w.broadcast(mnet.ItemDespawn...)`); `EvItemDespawned` does not
+exist. Do not write a recipe that greps for it. The demo proves the despawn from
+`pickup_resolved`, which causes it, and from both clients dropping the item body —
+which a client does only on receiving that frame.
+
+Sabotage-tested: `memStore.TakeGroundItem` was changed to leave the item on the ground,
+so both contestants took it. The demo failed on ten assertions at once, led by "the
+server resolved 2 pickup(s) of item 1, want exactly 1" and "the server recorded 0 lost
+pickup(s)", and both clients reported holding an acorn.
 
 ### Raw protocol probes
 
