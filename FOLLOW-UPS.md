@@ -146,3 +146,22 @@ Shipped values from M0c, all in `client/scenes/main.tscn`:
 prescribes lit ones, because unlit ignores the directional light and kills the cast shadow that
 makes a capsule look like it is standing on the ground rather than floating. That reasoning is
 about legibility, not beauty, so the look pass should revisit it on its own terms.
+
+## Items and pickup
+
+Shipped from M1a. Every number here was chosen to be usable, not good.
+
+| Name | Value | Where | What wrong feels like |
+|---|---|---|---|
+| `PickupRange` | `0.5` | `server/internal/game/items.go` | Too small and a player who looks like they are standing on an acorn does not take it. Too large and they take it from visibly beside it, then slide the rest of the way. It has to stay above one tick of walking, `WalkSpeed * TickDuration` = `0.45`, or a walker can step over the item without ever entering the range. |
+| `InventorySize` | `28` | `server/internal/game/store.go` | RuneScape's number. Not really a tuning knob; listed because it is on the wire and a client draws the grid it is told to draw. |
+
+Decisions M1a made that a human may want to overturn:
+
+- **A player's inventory is deleted when they disconnect.** There is no persistence in M1 and no
+  drop-on-logout, so whatever they were carrying leaves the world with them rather than falling
+  at their feet. It is one line in `World.removePlayer`. RuneScape drops on death, not on
+  logout, so this is not obviously wrong; it is just undecided.
+- **Join order decides a contested pickup**, which is decidable rather than fair. The first
+  player to have connected wins every race they are in. Revisit the first time it feels unfair
+  to a human, which needs a human playing.

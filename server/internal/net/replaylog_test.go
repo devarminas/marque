@@ -47,7 +47,7 @@ func TestJoinReplayLogsTheReAnchoredPath(t *testing.T) {
 	time.Sleep(4 * game.TickDuration)
 
 	bob := h.dial("bob")
-	bobWelcome := bob.welcome()
+	bobWelcome := bob.welcomeFrame()
 	inFlight := bob.path()
 
 	replays := h.awaitEvents(game.EvPathReplayed, 1)
@@ -126,7 +126,7 @@ func TestJoinReplayLogsOncePerWalker(t *testing.T) {
 	bob.drain()
 
 	carol := h.dial("carol")
-	carolWelcome := carol.welcome()
+	carolWelcome := carol.welcomeFrame()
 
 	replays := h.awaitEvents(game.EvPathReplayed, 2)
 	if len(replays) != 2 {

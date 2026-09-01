@@ -31,7 +31,7 @@ func (idleTransport) Events() <-chan mnet.Event { return nil }
 func newStepWorld(t *testing.T) (*World, *bytes.Buffer) {
 	t.Helper()
 	logs := &bytes.Buffer{}
-	return NewWorld(idleTransport{}, gamelog.New(logs, true)), logs
+	return NewWorld(idleTransport{}, gamelog.New(logs, true), NewMemoryStore()), logs
 }
 
 // TestCatchUpStopsAtTheBound is the arithmetic of PROTOCOL.md's "Clock": at

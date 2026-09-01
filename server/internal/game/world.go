@@ -106,6 +106,35 @@ const (
 	// the frame's kind yet, so naming one would be a claim the code cannot
 	// make.
 	EvFrameDropped = "frame_dropped"
+
+	// Item and pickup events. Every change to where an item is has its own
+	// name, for EvPathReplayed's reason: a reader counting one outcome must get
+	// the right answer without knowing to exclude anything, and these five do
+	// not share a field set.
+	//
+	// EvItemSpawned is an item entering the world. Seeding is the only way in
+	// M1a; M1b's drop is the second, and it reuses this name because it is the
+	// same state change with the same fields.
+	EvItemSpawned = "item_spawned"
+	// EvPickup is the intent arriving. It records what the client asked for,
+	// before the server has decided anything about it.
+	EvPickup = "pickup"
+	// EvPickupRejected is a pickup refused outright, which in M1a means it
+	// named no live ground item or its body would not decode. It carries the
+	// rejection's fields, not a pickup's, because it shares refuse with
+	// move_to.
+	EvPickupRejected = "pickup_rejected"
+	// EvPickupResolved is the item changing hands: one winner, one slot, in one
+	// tick. It is the only event in M1a that records an item leaving the
+	// ground.
+	EvPickupResolved = "pickup_resolved"
+	// EvPickupLost is a pending pickup whose item was gone when the player
+	// arrived. Distinct from EvPickupRejected because nothing was wrong with
+	// the intent: it was legal when it was made and somebody else was faster.
+	EvPickupLost = "pickup_lost"
+	// EvPickupNoRoom is a pending pickup that arrived at a full inventory. The
+	// item stays where it is.
+	EvPickupNoRoom = "pickup_no_room"
 )
 
 // Transport is the world's view of the network: a stream of connection events.
@@ -125,6 +154,16 @@ type player struct {
 
 	// remaining is the waypoints still ahead. Empty means standing still.
 	remaining []Point
+
+	// pending is the item this player is walking to take, or zero when there is
+	// none. A player has at most one: a second pickup replaces it, and a
+	// move_to cancels it, because clicking the ground says you wanted something
+	// else (PROTOCOL.md, "Pickup").
+	//
+	// Zero is the absent value rather than a pointer or a second bool, because
+	// item ids start at 1 and are never reused, so no live item can ever be
+	// mistaken for "none".
+	pending mnet.ItemID
 }
 
 func (p *player) walking() bool { return len(p.remaining) > 0 }
@@ -137,24 +176,40 @@ type World struct {
 	transport Transport
 	log       *gamelog.Logger
 
+	// items holds every item location, on the ground and in inventories. The
+	// world owns no item state of its own: asking the store is the only way to
+	// learn where something is. Swapping this for a Postgres implementation is
+	// the whole of what standing order 6 asks for.
+	items Store
+
 	tick   int64
 	nextID mnet.PlayerID
 
 	players map[*mnet.Conn]*player
 	// order keeps iteration deterministic. Go randomises map iteration, which
 	// would make welcome's player list and broadcast order differ run to run,
-	// and replay diffs are only useful when two identical runs agree.
+	// and replay diffs are only useful when two identical runs agree. It is
+	// also the tiebreaker for a contested pickup, so it is load-bearing for
+	// game rules and not only for logs.
 	order []*mnet.Conn
 }
 
-// NewWorld returns an empty world reading intents from transport.
-func NewWorld(transport Transport, log *gamelog.Logger) *World {
+// NewWorld returns an empty world reading intents from transport and keeping
+// items in store.
+//
+// The store must be used by nobody else. Once Run starts, its goroutine is the
+// only thing allowed to touch it.
+func NewWorld(transport Transport, log *gamelog.Logger, store Store) *World {
 	if transport == nil {
 		panic("game: nil transport")
+	}
+	if store == nil {
+		panic("game: nil store")
 	}
 	return &World{
 		transport: transport,
 		log:       log,
+		items:     store,
 		players:   make(map[*mnet.Conn]*player),
 	}
 }
@@ -208,7 +263,16 @@ func (w *World) stepAll(owed *time.Duration) {
 	}
 }
 
-// step advances one tick.
+// step advances one tick. It is the transaction boundary: everything one tick
+// decides is decided here, on this goroutine, with nothing observable in
+// between.
+//
+// Movement and pickup resolution are two passes rather than one, so that "a
+// pending pickup resolves after movement has advanced" (PROTOCOL.md, "Pickup")
+// is true of every player and not only of the player being visited. The passes
+// happen to be equivalent today, because resolving reads only the resolving
+// player's own position; the day a rule reads somebody else's, one pass would
+// be wrong and nothing would say so.
 func (w *World) step() {
 	w.tick++
 	distance := WalkSpeed * TickDuration.Seconds()
@@ -225,6 +289,17 @@ func (w *World) step() {
 				"x":      p.pos.X,
 				"z":      p.pos.Z,
 			})
+		}
+	}
+
+	// Join order, deliberately: the first player in w.order who has a pending
+	// pickup for an item and is near enough to it takes it, and every later
+	// player in this same pass finds it gone. Never a range over w.players,
+	// whose iteration order Go randomises; the winner of a contest must be the
+	// same in two identical runs.
+	for _, conn := range w.order {
+		if p := w.players[conn]; p.pending != 0 {
+			w.resolvePickup(p)
 		}
 	}
 }
@@ -258,6 +333,7 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 	p := &player{id: w.nextID, conn: conn, pos: Point{X: spawnX, Z: spawnZ}}
 	w.players[conn] = p
 	w.order = append(w.order, conn)
+	w.items.AddPlayer(p.id)
 
 	w.log.Event(w.tick, EvConnected, gamelog.Fields{
 		"player": p.id,
@@ -274,6 +350,7 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		TickMS:  int(TickDuration.Milliseconds()),
 		Tick:    w.tick,
 		Players: states,
+		Items:   w.groundItemStates(),
 	})
 
 	// Everyone already mid-walk is described to the newcomer with an ordinary
@@ -298,6 +375,13 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		w.send(p, replay)
 	}
 
+	// Last inside the atomic step, after the replays. The inventory is the one
+	// thing in the step that is about this player rather than about the world,
+	// and nothing about the world may be observable to the newcomer before it
+	// has been told everything the step describes (PROTOCOL.md, "Ordering and
+	// the join race").
+	w.sendInventory(p)
+
 	w.broadcast(mnet.Spawn{ID: p.id, X: p.pos.X, Z: p.pos.Z}, conn)
 }
 
@@ -319,6 +403,11 @@ func (w *World) removePlayer(conn *mnet.Conn, reason string) {
 			break
 		}
 	}
+	// Whatever they were carrying leaves with them. M1 has no persistence and
+	// no drop-on-logout, so this is deletion rather than a transfer to the
+	// ground; making it a transfer is a design decision, not a bug fix, and it
+	// is parked in FOLLOW-UPS.md.
+	w.items.RemovePlayer(p.id)
 
 	w.log.Event(w.tick, EvDisconnected, gamelog.Fields{
 		"player": p.id,
@@ -354,6 +443,8 @@ func (w *World) handleFrame(ev mnet.Event) {
 	switch msg := ev.Msg.(type) {
 	case mnet.MoveTo:
 		w.moveTo(p, msg)
+	case mnet.Pickup:
+		w.pickup(p, msg)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -381,11 +472,24 @@ func (w *World) refuse(p *player, rejection *mnet.RejectError) {
 		return
 	}
 
-	w.log.Event(w.tick, EvMoveToRejected, fields)
+	w.log.Event(w.tick, rejectionEvent(rejection.Re), fields)
 	w.send(p, mnet.Error{Re: rejection.Re, Msg: rejection.Detail})
 	if rejection.Disposition == mnet.ReplyErrorAndClose {
 		p.conn.CloseAfterFlush(mnet.DisconnectProtocol)
 	}
+}
+
+// rejectionEvent names the log event for a refusal after the message it refused.
+//
+// A reader asking "how many pickups did this server turn down" must not have to
+// know that pickups were once logged under move_to's name. The default covers
+// the frames too malformed to attribute to any message, which carry no "re" and
+// which the log has always filed here.
+func rejectionEvent(re string) string {
+	if re == mnet.MsgPickup {
+		return EvPickupRejected
+	}
+	return EvMoveToRejected
 }
 
 // moveTo answers a click.
@@ -431,6 +535,12 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo) {
 		points = []Point{p.pos}
 	}
 
+	// Clicking the ground says you wanted something else, so it cancels a
+	// pending pickup. Here, at the point the click actually changes where the
+	// player is going, and not on entry: a click the server refuses changes
+	// nothing, and an out-of-bounds coordinate must not quietly cost the player
+	// the item they were already walking to.
+	p.pending = 0
 	p.remaining = points[1:]
 
 	out := mnet.Path{
@@ -465,26 +575,35 @@ func pathLogFields(msg mnet.Path) gamelog.Fields {
 // would move the player somewhere they did not click and leave the client
 // unable to tell the difference between "obeyed" and "corrected".
 func (w *World) validate(msg mnet.MoveTo) *mnet.RejectError {
-	// Decoding already refuses non-finite coordinates. Repeated here because
-	// this function, not the decoder, is what stands between a number and world
-	// state, and a NaN position would poison every later broadcast.
-	if !finite(msg.X) || !finite(msg.Z) {
-		return &mnet.RejectError{
-			Reason:      mnet.ReasonNonFinite,
-			Detail:      "move_to coordinates must be finite",
-			Re:          mnet.MsgMoveTo,
-			Disposition: mnet.ReplyError,
-		}
+	reason, detail := checkCoordinates(msg.X, msg.Z)
+	if reason == "" {
+		return nil
 	}
-	if math.Abs(msg.X) > WorldHalfExtent || math.Abs(msg.Z) > WorldHalfExtent {
-		return &mnet.RejectError{
-			Reason:      mnet.ReasonOutOfBounds,
-			Detail:      fmt.Sprintf("out of bounds: x and z must be within +/-%v", WorldHalfExtent),
-			Re:          mnet.MsgMoveTo,
-			Disposition: mnet.ReplyError,
-		}
+	return &mnet.RejectError{
+		Reason:      reason,
+		Detail:      mnet.MsgMoveTo + ": " + detail,
+		Re:          mnet.MsgMoveTo,
+		Disposition: mnet.ReplyError,
 	}
-	return nil
+}
+
+// checkCoordinates says why (x, z) may not enter world state, or returns an
+// empty reason when it may. It is the one place the question is answered, so a
+// seeded item and a clicked destination are held to the same rule and cannot
+// drift apart.
+//
+// Decoding already refuses non-finite client coordinates. Repeated here because
+// this function, not the decoder, is what stands between a number and world
+// state: a NaN would poison every later broadcast, and seeds do not come
+// through the decoder at all.
+func checkCoordinates(x, z float64) (mnet.RejectReason, string) {
+	if !finite(x) || !finite(z) {
+		return mnet.ReasonNonFinite, "coordinates must be finite"
+	}
+	if math.Abs(x) > WorldHalfExtent || math.Abs(z) > WorldHalfExtent {
+		return mnet.ReasonOutOfBounds, fmt.Sprintf("out of bounds: x and z must be within +/-%v", WorldHalfExtent)
+	}
+	return "", ""
 }
 
 // pathMessage describes a walk already in progress as if it had just been

@@ -90,14 +90,33 @@ type harness struct {
 	once    sync.Once
 }
 
+// seed is one ground item placed before the world opens, the way marqued's
+// -item flag places one. Ids are assigned in the order given, so a test naming
+// item 1 means the first seed it passed.
+type seed struct {
+	kind string
+	x, z float64
+}
+
+func acornAt(x, z float64) seed { return seed{kind: game.KindAcorn, x: x, z: z} }
+
 // newHarness boots hub, world, and HTTP server exactly the way cmd/marqued
-// does, and tears them down in the same order.
-func newHarness(t *testing.T) *harness {
+// does, seeds any items it was given, and tears everything down in the same
+// order marqued does.
+func newHarness(t *testing.T, seeds ...seed) *harness {
 	t.Helper()
 
 	logs := &syncBuffer{}
 	hub := mnet.NewHub()
-	world := game.NewWorld(hub, gamelog.New(logs, true))
+	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore())
+
+	// Before Run, which is the only time seeding is safe: after it, the world
+	// goroutine owns the store.
+	for _, s := range seeds {
+		if err := world.SeedGroundItem(s.kind, s.x, s.z); err != nil {
+			t.Fatalf("seeding %+v: %v", s, err)
+		}
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws", hub)
@@ -234,11 +253,14 @@ type client struct {
 // frame is a decoded server message. Every field but one is nil, which is what
 // makes it a usable assertion about the key-as-tag envelope.
 type frame struct {
-	Welcome *mnet.Welcome `json:"welcome"`
-	Spawn   *mnet.Spawn   `json:"spawn"`
-	Despawn *mnet.Despawn `json:"despawn"`
-	Path    *mnet.Path    `json:"path"`
-	Error   *mnet.Error   `json:"error"`
+	Welcome     *mnet.Welcome     `json:"welcome"`
+	Spawn       *mnet.Spawn       `json:"spawn"`
+	Despawn     *mnet.Despawn     `json:"despawn"`
+	Path        *mnet.Path        `json:"path"`
+	Error       *mnet.Error       `json:"error"`
+	ItemSpawn   *mnet.ItemSpawn   `json:"item_spawn"`
+	ItemDespawn *mnet.ItemDespawn `json:"item_despawn"`
+	Inventory   *mnet.Inventory   `json:"inventory"`
 
 	raw string
 	// bad is set when the frame broke an envelope rule. The reader goroutine
@@ -259,6 +281,12 @@ func (f frame) kind() string {
 		return "path"
 	case f.Error != nil:
 		return "error"
+	case f.ItemSpawn != nil:
+		return "item_spawn"
+	case f.ItemDespawn != nil:
+		return "item_despawn"
+	case f.Inventory != nil:
+		return "inventory"
 	default:
 		return "none"
 	}
@@ -328,6 +356,11 @@ func (c *client) sendBinary(payload []byte) {
 	}
 }
 
+func (c *client) pickup(item mnet.ItemID) {
+	c.t.Helper()
+	c.sendRaw(fmt.Sprintf(`{"pickup":{"item":%d}}`, item))
+}
+
 func (c *client) moveTo(x, z float64) {
 	c.t.Helper()
 	c.sendRaw(fmt.Sprintf(`{"move_to":{"x":%v,"z":%v}}`, x, z))
@@ -382,6 +415,18 @@ func (c *client) tryNext(within time.Duration) (frame, bool) {
 
 func (c *client) welcome() mnet.Welcome {
 	c.t.Helper()
+	got := c.welcomeFrame()
+	// The joining player's own inventory is the last frame of the atomic
+	// welcome step. A test that expects a path replay in between must read the
+	// step a frame at a time with welcomeFrame; everything else joins a world
+	// with nobody walking, where welcome and inventory are adjacent.
+	c.inventory()
+	return got
+}
+
+// welcomeFrame reads only the welcome, leaving the rest of the join step queued.
+func (c *client) welcomeFrame() mnet.Welcome {
+	c.t.Helper()
 	f := c.next()
 	if f.Welcome == nil {
 		c.t.Fatalf("client %s: got a %s frame, want welcome: %s", c.name, f.kind(), f.raw)
@@ -414,6 +459,80 @@ func (c *client) errorFrame() mnet.Error {
 		c.t.Fatalf("client %s: got a %s frame, want error: %s", c.name, f.kind(), f.raw)
 	}
 	return *f.Error
+}
+
+// awaitError reads until an error arrives, ignoring everything else. A refusal
+// that follows a broadcast, such as a lost pickup's halt path, is not the next
+// frame the client sees.
+func (c *client) awaitError() mnet.Error {
+	c.t.Helper()
+
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(readTimeout)
+		if !ok {
+			break
+		}
+		if f.Error != nil {
+			return *f.Error
+		}
+	}
+	c.t.Fatalf("client %s: no error frame within %v", c.name, readTimeout)
+	return mnet.Error{}
+}
+
+func (c *client) inventory() mnet.Inventory {
+	c.t.Helper()
+	f := c.next()
+	if f.Inventory == nil {
+		c.t.Fatalf("client %s: got a %s frame, want inventory: %s", c.name, f.kind(), f.raw)
+	}
+	return *f.Inventory
+}
+
+// awaitInventory reads until an inventory arrives, ignoring everything else. A
+// pickup resolving broadcasts a despawn to every client before it unicasts the
+// winner's inventory, so the winner sees traffic in between.
+func (c *client) awaitInventory() mnet.Inventory {
+	c.t.Helper()
+	return *c.awaitInventoryFrame().Inventory
+}
+
+// awaitInventoryFrame is awaitInventory keeping the raw JSON, for the
+// assertions that are about the encoding rather than the values.
+func (c *client) awaitInventoryFrame() frame {
+	c.t.Helper()
+
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(readTimeout)
+		if !ok {
+			break
+		}
+		if f.Inventory != nil {
+			return f
+		}
+	}
+	c.t.Fatalf("client %s: no inventory within %v", c.name, readTimeout)
+	return frame{}
+}
+
+// awaitItemDespawn reads until the named item is announced gone.
+func (c *client) awaitItemDespawn(item mnet.ItemID) mnet.ItemDespawn {
+	c.t.Helper()
+
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(readTimeout)
+		if !ok {
+			break
+		}
+		if f.ItemDespawn != nil && f.ItemDespawn.ID == item {
+			return *f.ItemDespawn
+		}
+	}
+	c.t.Fatalf("client %s: no item_despawn for item %d within %v", c.name, item, readTimeout)
+	return mnet.ItemDespawn{}
 }
 
 func (c *client) despawn() mnet.Despawn {

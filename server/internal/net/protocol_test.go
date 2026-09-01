@@ -25,8 +25,43 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 					{ID: 1, X: 0, Z: 0},
 					{ID: 2, X: 5, Z: 5},
 				},
+				Items: []mnet.ItemState{{ID: 7, Kind: "acorn", X: 3, Z: -2}},
 			},
-			want: `{"welcome":{"you":1,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0},{"id":2,"x":5,"z":5}]}}`,
+			want: `{"welcome":{"you":1,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0},{"id":2,"x":5,"z":5}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}]}}`,
+		},
+		{
+			// An empty world is [] on both arrays, never null and never an
+			// absent key. A client should not have to tell three spellings of
+			// "nothing there" apart.
+			name: "welcome with an empty world",
+			msg: mnet.Welcome{
+				You:     1,
+				TickMS:  150,
+				Tick:    0,
+				Players: []mnet.PlayerState{},
+				Items:   []mnet.ItemState{},
+			},
+			want: `{"welcome":{"you":1,"tick_ms":150,"tick":0,"players":[],"items":[]}}`,
+		},
+		{
+			name: "item_spawn",
+			msg:  mnet.ItemSpawn{ID: 7, Kind: "acorn", X: 3, Z: -2},
+			want: `{"item_spawn":{"id":7,"kind":"acorn","x":3,"z":-2}}`,
+		},
+		{
+			name: "item_despawn",
+			msg:  mnet.ItemDespawn{ID: 7},
+			want: `{"item_despawn":{"id":7}}`,
+		},
+		{
+			name: "inventory",
+			msg:  mnet.Inventory{Size: 28, Slots: []mnet.InventorySlot{{Slot: 1, Kind: "acorn"}}},
+			want: `{"inventory":{"size":28,"slots":[{"slot":1,"kind":"acorn"}]}}`,
+		},
+		{
+			name: "empty inventory",
+			msg:  mnet.Inventory{Size: 28, Slots: []mnet.InventorySlot{}},
+			want: `{"inventory":{"size":28,"slots":[]}}`,
 		},
 		{
 			name: "spawn",
