@@ -244,6 +244,24 @@ rather than null. A sparse list is smaller, and it keeps both ends off the quest
 JSON library represents a null inside an array, which is a question about someone else's code
 that this contract does not need to answer.
 
+**An empty list is `[]`, or for `welcome.items` an absent key. It is never `null`.** This binds
+both ends and it is not a style preference.
+
+A Go server holding `Items []ItemState` that was never appended to marshals `null`, not `[]`,
+and it does so silently. A strict client reading `null` as "not an array" drops the whole frame,
+and for `welcome` that means **the client never joins and sits frozen forever**. Nothing in
+either half looks wrong while that happens: the server sent a conforming-looking frame and the
+client obeyed its own never-close rule. Found by a verifier reading across the two halves before
+either shipped, which is the only place it could have been found cheaply.
+
+So, two rules that overlap on purpose:
+
+- **A sender never emits `null` for a list.** Initialise the slice; do not rely on the marshaller.
+- **A receiver treats `null` as an absent key**, meaning empty, and logs loudly. This is the
+  client's lenient side again, and the reasoning is the same one that forbids it closing on a
+  bad frame: the server is its only peer, so the cost of being strict is the whole session, and
+  the cost of being lenient is a log line naming a server bug.
+
 `size` is the number of slots the player has. Twenty-eight, which is RuneScape's, and one
 server-side constant. Slot indices run `0` to `size - 1`. `size` is on the wire so the client
 draws the grid it is told to draw rather than hardcoding a second copy of the number.

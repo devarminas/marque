@@ -73,6 +73,23 @@ adding a headless test.
   budget on one network handshake. Pin `Engine.max_fps` for the duration of any time-sensitive
   suite and restore it after.
 
+- **`%v` in a GDScript format string accepts only vector types, and a `Color` fails it at
+  runtime while leaving the assertion green.** Reproduced against 4.7.2, verbatim:
+
+  ```
+  ERROR: String formatting error: %v requires a vector type (Vector2/3/4/2i/3i/4i).
+  format-with-color returned: [unknown kind draws %v]
+  ```
+
+  The script loads, the line runs, the error is logged, and **the expression returns the
+  template with `%v` still in it**. So a test whose failure message formats a `Color` degrades
+  into an unreadable message while the check itself stays green, and nothing fails. Use `%s`
+  for a `Color`.
+
+  Worse, `scripts/interop_test.ps1` cannot save you here: it fails on the *server's* stderr but
+  only displays Godot's, and it cannot cheaply be made stricter, because the malformed-frame
+  tests deliberately write `push_error` output to that same stream. Writing the trap down is
+  the only cheap defence.
 - **`godot.exe` output cannot be captured by direct assignment in PowerShell, but pipes fine.**
   Measured on this machine, and the split is exact:
 
