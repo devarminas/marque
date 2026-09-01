@@ -108,9 +108,21 @@ told to invent modes nobody had tried, found two more, both real and both in the
 
 Four rules:
 
-- **A verify recipe must require the runner's `PASS:` line, not merely exit 0.** Exit code
-  alone cannot distinguish a green run from a run that quit before asserting anything. This
-  costs one `grep` and closes the worst of the two modes above at the recipe level.
+- **A verify recipe must require exit 0 *and* the runner's `PASS:` line. Either alone is a
+  false pass, in opposite directions.** Exit code alone cannot distinguish a green run from a
+  run that quit before asserting anything. And the `PASS:` line alone is worse than it looks:
+  **it is unauthenticated output that any suite can print.**
+
+  M1c's verifier demonstrated this. It made a failing suite print
+  `PASS: 999 assertion(s) held across 8 suite(s)` from inside itself, then ran the real
+  `interop_test.ps1` against it and watched the harness's transcript parser believe the forgery,
+  reporting `runner: PASS, 999 assertions across 8 suites`. Only the separate exit-code check
+  turned the run red. A checker that had followed the earlier version of this rule literally,
+  grepping for `PASS:` and nothing else, would have passed a suite that failed.
+
+  Better than either: **the runner emits `PASS` only as its final line, and checkers read the
+  tail rather than grepping the whole transcript.** Grep matches a forgery anywhere in the
+  output; a tail read does not.
 - **Any bound a test runner enforces must be below the `--quit-after` it runs under**, or the
   harness exits successfully before the bound is reached and the bound is decorative.
 - **Treat a passed sabotage suite as evidence about the modes tested, not about the runner.**

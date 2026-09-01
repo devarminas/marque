@@ -122,6 +122,25 @@ Full detail in `NOTES.md`. Summary:
     Needs M1a and M1c.
   - **M1e**, the milestone. Two real clients race for one item; exactly one gets it, by
     observation. A `scripts/` demo alongside `two_client_demo.ps1`. Needs everything above.
+
+  Four more units, none in the original cut, each opened because something real was found:
+
+  - **M1f**, Go. Implement the slow-client condemnation decision `PROTOCOL.md` now records:
+    classify by cause, latch on first condemnation. Found because a worker wrote `slow_client`
+    and `peer_gone` into a document as if they were current behaviour when nothing implements
+    them. Independent of everything else.
+  - **M1g**, PowerShell and markdown. Make `two_client_demo.ps1` assert server state, stop it
+    deleting the event log, stop both harnesses running into a dirty output directory, and land
+    the verification skill that PR #9 failed on. **Blocks M1e**, which otherwise inherits a demo
+    that cannot tell a frozen server from a live one.
+  - **M1h**, Godot. Two over-tight assertions in `client/tests/test_interop.gd` accumulate
+    unknown top-level keys across a whole session and assert the accumulator holds exactly
+    `["tick"]`. Any M1 message trips them and `inventory` does. Also the receiver's half of the
+    null-list rule. **Blocks M1a's merge**, and must merge first, because the corrected
+    assertion passes against both the old server and the new one.
+  - **M1i**, Go, small and unscheduled. `hub_test.go:752` calls a `*testing.T`-touching helper
+    from a background goroutine, which the harness's own comment forbids. Pre-existing,
+    test-only, found while reading. Not blocking anything.
 - **M2**. Reconnect. Sequence numbers and server-side dedupe.
 
 ## Pasting these orders
@@ -158,7 +177,28 @@ Two commands tell you the stack is alive:
   free port, runs the whole Godot suite against a live `marqued`, and shuts it down. 321
   assertions across 6 suites.
 - `powershell -ExecutionPolicy Bypass -File scripts/two_client_demo.ps1` runs two real windowed
-  clients and proves the milestone.
+  clients. **Read the next paragraph before you believe what it tells you.**
+
+**`two_client_demo.ps1` asserts nothing about the server, and that is a live defect.** Every one
+of its roughly twenty assertions reads a client's stdout or a client's PNG. It contains no
+reference to `arrived`, `path_assigned`, `move_to`, `client_connected`, or the event log at all,
+and it deletes the server's log at teardown.
+
+An independent verifier proved the consequence rather than arguing it. It made the tick loop
+skip its movement step, so the server assigned and broadcast paths and then never moved anybody
+and never emitted a single `arrived`. **The demo printed `TWO CLIENT DEMO OK` with displacements
+byte-identical to a healthy run.** Clients interpolate the polylines they are handed, so a
+frozen server still produces moving pixels on every screen. That is the exact hazard the project
+already knew about and had written down, and the demo was never checked against it.
+
+M0's milestone verdict still stands, because M0e's verifier read the event log itself and the
+interop suite carries ninety server-side assertions. **The demo alone does not.** It is a
+client-rendering check that has been described here as a milestone proof, and this paragraph is
+the correction. A fix unit is open; until it lands, treat a green demo as evidence about pixels
+and read the event log yourself for anything about server state.
+
+This matters more for M1 than it did for M0. "Exactly one client gets the item" is a purely
+server-side fact, and a client-side-only demo cannot see it at all.
 
 **Known flake, recorded so nobody debugs it twice.** The demo's still-camera control asserts
 byte-exactness over the top quarter of a GPU-rendered frame. One flip was observed on a fully
