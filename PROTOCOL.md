@@ -415,6 +415,14 @@ engineer a race.
 player's position at that tick, `item_spawn` goes to everyone including the dropper, and the
 dropper gets a new `inventory`.
 
+**A dropped item gets a new item id. Dropping and picking up the same object twice yields three
+different ids, and none of them is reused.** This follows from two rules already stated, that ids
+are assigned sequentially as items enter the world and are never reused, but it was only ever
+implicit and the first client author to draw an item is the one who has to know it. An inventory
+holds *kinds*, not ids: once an item is carried, the id it had on the ground is gone and there is
+nothing to restore. So a client must key its item bodies on whatever id `item_spawn` carries and
+must never assume an id survives a round trip through somebody's pockets.
+
 Dropping while walking is legal and the item lands where the player is at that tick, not at the
 end of the path. An empty slot, or an index outside `0` to `size - 1`, is answered with an
 `error` and nothing else.

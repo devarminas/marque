@@ -117,7 +117,12 @@ Full detail in `NOTES.md`. Summary:
   - **M1c**, Godot. The second registry: a ground-item body and an item container driven by
     `welcome.items`, `item_spawn`, and `item_despawn`. Verified against scripted frames, no
     server. Depends on nothing, so it runs alongside M1a.
-  - **M1b**, Go. `drop`, the reverse transaction, and the full-inventory refusal. Needs M1a.
+  - **M1b**, Go. `drop`, pickup's reverse transaction. Needs M1a.
+
+    This line used to say "and the full-inventory refusal", which was wrong when written.
+    **A drop empties a slot and can never find the inventory full.** That refusal belongs to
+    pickup on arrival, `PROTOCOL.md` has always said so, and M1a shipped it. Its writer caught
+    the contradiction and reported it rather than inventing a case to satisfy the summary.
   - **M1d**, Godot. Clicking an item sends `pickup`, and an inventory panel fed by `inventory`.
     Needs M1a and M1c.
   - **M1e**, the milestone. Two real clients race for one item; exactly one gets it, by
