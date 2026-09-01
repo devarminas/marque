@@ -174,8 +174,9 @@ stationary.
 Two commands tell you the stack is alive:
 
 - `powershell -ExecutionPolicy Bypass -File scripts/interop_test.ps1` builds the server, binds a
-  free port, runs the whole Godot suite against a live `marqued`, and shuts it down. 321
-  assertions across 6 suites.
+  free port, runs the whole Godot suite against a live `marqued`, and shuts it down. **443
+  assertions across 8 suites** as of M1c merging. This number goes stale every time a unit adds
+  a suite, so treat it as "what it was last time somebody looked" and report the number you got.
 - `powershell -ExecutionPolicy Bypass -File scripts/two_client_demo.ps1` runs two real windowed
   clients. **Read the next paragraph before you believe what it tells you.**
 
