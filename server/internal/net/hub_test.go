@@ -103,7 +103,7 @@ func TestLateJoinLearnsInFlightPath(t *testing.T) {
 	bob := h.dial("bob")
 
 	// Welcome first, always.
-	bobWelcome := bob.welcome()
+	bobWelcome := bob.welcomeFrame()
 	var alicePos mnet.PlayerState
 	found := false
 	for _, p := range bobWelcome.Players {
@@ -749,7 +749,7 @@ func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 			default:
 			}
 			c := h.dial("churn")
-			c.welcome()
+			c.welcomeFrame()
 			c.moveTo(5, 5)
 			c.close()
 			time.Sleep(5 * time.Millisecond)

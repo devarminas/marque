@@ -33,15 +33,54 @@ func (p Point) X() float64 { return p[0] }
 // Z returns the point's z coordinate.
 func (p Point) Z() float64 { return p[1] }
 
-// MsgMoveTo is the name of the only client-to-server message in M0. It is the
-// key in the envelope and the value of an error's "re" field.
-const MsgMoveTo = "move_to"
+// ItemID identifies one item for the lifetime of one server process.
+//
+// A separate sequence in a separate space from PlayerID: assigned from 1 as
+// items enter the world, never reused, and never mixed with a player id
+// (PROTOCOL.md, "Entity naming"). The distinct Go type is what stops one being
+// passed where the other belongs, which is the cheapest bug in this protocol to
+// write and one of the more expensive to find.
+type ItemID int64
+
+// Client-to-server message names. Each is the key in the envelope and the value
+// of an error's "re" field.
+const (
+	MsgMoveTo = "move_to"
+	MsgPickup = "pickup"
+)
 
 // PlayerState is one player's position, as it appears inside welcome.
 type PlayerState struct {
 	ID PlayerID `json:"id"`
 	X  float64  `json:"x"`
 	Z  float64  `json:"z"`
+}
+
+// ItemState is one ground item, as it appears inside welcome and item_spawn.
+//
+// Items use the id-carrying coordinate encoding, the same shape as PlayerState,
+// rather than the packed [x, z] form path uses. Nothing about an item is a
+// polyline (PROTOCOL.md, "Decoding notes for the Godot side").
+//
+// Kind is an item type name; M1 ships exactly one. A client that does not know
+// a kind renders it magenta and keeps going, which is how content arrives
+// without a client release.
+type ItemState struct {
+	ID   ItemID  `json:"id"`
+	Kind string  `json:"kind"`
+	X    float64 `json:"x"`
+	Z    float64 `json:"z"`
+}
+
+// InventorySlot is one occupied slot of one player's inventory.
+//
+// Every entry carries its own index, because empty slots are absent from the
+// list rather than present as null. A sparse list is smaller, and it keeps both
+// ends off the question of how their JSON library spells a null inside an array
+// (PROTOCOL.md, "inventory").
+type InventorySlot struct {
+	Slot int    `json:"slot"`
+	Kind string `json:"kind"`
 }
 
 // ServerMessage is one message the server can send. The envelope is key-as-tag:
@@ -55,11 +94,22 @@ type ServerMessage interface{ isServerMessage() }
 // You is the receiving client's own id. Players is every player in the world
 // including itself, at their position as of Tick. TickMS tells the client the
 // tick duration; Tick is the anchor every later StartTick is measured against.
+//
+// Items is every item lying on the ground as of the same tick. It is a sibling
+// of Players because both describe the world. The joining player's own
+// inventory is not here: it is private to one player rather than part of the
+// world, and it arrives as a separate Inventory inside the same atomic step.
+//
+// Neither array carries omitempty, so an empty world encodes as "players":[]
+// and "items":[] rather than dropping the key. Both must be handed to Encode
+// non-nil: encoding/json writes a nil slice as null, and a client should not
+// have to distinguish three spellings of "nothing there".
 type Welcome struct {
 	You     PlayerID      `json:"you"`
 	TickMS  int           `json:"tick_ms"`
 	Tick    int64         `json:"tick"`
 	Players []PlayerState `json:"players"`
+	Items   []ItemState   `json:"items"`
 }
 
 // Spawn announces a player who just joined. Broadcast to everyone except the
@@ -103,11 +153,44 @@ type Error struct {
 	Msg string `json:"msg"`
 }
 
-func (Welcome) isServerMessage() {}
-func (Spawn) isServerMessage()   {}
-func (Despawn) isServerMessage() {}
-func (Path) isServerMessage()    {}
-func (Error) isServerMessage()   {}
+// ItemSpawn announces an item that has appeared on the ground.
+//
+// Broadcast to everyone including the player who caused it. That is Path's
+// rule, not Spawn's: Spawn excludes the joining player because that player
+// learns of itself from Welcome, and there is no equivalent here. A dropper who
+// did not receive ItemSpawn would have to conjure the body from its own intent,
+// which is the client inventing state the server never announced.
+type ItemSpawn ItemState
+
+// ItemDespawn announces an item that has left the ground. Broadcast to everyone
+// including the player who caused it, for ItemSpawn's reason.
+type ItemDespawn struct {
+	ID ItemID `json:"id"`
+}
+
+// Inventory is one player's whole inventory, sent to that player only and never
+// broadcast.
+//
+// A full restatement rather than a patch, matching Welcome's doctrine for the
+// same reason: a restatement cannot drift, and twenty-eight slots is nothing on
+// the wire. Slots lists only occupied slots and must be non-nil, so an empty
+// inventory encodes as "slots":[].
+//
+// Size is how many slots the player has. It is on the wire so the client draws
+// the grid it is told to draw rather than keeping a second copy of the number.
+type Inventory struct {
+	Size  int             `json:"size"`
+	Slots []InventorySlot `json:"slots"`
+}
+
+func (Welcome) isServerMessage()     {}
+func (Spawn) isServerMessage()       {}
+func (Despawn) isServerMessage()     {}
+func (Path) isServerMessage()        {}
+func (Error) isServerMessage()       {}
+func (ItemSpawn) isServerMessage()   {}
+func (ItemDespawn) isServerMessage() {}
+func (Inventory) isServerMessage()   {}
 
 // ClientMessage is one message a client can send. Clients send intents, never
 // facts (CLAUDE.md, "Architecture invariants").
@@ -122,16 +205,29 @@ type MoveTo struct {
 	Z float64 `json:"z"`
 }
 
+// Pickup is a request to take a ground item.
+//
+// Item is an item id, not a player id and not an inventory slot. It is an
+// intent: the server decides whether that item exists, whether the player may
+// have it, and when.
+type Pickup struct {
+	Item ItemID `json:"item"`
+}
+
 func (MoveTo) isClientMessage() {}
+func (Pickup) isClientMessage() {}
 
 // serverEnvelope is the key-as-tag wrapper. Exactly one field is ever non-nil;
 // Encode is the only thing that builds it.
 type serverEnvelope struct {
-	Welcome *Welcome `json:"welcome,omitempty"`
-	Spawn   *Spawn   `json:"spawn,omitempty"`
-	Despawn *Despawn `json:"despawn,omitempty"`
-	Path    *Path    `json:"path,omitempty"`
-	Error   *Error   `json:"error,omitempty"`
+	Welcome     *Welcome     `json:"welcome,omitempty"`
+	Spawn       *Spawn       `json:"spawn,omitempty"`
+	Despawn     *Despawn     `json:"despawn,omitempty"`
+	Path        *Path        `json:"path,omitempty"`
+	Error       *Error       `json:"error,omitempty"`
+	ItemSpawn   *ItemSpawn   `json:"item_spawn,omitempty"`
+	ItemDespawn *ItemDespawn `json:"item_despawn,omitempty"`
+	Inventory   *Inventory   `json:"inventory,omitempty"`
 }
 
 // Encode renders one server message as a single WebSocket text frame payload.
@@ -152,6 +248,12 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.Path = &v
 	case Error:
 		env.Error = &v
+	case ItemSpawn:
+		env.ItemSpawn = &v
+	case ItemDespawn:
+		env.ItemDespawn = &v
+	case Inventory:
+		env.Inventory = &v
 	default:
 		return nil, fmt.Errorf("net: encode: unhandled server message %T", m)
 	}
@@ -191,6 +293,12 @@ const (
 	// ReasonDegenerate: a path whose total length is below the epsilon at which
 	// the client's interpolator would divide by a segment length of zero.
 	ReasonDegenerate RejectReason = "degenerate"
+	// ReasonUnknownItem: a pickup naming no live ground item. Raised by the
+	// game package, which owns what is lying in the world. One reason covers a
+	// stale id, an id another player has already taken, and a fabricated one,
+	// because the server must not tell a client which ids exist (PROTOCOL.md,
+	// "Pickup").
+	ReasonUnknownItem RejectReason = "unknown_item"
 	// ReasonUnknownSender: a frame from a connection with no player. Defensive:
 	// the hub reports a connection before any of its frames.
 	ReasonUnknownSender RejectReason = "unknown_sender"
@@ -244,11 +352,15 @@ func Rejection(err error) (*RejectError, bool) {
 	return nil, false
 }
 
-func rejectMoveTo(reason RejectReason, format string, args ...any) error {
+// rejectIntent builds the refusal for a frame that named a known message and
+// then failed to decode. Re is always set, because the frame was attributable;
+// the connection always survives, because a broken frame is a broken frame and
+// not a broken client.
+func rejectIntent(reason RejectReason, re, format string, args ...any) error {
 	return &RejectError{
 		Reason:      reason,
 		Detail:      fmt.Sprintf(format, args...),
-		Re:          MsgMoveTo,
+		Re:          re,
 		Disposition: ReplyError,
 	}
 }
@@ -263,6 +375,14 @@ func rejectMoveTo(reason RejectReason, format string, args ...any) error {
 type moveToWire struct {
 	X *float64 `json:"x"`
 	Z *float64 `json:"z"`
+}
+
+// pickupWire decodes pickup, with the same absent-is-not-zero rule as
+// moveToWire. Zero is not a legal item id, so it would be caught either way,
+// but "you sent no item" and "you sent item 0" are different bugs in the client
+// and the server should say which one it saw.
+type pickupWire struct {
+	Item *ItemID `json:"item"`
 }
 
 // Decode parses one inbound frame.
@@ -293,6 +413,8 @@ func Decode(frame []byte) (ClientMessage, error) {
 		switch key {
 		case MsgMoveTo:
 			return decodeMoveTo(payload)
+		case MsgPickup:
+			return decodePickup(payload)
 		default:
 			// Logged loudly and ignored. A peer written against a later
 			// protocol version must not be broken by this one.
@@ -312,18 +434,32 @@ func decodeMoveTo(payload []byte) (ClientMessage, error) {
 	// seq is already spoken for (PROTOCOL.md, "Compatibility" rule 2).
 	var wire moveToWire
 	if err := json.Unmarshal(payload, &wire); err != nil {
-		return nil, rejectMoveTo(ReasonMalformedJSON, "move_to: %v", err)
+		return nil, rejectIntent(ReasonMalformedJSON, MsgMoveTo, "move_to: %v", err)
 	}
 	if wire.X == nil || wire.Z == nil {
-		return nil, rejectMoveTo(ReasonMissingField, "move_to needs both x and z")
+		return nil, rejectIntent(ReasonMissingField, MsgMoveTo, "move_to needs both x and z")
 	}
 	// The finite check runs on the decoded value, not on the source text:
 	// whether a huge literal errors or saturates to +Inf differs by parser
 	// path, and either way what reaches world state must be a real coordinate.
 	if !finite(*wire.X) || !finite(*wire.Z) {
-		return nil, rejectMoveTo(ReasonNonFinite, "move_to coordinates must be finite")
+		return nil, rejectIntent(ReasonNonFinite, MsgMoveTo, "move_to coordinates must be finite")
 	}
 	return MoveTo{X: *wire.X, Z: *wire.Z}, nil
+}
+
+// decodePickup parses a pickup body. Whether the named item exists is a
+// question about world state and is not asked here; this only establishes that
+// the client named one.
+func decodePickup(payload []byte) (ClientMessage, error) {
+	var wire pickupWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgPickup, "pickup: %v", err)
+	}
+	if wire.Item == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgPickup, "pickup needs an item id")
+	}
+	return Pickup{Item: *wire.Item}, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }

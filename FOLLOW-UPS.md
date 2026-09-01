@@ -147,6 +147,34 @@ prescribes lit ones, because unlit ignores the directional light and kills the c
 makes a capsule look like it is standing on the ground rather than floating. That reasoning is
 about legibility, not beauty, so the look pass should revisit it on its own terms.
 
+## Items and pickup
+
+Shipped from M1a. Every number here was chosen to be usable, not good.
+
+| Name | Value | Where | What wrong feels like |
+|---|---|---|---|
+| `PickupRange` | `0.5` | `server/internal/game/items.go` | Too small and a player who looks like they are standing on an acorn does not take it. Too large and they take it from visibly beside it, then slide the rest of the way. **The only constraint is `PickupRange >= MinPathLength` (`1e-3`)**, a five-hundred-fold margin, because the underfoot case assigns no path and so is never closed by walking. |
+| `InventorySize` | `28` | `server/internal/game/store.go` | RuneScape's number. Not really a tuning knob; listed because it is on the wire and a client draws the grid it is told to draw. |
+
+Decisions M1a made that a human may want to overturn:
+
+- **A player's inventory is deleted when they disconnect.** There is no persistence in M1 and no
+  drop-on-logout, so whatever they were carrying leaves the world with them rather than falling
+  at their feet. It is one line in `World.removePlayer`. RuneScape drops on death, not on
+  logout, so this is not obviously wrong; it is just undecided.
+- **Join order decides a contested pickup**, which is decidable rather than fair. The first
+  player to have connected wins every race they are in. Revisit the first time it feels unfair
+  to a human, which needs a human playing.
+
+**This table used to claim `PickupRange` had to stay above `WalkSpeed * TickDuration` = `0.45`,
+or a walker could step over an item without entering range.** That was true of the rule M1a was
+originally written against, and it died when `PROTOCOL.md` deleted the distance carve-out from
+path assignment: a pending pickup's path now terminates at the item and `Advance` lands the
+walker exactly on the final waypoint, so resolution happens at latest on the arrival tick for
+any range. The old constraint left `0.5` guarded by five hundredths of a unit against a silent
+failure. It is corrected here rather than left standing, because this file's whole audience is a
+human tuning a number, and a dead constraint is the worst thing to hand them.
+
 ## Ground items (M1c)
 
 Shipped values, all in `client/scenes/ground_item.tscn`. Every one was picked to be legible in
