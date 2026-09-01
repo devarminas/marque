@@ -19,14 +19,29 @@ import (
 // PickupRange is how near a player must be to a ground item to take it, in
 // world units.
 //
+// It governs resolution only, and never path assignment. It is the distance at
+// which the tick loop hands you the item. It is not, and must never become, a
+// distance at which the server declines to walk you: that carve-out was in the
+// contract once, it broke a pickup by a player who was already walking, and
+// deleting it rather than patching under it is what PROTOCOL.md, "Pickup", now
+// says.
+//
+// Being larger than one tick of walking (WalkSpeed * TickDuration = 0.45 units)
+// is now a consequence rather than an invariant, and it used to be neither. A
+// player usually enters the range with a waypoint still ahead of them, which the
+// resolution code handles: reaching the range is what licenses the take, and
+// arriving is what ends the walk. Nothing breaks if a smaller value makes
+// arrival the usual moment instead, because the path a pending pickup walks ends
+// at the item.
+//
+// It must stay at or above MinPathLength, which is the one coupling it has left.
+// A pickup of the item underfoot assigns no path, so the sub-millimetre gap it
+// leaves is never closed by walking and resolution has to accept it.
+// TestPickupOfTheItemUnderfootAssignsNoPath holds that.
+//
 // Placeholder, chosen to be small enough to read as "standing on it" and large
 // enough to swallow the arithmetic of arrival. Revisitable, and parked in
 // FOLLOW-UPS.md along with every other number that is about feel.
-//
-// Note that it is larger than one tick of walking (WalkSpeed * TickDuration =
-// 0.45 units), so a player can enter the range with waypoints still ahead of
-// them. That is deliberate and the resolution code handles it: reaching the
-// range is what licenses the take, and arriving is what ends the walk.
 const PickupRange = 0.5
 
 // SeedGroundItem puts one item into the world before it opens.
@@ -90,42 +105,19 @@ func (w *World) pickup(p *player, msg mnet.Pickup) {
 	// overwrite it.
 	p.pending = item.ID
 
-	dest := Point{X: item.X, Z: item.Z}
-	if distanceBetween(p.pos, dest) <= PickupRange {
-		// Near enough already: no walk, and the take happens on the next tick
-		// through the same resolution every other pickup uses.
-		//
-		// Unless they were already walking somewhere, in which case they stop.
-		// PROTOCOL.md says only "no path is assigned", picturing a player
-		// standing still, but a pickup replaces whatever the previous intent
-		// was doing, and that includes its walk. Leaving the old path running
-		// would march the player away from the item they just asked for and
-		// out of range of it, and the pickup would then never resolve. The
-		// stop is a one-element halt path, which is move_to's answer to the
-		// same shape of problem, and it has to be broadcast or the client goes
-		// on interpolating a walk the server has abandoned.
-		if p.walking() {
-			p.remaining = nil
-			w.assignHalt(p)
-		}
+	// A move_to at the item's position, and nothing else. No distance carve-out:
+	// how near the player already is decides when the item is handed over, never
+	// whether a path is assigned.
+	points, assign := destinationPath(p, Point{X: item.X, Z: item.Z})
+	if !assign {
+		// Standing on the item. This is the one place a pickup differs from a
+		// move_to, which would answer "already there": there is something left
+		// to do, so no path is assigned, nothing is broadcast, and the pending
+		// pickup resolves on the next tick through the same resolution every
+		// other pickup uses.
 		return
 	}
-
-	// No degenerate-path branch here, and none is needed: the distance is
-	// greater than PickupRange, which is three orders of magnitude above
-	// MinPathLength, so the polyline cannot be short enough to divide by zero
-	// on the client.
-	points := StraightLine(p.pos, dest)
-	p.remaining = points[1:]
-
-	out := mnet.Path{
-		ID:        p.id,
-		StartTick: w.tick,
-		Points:    wirePoints(points),
-		Speed:     WalkSpeed,
-	}
-	w.log.Event(w.tick, EvPathAssigned, pathLogFields(out))
-	w.broadcast(out, nil)
+	w.assignPath(p, points)
 }
 
 // resolvePickup decides one player's pending pickup for this tick. Called from
@@ -189,32 +181,24 @@ func (w *World) resolvePickup(p *player) {
 // ground would be the server lying about the world.
 //
 // The halt is sent even when the loser was standing still, which happens when
-// they were already inside PickupRange and lost the same tick they asked. The
-// protocol states the rule without a condition, and a client that holds at the
-// last point of its polyline is unmoved by being told to stand where it stands.
+// they were standing on the item and lost the same tick they asked. The protocol
+// states the rule without a condition, and a client that holds at the last point
+// of its polyline is unmoved by being told to stand where it stands.
 func (w *World) losePickup(p *player) {
 	w.log.Event(w.tick, EvPickupLost, pickupLogFields(p.id, p.pending))
 	p.pending = 0
-	p.remaining = nil
 	w.assignHalt(p)
 	w.send(p, mnet.Error{Re: mnet.MsgPickup, Msg: "the item is gone"})
 }
 
-// assignHalt tells everyone that this player is standing where they are.
+// assignHalt stops a player where they stand and tells everyone.
 //
-// A walker holds at the final point of its polyline, so a polyline of one point
-// is a complete instruction to stand still there. The caller has already
-// stopped the player in world state; this is what stops the client's copy of
-// them, and it broadcasts because every observer is drawing that walk too.
+// It stops them on both sides at once: the one-element polyline empties the
+// server's waypoints and is a complete instruction to the client, which holds at
+// the final point of whatever path it was last given. It broadcasts because
+// every observer is drawing that walk too.
 func (w *World) assignHalt(p *player) {
-	halt := mnet.Path{
-		ID:        p.id,
-		StartTick: w.tick,
-		Points:    wirePoints([]Point{p.pos}),
-		Speed:     WalkSpeed,
-	}
-	w.log.Event(w.tick, EvPathAssigned, pathLogFields(halt))
-	w.broadcast(halt, nil)
+	w.assignPath(p, []Point{p.pos})
 }
 
 // sendInventory restates one player's whole inventory to that player.

@@ -510,29 +510,18 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo) {
 		return
 	}
 
-	dest := Point{X: msg.X, Z: msg.Z}
-	points := StraightLine(p.pos, dest)
-
-	// A click that resolves to where the player already is means one of two
-	// different things, and which one depends on whether they are moving.
-	if length(points) < MinPathLength {
-		if !p.walking() {
-			// Standing still and asked to stand still. Nothing changes, so
-			// there is nothing to broadcast; the sender is told, because
-			// otherwise the click is indistinguishable from a dropped frame.
-			w.refuse(p, &mnet.RejectError{
-				Reason:      mnet.ReasonDegenerate,
-				Detail:      "already there",
-				Re:          mnet.MsgMoveTo,
-				Disposition: mnet.ReplyError,
-			})
-			return
-		}
-		// Walking and asked to stop. A walker holds at the final point of its
-		// polyline, so a polyline of one point is a complete instruction to
-		// stand still there. This is the whole of "stop walking": no separate
-		// message exists, and none is needed.
-		points = []Point{p.pos}
+	points, assign := destinationPath(p, Point{X: msg.X, Z: msg.Z})
+	if !assign {
+		// Standing still and asked to stand still. Nothing changes, so there is
+		// nothing to broadcast; the sender is told, because otherwise the click
+		// is indistinguishable from a dropped frame.
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonDegenerate,
+			Detail:      "already there",
+			Re:          mnet.MsgMoveTo,
+			Disposition: mnet.ReplyError,
+		})
+		return
 	}
 
 	// Clicking the ground says you wanted something else, so it cancels a
@@ -541,6 +530,43 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo) {
 	// nothing, and an out-of-bounds coordinate must not quietly cost the player
 	// the item they were already walking to.
 	p.pending = 0
+	w.assignPath(p, points)
+}
+
+// destinationPath is the polyline that takes p to dest, and whether there is one
+// to assign at all.
+//
+// Three shapes, and move_to and pickup agree on all three, because a pickup is a
+// move_to at the item's position (PROTOCOL.md, "Pickup"):
+//
+//   - an ordinary walk, when dest is further off than MinPathLength;
+//   - a one-element halt at p.pos, when dest is where p already is and p is
+//     walking. A walker holds at the final point of its polyline, so a polyline
+//     of one point is a complete instruction to stand still there, and that is
+//     the whole of "stop walking": no separate message exists, and none is
+//     needed;
+//   - nothing at all, when dest is where p already is and p is standing still.
+//
+// The two callers differ only in what they say about the third. move_to answers
+// "already there", because nothing is left to do. A pickup says nothing, because
+// its pending pickup still has something left to do.
+func destinationPath(p *player, dest Point) (points []Point, assign bool) {
+	line := StraightLine(p.pos, dest)
+	if length(line) >= MinPathLength {
+		return line, true
+	}
+	if p.walking() {
+		return []Point{p.pos}, true
+	}
+	return nil, false
+}
+
+// assignPath puts a player on a polyline and tells everyone.
+//
+// points[0] must be where the player is right now: that is what the wire
+// contract says the field means, and it is what lets a client processing the
+// frame a tick late still place the walker correctly.
+func (w *World) assignPath(p *player, points []Point) {
 	p.remaining = points[1:]
 
 	out := mnet.Path{

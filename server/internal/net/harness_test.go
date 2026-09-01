@@ -427,11 +427,18 @@ func (c *client) welcome() mnet.Welcome {
 // welcomeFrame reads only the welcome, leaving the rest of the join step queued.
 func (c *client) welcomeFrame() mnet.Welcome {
 	c.t.Helper()
+	return *c.welcomeEnvelope().Welcome
+}
+
+// welcomeEnvelope is welcomeFrame keeping the raw JSON, for the assertions that
+// are about the encoding rather than the values.
+func (c *client) welcomeEnvelope() frame {
+	c.t.Helper()
 	f := c.next()
 	if f.Welcome == nil {
 		c.t.Fatalf("client %s: got a %s frame, want welcome: %s", c.name, f.kind(), f.raw)
 	}
-	return *f.Welcome
+	return f
 }
 
 func (c *client) path() mnet.Path {

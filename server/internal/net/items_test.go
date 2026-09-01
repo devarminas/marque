@@ -7,6 +7,7 @@ package net_test
 // said why.
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -130,13 +131,64 @@ func TestPickupWalksThenTakes(t *testing.T) {
 	alice.expectSilence()
 }
 
-// TestPickupWithinRangeAssignsNoPath is the other half of the pickup intent. A
-// player already standing on the item does not walk; the take happens on the
-// next tick through the same resolution.
-func TestPickupWithinRangeAssignsNoPath(t *testing.T) {
-	// Inside PickupRange of the spawn point, and not on top of it, so that
-	// "near enough" is doing the work rather than "identical".
-	h := newHarness(t, acornAt(game.PickupRange/2, 0))
+// TestPickupOfTheItemUnderfootAssignsNoPath is the one place a pickup differs
+// from a move_to at the same coordinates. A move_to that resolves to where the
+// player is already standing is answered "already there"; a pickup has something
+// left to do, so it is not an error, no path is assigned, nothing is broadcast,
+// and the take happens on the next tick.
+//
+// The two cases are the whole of "underfoot", which is whatever MinPathLength
+// calls the same spot. The second is the one that couples the two constants: no
+// path is assigned, so nothing ever closes the gap that is left, and the take
+// depends on PickupRange being at least MinPathLength. That is the only coupling
+// PickupRange has left, it runs on a five-hundred-fold margin rather than the
+// deleted carve-out's hundredth of a unit, and this is where it is held.
+func TestPickupOfTheItemUnderfootAssignsNoPath(t *testing.T) {
+	cases := []struct {
+		name string
+		x    float64
+	}{
+		{"exactly on it", 0},
+		{"a hair off it", game.MinPathLength / 2},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t, acornAt(tc.x, 0))
+
+			alice := h.dial("alice")
+			welcome := alice.welcome()
+			item := welcome.Items[0].ID
+
+			alice.pickup(item)
+
+			// The next frame is the despawn: no path, and no error either.
+			f := alice.next()
+			if f.ItemDespawn == nil {
+				t.Fatalf("got a %s frame, want item_despawn with nothing before it: %s", f.kind(), f.raw)
+			}
+			if inv := alice.awaitInventory(); len(inv.Slots) != 1 {
+				t.Fatalf("inventory holds %+v, want the acorn", inv.Slots)
+			}
+			if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
+				t.Fatalf("logged %d %s events for a pickup that needed no walk: %+v",
+					len(assigned), game.EvPathAssigned, assigned)
+			}
+			alice.expectSilence()
+		})
+	}
+}
+
+// TestPickupWithinRangeStillWalksToTheItem pins the carve-out that PROTOCOL.md
+// deleted. PickupRange decides when the tick loop hands the item over; it is
+// never a distance at which the server declines to walk the player.
+//
+// The walk is a quarter of a world unit and ends the same tick it started, which
+// is the point: the path exists, it is broadcast, and no rule anywhere compares
+// the distance against PickupRange before assigning it.
+func TestPickupWithinRangeStillWalksToTheItem(t *testing.T) {
+	const near = game.PickupRange / 2
+	h := newHarness(t, acornAt(near, 0))
 
 	alice := h.dial("alice")
 	welcome := alice.welcome()
@@ -144,17 +196,15 @@ func TestPickupWithinRangeAssignsNoPath(t *testing.T) {
 
 	alice.pickup(item)
 
-	// The next frame is the despawn, not a path: no walk was assigned.
-	f := alice.next()
-	if f.ItemDespawn == nil {
-		t.Fatalf("got a %s frame, want item_despawn with no path before it: %s", f.kind(), f.raw)
+	assigned := alice.path()
+	if len(assigned.Points) != 2 {
+		t.Fatalf("path has %d points, want a start and the item: %+v", len(assigned.Points), assigned.Points)
+	}
+	if assigned.Points[0] != mnet.Pt(0, 0) || assigned.Points[1] != mnet.Pt(near, 0) {
+		t.Fatalf("path is %v, want (0, 0) to the item at (%v, 0)", assigned.Points, near)
 	}
 	if inv := alice.awaitInventory(); len(inv.Slots) != 1 {
 		t.Fatalf("inventory holds %+v, want the acorn", inv.Slots)
-	}
-	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
-		t.Fatalf("logged %d %s events for a pickup that needed no walk: %+v",
-			len(assigned), game.EvPathAssigned, assigned)
 	}
 }
 
@@ -227,46 +277,56 @@ func TestASecondPickupReplacesTheFirst(t *testing.T) {
 	}
 }
 
-// TestAPickupWithinRangeStopsAWalkAlreadyUnderWay records a decision this unit
-// had to make, because PROTOCOL.md does not cover it.
+// TestAPickupWhileWalkingAwayFromANearItemStillTakesIt is the property the
+// deleted carve-out violated, and the reason PROTOCOL.md deleted it rather than
+// adding a second rule underneath it.
 //
-// The file says a pickup within PickupRange assigns no path, picturing a player
-// standing still. A player who is already walking somewhere else needs more
-// than that: the pickup replaced the intent that walk belonged to, and leaving
-// it running marches them out of range of the item they just asked for, where
-// nothing ever resolves it. So they stop, with the one-element halt path
-// move_to uses for the same shape of problem.
-func TestAPickupWithinRangeStopsAWalkAlreadyUnderWay(t *testing.T) {
-	// The near item sits at a staging point away from the spawn, so that being
-	// in range of it is a fact about where she walked to rather than about
-	// where everyone starts.
-	const staging = 1.0
-	h := newHarness(t, acornAt(farItem, 0), acornAt(staging, 0))
+// The old clause said a player already inside PickupRange is assigned no path.
+// For a player standing still that is right. For a player already walking it is
+// broken: the walk they were on is never replaced, it carries them out of range
+// on the next tick, and the pending pickup then never resolves for the rest of
+// the session. A pickup is now a move_to at the item's position with no distance
+// carve-out at all, so what she gets is an ordinary walk back to it.
+func TestAPickupWhileWalkingAwayFromANearItemStillTakesIt(t *testing.T) {
+	// The item sits a fraction of PickupRange from the staging point, so she is
+	// well inside the range that used to suppress her path, and stays inside it
+	// even if a tick slips in between the two intents below.
+	const staging, near = 1.0, 1.05
+	h := newHarness(t, acornAt(near, 0))
 
 	alice := h.dial("alice")
 	welcome := alice.welcome()
-	far, near := welcome.Items[0].ID, welcome.Items[1].ID
+	item := welcome.Items[0].ID
 
-	// Walk to the staging point first. Arriving both puts her on the near item
-	// and marks a tick boundary, so the two intents below are processed inside
-	// one tick and no movement happens between them.
+	// Walk to the staging point first. Arriving both puts her next to the item
+	// and marks a tick boundary, so the two intents below land in one tick.
 	alice.moveTo(staging, 0)
 	alice.path()
 	h.awaitEvents(game.EvArrived, 1)
 
-	alice.pickup(far)
-	if p := alice.path(); len(p.Points) != 2 {
-		t.Fatalf("the first pickup assigned %+v, want a two-point walk", p.Points)
-	}
-	alice.pickup(near)
+	// Away from the item, at right angles to it, so that a tick slipping in
+	// costs her less of PickupRange than walking straight away would.
+	alice.moveTo(staging, 20)
+	alice.path()
 
-	halt := alice.awaitHaltPath(welcome.You)
-	if halt.Points[0] != mnet.Pt(staging, 0) {
-		t.Fatalf("she halted at %v, want the staging point (%v, 0) she was standing on",
-			halt.Points[0], staging)
+	alice.pickup(item)
+
+	// An ordinary two-point walk back to the item: not a halt, and not nothing.
+	back := alice.path()
+	if len(back.Points) != 2 {
+		t.Fatalf("the pickup assigned %+v, want a two-point walk back to the item", back.Points)
 	}
-	if inv := alice.awaitInventory(); len(inv.Slots) != 1 {
-		t.Fatalf("inventory holds %+v, want the near acorn", inv.Slots)
+	if back.Points[1] != mnet.Pt(near, 0) {
+		t.Fatalf("the walk ends at %v, want the item at (%v, 0)", back.Points[1], near)
+	}
+	if d := math.Hypot(back.Points[0].X()-near, back.Points[0].Z()); d > game.PickupRange {
+		t.Fatalf("she was %v from the item when she asked, want inside PickupRange (%v): a tick fell "+
+			"between the two intents, so this run proved nothing about the near case", d, game.PickupRange)
+	}
+
+	// And the property the whole rule exists for: she ends up holding it.
+	if inv := alice.awaitInventory(); len(inv.Slots) != 1 || inv.Slots[0].Kind != game.KindAcorn {
+		t.Fatalf("she holds %+v, want the acorn she asked for", inv.Slots)
 	}
 	alice.expectSilence()
 }
