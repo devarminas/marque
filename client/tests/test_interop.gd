@@ -452,23 +452,44 @@ func _test_unknown_and_malformed_frames_do_not_kill_the_client(a: Peer) -> void:
 	print("== unknown and malformed frames ==")
 	var errors_before := a.errors.size()
 
+	# `unknown_keys` accumulates for the whole session, so every assertion below
+	# is a delta. What is already in it depends on everything this server said
+	# before this function ran, and that set grows with the protocol: an M1
+	# `inventory` arriving at a client that predates it is compatibility rule 1
+	# working, not a failure. An assertion on the total would have to be
+	# rewritten by every message the protocol ever gains.
+	#
+	# The unrelated key injected first is not decoration. It makes the
+	# accumulator non-empty here without needing a server that sends a second
+	# unknown key, so the delta below is measured rather than assumed.
+	var unrelated_before := a.unknown_keys.size()
+	a.net.ingest_text_frame('{"m1h_unrelated_key":{"why":"a second unknown key, from nowhere"}}')
+	_check(
+		a.unknown_keys.size() == unrelated_before + 1
+		and a.unknown_keys[-1] == "m1h_unrelated_key",
+		"an unrelated unknown key accumulates ahead of the one under test, got %s"
+		% [a.unknown_keys],
+	)
+
+	var unknown_before := a.unknown_keys.size()
 	# The shape M2's heartbeat will have, arriving at a client built today.
 	a.net.ingest_text_frame('{"tick":{"t":9001}}')
 	_check(
-		a.unknown_keys.size() == 1 and a.unknown_keys[0] == "tick",
-		'an unknown key is reported once as "tick", got %s' % [a.unknown_keys],
+		a.unknown_keys.size() == unknown_before + 1 and a.unknown_keys[-1] == "tick",
+		'this frame adds exactly one unknown key, named "tick", got %s' % [a.unknown_keys],
 	)
 	_check(a.net.is_open(), "an unknown message leaves the connection open")
 
+	var unknown_before_malformed := a.unknown_keys.size()
 	a.net.ingest_text_frame("{}")
 	a.net.ingest_text_frame('{"welcome":{},"path":{}}')
 	a.net.ingest_text_frame("not json at all")
 	a.net.ingest_text_frame('["welcome"]')
 	_check(a.net.is_open(), "a malformed frame leaves the connection open")
 	_check(
-		a.unknown_keys.size() == 1,
-		"a malformed frame is not mistaken for an unknown message (%d unknown keys)"
-		% a.unknown_keys.size(),
+		a.unknown_keys.size() == unknown_before_malformed,
+		"a malformed frame is not mistaken for an unknown message (%d added)"
+		% (a.unknown_keys.size() - unknown_before_malformed),
 	)
 	_check(
 		a.errors.size() == errors_before,

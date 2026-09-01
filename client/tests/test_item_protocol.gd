@@ -133,6 +133,7 @@ func run(assertions: RefCounted) -> void:
 	_test_welcome_without_items()
 	_test_item_spawn_and_despawn()
 	_test_inventory()
+	_test_a_null_list_means_empty()
 	_test_malformed_frames_are_dropped_and_the_connection_survives()
 	_test_unknown_keys_are_still_ignored()
 	_test_integers_arrive_as_integers()
@@ -294,6 +295,158 @@ func _test_inventory() -> void:
 			"and 28 kinds index aligned with them",
 		)
 	recorder.release()
+
+
+## The receiver's half of the null-list rule (`PROTOCOL.md`, `inventory`): "A
+## receiver treats `null` as an absent key, meaning empty, and logs loudly."
+##
+## A Go server holding a slice that was never appended to marshals it as `null`,
+## not `[]`, and it does so silently. A client that read `null` as "not an array"
+## would drop the whole frame, and for `welcome` that means it never joins and
+## sits frozen forever, with nothing looking wrong on either side. So `null`,
+## `[]`, and — for `welcome.items` — an absent key have to be indistinguishable
+## in the state they produce.
+##
+## [b]Loudness is printed here, not asserted.[/b] `push_error` is what "loudly"
+## means in `net_client.gd`, and a GDScript suite has no way to capture one; the
+## same limitation is why `test_polyline_walker.gd` prints a banner instead. What
+## makes the log checkable is that this function is the only source of
+## `net_client: ... is null, which is a server bug` in the whole suite, and it
+## produces exactly three of them: two `welcome.items` and one
+## `inventory.slots`, one per null frame fed below. A run with fewer has lost
+## the accommodation's log line; a run with more has spread the leniency
+## somewhere it does not belong.
+func _test_a_null_list_means_empty() -> void:
+	print("-- expect exactly three 'is null, which is a server bug' errors below")
+
+	# `welcome.items`, three ways of saying the ground is bare. The player list
+	# is identical in all three, because what is being compared is the whole
+	# resulting state and not just the items.
+	const PLAYERS := '"players":[{"id":1,"x":0.0,"z":0.0}]'
+	var absent := _replay(
+		'{"welcome":{"you":1,"tick_ms":150,"tick":5,' + PLAYERS + "}}"
+	)
+	var listed := _replay(
+		'{"welcome":{"you":1,"tick_ms":150,"tick":5,' + PLAYERS + ',"items":[]}}'
+	)
+	var nulled := _replay(
+		'{"welcome":{"you":1,"tick_ms":150,"tick":5,' + PLAYERS + ',"items":null}}'
+	)
+	_check(
+		absent == listed,
+		"welcome.items absent and [] are the same state (%s vs %s)" % [absent, listed],
+	)
+	_check(
+		nulled == listed,
+		"welcome.items null and [] are the same state (%s vs %s)" % [nulled, listed],
+	)
+	# Stated positively as well, so that three frames all failing the same way
+	# cannot pass the comparison above.
+	_check(
+		nulled == [
+			["welcomed", "welcome_items"],
+			["welcomed", 1, 5, [1]],
+			["welcome_items", [], [], []],
+		],
+		"a welcome whose items are null still joins the client, got %s" % [nulled],
+	)
+
+	# `inventory.slots`. `[]` and `null` are one empty inventory.
+	var empty_slots := _replay('{"inventory":{"size":28,"slots":[]}}')
+	var null_slots := _replay('{"inventory":{"size":28,"slots":null}}')
+	_check(
+		null_slots == empty_slots,
+		"inventory.slots null and [] are the same state (%s vs %s)" % [null_slots, empty_slots],
+	)
+	_check(
+		null_slots == [["inventory_changed"], ["inventory_changed", 28, [], []]],
+		"and that state is 28 slots with nothing in them, got %s" % [null_slots],
+	)
+
+	# The third shape, and the one place this client stays strict: an absent
+	# `slots` is still a missing field. `inventory` is an M1 message with no
+	# earlier form to be compatible with, so no sender legitimately omits
+	# `slots`, and a frame that lost the field is a frame that lost a field —
+	# not a server saying "empty". Dropping it is unchanged from before this
+	# unit and `_test_malformed_frames_are_dropped_and_the_connection_survives`
+	# asserts the same thing from the other side.
+	var absent_slots := _replay('{"inventory":{"size":28}}')
+	_check(
+		absent_slots == [[]],
+		"an inventory with no slots key at all is still dropped, got %s" % [absent_slots],
+	)
+
+	# The leniency is exactly two fields wide. Everywhere else a `null` is what
+	# it was before: a value of the wrong type, and a dropped frame.
+	var still_strict := [
+		'{"welcome":{"you":1,"tick_ms":150,"tick":5,"players":null}}',
+		'{"welcome":{"you":1,"tick_ms":150,"tick":5,"players":[],"items":{"id":7}}}',
+		'{"welcome":null}',
+		'{"path":{"id":1,"start_tick":1,"points":null,"speed":3.0}}',
+		'{"inventory":null}',
+		'{"inventory":{"size":null,"slots":[]}}',
+		'{"inventory":{"size":28,"slots":{}}}',
+		'{"inventory":{"size":28,"slots":[null]}}',
+		'{"item_spawn":{"id":7,"kind":null,"x":0.0,"z":0.0}}',
+		'{"item_spawn":{"id":7,"kind":"acorn","x":null,"z":0.0}}',
+		'{"item_despawn":{"id":null}}',
+	]
+	for frame: String in still_strict:
+		_check(
+			_replay(frame) == [[]],
+			"a null outside welcome.items and inventory.slots is still refused: %s" % frame,
+		)
+
+	# And the connection is intact after all of it, which is the rule the
+	# leniency exists to serve: this client never closes on a server's bug.
+	var recorder := Recorder.new()
+	recorder.feed('{"welcome":{"you":1,"tick_ms":150,"tick":6,' + PLAYERS + ',"items":null}}')
+	recorder.feed('{"item_spawn":{"id":7,"kind":"acorn","x":3.0,"z":-2.0}}')
+	_check(
+		recorder.of("item_spawned").size() == 1,
+		"the frame after an accommodated null decodes normally",
+	)
+	_check(
+		recorder.of("disconnected").is_empty(),
+		"and a null list never closes the connection",
+	)
+	recorder.release()
+
+
+## Feeds one frame to a fresh decoder and returns everything it emitted, as one
+## value that [code]==[/code] can compare.
+##
+## The first element is the signal names in order, so an empty result reads as
+## [code][[]][/code] and a dropped frame is distinguishable from a frame that
+## emitted the right signals carrying the wrong payload.
+func _replay(frame: String) -> Array:
+	var recorder := Recorder.new()
+	recorder.feed(frame)
+	var out: Array = [recorder.names()]
+	for event: Dictionary in recorder.events:
+		match event["signal"]:
+			"welcomed":
+				out.append([
+					"welcomed", event["you"], event["tick"], Array(event["player_ids"])
+				])
+			"welcome_items":
+				out.append([
+					"welcome_items",
+					Array(event["ids"]),
+					Array(event["kinds"]),
+					Array(event["positions"]),
+				])
+			"inventory_changed":
+				out.append([
+					"inventory_changed",
+					event["size"],
+					Array(event["slots"]),
+					Array(event["kinds"]),
+				])
+			_:
+				out.append([event["signal"]])
+	recorder.release()
+	return out
 
 
 ## `PROTOCOL.md`, "Compatibility": a client logs loudly, drops the single
