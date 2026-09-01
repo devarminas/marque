@@ -1,0 +1,2 @@
+{"welcome":{"you":1,"tick_ms":150,"tick":4200,"players":[{"id":1,"x":0.0,"z":0.0}],"items":[{"id":7,"kind":"acorn","x":2.2,"z":-1.4},{"id":9,"kind":"acorn","x":-2.6,"z":1.1}]}}
+{"inventory":{"size":28,"slots":[{"slot":0,"kind":"acorn"},{"slot":3,"kind":"acorn"},{"slot":27,"kind":"pinecone"}]}}

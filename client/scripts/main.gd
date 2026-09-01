@@ -36,6 +36,7 @@ extends Node3D
 const SessionScript := preload("res://scripts/session.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const NetClientScript := preload("res://scripts/net_client.gd")
+const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 
 ## One capture to [constant SCREENSHOT_PATH], then quit. M0c's visual check.
 const SCREENSHOT_FLAG := "--screenshot"
@@ -138,21 +139,31 @@ func _ready() -> void:
 		await _capture_and_quit()
 
 
-## Applies [constant FEED_FLAG]'s file, one JSON frame per line.
+## Applies [constant FEED_FLAG]'s file, one JSON frame per line, and returns how
+## many frames it fed. Zero when the flag is absent, which is not a failure.
 ##
 ## A blank line is skipped so the file can be laid out for a human to read. A
 ## frame that will not decode logs from inside `net_client.gd` and is dropped
 ## there, which is the behaviour under test rather than a case to handle here.
-func _feed_scripted_frames(args: Array) -> void:
+## So the count is frames [i]offered[/i], and the world line printed after it is
+## what says whether they landed.
+##
+## [b]It takes an argument list rather than a path[/b] so that a test can drive
+## the flag parsing, the file reading, and the decoding in one call.
+## [constant FEED_FLAG] is otherwise reachable only by launching a process, and
+## a screenshot flag that nothing automated touches is a flag which breaks
+## silently between screenshots. **M1d**, closing M1c's gap; `test_interaction.gd`
+## calls this with a synthetic argument list and asserts on both numbers.
+func _feed_scripted_frames(args: Array) -> int:
 	var path := _argument_after(args, FEED_FLAG)
 	if path.is_empty():
-		return
+		return 0
 
 	var net := get_node_or_null("Session/Net") as NetClientScript
 	if net == null:
 		push_error("main.tscn has no Session/Net node to feed")
 		get_tree().quit(1)
-		return
+		return 0
 
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
@@ -160,7 +171,7 @@ func _feed_scripted_frames(args: Array) -> void:
 			"%s could not open %s: %d" % [FEED_FLAG, path, FileAccess.get_open_error()]
 		)
 		get_tree().quit(1)
-		return
+		return 0
 
 	var count := 0
 	while not file.eof_reached():
@@ -170,6 +181,25 @@ func _feed_scripted_frames(args: Array) -> void:
 		net.ingest_text_frame(line)
 		count += 1
 	print("main: fed %d scripted frame(s) from %s" % [count, path])
+	_print_world_contents()
+	return count
+
+
+## What the fed frames actually built. Printed rather than judged: this script
+## drives the game and reports, and the line is what makes a screenshot run say
+## out loud whether the world it is about to capture has anything in it.
+func _print_world_contents() -> void:
+	var session := get_node_or_null("Session") as SessionScript
+	if session == null:
+		push_error("main.tscn has no Session node to report")
+		return
+	var panel := get_node_or_null("UI/InventoryPanel") as InventoryPanelScript
+	var slots := -1 if panel == null else panel.slot_count()
+	var carried := -1 if panel == null else panel.occupied_slot_count()
+	print(
+		"main: world holds %d player body(s), %d item body(s), %d/%d inventory slot(s) filled"
+		% [session.known_ids().size(), session.known_item_ids().size(), carried, slots]
+	)
 
 
 ## The two-client visual check, from this client's side.

@@ -67,6 +67,10 @@ const SCENE_SUITES: Array = [
 	# scripted frames, so it never connects to anything and is safe anywhere
 	# before the two suites below.
 	{"name": "ground items", "scene": "res://tests/test_items.tscn"},
+	# M1's interaction: what a click resolves to, and what the inventory panel
+	# draws. Same shape as the suite above — it instances main.tscn and feeds it
+	# scripted frames — so it never connects to anything either.
+	{"name": "interaction", "scene": "res://tests/test_interaction.tscn"},
 	# The two suites that talk to another process come last. Each has a half
 	# that runs with no server and a half that needs MARQUE_WS_URL, which is
 	# what scripts/interop_test.ps1 exists to provide.
