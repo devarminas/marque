@@ -84,14 +84,29 @@ right. None blocks anything.
 
 From M1d. Read the headless-viewport entry in `NOTES.md` first; this is its consequence.
 
-- **A click on the panel's margin, or between two slots, currently walks your character.** The
-  panel's chrome is click-transparent and only the slot widgets take input. RuneScape's sidebar
-  is opaque and nothing behind it is reachable, which is obviously what a player expects.
-  **This is not a design choice, it is a workaround.** The headless viewport is 64x64 whatever
-  the project settings say, a 28-slot panel covers all of it, and an opaque panel broke three
-  other suites. The fix is a click-blocking background on the panel plus a way for the headless
-  suite to test the world without the panel over it, and it cannot be verified headless today.
-- **An empty panel hides itself**, for the same reason and with the same smell.
+**Scheduled as unit M1k. Proven live against a real windowed client and a real server, not
+inferred from the headless suite.** The shipped panel behaves three different ways depending on
+where you click it, and only one of them is intended:
+
+- **The chrome walks your character.** A click at (1144, 290), inside the drawn panel rect on a
+  pixel reading opaque panel gray, produced `move_to (12.040, -9.565)` on the server and walked
+  the player 12.6 units. The panel's chrome is click-transparent and only slot widgets take
+  input. RuneScape's sidebar is opaque and nothing behind it is reachable. **This is not a design
+  choice, it is a workaround** for the 64x64 headless viewport in `NOTES.md`.
+- **Empty slots eat the click.** A slot `Button` keeps `MOUSE_FILTER_STOP` even when disabled, so
+  clicking an empty slot neither drops, nor walks, nor falls through. Nobody designed this; it is
+  the default doing something reasonable in a context nobody checked.
+- **Occupied slots drop**, which is the one intended behaviour.
+- **The panel is visible from the moment you join**, with 28 empty slots. It hides only before
+  the first `inventory` frame, and the server sends one inside the atomic welcome step. An
+  earlier version of this note said an empty panel hides itself, which is true only of the
+  uninformed state and understated the exposure.
+
+**The fix is coupled, and that coupling is the unit.** `test_wiring`'s live half clicks at
+`CLICK_AT=(0.30, 0.72)`, which on the 64x64 headless viewport lands *inside* the visible panel,
+in the roughly 12px chrome strip below the last slot row. It reaches the world **only because the
+chrome is click-through**. An opaque panel breaks that suite unless `CLICK_AT` or the panel
+moves. Whoever fixes this inherits both halves.
 - **Nothing sizes the UI to the window.** The panel is laid out for 1280x720 and there is no
   stretch mode. That is a project-wide decision rather than a number, and it should be made once
   rather than per-element.

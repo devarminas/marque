@@ -151,6 +151,10 @@ Full detail in `NOTES.md`. Summary:
     M1a's real exposure was the null rule alone. Recorded because a coordinator writing program
     state from a worker's report, forty-five seconds after the thing that falsified it, is a
     failure mode worth naming.
+  - **M1k**, Godot. Make the inventory panel opaque and move whatever depends on it being
+    click-through. Three behaviours today, one intended: chrome walks you, empty slots eat the
+    click, occupied slots drop. Proven live, not inferred. `test_wiring`'s live half clicks
+    through the panel on purpose, so `CLICK_AT` or the panel has to move with it.
   - **M1i**, Go, small and unscheduled. `hub_test.go:752` calls a `*testing.T`-touching helper
     from a background goroutine, which the harness's own comment forbids. Pre-existing,
     test-only, found while reading. Not blocking anything.
