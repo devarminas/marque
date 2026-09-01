@@ -146,3 +146,28 @@ Shipped values from M0c, all in `client/scenes/main.tscn`:
 prescribes lit ones, because unlit ignores the directional light and kills the cast shadow that
 makes a capsule look like it is standing on the ground rather than floating. That reasoning is
 about legibility, not beauty, so the look pass should revisit it on its own terms.
+
+## Ground items (M1c)
+
+Shipped values, all in `client/scenes/ground_item.tscn`. Every one was picked to be legible in
+a screenshot, not to look like anything.
+
+- **Item box `0.5 x 0.5 x 0.5`, sitting at `y` `0` to `0.5`.** Chosen against the player
+  capsule's `1.8` height so the two are not confusable at a glance. Wrong feels like an item you
+  have to hunt for on the ground, or one that reads as a crate rather than a thing you pick up.
+- **Known-kind albedo `(0.18, 0.72, 0.26)`, unknown-kind albedo `(0.95, 0.08, 0.85)`.** Green is
+  Pickup and magenta is missing-asset in `NOTES.md`'s palette, so these are semantics rather
+  than art and the look pass should leave the *meaning* alone even if it changes the shade.
+- **One mesh for every kind.** M1 ships one kind, so kind currently only picks a colour. The
+  moment a second kind ships with its own silhouette, `KNOWN_KINDS` in
+  `client/scripts/ground_item.gd` should become a kind-to-appearance table — mesh and material
+  per kind, with magenta as the miss — rather than a const array that grows. It is a const array
+  today because one entry is not yet a table.
+
+## Ground height, in two places
+
+`ground_y` is now an `@export` on both `player_avatar.tscn` and `ground_item.tscn`, both `0.0`,
+because `y` never crosses the wire and the M0 world is a flat plane. They are two copies of one
+fact. When terrain lands, both become a query against the same ground service, and they should
+move together: an item resting at a different height from the player standing over it is the
+failure this note exists to prevent.

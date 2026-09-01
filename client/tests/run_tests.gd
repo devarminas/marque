@@ -45,6 +45,9 @@ extends SceneTree
 const TREE_FREE_SUITES: Array = [
 	{"name": "tick clock", "script": preload("res://tests/test_tick_clock.gd")},
 	{"name": "polyline walker", "script": preload("res://tests/test_polyline_walker.gd")},
+	# M1's wire layer decodes frames into plain values. It needs no viewport to
+	# do that, and running it here is what proves it.
+	{"name": "item protocol", "script": preload("res://tests/test_item_protocol.gd")},
 ]
 
 ## Suites that need a scene tree, run one at a time in this order.
@@ -60,6 +63,10 @@ const TREE_FREE_SUITES: Array = [
 const SCENE_SUITES: Array = [
 	{"name": "world and camera", "scene": "res://tests/test_world.tscn"},
 	{"name": "player avatar", "scene": "res://tests/test_avatar.tscn"},
+	# M1's item registry and bodies. It instances main.tscn and feeds it
+	# scripted frames, so it never connects to anything and is safe anywhere
+	# before the two suites below.
+	{"name": "ground items", "scene": "res://tests/test_items.tscn"},
 	# The two suites that talk to another process come last. Each has a half
 	# that runs with no server and a half that needs MARQUE_WS_URL, which is
 	# what scripts/interop_test.ps1 exists to provide.

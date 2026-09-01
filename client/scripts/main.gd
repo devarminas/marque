@@ -35,10 +35,25 @@ extends Node3D
 
 const SessionScript := preload("res://scripts/session.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
+const NetClientScript := preload("res://scripts/net_client.gd")
 
 ## One capture to [constant SCREENSHOT_PATH], then quit. M0c's visual check.
 const SCREENSHOT_FLAG := "--screenshot"
 const SCREENSHOT_PATH := "user://shot.png"
+
+## A file of scripted server frames applied before anything else, one JSON
+## object per line, as `--feed C:/tmp/world.ndjson`. **M1.**
+##
+## The visual check for anything a client only learns about from the wire cannot
+## wait for the server that sends it. Ground items are drawn by `session.gd` in
+## response to frames, so [constant SCREENSHOT_FLAG] on its own captures a world
+## with no items in it and proves nothing about them.
+##
+## [b]Not a second protocol and not a fixture format.[/b] Every line goes through
+## the same [code]ingest_text_frame[/code] the socket goes through, so a frame
+## that would be rejected on the wire is rejected here too, and the picture this
+## produces is the picture a conforming server would produce.
+const FEED_FLAG := "--feed"
 
 ## Two captures around a scripted walk, written to `<prefix>_1.png` and
 ## `<prefix>_2.png`.
@@ -112,11 +127,49 @@ const DEMO_HOLD_MSEC := 2000
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
+	# Before either capture path, and before any socket could deliver a frame:
+	# a scripted world is only a starting state, and a live server's frames
+	# arrive on top of it exactly as they would on top of an empty one.
+	_feed_scripted_frames(args)
 	if SHOTS_FLAG in args:
 		await _run_demo(args)
 		return
 	if SCREENSHOT_FLAG in args:
 		await _capture_and_quit()
+
+
+## Applies [constant FEED_FLAG]'s file, one JSON frame per line.
+##
+## A blank line is skipped so the file can be laid out for a human to read. A
+## frame that will not decode logs from inside `net_client.gd` and is dropped
+## there, which is the behaviour under test rather than a case to handle here.
+func _feed_scripted_frames(args: Array) -> void:
+	var path := _argument_after(args, FEED_FLAG)
+	if path.is_empty():
+		return
+
+	var net := get_node_or_null("Session/Net") as NetClientScript
+	if net == null:
+		push_error("main.tscn has no Session/Net node to feed")
+		get_tree().quit(1)
+		return
+
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		push_error(
+			"%s could not open %s: %d" % [FEED_FLAG, path, FileAccess.get_open_error()]
+		)
+		get_tree().quit(1)
+		return
+
+	var count := 0
+	while not file.eof_reached():
+		var line := file.get_line().strip_edges()
+		if line.is_empty():
+			continue
+		net.ingest_text_frame(line)
+		count += 1
+	print("main: fed %d scripted frame(s) from %s" % [count, path])
 
 
 ## The two-client visual check, from this client's side.

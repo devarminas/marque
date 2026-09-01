@@ -59,6 +59,28 @@ signal welcomed(
 	player_positions: PackedVector2Array,
 )
 
+## The ground items `welcome` listed, emitted immediately after [signal welcomed]
+## and out of the same frame. **M1.**
+##
+## Split from [signal welcomed] rather than folded into it because the handler
+## for the players has to have run first: `welcome` is the world restated, so a
+## listener frees everything it believed on [signal welcomed] and then rebuilds,
+## and one signal carrying both would leave the order of those two jobs to the
+## listener. Emission here is synchronous and in that order, so it does not.
+##
+## Emitted on every `welcome`: one carrying items, one carrying an empty `items`
+## array, and one from a pre-M1 server with no `items` key at all. The last two
+## mean the same thing — the world has no ground items — and a listener that
+## only heard about items when there were some could never clear the ones it
+## already had.
+##
+## The three arrays are index aligned.
+signal welcome_items(
+	item_ids: PackedInt64Array,
+	item_kinds: PackedStringArray,
+	item_positions: PackedVector2Array,
+)
+
 ## `spawn`: a player joined. Never carries this client's own id, which arrives
 ## in `welcome` instead.
 signal spawned(id: int, position: Vector2)
@@ -72,6 +94,35 @@ signal despawned(id: int)
 ## at least one element; a one-element path means "halt here". `speed` is world
 ## units per second, constant across the whole polyline.
 signal path_assigned(id: int, start_tick: int, points: PackedVector2Array, speed: float)
+
+## `item_spawn`: a ground item appeared. **M1.**
+##
+## Broadcast to everyone including whoever caused it, which is `path`'s rule and
+## not `spawn`'s: a dropper who did not hear this would have to conjure the body
+## out of its own intent, which is the client inventing state the server never
+## announced (`PROTOCOL.md`, `item_spawn`).
+##
+## `kind` is handed over verbatim, including a kind this client has never heard
+## of. Deciding what to draw for one is the body's job, not this file's.
+signal item_spawned(id: int, kind: String, position: Vector2)
+
+## `item_despawn`: a ground item left the world. **M1.**
+signal item_despawned(id: int)
+
+## `inventory`: this client's own inventory, restated in full. **M1.**
+##
+## Sent to one player, never broadcast, and never a patch. `size` is how many
+## slots exist; slot indices run `0` to `size - 1`.
+##
+## [b]`slot_indices` and `slot_kinds` are sparse and index aligned.[/b] They list
+## only the occupied slots, each carrying its own index, in the order the server
+## sent them — which is not promised to be sorted, so a reader that wants order
+## sorts. An empty slot is absent rather than null (`PROTOCOL.md`, `inventory`),
+## so `slot_indices.size()` is the number of items held and never the number of
+## slots drawn.
+signal inventory_changed(
+	size: int, slot_indices: PackedInt32Array, slot_kinds: PackedStringArray
+)
 
 ## `error`: the server refused something this client sent. `re` names the
 ## rejected message and is [code]""[/code] when the frame could not be
@@ -134,7 +185,44 @@ func is_open() -> bool:
 ## owns what is legal, and a client-side bounds check would only hide the
 ## `error` reply that proves the server is doing its job.
 func send_move_to(x: float, z: float) -> Error:
-	return _send({"move_to": {"x": x, "z": z}})
+	return _send(move_to_frame(x, z))
+
+
+## Sends `pickup`: a request to take a ground item. **M1.**
+##
+## `item` is an item id, never a player id (`PROTOCOL.md`, "Entity naming").
+## Taking an item is a walk followed by a pending action on the server, so
+## nothing here happens immediately and the reply is a `path` like any other.
+func send_pickup(item_id: int) -> Error:
+	return _send(pickup_frame(item_id))
+
+
+## Sends `drop`: a request to drop whatever is in an inventory slot. **M1.**
+##
+## [param slot] is a position in this client's cached inventory, [b]not[/b] an
+## item id. The server looks up what is actually there, which is the
+## intents-never-facts rule at its most load-bearing: a client that could name
+## the item id could name one it does not own (`PROTOCOL.md`, `drop`).
+func send_drop(slot: int) -> Error:
+	return _send(drop_frame(slot))
+
+
+## The three client-to-server frames, as the dictionaries [method _send] would
+## encode.
+##
+## Public and static so that a test can assert on the exact bytes a call would
+## put on the wire without needing a socket to be open, which is the only way to
+## check a sender against `PROTOCOL.md` before the server that answers it exists.
+static func move_to_frame(x: float, z: float) -> Dictionary:
+	return {"move_to": {"x": x, "z": z}}
+
+
+static func pickup_frame(item_id: int) -> Dictionary:
+	return {"pickup": {"item": item_id}}
+
+
+static func drop_frame(slot: int) -> Dictionary:
+	return {"drop": {"slot": slot}}
 
 
 func _process(_delta: float) -> void:
@@ -214,6 +302,12 @@ func ingest_text_frame(text: String) -> void:
 			_on_despawn(body, text)
 		"path":
 			_on_path(body, text)
+		"item_spawn":
+			_on_item_spawn(body, text)
+		"item_despawn":
+			_on_item_despawn(body, text)
+		"inventory":
+			_on_inventory(body, text)
 		"error":
 			_on_error(body, text)
 		_:
@@ -243,7 +337,32 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 		# Two encodings for one idea, deliberate and documented in PROTOCOL.md.
 		positions.append(Vector2(state["x"], state["z"]))
 
+	# M1. `items` is absent from every pre-M1 server and that is not an error:
+	# no items on the wire and no items in the world are the same statement.
+	# Parsed before anything is emitted, so a malformed `items` drops the whole
+	# frame rather than applying half of it — this file's rule is that one bad
+	# frame is dropped entire, and a `welcome` that landed its players and lost
+	# its items would leave a world nobody described.
+	var item_ids := PackedInt64Array()
+	var item_kinds := PackedStringArray()
+	var item_positions := PackedVector2Array()
+	if body.has("items"):
+		if typeof(body["items"]) != TYPE_ARRAY:
+			push_error("net_client: welcome.items is not an array: %s" % text)
+			return
+		for entry: Variant in body["items"] as Array:
+			var item := _item_state(entry, "welcome.items entry", text)
+			if item.is_empty():
+				return
+			item_ids.append(item["id"])
+			item_kinds.append(item["kind"])
+			item_positions.append(item["position"])
+
 	welcomed.emit(int(body["you"]), int(body["tick_ms"]), int(body["tick"]), ids, positions)
+	# After `welcomed`, always: a listener rebuilds its world on that signal, so
+	# items announced before it would be freed by the very frame that announced
+	# them.
+	welcome_items.emit(item_ids, item_kinds, item_positions)
 
 
 func _on_spawn(body: Dictionary, text: String) -> void:
@@ -284,6 +403,92 @@ func _on_path(body: Dictionary, text: String) -> void:
 		points.append(Vector2(pair[0], pair[1]))
 
 	path_assigned.emit(int(body["id"]), int(body["start_tick"]), points, float(body["speed"]))
+
+
+## `item_spawn`. **M1.** Same id-carrying encoding as `spawn` and
+## `welcome.players`; nothing about an item is a polyline, so the packed
+## `[x, z]` form never appears here (`PROTOCOL.md`, "Decoding notes").
+func _on_item_spawn(body: Dictionary, text: String) -> void:
+	var item := _item_state(body, "item_spawn", text)
+	if item.is_empty():
+		return
+	item_spawned.emit(item["id"], item["kind"], item["position"])
+
+
+## `item_despawn`. **M1.**
+func _on_item_despawn(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["id"], text):
+		return
+	item_despawned.emit(int(body["id"]))
+
+
+## `inventory`. **M1.** A full restatement, never a patch.
+##
+## The two invariants checked below — an index inside `0..size - 1`, and one
+## entry per slot — are the server's, stated in `PROTOCOL.md`. They are checked
+## rather than assumed because a frame breaking either would put an item outside
+## the very grid the same frame told this client to draw, and because a sparse
+## list makes both failures invisible until something reads the slot.
+func _on_inventory(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["size"], text):
+		return
+	var size := int(body["size"])
+	if size < 0:
+		push_error("net_client: inventory.size is negative (%d): %s" % [size, text])
+		return
+	if typeof(body.get("slots")) != TYPE_ARRAY:
+		push_error("net_client: inventory.slots is missing or not an array: %s" % text)
+		return
+
+	var indices := PackedInt32Array()
+	var kinds := PackedStringArray()
+	for entry: Variant in body["slots"] as Array:
+		if typeof(entry) != TYPE_DICTIONARY:
+			push_error("net_client: inventory.slots entry is not an object: %s" % text)
+			return
+		var occupied: Dictionary = entry
+		if not _has_numbers(occupied, ["slot"], text):
+			return
+		if typeof(occupied.get("kind")) != TYPE_STRING:
+			push_error("net_client: inventory.slots entry has no kind string: %s" % text)
+			return
+		var slot := int(occupied["slot"])
+		if slot < 0 or slot >= size:
+			push_error(
+				"net_client: inventory slot %d is outside 0..%d: %s" % [slot, size - 1, text]
+			)
+			return
+		if indices.has(slot):
+			push_error("net_client: inventory names slot %d twice: %s" % [slot, text])
+			return
+		indices.append(slot)
+		kinds.append(occupied["kind"])
+
+	inventory_changed.emit(size, indices, kinds)
+
+
+## One `{"id":..,"kind":..,"x":..,"z":..}` object, decoded.
+##
+## Returns an empty dictionary when it will not parse, having logged which field
+## was wrong. A successful parse is never empty, so the caller checks
+## [method Dictionary.is_empty] rather than comparing against null.
+func _item_state(entry: Variant, where: String, text: String) -> Dictionary:
+	if typeof(entry) != TYPE_DICTIONARY:
+		push_error("net_client: %s is not a JSON object: %s" % [where, text])
+		return {}
+	var state: Dictionary = entry
+	if not _has_numbers(state, ["id", "x", "z"], text):
+		return {}
+	if typeof(state.get("kind")) != TYPE_STRING:
+		push_error("net_client: %s has no kind string: %s" % [where, text])
+		return {}
+	# `id` is a 64-bit integer on the wire that arrives as a float, like every
+	# other integer here.
+	return {
+		"id": int(state["id"]),
+		"kind": state["kind"],
+		"position": Vector2(state["x"], state["z"]),
+	}
 
 
 func _on_error(body: Dictionary, text: String) -> void:

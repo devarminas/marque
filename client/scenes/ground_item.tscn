@@ -1,0 +1,27 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/ground_item.gd" id="1_ground_item"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_known"]
+albedo_color = Color(0.18, 0.72, 0.26, 1)
+roughness = 0.75
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_unknown"]
+albedo_color = Color(0.95, 0.08, 0.85, 1)
+roughness = 0.75
+
+[sub_resource type="BoxMesh" id="BoxMesh_item"]
+size = Vector3(0.5, 0.5, 0.5)
+
+[node name="GroundItem" type="Node3D" node_paths=PackedStringArray("mesh")]
+script = ExtResource("1_ground_item")
+ground_y = 0.0
+mesh = NodePath("Mesh")
+known_material = SubResource("StandardMaterial3D_known")
+unknown_material = SubResource("StandardMaterial3D_unknown")
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
+cast_shadow = 1
+material_override = SubResource("StandardMaterial3D_known")
+mesh = SubResource("BoxMesh_item")
