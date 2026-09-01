@@ -160,8 +160,19 @@ Full detail in `NOTES.md`. Summary:
 
 Paste this file verbatim into every worker spawn and every resume, and **name the commit SHA
 the paste came from**. This file changes as the program learns, so an unpinned paste silently
-drifts from the file on disk and the worker cannot tell which one binds. On conflict, the file
-in the repo wins and the worker reports the drift.
+drifts from the file on disk and the worker cannot tell which one binds.
+
+**On conflict, the newer of the two wins, and you say which one you used.** Compare the paste's
+named SHA against your worktree's copy. If your branch forked before the paste's commit, the
+**paste** is newer and it binds. If `main` has moved past the paste, run `git fetch` and read
+`origin/main`'s copy, which is newer than both.
+
+This used to say "the file in the repo wins", flatly, and an M1b verifier caught that it is
+wrong in the commonest case. Its branch forked one commit before a line here was corrected, so
+its worktree carried the falsehood and the paste carried the fix. **Obeying the old rule
+literally would have resurrected a corrected falsehood**, which is the precise opposite of what
+the rule is for. Neither copy is authoritative by virtue of being on disk; recency is what
+decides, and `origin/main` settles it.
 
 ## Picking this up in a new session
 

@@ -131,6 +131,16 @@ Four rules:
   When a later unit finds a new hole, add that mode to the list rather than treating the
   earlier verification as having been wrong. The verification was correct and incomplete,
   which is the normal state of every verification.
+- **Prove the sabotage applied before you believe the green run.** M1b's verifier edited a Go
+  file with a `perl` one-liner that silently did nothing, because the file has CRLF line endings
+  and the pattern did not match. The suite then ran green **against unsabotaged code**, which
+  reads exactly like "the test does not catch this". It caught itself with `git diff --stat`
+  before reporting, and checked every later sabotage was applied before running it.
+
+  A sabotage that fails to apply produces a false *finding*, not a false pass, which makes it the
+  mirror image of everything else on this list and just as wrong. `git diff --stat` between
+  editing and running costs nothing. **Every sabotage in this program's history that was worth
+  anything was worth it because someone confirmed the break existed.**
 - **Reproduce a claim about another unit's code before writing it down as fact.** See below.
 
 ### A correction, and the rule that came from it
