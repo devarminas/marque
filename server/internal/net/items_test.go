@@ -441,8 +441,34 @@ func TestTheLoserIsHaltedAndToldWhy(t *testing.T) {
 	if len(halt.Points) != 1 {
 		t.Fatalf("halt path has %d points, want 1: %+v", len(halt.Points), halt.Points)
 	}
-	if halt.Points[0].X() <= 0 || halt.Points[0].X() > farItem {
-		t.Fatalf("bob halted at %v, want somewhere between the spawn point and the item", halt.Points[0])
+	// Where the halt is, compared against where bob actually is.
+	//
+	// The server is asked for bob's position through a channel that has nothing
+	// to do with the halt: a client joining now is handed a snapshot of the
+	// world composed from world state, and bob, being halted, never moves again,
+	// so the two must name the same point exactly.
+	//
+	// This used to assert an interval instead -- somewhere between the spawn
+	// point and the item, inclusive at the item's own coordinate -- and nothing
+	// compared the halt against bob at all. A verifier halted the loser at the
+	// item's coordinates, which is a well-formed one-element path that teleports
+	// bob onto the empty patch of ground where the item vanished, the exact lie
+	// losePickup exists to prevent, and the whole suite stayed green. An
+	// interval cannot catch that class, because every wrong point inside it is
+	// still inside it; the player's own position can, because there is only one
+	// right answer.
+	carol := h.dial("carol")
+	bobNow := positionOf(t, carol.welcomeFrame(), bobWelcome.You)
+	if halt.Points[0].X() != bobNow.X || halt.Points[0].Z() != bobNow.Z {
+		t.Fatalf("bob was halted at %v, but the server puts bob at (%v, %v): a halt anywhere other "+
+			"than the player's own position teleports them", halt.Points[0], bobNow.X, bobNow.Z)
+	}
+	// The assertion above is vacuous if bob happens to be standing on the
+	// item's square, where halting him at the item and halting him where he
+	// stands are the same instruction.
+	if bobNow.X == farItem && bobNow.Z == 0 {
+		t.Fatalf("bob halted on the item's own square (%v, %v), so the assertion above could not "+
+			"have distinguished the two; move the seed", bobNow.X, bobNow.Z)
 	}
 
 	refusal := bob.awaitError()

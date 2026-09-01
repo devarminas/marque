@@ -47,6 +47,7 @@ type ItemID int64
 const (
 	MsgMoveTo = "move_to"
 	MsgPickup = "pickup"
+	MsgDrop   = "drop"
 )
 
 // PlayerState is one player's position, as it appears inside welcome.
@@ -214,8 +215,25 @@ type Pickup struct {
 	Item ItemID `json:"item"`
 }
 
+// Drop is a request to drop whatever is in one inventory slot at the player's
+// feet.
+//
+// Slot is an index into the sender's own inventory, never an item id. The
+// client names a position in its own cache and the server looks up what is
+// actually there, which is the intents-never-facts rule at its most
+// load-bearing: a client that could name the item id could name one it does not
+// own (PROTOCOL.md, "drop").
+//
+// Whether the index is inside 0 to InventorySize-1, and whether anything is in
+// it, are questions about world state and are not asked here. This package does
+// not know how many slots a player has.
+type Drop struct {
+	Slot int `json:"slot"`
+}
+
 func (MoveTo) isClientMessage() {}
 func (Pickup) isClientMessage() {}
+func (Drop) isClientMessage()   {}
 
 // serverEnvelope is the key-as-tag wrapper. Exactly one field is ever non-nil;
 // Encode is the only thing that builds it.
@@ -299,6 +317,21 @@ const (
 	// because the server must not tell a client which ids exist (PROTOCOL.md,
 	// "Pickup").
 	ReasonUnknownItem RejectReason = "unknown_item"
+	// ReasonNoSuchSlot: a drop naming an index outside 0 to InventorySize-1.
+	// Raised by the game package, which owns how many slots a player has.
+	ReasonNoSuchSlot RejectReason = "no_such_slot"
+	// ReasonEmptySlot: a drop naming a legal index that holds nothing.
+	//
+	// Deliberately a second reason rather than being folded into
+	// ReasonNoSuchSlot, which is the opposite of what ReasonUnknownItem does
+	// for pickup. The two situations differ in what they leak and in what they
+	// mean. One pickup reason exists because the server must not tell a client
+	// which item ids exist; a slot index leaks nothing, because the client is
+	// told its own size in every inventory message and is told its own contents
+	// as a full restatement. And the two are different diagnoses for a human
+	// reading the log: an index outside the grid is a client that drew the
+	// wrong grid, and an empty slot in range is an ordinary stale cache.
+	ReasonEmptySlot RejectReason = "empty_slot"
 	// ReasonUnknownSender: a frame from a connection with no player. Defensive:
 	// the hub reports a connection before any of its frames.
 	ReasonUnknownSender RejectReason = "unknown_sender"
@@ -385,6 +418,15 @@ type pickupWire struct {
 	Item *ItemID `json:"item"`
 }
 
+// dropWire decodes drop, with the same absent-is-not-zero rule as moveToWire,
+// and here it is load-bearing rather than merely tidy: slot 0 is a perfectly
+// legal slot and the first one RuneScape's lowest-free rule fills. A missing
+// field filled in with encoding/json's zero would turn {"drop":{}} into a drop
+// of whatever the player is holding in their first slot.
+type dropWire struct {
+	Slot *int `json:"slot"`
+}
+
 // Decode parses one inbound frame.
 //
 // Every failure is a *RejectError carrying both a machine-readable reason and
@@ -415,6 +457,8 @@ func Decode(frame []byte) (ClientMessage, error) {
 			return decodeMoveTo(payload)
 		case MsgPickup:
 			return decodePickup(payload)
+		case MsgDrop:
+			return decodeDrop(payload)
 		default:
 			// Logged loudly and ignored. A peer written against a later
 			// protocol version must not be broken by this one.
@@ -460,6 +504,20 @@ func decodePickup(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonMissingField, MsgPickup, "pickup needs an item id")
 	}
 	return Pickup{Item: *wire.Item}, nil
+}
+
+// decodeDrop parses a drop body. Whether the slot exists and whether it holds
+// anything are questions about world state and are not asked here; this only
+// establishes that the client named a slot.
+func decodeDrop(payload []byte) (ClientMessage, error) {
+	var wire dropWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgDrop, "drop: %v", err)
+	}
+	if wire.Slot == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgDrop, "drop needs a slot index")
+	}
+	return Drop{Slot: *wire.Slot}, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }

@@ -69,11 +69,20 @@ func TestNoFrameOfASessionCarriesANull(t *testing.T) {
 	alice.spawn()
 
 	// A walk, then a contested pickup, which is what produces an ordinary path,
-	// a one-element halt path, an item_despawn, an inventory and an error.
+	// a one-element halt path, an item_despawn, an inventory and an error, and
+	// then a drop, which is the only thing that produces an item_spawn once the
+	// world is running.
+	//
+	// The session is driven entirely through the log, never by reading a
+	// client's frames: everything either client is sent has to still be sitting
+	// in its queue for the collect below to walk.
 	alice.moveTo(2, 2)
 	alice.pickup(item)
 	bob.pickup(item)
 	h.awaitEvents(game.EvPickupLost, 1)
+	h.awaitEvents(game.EvPickupResolved, 1) // alice joined first, so alice holds it, in slot 0
+	alice.drop(0)
+	h.awaitEvents(game.EvDrop, 1)
 	alice.pickup(item) // now stale, so an error comes back
 	h.awaitEvents(game.EvPickupRejected, 1)
 
@@ -90,7 +99,7 @@ func TestNoFrameOfASessionCarriesANull(t *testing.T) {
 
 	// The assertion above is vacuous if the session produced no frames, and
 	// weaker than it looks if it produced only one kind of them.
-	for _, want := range []string{"path", "item_despawn", "inventory", "error"} {
+	for _, want := range []string{"path", "item_spawn", "item_despawn", "inventory", "error"} {
 		if kinds[want] == 0 {
 			t.Fatalf("the session produced no %s frame, so nothing checked one: saw %v", want, kinds)
 		}

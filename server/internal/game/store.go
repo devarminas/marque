@@ -31,6 +31,14 @@ var (
 	ErrNoSuchItem = errors.New("game: no such ground item")
 	// ErrInventoryFull: every slot is occupied.
 	ErrInventoryFull = errors.New("game: inventory is full")
+	// ErrNoSuchSlot: a slot index outside 0 to InventorySize-1. A broken
+	// client rather than a stale one: no index in that range was ever legal.
+	ErrNoSuchSlot = errors.New("game: no such inventory slot")
+	// ErrEmptySlot: a legal slot index holding nothing. Separate from
+	// ErrNoSuchSlot because the caller reports them separately, and because
+	// they are different diagnoses: a client that drew the wrong grid, against
+	// a client whose cached inventory is one transaction behind.
+	ErrEmptySlot = errors.New("game: inventory slot is empty")
 	// ErrNoSuchPlayer: the player has no inventory, meaning nobody ever called
 	// AddPlayer for them or RemovePlayer already ran. Reaching it is a broken
 	// invariant in the caller, not a condition to recover from.
@@ -105,6 +113,30 @@ type Store interface {
 	//
 	// Fails with ErrNoSuchItem, ErrInventoryFull, or ErrNoSuchPlayer.
 	TakeGroundItem(mnet.ItemID, mnet.PlayerID) (Slot, error)
+
+	// DropInventorySlot moves whatever is in one of a player's slots out onto
+	// the ground at (x, z), and is the only way an item crosses back. Like
+	// TakeGroundItem it either happens completely or leaves both sides
+	// untouched: one call, never a read of the slot followed by a write of the
+	// ground.
+	//
+	// The returned GroundItem carries a **new** id, freshly assigned from the
+	// store's counter. That is forced rather than chosen: an inventory holds
+	// kinds, not item ids, so the id an item had before it was picked up is
+	// already unrecoverable by the time it is dropped, and ids are never reused
+	// within a process (PROTOCOL.md, "Entity naming"). A client that cached the
+	// old id sees a body it has never heard of, which is exactly right, because
+	// it was told that one despawned.
+	//
+	// The coordinate is not validated here. It is the dropping player's own
+	// position, which is already in world state and therefore already inside
+	// the bounds checkCoordinates enforces; every position is either the spawn
+	// point or a convex combination of validated waypoints. A caller passing
+	// anything else is the bug, and a check here would answer it too late to
+	// help.
+	//
+	// Fails with ErrNoSuchPlayer, ErrNoSuchSlot, or ErrEmptySlot.
+	DropInventorySlot(player mnet.PlayerID, slot int, x, z float64) (GroundItem, error)
 
 	// Inventory lists one player's occupied slots, ascending by index. Absent
 	// slots are empty. An unknown player has no inventory and returns nil.
@@ -211,6 +243,30 @@ func (s *memStore) TakeGroundItem(id mnet.ItemID, player mnet.PlayerID) (Slot, e
 	slots[index] = item.Kind
 
 	return Slot{Index: index, Kind: item.Kind}, nil
+}
+
+func (s *memStore) DropInventorySlot(player mnet.PlayerID, slot int, x, z float64) (GroundItem, error) {
+	slots, known := s.inventories[player]
+	if !known {
+		return GroundItem{}, fmt.Errorf("drop slot %d for player %d: %w", slot, player, ErrNoSuchPlayer)
+	}
+	if slot < 0 || slot >= InventorySize {
+		return GroundItem{}, fmt.Errorf("drop slot %d for player %d: %w", slot, player, ErrNoSuchSlot)
+	}
+	kind := slots[slot]
+	if kind == "" {
+		return GroundItem{}, fmt.Errorf("drop slot %d for player %d: %w", slot, player, ErrEmptySlot)
+	}
+
+	// Both sides of the move, with nothing between them that can fail. Every
+	// reason to refuse has already been checked, so this is the transaction:
+	// the slot is empty and the item is on the ground, or neither. The spawn
+	// cannot fail either -- kind is non-empty, which is the only thing
+	// SpawnGroundItem refuses.
+	slots[slot] = ""
+	item := s.SpawnGroundItem(kind, x, z)
+
+	return item, nil
 }
 
 func (s *memStore) Inventory(player mnet.PlayerID) []Slot {
