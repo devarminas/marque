@@ -264,7 +264,10 @@ Real navmesh, auth/accounts, skills/XP, multiple recipes, map content, interest 
 ### Cut from M0/M1
 
 - Auth — hardcode two player IDs. Known work, zero risk, pure time.
-- Art — magenta/blue capsules, one yellow box for the item.
+- Art — magenta/blue capsules, one **green** box for the ground item. This line said yellow and
+  contradicted the palette above, where yellow is Interactable and green is Pickup. A ground
+  item in M1 is a pickup and nothing else, so it is green. An item kind the client does not
+  recognise is magenta, which is the palette's whole point.
 - Skills, XP, recipes, map content. All content, no architecture.
 
 Build the JSON event log into the Go server from tick zero. Retrofitting after inventory exists

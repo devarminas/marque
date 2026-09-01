@@ -108,7 +108,20 @@ Full detail in `NOTES.md`. Summary:
   M0a and M0c have no dependency on each other and run concurrently. M0b and M0d likewise.
   Only M0e is a genuine join.
 - **M1**, MVP. One item on the ground, two clients click it, exactly one gets it. Pickup and
-  drop. In-memory store. Survives a server restart is out of scope until Postgres.
+  drop. In-memory store behind a `Store` interface. Postgres and surviving a restart are out of
+  scope. **The wire contract for all of it is already written**: `PROTOCOL.md`, the sections
+  marked **M1**. Read them; do not re-derive them and do not negotiate with them.
+  - **M1a**, Go. The `Store` interface, ground items, inventory, the `pickup` intent, and
+    contested resolution. Ends in a Go test where two real WebSocket clients race for one item
+    and exactly one wins. Depends on nothing.
+  - **M1c**, Godot. The second registry: a ground-item body and an item container driven by
+    `welcome.items`, `item_spawn`, and `item_despawn`. Verified against scripted frames, no
+    server. Depends on nothing, so it runs alongside M1a.
+  - **M1b**, Go. `drop`, the reverse transaction, and the full-inventory refusal. Needs M1a.
+  - **M1d**, Godot. Clicking an item sends `pickup`, and an inventory panel fed by `inventory`.
+    Needs M1a and M1c.
+  - **M1e**, the milestone. Two real clients race for one item; exactly one gets it, by
+    observation. A `scripts/` demo alongside `two_client_demo.ps1`. Needs everything above.
 - **M2**. Reconnect. Sequence numbers and server-side dedupe.
 
 ## Pasting these orders
@@ -163,22 +176,26 @@ Everything a coordinator needs is in this repo. Nothing lives only in a chat tra
 this file, then `COORDINATION.md`, `PROTOCOL.md`, `NOTES.md`, and `FOLLOW-UPS.md`. Each merged
 PR body is that unit's ledger row: verdict, head SHA, and the commands actually run.
 
-**Nothing is in flight. M0 is closed and `main` is green.**
+**M0 is closed and `main` is green. M1 is scoped and open.**
 
-The next milestone is **M1, contested pickup**: one item on the ground, two clients click it,
-exactly one gets it. It is unscoped on purpose, because M0's own findings are its inputs. Before
-scoping it, read:
+The two protocol decisions that were due before M1's first message are **both settled and
+written into `PROTOCOL.md`**, with their reasoning:
 
-- `PROTOCOL.md` end to end. It was amended eight times from real findings and it is the contract.
-  Its **M2** markers name what is reserved rather than forgotten.
-- M0e's PR body, whose `what M1 inherits` section is the handover. Its sharpest point: the client
-  believes the world is made of players and only players. There is no second registry, no second
-  container, and no applier that is not about a body that walks.
-- `COORDINATION.md`, which records how briefs and verifications go wrong here, including three
-  occasions when a claim about a dependency was written into a contract file as fact and had to
-  be corrected.
-- The two protocol decisions `PROTOCOL.md` says to settle **before M1 adds its first message**:
-  which slow-client death reason is authoritative, and how item messages name their entity type.
+- *Which reason is authoritative* when a slow client dies. The cause is authoritative, never the
+  detector, and the first condemnation latches so a consequence cannot overwrite a cause.
+- *Entity naming*. Every entity family gets its own message names and its own id space. The
+  compatibility rules chose it: a `kind` field on `spawn` would make an M0 client render an
+  acorn as a walking blue capsule, where a new top-level key makes it render nothing.
+
+M1's whole wire contract is now in `PROTOCOL.md` under the **M1** markers, and its five units
+are listed under *Milestones*. Read the contract rather than re-deriving it.
+
+Still worth reading before touching M1: M0e's PR body, whose sharpest handover is that **the
+client believes the world is made of players and only players** — no second registry, no second
+container, no applier that is not about a body that walks. That is exactly what M1c builds. And
+`COORDINATION.md`, which records how briefs and verifications go wrong here, including three
+occasions when a claim about a dependency was written into a contract file as fact and had to be
+corrected.
 
 **Do not re-derive M0's decisions from scratch.** They are written down, with the reasoning and
 the evidence, in the files above.

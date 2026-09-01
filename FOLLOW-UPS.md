@@ -60,6 +60,26 @@ Found by M0e, the unit that first rendered two real players at once.
 - **`follow_damping` at 12.0 visibly trails at the start of a walk** in the demo captures. It
   might be right. It needs someone watching it move rather than looking at a still.
 
+## M1 placeholders
+
+Chosen by the coordinator while scoping M1, all placeholders picked to be decidable rather than
+right. None blocks anything.
+
+- **`PickupRange`, proposed `0.5` world units.** How close your feet have to be to an item before
+  the server hands it to you. Too small and a walk that lands a hair short leaves you standing
+  on the acorn doing nothing; too large and you vacuum up items you walked past. Interacts with
+  `MinPathLength`, which is `1e-3`, so there is a lot of room between them.
+- **Contested pickup is won by join order.** Deterministic and replayable, which is what a test
+  needs, and arbitrary as fairness. It only becomes a real question the first time two humans
+  race for something they both want. `PROTOCOL.md`, *Contested pickup*, has the reasoning.
+- **Ground items do not despawn and are visible to everyone.** RuneScape hides a drop from
+  everyone but the dropper for sixty seconds and then despawns it. Marque does neither, because
+  M1 has nothing worth protecting and because a hidden item cannot be contested by two clients,
+  which is the entire milestone. Revisit when items have value.
+- **Nothing marks a ground item as clickable.** Same gap as "nothing is drawn at the clicked
+  point" above, and it will read the same way: the player cannot tell an item apart from scenery
+  except by clicking it. RuneScape has hover text and a right-click menu. Marque has a green box.
+
 ## Scale cliffs, not tuning
 
 Not feel, but parked here for the same reason: real, unreachable today, and expensive to
