@@ -184,6 +184,34 @@ A worker asserting one of these is usually right about the *behaviour* and wrong
 *mechanism*, which is the worst combination, because the symptom it describes really does
 happen and that makes the explanation feel confirmed.
 
+## The coordinator's fleet is part of the environment
+
+**Never run a timing-sensitive verification concurrently with other Godot work.** This cost a
+worker its acceptance criterion and cost me a false diagnosis.
+
+`scripts/two_client_demo.ps1` schedules its phases on wall-clock deadlines but waits **15
+rendered frames** inside each capture. Unloaded that is a quarter-second and invisible. With
+several agents driving Godot at once, those fifteen frames stretch without bound, the second
+capture of a phase lands after the walk has finished, and every displacement reads exactly 0.
+`NOTES.md` had already recorded the class, from M0d: a frame budget is a machine-dependent
+amount of wall time.
+
+M1g's writer measured 8.2 seconds for a single client to boot and capture and concluded the
+machine was slow. It was right about the number and could not see the cause, because **the cause
+was the coordinator's own fleet**, which no worker can observe. Run on an idle machine
+afterwards, the same commit passed in 21.7 seconds with the two `move_to` events 25 ticks apart,
+against the 81 the worker saw.
+
+Three rules:
+
+- **Serialise Godot-driving agents when any of them is timing-sensitive.** Go tests and headless
+  suites tolerate load; the windowed demo does not.
+- **A worker's environment claim is scoped to what a worker can see.** "This machine is slow" is
+  a hypothesis about a machine whose other tenants are invisible to it. Check your own fleet
+  before believing it, and before letting a worker write it down.
+- **Take the idle measurement yourself.** It is one command and it settles the question that a
+  worker cannot settle from inside the load.
+
 ## Sizing a verification
 
 A verifier is an agent with a budget like any other, and a check list is scope.
