@@ -1,6 +1,8 @@
 package game
 
-// Ground items, inventories, and the pickup transaction.
+// Ground items, inventories, and the two transactions that move an item between
+// them: pickup, which walks first and resolves in the tick loop, and drop, which
+// is immediate.
 //
 // Everything here runs on the goroutine that owns world state, with one stated
 // exception: SeedGroundItem, which runs before that goroutine starts.
@@ -61,20 +63,24 @@ func (w *World) SeedGroundItem(kind string, x, z float64) error {
 	if reason, detail := checkCoordinates(x, z); reason != "" {
 		return fmt.Errorf("seed item %q at (%v, %v): %s", kind, x, z, detail)
 	}
-	w.admitGroundItem(kind, x, z)
+	w.noteItemEntered(w.items.SpawnGroundItem(kind, x, z))
 	return nil
 }
 
-// admitGroundItem places an item and logs it. Every way an item enters the
-// world goes through here, so the log records all of them the same way and
-// M1b's drop has one line to add rather than a shape to copy.
+// noteItemEntered records an item that has just entered the world.
 //
-// It does not broadcast. Seeding happens before anyone is connected, and a
-// caller with an audience broadcasts the returned item itself.
-func (w *World) admitGroundItem(kind string, x, z float64) GroundItem {
-	item := w.items.SpawnGroundItem(kind, x, z)
+// Both ways in go through here -- a seed before the world opens, and a drop
+// once it is running -- so the log records them under one event name with one
+// field set, and a reader counting item_spawned to ask how many items entered
+// the world gets the right answer without knowing to exclude anything. The
+// causer is deliberately not among the fields; EvItemSpawned's comment is where
+// that is argued.
+//
+// It does not broadcast, because its two callers have different audiences:
+// seeding happens before anybody is connected, and a drop has everybody. The
+// caller with an audience broadcasts the item itself.
+func (w *World) noteItemEntered(item GroundItem) {
 	w.log.Event(w.tick, EvItemSpawned, itemLogFields(item))
-	return item
 }
 
 // pickup answers a click on an item.
@@ -84,7 +90,7 @@ func (w *World) admitGroundItem(kind string, x, z float64) GroundItem {
 // enough, which is what makes a contested pickup a contest rather than a race
 // between two network arrivals.
 func (w *World) pickup(p *player, msg mnet.Pickup) {
-	w.log.Event(w.tick, EvPickup, pickupLogFields(p.id, msg.Item))
+	w.log.Event(w.tick, EvPickup, playerItemFields(p.id, msg.Item))
 
 	item, live := w.items.GroundItem(msg.Item)
 	if !live {
@@ -120,6 +126,67 @@ func (w *World) pickup(p *player, msg mnet.Pickup) {
 	w.assignPath(p, points)
 }
 
+// drop answers a click on an inventory slot. It is pickup's reverse
+// transaction, and it is where the two stop resembling each other.
+//
+// A drop is immediate: no walk, no pending action, no second chance to fail
+// later. The item leaves the slot and lands at the player's position on this
+// tick, which is why dropping mid-walk lands it under the walker rather than at
+// the end of the path -- p.pos is where the player is now, and the waypoints
+// ahead are not consulted or disturbed. The walk continues untouched
+// (PROTOCOL.md, "Drop").
+//
+// The whole transaction is one store call, for TakeGroundItem's reason: a
+// caller that read the slot and then wrote the ground would have made a
+// two-phase write that a transactional store cannot make atomic.
+func (w *World) drop(p *player, msg mnet.Drop) {
+	item, err := w.items.DropInventorySlot(p.id, msg.Slot, p.pos.X, p.pos.Z)
+	switch {
+	case errors.Is(err, ErrNoSuchSlot):
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonNoSuchSlot,
+			Detail:      fmt.Sprintf("no such slot: %d is outside 0 to %d", msg.Slot, InventorySize-1),
+			Re:          mnet.MsgDrop,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	case errors.Is(err, ErrEmptySlot):
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonEmptySlot,
+			Detail:      "that slot is empty",
+			Re:          mnet.MsgDrop,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	case err != nil:
+		// ErrNoSuchPlayer, or something a later Store invents. A player in
+		// w.order without an inventory is a broken invariant in addPlayer, not
+		// a condition to recover from.
+		panic(fmt.Sprintf("game: dropping slot %d for player %d: %v", msg.Slot, p.id, err))
+	}
+
+	// One tick, one goroutine, one transaction, exactly as a pickup's
+	// resolution is: the slot is empty, the item is on the ground, and everyone
+	// has been told, before the next frame is looked at.
+	w.noteItemEntered(item)
+	fields := playerItemFields(p.id, item.ID)
+	fields["kind"] = item.Kind
+	fields["slot"] = msg.Slot
+	w.log.Event(w.tick, EvDrop, fields)
+
+	// Everyone, and the dropper is not excluded. That is path's broadcast rule
+	// rather than spawn's: spawn leaves out the joining player because welcome
+	// already described them to themselves, and there is no equivalent here. A
+	// dropper who did not receive this would have to conjure the body from its
+	// own intent, which is the client inventing state the server never
+	// announced (PROTOCOL.md, "item_spawn / item_despawn").
+	w.broadcast(mnet.ItemSpawn{ID: item.ID, Kind: item.Kind, X: item.X, Z: item.Z}, nil)
+
+	// The world first, then the one thing that is private to this player. Same
+	// order as a resolved pickup, and same order as the welcome step.
+	w.sendInventory(p)
+}
+
 // resolvePickup decides one player's pending pickup for this tick. Called from
 // step, after movement, in join order.
 //
@@ -142,7 +209,7 @@ func (w *World) resolvePickup(p *player) {
 		// halt path: the walk ends by arriving, which it is about to do on its
 		// own, and cutting it short here would freeze the server's copy of the
 		// player up to PickupRange short of where the client draws them.
-		w.log.Event(w.tick, EvPickupNoRoom, pickupLogFields(p.id, item.ID))
+		w.log.Event(w.tick, EvPickupNoRoom, playerItemFields(p.id, item.ID))
 		p.pending = 0
 		w.send(p, mnet.Error{Re: mnet.MsgPickup, Msg: "inventory is full"})
 		return
@@ -161,7 +228,7 @@ func (w *World) resolvePickup(p *player) {
 	}
 
 	p.pending = 0
-	fields := pickupLogFields(p.id, item.ID)
+	fields := playerItemFields(p.id, item.ID)
 	fields["kind"] = item.Kind
 	fields["slot"] = slot.Index
 	w.log.Event(w.tick, EvPickupResolved, fields)
@@ -185,7 +252,7 @@ func (w *World) resolvePickup(p *player) {
 // states the rule without a condition, and a client that holds at the last point
 // of its polyline is unmoved by being told to stand where it stands.
 func (w *World) losePickup(p *player) {
-	w.log.Event(w.tick, EvPickupLost, pickupLogFields(p.id, p.pending))
+	w.log.Event(w.tick, EvPickupLost, playerItemFields(p.id, p.pending))
 	p.pending = 0
 	w.assignHalt(p)
 	w.send(p, mnet.Error{Re: mnet.MsgPickup, Msg: "the item is gone"})
@@ -237,10 +304,15 @@ func itemLogFields(item GroundItem) gamelog.Fields {
 	}
 }
 
-// pickupLogFields names the player and the item for every event about a pickup,
-// so the four of them cannot drift apart on a key name. EvPickupResolved adds
-// "kind" and "slot" on top, being the only one that knows either.
-func pickupLogFields(id mnet.PlayerID, item mnet.ItemID) gamelog.Fields {
+// playerItemFields names the player and the item for every event about one
+// player and one item, so the five of them cannot drift apart on a key name.
+//
+// EvPickupResolved and EvDrop add "kind" and "slot" on top, being the two that
+// know either. That those two end up with identical field sets is the point
+// rather than a coincidence: they are the two transactions that move an item
+// between the ground and a slot, in opposite directions, and a reader who has
+// learned one row has learned the other.
+func playerItemFields(id mnet.PlayerID, item mnet.ItemID) gamelog.Fields {
 	return gamelog.Fields{
 		"player": id,
 		"item":   item,

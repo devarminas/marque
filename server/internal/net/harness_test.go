@@ -366,6 +366,11 @@ func (c *client) moveTo(x, z float64) {
 	c.sendRaw(fmt.Sprintf(`{"move_to":{"x":%v,"z":%v}}`, x, z))
 }
 
+func (c *client) drop(slot int) {
+	c.t.Helper()
+	c.sendRaw(fmt.Sprintf(`{"drop":{"slot":%d}}`, slot))
+}
+
 func (c *client) next() frame {
 	c.t.Helper()
 
@@ -522,6 +527,70 @@ func (c *client) awaitInventoryFrame() frame {
 	}
 	c.t.Fatalf("client %s: no inventory within %v", c.name, readTimeout)
 	return frame{}
+}
+
+// awaitItemSpawn reads until an item is announced onto the ground, ignoring
+// everything else. A drop broadcasts the spawn to every client before it
+// unicasts the dropper's inventory, so the dropper sees traffic around it.
+//
+// It takes the next spawn rather than one named id, because the id of a dropped
+// item is not predictable from outside: it is freshly assigned, the id the item
+// had before it was picked up having been retired for good.
+func (c *client) awaitItemSpawn() mnet.ItemSpawn {
+	c.t.Helper()
+	return *c.awaitItemSpawnFrame().ItemSpawn
+}
+
+// awaitItemSpawnFrame is awaitItemSpawn keeping the raw JSON, for the
+// assertions that are about the encoding rather than the values.
+func (c *client) awaitItemSpawnFrame() frame {
+	c.t.Helper()
+
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(readTimeout)
+		if !ok {
+			break
+		}
+		if f.ItemSpawn != nil {
+			return f
+		}
+	}
+	c.t.Fatalf("client %s: no item_spawn within %v", c.name, readTimeout)
+	return frame{}
+}
+
+// countItemSpawns reports how many times one item was announced onto the ground
+// within the window, which is the only way to catch a client being told about
+// the same item twice.
+func (c *client) countItemSpawns(item mnet.ItemID, window time.Duration) int {
+	c.t.Helper()
+
+	var seen int
+	for _, f := range c.collect(window) {
+		if f.ItemSpawn != nil && f.ItemSpawn.ID == item {
+			seen++
+		}
+	}
+	return seen
+}
+
+// positionOf is where the server says one player is, taken from a snapshot of
+// the world it composed itself.
+//
+// It exists so that a test can compare a claim about a player's position
+// against the server's own authoritative answer, rather than against an
+// interval the test author guessed or arithmetic the test author repeated.
+func positionOf(t *testing.T, world mnet.Welcome, id mnet.PlayerID) mnet.PlayerState {
+	t.Helper()
+
+	for _, p := range world.Players {
+		if p.ID == id {
+			return p
+		}
+	}
+	t.Fatalf("player %d is not in the world snapshot %+v", id, world.Players)
+	return mnet.PlayerState{}
 }
 
 // awaitItemDespawn reads until the named item is announced gone.

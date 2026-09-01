@@ -107,14 +107,37 @@ const (
 	// make.
 	EvFrameDropped = "frame_dropped"
 
-	// Item and pickup events. Every change to where an item is has its own
+	// Item, pickup and drop events. Every change to where an item is has its own
 	// name, for EvPathReplayed's reason: a reader counting one outcome must get
-	// the right answer without knowing to exclude anything, and these five do
+	// the right answer without knowing to exclude anything, and these seven do
 	// not share a field set.
 	//
-	// EvItemSpawned is an item entering the world. Seeding is the only way in
-	// M1a; M1b's drop is the second, and it reuses this name because it is the
-	// same state change with the same fields.
+	// EvItemSpawned is an item entering the world, and carries only the item:
+	// id, kind, and where it landed. There are two ways in -- a seed before the
+	// world opens, and a drop once it is running -- and both log this name with
+	// this field set.
+	//
+	// **The causer is deliberately not on it.** M1a pre-committed to reusing the
+	// name here on the grounds that a drop is "the same state change with the
+	// same fields", and the first half of that is right while the second is a
+	// trap: a drop has a player behind it and a seed does not, so a "player"
+	// field would make one event name carry two field sets, which is the exact
+	// shape EvPathReplayed exists to refuse.
+	//
+	// Splitting the name instead was the other candidate and it is worse, and
+	// the doctrine above is why. EvPathReplayed earns a name of its own because
+	// a replay is not the server choosing a path: the outcome differs, not only
+	// the fields. A drop is not like that. A dropped item and a seeded item have
+	// both entered the world, at a position, for the first time, and a reader
+	// counting item_spawned to ask "how many items entered the world, and where"
+	// must get both. Naming the drop's entry separately would make that reader
+	// wrong in the other direction, and would leave item_spawned quietly meaning
+	// "seeded".
+	//
+	// So the two halves are split by what they are about rather than by who
+	// caused them: this name carries the world's state change, and EvDrop below
+	// carries the transaction, including the player and the slot the item came
+	// from. Neither has to be joined to the other by adjacency.
 	EvItemSpawned = "item_spawned"
 	// EvPickup is the intent arriving. It records what the client asked for,
 	// before the server has decided anything about it.
@@ -135,6 +158,28 @@ const (
 	// EvPickupNoRoom is a pending pickup that arrived at a full inventory. The
 	// item stays where it is.
 	EvPickupNoRoom = "pickup_no_room"
+
+	// EvDrop is one completed drop: which player, which slot it came out of,
+	// and which item it became. Logged after the move, never before it, which
+	// is where it differs from EvPickup.
+	//
+	// EvPickup records an intent on arrival because a pickup is pending: the
+	// intent and its outcome are separated by a walk of many ticks, and without
+	// a line at arrival the log cannot show that a player is walking to
+	// something. A drop is immediate (PROTOCOL.md, "Drop"). Its intent and its
+	// outcome are the same tick, in one function call, with nothing observable
+	// in between, so one line for the whole transaction is the honest shape and
+	// a second one at arrival would say nothing the first does not.
+	//
+	// Its four fields are EvPickupResolved's four fields, spelled by the same
+	// helper: these are the two events that move an item between the ground and
+	// a slot, and a reader who has learned one row has learned the other.
+	EvDrop = "drop"
+	// EvDropRejected is a drop refused: an index outside the inventory, a slot
+	// holding nothing, or a body that would not decode. It carries the
+	// rejection's fields, not a drop's, because it shares refuse with move_to
+	// and pickup.
+	EvDropRejected = "drop_rejected"
 )
 
 // Transport is the world's view of the network: a stream of connection events.
@@ -445,6 +490,8 @@ func (w *World) handleFrame(ev mnet.Event) {
 		w.moveTo(p, msg)
 	case mnet.Pickup:
 		w.pickup(p, msg)
+	case mnet.Drop:
+		w.drop(p, msg)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -485,11 +532,19 @@ func (w *World) refuse(p *player, rejection *mnet.RejectError) {
 // know that pickups were once logged under move_to's name. The default covers
 // the frames too malformed to attribute to any message, which carry no "re" and
 // which the log has always filed here.
+//
+// Every intent this server accepts needs an arm here, and the cost of forgetting
+// one is quiet rather than loud: the refusals get filed under move_to's name and
+// nothing fails.
 func rejectionEvent(re string) string {
-	if re == mnet.MsgPickup {
+	switch re {
+	case mnet.MsgPickup:
 		return EvPickupRejected
+	case mnet.MsgDrop:
+		return EvDropRejected
+	default:
+		return EvMoveToRejected
 	}
-	return EvMoveToRejected
 }
 
 // moveTo answers a click.
