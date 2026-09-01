@@ -60,6 +60,8 @@ shape = SubResource("BoxShape3D_ground")
 
 [node name="RemotePlayers" type="Node3D" parent="."]
 
+[node name="GroundItems" type="Node3D" parent="."]
+
 [node name="CameraRig" type="Node3D" parent="." node_paths=PackedStringArray("target", "camera")]
 transform = Transform3D(0.8660254, -0.28678823, 0.40957603, 0, 0.81915206, 0.57357645, -0.5, -0.49673176, 0.7094065, 0, 0, 0)
 script = ExtResource("3_camera_rig")
@@ -86,11 +88,12 @@ camera = NodePath("../CameraRig/Camera3D")
 ray_length = 4096.0
 ground_collision_mask = 1
 
-[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_picker")]
+[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "ground_picker")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
 remote_players = NodePath("../RemotePlayers")
+ground_items = NodePath("../GroundItems")
 ground_picker = NodePath("../GroundPicker")
 
 [node name="Net" type="Node" parent="Session"]
