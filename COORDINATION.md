@@ -290,35 +290,63 @@ watching the other move while its own camera is provably still, the two walks ar
 apart so neither can be mistaken for the other, and the demo fails loudly if either direction is
 stationary.
 
+## M1, in flight
+
+Four units merged, each with a verdict in its PR body.
+
+| Unit | PR | Verdicts | What |
+|---|---|---|---|
+| M1c | #8 | `live-ui-verified`, `conformance-holds-with-findings` | The second registry: ground item bodies, green for a known kind and magenta for an unknown one |
+| M1h | #11 | `unit-test-verified` | Client stops asserting on a session-wide accumulator, and accepts a `null` list |
+| M1g | #9 | `live-ui-verified` | The demo asserts server state, plus the `verify-marque` skill |
+| M1a | #10 | `unit-test-verified`, `conformance-holds-with-findings` | `Store`, ground items, inventory, `pickup`, contested resolution |
+
+Open, in dependency order. **M1b** and **M1d** are the critical path to **M1e**, the milestone.
+**M1f** (the slow-client condemnation latch), **M1j** (the demo's plausibility assertion and a
+false causal claim in `SKILL.md`), and **M1i** (`hub_test.go`'s background-goroutine `*testing.T`
+use) are independent and unscheduled.
+
+**Verified green on `main` at `ef5eda8`**, by the coordinator rather than by inference: interop
+`PASS: 463 assertion(s) held across 8 suite(s)` with `INTEROP OK`, the demo `TWO CLIENT DEMO OK`
+with its server-side layer, and `go test ./...` clean across all three packages.
+
 Two commands tell you the stack is alive:
 
 - `powershell -ExecutionPolicy Bypass -File scripts/interop_test.ps1` builds the server, binds a
-  free port, runs the whole Godot suite against a live `marqued`, and shuts it down. **443
-  assertions across 8 suites** as of M1c merging. This number goes stale every time a unit adds
-  a suite, so treat it as "what it was last time somebody looked" and report the number you got.
+  free port, runs the whole Godot suite against a live `marqued`, and shuts it down. **463
+  assertions across 8 suites** as of M1a merging, measured on `main` at `ef5eda8`. This number
+  goes stale every time a unit adds a suite, so treat it as "what it was last time somebody
+  looked" and report the number you got.
 - `powershell -ExecutionPolicy Bypass -File scripts/two_client_demo.ps1` runs two real windowed
   clients. **Read the next paragraph before you believe what it tells you.**
 
-**`two_client_demo.ps1` asserts nothing about the server, and that is a live defect.** Every one
-of its roughly twenty assertions reads a client's stdout or a client's PNG. It contains no
-reference to `arrived`, `path_assigned`, `move_to`, `client_connected`, or the event log at all,
-and it deletes the server's log at teardown.
+**`two_client_demo.ps1` now asserts server state, and did not before M1g.** It reads the event log
+it used to delete, and per player id resolved from that client's own `DEMO joined` line it
+requires a `path_assigned` spanning at least two units and an `arrived` that postdates
+`start_tick` and lands within `1e-6` of that path's endpoint. It then ties the layers together,
+comparing where the client drew a player against where the server says it stopped.
 
-An independent verifier proved the consequence rather than arguing it. It made the tick loop
-skip its movement step, so the server assigned and broadcast paths and then never moved anybody
-and never emitted a single `arrived`. **The demo printed `TWO CLIENT DEMO OK` with displacements
-byte-identical to a healthy run.** Clients interpolate the polylines they are handed, so a
-frozen server still produces moving pixels on every screen. That is the exact hazard the project
-already knew about and had written down, and the demo was never checked against it.
+**Why that had to be added.** Every one of its roughly twenty original assertions read a client's
+stdout or a client's PNG. A verifier made the tick loop skip its movement step, so the server
+assigned and broadcast paths and never moved anybody, and **the demo printed `TWO CLIENT DEMO OK`
+with displacements byte-identical to a healthy run.** Clients interpolate the polylines they are
+handed, so a frozen server still produces moving pixels on every screen. Reproduced after the
+fix: the frozen server passes every client-layer assertion and the nine-event log turns it red on
+`the whole log holds 0 arrived event(s) for that player`.
 
-M0's milestone verdict still stands, because M0e's verifier read the event log itself and the
-interop suite carries ninety server-side assertions. **The demo alone does not.** It is a
-client-rendering check that has been described here as a milestone proof, and this paragraph is
-the correction. A fix unit is open; until it lands, treat a green demo as evidence about pixels
-and read the event log yourself for anything about server state.
+M0's milestone verdict always stood, because M0e's verifier read the event log itself and the
+interop suite carries ninety server-side assertions. The demo alone did not, and this file
+described it as a milestone proof for a milestone and a half.
 
-This matters more for M1 than it did for M0. "Exactly one client gets the item" is a purely
-server-side fact, and a client-side-only demo cannot see it at all.
+**The next false pass in the family is still open, and it is unit M1j.** A *teleporting* server
+passes. With `distance := 1000.0` the world crosses a whole path in one tick and emits a
+perfectly-formed `arrived`, and the demo prints OK. A 6.204-unit walk at `WalkSpeed` 3.0 on 150ms
+ticks takes 14 ticks and every healthy run shows exactly 14, but nothing asserts that the span is
+**plausible**. So the demo currently proves the server *finished* the walk, not that it *walked*.
+The tell is already printed in the demo's own `==> server:` line.
+
+**The demo is load-fragile and must run on an idle machine.** See *The coordinator's fleet is part
+of the environment* above.
 
 **Known flake, recorded so nobody debugs it twice.** The demo's still-camera control asserts
 byte-exactness over the top quarter of a GPU-rendered frame. One flip was observed on a fully
