@@ -73,6 +73,28 @@ adding a headless test.
   budget on one network handshake. Pin `Engine.max_fps` for the duration of any time-sensitive
   suite and restore it after.
 
+- **`godot.exe` output cannot be captured by direct assignment in PowerShell, but pipes fine.**
+  Measured on this machine, and the split is exact:
+
+  | Form | Result |
+  |---|---|
+  | `godot --version \| Out-String` | `4.7.2.stable.official.ed1daf0bf` |
+  | `godot --version \| ForEach-Object { $_ }` | captures |
+  | `godot --version \| Select-Object -First 1` | captures |
+  | `$v = godot --version` | **empty** |
+  | `@(godot --version)`, `(godot --version)`, `$(godot --version)` | **empty** |
+
+  So a preflight check written as `if (-not ($v = godot --version)) { fail }` reports Godot
+  missing on a machine where it is installed and on `PATH`. **Pipe into a cmdlet, or route
+  through `cmd /c`.** The repo's own `scripts/*.ps1` are immune because they hand the process a
+  real file handle via `-RedirectStandardOutput` rather than a pipeline.
+
+  **The mechanism is unexplained and is deliberately not guessed at here.** The likely story
+  involves `godot.exe` being a GUI-subsystem binary that attaches to the parent console, but
+  nobody has established that, and the table above is what was actually observed. It is written
+  as behaviour precisely because the last three times somebody here paired a correct behaviour
+  with a confident mechanism, the mechanism was wrong.
+
 **Verify a Godot API exists in 4.7 before writing it into a brief or a gotcha list.** Two
 briefs have now named plausible APIs that do not exist in the target version, and both cost a
 worker real time. `WebSocketPeer.new().get_property_list()` settles it in one line.
