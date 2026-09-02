@@ -94,12 +94,11 @@ const CLOCK_SKEW_TOLERANCE := 0.95
 ## whatever its position, and the picker fires exactly when the point is off the
 ## panel and the ray meets ground — the viewport rect never enters into it.
 ## (19.2, 70), (70, 30) and (19.2, 500) all sit outside the viewport and all
-## reached the picker; (-10, 30) and (-50, 40) sit outside it too and were
-## swallowed, because the panel's rect extends past the viewport and they are
-## inside it. So a point outside the viewport would still walk the player, and
-## would still satisfy a test that only counted intents. Staying inside is about
-## clicking where a player's mouse could actually be, not about the click
-## surviving the trip.
+## reached the picker; (-50, 40) sits outside it too and was swallowed by the
+## panel, whose rect extends 190px past the viewport edge. So a point outside
+## the viewport would still walk the player, and would still satisfy a test that
+## only counted intents. Staying inside is about clicking where a player's
+## mouse could actually be, not about the click surviving the trip.
 ##
 ## The old value, (0.30, 0.72), landed at (19.2, 46.08) — inside the panel, and
 ## it reached the world only because the chrome was click-through. That is the
@@ -481,7 +480,10 @@ func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> voi
 ## A test that only counts intents cannot tell an opaque panel from a click that
 ## went nowhere.
 func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
-	client.feed('{"inventory":{"size":28,"slots":[{"slot":0,"kind":"acorn"}]}}')
+	# Twenty-eight empty slots: the inventory every player joins holding, which
+	# is the state the panel spends most of its life in and the one a build that
+	# turned opaque only while carrying something would get wrong.
+	client.feed('{"inventory":{"size":28,"slots":[]}}')
 	# A rebuilt grid has not sorted its children yet, and a widget with no rect
 	# is a rect that every point misses.
 	await get_tree().process_frame

@@ -113,16 +113,42 @@ adding a headless test.
 
   **Corollary, and it is narrower than this note used to claim.** The sentence here used to
   read "a click outside the 64x64 rect reaches no `Control` at all, so a headless UI test must
-  aim inside it". M1k probed that against 4.7.2 with `Viewport.push_input` and found a direct
-  counterexample: the inventory panel's rect extends past the viewport, and presses at
-  (-10, 30) and (-50, 40) — both outside the 64x64 rect — were consumed by it. In the same
-  probe, presses at (19.2, 70), (70, 30) and (19.2, 500) reached `_unhandled_input` and drove
-  the picker. The rule the data supports is that **`push_input` does not care about the visible
-  rect at all**: a `Control` consumes by its own rect wherever that rect lies, and what is left
-  reaches `_unhandled_input`. Whatever produced the original sentence was not re-run, so it is
-  narrowed rather than deleted. The practical consequence is unchanged and now has a different
-  reason: aim inside the viewport because that is where a player's mouse can be, not because a
-  click outside it dies.
+  aim inside it". M1k probed that against 4.7.2 with `Viewport.push_input` and found direct
+  counterexamples. Each row below is a press and release at one position, with the consumer read
+  from `gui_input` on the panel and on every slot rather than inferred from what did not happen:
+
+  | Position | In viewport | Consumed by | Reached `_unhandled_input` |
+  |---|---|---|---|
+  | (19.2, 56.32) | yes | nobody | yes, picker fired |
+  | (19.2, 70), (70, 30), (19.2, 500) | no | nobody | yes, picker fired |
+  | (44, 44) | yes | the panel | no |
+  | (-50, 40) | **no** | **the panel** | no |
+  | (-10, 30) | **no** | **slot 27's widget** | no |
+
+  The rule the data supports is that **`push_input` does not care about the visible rect at
+  all**: a `Control` consumes by its own rect wherever that rect lies, and what is left reaches
+  `_unhandled_input`. The panel's rect extends 190px past the left viewport edge and its last
+  slot's rect extends 14px past, and both consume out there. Whatever experiment produced the
+  original sentence was not re-run, so it is narrowed rather than deleted. The practical
+  consequence is unchanged and now has a different reason: aim inside the viewport because that
+  is where a player's mouse can be, not because a click outside it dies.
+
+  **Consuming and acting are not the same thing, and the gap is silent.** Same probe, two
+  occupied slots, both drawn, both inside the panel. Slot 27's rect is (-14, -14)…(38, 38), so
+  its centre (12, 12) is inside the viewport; slot 24's rect is (-182, -14)…(-130, 38), wholly
+  outside it. A press and release at each:
+
+  | Slot | Centre | `gui_input` | `button_down` | `pressed` | `button_up` | `drop` sent |
+  |---|---|---|---|---|---|---|
+  | 27 | (12, 12), inside | yes | yes | yes | yes | yes |
+  | 24 | (-156, 12), outside | **yes** | no | no | no | no |
+
+  So an off-screen `Button` takes the event away from everything behind it and then does nothing
+  with it. **The mechanism is not established and is deliberately not guessed at here**; the
+  table is what was observed. The consequence for a test is concrete: a slot that has drifted off
+  the viewport edge produces no drop and looks exactly like broken wiring, and no error is
+  logged either way, so a headless UI test must assert that the widget it is about to click is
+  laid out somewhere visible. `test_interaction.gd`'s `_click_slot` does.
 
   And `Control.mouse_filter` defaults are not what you would guess. `ColorRect` and `Panel`
   default to `STOP` (`0`); only `Label` defaults to `IGNORE` (`2`). A `ColorRect` background
