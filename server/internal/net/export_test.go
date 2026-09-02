@@ -16,9 +16,8 @@ import "time"
 // field is never written again, which is what makes it lock-free.
 func (h *Hub) SetWriteTimeout(d time.Duration) { h.writeTimeout = d }
 
-// ClassifyRead and ClassifyWrite expose the two classifiers so a test can state
-// what each pump *would* have reported for a given failure. That is what turns
-// "the reported reason is slow_client" into a proof about ordering: without it,
-// a test cannot show that the losing classification was genuinely different.
-func ClassifyRead(err error) (reason, detail string)  { return readReason(err) }
-func ClassifyWrite(err error) (reason, detail string) { return writeReason(err) }
+// ClassifyRead exposes the read pump's classifier so a test can state what that
+// pump *would* have reported for a given failure. That is what turns "the
+// reported reason is slow_client" into a proof about ordering: without it, a
+// test cannot show the losing classification was genuinely different.
+func ClassifyRead(err error) (reason, detail string) { return readReason(err) }

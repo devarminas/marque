@@ -520,13 +520,22 @@ Revisit if a class of write failure ever turns out to mean something a server ca
 differently from a vanished peer. Nothing in M1 distinguishes them, and inventing a third cause
 before anything can use it would be inventing a distinction the log's reader cannot act on.
 
-**The write timeout is distinguishable, and that is a fact about a dependency rather than about
-our code.** `coder/websocket` v1.8.15 wraps the write context's own error, so `errors.Is` finds
-`context.DeadlineExceeded`; a write onto a socket the peer destroyed does not match it. That was
-probed against a real jammed peer before the classifier was written, and it is pinned by
-`TestWriteTimeoutIsDistinguishableFromABrokenSocket` rather than trusted, because a dependency
-upgrade that stopped wrapping the context error would silently reclassify every slow client as
-`peer_gone`.
+**The server owns the write deadline, and that is what makes the latch true rather than likely.**
+Handed a context with a deadline, `coder/websocket` v1.8.15 closes the whole connection from its
+own timer goroutine and only then returns the error (`conn.go`, `setupWriteTimeout`). So the read
+pump wakes on an already-dead socket and can condemn it `peer_gone` before the write pump has
+classified anything: the consequence overwrites the cause, which is the exact failure rule 2
+forbids. **Measured, not reasoned about — the ordering test failed five runs in ten.** The write
+pump therefore runs its own timer, condemns first, and lets the resulting close abort the write.
+By the time anything else can see a dead socket the reason is already recorded.
+
+Two dependency claims sit under that, and both were probed against a real jammed peer rather than
+assumed. A deadline-bearing write *does* fail with something `errors.Is`-comparable to
+`context.DeadlineExceeded`, so the original design was not wrong about the error — it was wrong
+about the ordering, which is a thing no amount of reading the error would have revealed. And
+closing the socket from another goroutine unblocks a write jammed on it, which is what the
+server's own timer relies on; `TestClosingTheSocketUnblocksABlockedWrite` pins it, because if a
+dependency upgrade broke it a slow client would jam forever instead of being dropped.
 
 **Client.** Appliers are idempotent, because a redundant message is cheaper to tolerate than to
 prevent.

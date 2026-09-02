@@ -365,27 +365,21 @@ func readReason(err error) (reason, detail string) {
 	return DisconnectPeerGone, DetailReadError
 }
 
-// writeReason classifies why a write failed, by cause.
-//
-// A write that outlived its own deadline means the peer stopped acknowledging
-// data: the client has stopped keeping up, which is the same condition a full
-// send queue reports and therefore the same reason. Only the detail differs.
-// Any other write failure is the socket itself breaking, which is what
-// peer_gone names.
-//
-// That the timeout is distinguishable at all is a claim about coder/websocket,
-// not about this package: it wraps the context's own error, so errors.Is finds
-// context.DeadlineExceeded. TestWriteTimeoutIsDistinguishableFromABrokenSocket
-// pins that against the dependency rather than trusting it.
-func writeReason(err error) (reason, detail string) {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return DisconnectSlow, DetailWriteTimeout
-	}
-	return DisconnectPeerGone, DetailWriteError
-}
-
 // writePump drains the send buffer onto the socket. It is the only writer, so
 // frames reach the client in the order the world produced them.
+//
+// It owns the write deadline itself instead of handing one to the websocket
+// library, and that is load-bearing rather than a style choice. Given a context
+// with a deadline, coder/websocket closes the whole connection from its own
+// timer goroutine and only afterwards returns the error (conn.go,
+// setupWriteTimeout). The read pump then wakes on a socket that is already dead
+// and condemns it as peer_gone before this goroutine has classified anything,
+// so the cause loses the race about half the time. Measured, not reasoned
+// about: the ordering test failed five runs in ten before this changed.
+//
+// Condemning from our own timer puts the latch in front of the teardown rather
+// than racing it. By the time anything else can observe a dead socket, the
+// reason is already recorded.
 func (c *Conn) writePump() {
 	for {
 		select {
@@ -396,11 +390,21 @@ func (c *Conn) writePump() {
 				c.close(out.closeReason, "")
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), c.writeTimeout)
-			err := c.ws.Write(ctx, websocket.MessageText, out.payload)
-			cancel()
+			// close is what unblocks the write below, via CloseNow. Stop
+			// reports false if the timer already fired, and there is nothing to
+			// undo in that case: the connection is condemned and this frame was
+			// never going to arrive.
+			condemn := time.AfterFunc(c.writeTimeout, func() {
+				c.close(DisconnectSlow, DetailWriteTimeout)
+			})
+			err := c.ws.Write(context.Background(), websocket.MessageText, out.payload)
+			condemn.Stop()
 			if err != nil {
-				c.close(writeReason(err))
+				// Two ways here. The timer above condemned this connection and
+				// closed the socket underneath the write, in which case this
+				// call is a no-op and the latched cause stands. Or the socket
+				// broke on its own, which is what peer_gone names.
+				c.close(DisconnectPeerGone, DetailWriteError)
 				return
 			}
 		}
