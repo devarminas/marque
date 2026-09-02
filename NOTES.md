@@ -101,16 +101,29 @@ adding a headless test.
   is: a click on the drawn panel at (1144, 290) produced `move_to (12.040, -9.565)` and walked
   the player 12.6 units.
 
-  **M1k chose the tests and won.** The panel is `MOUSE_FILTER_STOP` and opaque, and the suites
-  aim at the strip it does not cover — `test_wiring.gd`'s `CLICK_AT` is (0.30, 0.88), which is
-  (19.2, 56.32) at 64x64 and (384, 633.6) at 1280x720, outside the panel at both sizes. Both
-  suites measure the rect on a live frame and assert the constant misses it, so the two cannot
-  drift apart silently again. The lesson is not "avoid opaque UI"; it is that a 64x64 viewport
-  makes screen position a scarce resource, and the scarcity is best spent on the tests rather
-  than on the product.
+  **M1k chose the tests and won.** The panel is `MOUSE_FILTER_STOP` and opaque, and the live
+  click aims at the strip it does not cover: `test_wiring.gd`'s `CLICK_AT` is (0.30, 0.88),
+  which is (19.2, 56.32) at 64x64 and (384, 633.6) at 1280x720, outside the panel at both
+  sizes. `CLICK_AT` exists only in that file, and only that file guards it — it measures the
+  rect on a live frame and asserts the constant misses it, so the two cannot drift apart
+  silently again. (`test_interaction.gd` measures the same rect for the opposite purpose, to
+  find a chrome point it then clicks deliberately.) The lesson is not "avoid opaque UI"; it is
+  that a 64x64 viewport makes screen position a scarce resource, and the scarcity is better
+  spent on the tests than on the product.
 
-  Corollary: a click outside the 64x64 rect reaches no `Control` at all, so a headless UI test
-  must aim inside it — and now also outside the panel, which leaves a 16px strip to aim at.
+  **Corollary, and it is narrower than this note used to claim.** The sentence here used to
+  read "a click outside the 64x64 rect reaches no `Control` at all, so a headless UI test must
+  aim inside it". M1k probed that against 4.7.2 with `Viewport.push_input` and found a direct
+  counterexample: the inventory panel's rect extends past the viewport, and presses at
+  (-10, 30) and (-50, 40) — both outside the 64x64 rect — were consumed by it. In the same
+  probe, presses at (19.2, 70), (70, 30) and (19.2, 500) reached `_unhandled_input` and drove
+  the picker. The rule the data supports is that **`push_input` does not care about the visible
+  rect at all**: a `Control` consumes by its own rect wherever that rect lies, and what is left
+  reaches `_unhandled_input`. Whatever produced the original sentence was not re-run, so it is
+  narrowed rather than deleted. The practical consequence is unchanged and now has a different
+  reason: aim inside the viewport because that is where a player's mouse can be, not because a
+  click outside it dies.
+
   And `Control.mouse_filter` defaults are not what you would guess. `ColorRect` and `Panel`
   default to `STOP` (`0`); only `Label` defaults to `IGNORE` (`2`). A `ColorRect` background
   swallows its own children's clicks.

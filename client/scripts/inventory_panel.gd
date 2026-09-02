@@ -35,19 +35,21 @@ extends PanelContainer
 ## through it, which is RuneScape's sidebar and so is the answer this game takes
 ## (STANDING-ORDERS.md, "Deciding without the human").
 ##
-## Exactly one node blocks, and it is this one. [code]Margin[/code],
+## Exactly one [i]chrome[/i] node blocks, and it is this one — the slot
+## [Button]s block too, which is how a drop happens at all. [code]Margin[/code],
 ## [code]Rows[/code] and [code]Slots[/code] stay
 ## [constant Control.MOUSE_FILTER_IGNORE], so a click that misses a slot falls
 ## past them to the panel instead of being caught by whichever container
-## happened to be under the cursor. Where a click stops is then a property of
-## the panel alone, and rearranging the containers cannot change it.
+## happened to be under the cursor. Where a missed click stops is then a
+## property of the panel alone, and rearranging the containers cannot change it.
 ##
 ## [b]M1d shipped the opposite[/b], the whole chrome IGNORE, because a headless
 ## Godot viewport is 64x64 (NOTES.md) and this panel covers all but a 16px strip
 ## of it: an opaque panel left no world for the older suites to click. That was
 ## a test-harness workaround wearing the shape of a design decision, and M1k
-## undid it. The suites now aim at the strip the panel does not cover, which is
-## what `test_wiring.gd`'s [code]CLICK_AT[/code] is for.
+## undid it. `test_wiring.gd`'s live click now aims at the strip the panel does
+## not cover, which is what its [code]CLICK_AT[/code] is for;
+## `test_interaction.gd` clicks the panel on purpose instead.
 ##
 ## [b]It listens to nothing.[/b] `session.gd` owns every connection between the
 ## network and the scene, and it calls [method apply] and hears

@@ -111,8 +111,13 @@ and zero displacement, while a world click in the same run walked the other play
 **The fix was coupled, and that coupling was the unit.** `test_wiring`'s live half clicked at
 `CLICK_AT=(0.30, 0.72)`, which on the 64x64 headless viewport landed *inside* the panel and
 reached the world only because the chrome was click-through. `CLICK_AT` is now (0.30, 0.88), in
-the 16px strip below the panel, and both suites measure the panel's rect on a live frame and
-assert the constant misses it rather than trusting the arithmetic.
+the 16px strip below the panel.
+
+`CLICK_AT` lives in `client/tests/test_wiring.gd` and nowhere else, and that suite is the only
+one that guards it: it measures the panel's rect on a live frame and asserts the constant is
+inside the viewport and outside the panel, rather than trusting the arithmetic.
+`client/tests/test_interaction.gd` measures the same rect for a different purpose — to derive a
+point on the chrome it then clicks on purpose — and never mentions `CLICK_AT`.
 
 **Settled while closing this, and not a defect.** The panel is visible from the moment you join,
 with 28 empty slots; it hides only before the first `inventory` frame, and the server sends one

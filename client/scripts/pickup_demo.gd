@@ -7,8 +7,9 @@ extends RefCounted
 ## `DEMO ` lines; `scripts/contested_pickup_demo.ps1` owns every assertion and
 ## reads them alongside the server's own event log. The one exception is a
 ## precondition this client can check and the harness cannot — see
-## [method _screen_position_of], which refuses to click through the inventory
-## panel — and those exit non-zero after printing `DEMO FAIL`.
+## [method _screen_position_of], which refuses to aim a click at an item drawn
+## behind the opaque inventory panel — and those exit non-zero after printing
+## `DEMO FAIL`.
 ##
 ## [b]Why a second demo mode rather than a flag on the first.[/b] `main.gd`'s
 ## [code]--shots[/code] mode is a two-phase choreography of ground clicks with a
