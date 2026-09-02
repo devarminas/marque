@@ -112,6 +112,42 @@ func TestTheReadPumpWouldCondemnATornDownSocketAsPeerGone(t *testing.T) {
 	}
 }
 
+// TestAReadContextDeadlineIsNotACleanClose is a regression test for a wrong
+// classification that shipped in this unit's first commit and was caught in
+// review.
+//
+// readReason used to map context deadlines to closed, on the reasoning that
+// readPump passes context.Background() so no deadline could ever expire. The
+// library falsifies that: it derives its own five-second contexts for control
+// frames from whatever it is handed (read.go:303, write.go:277), arms a close
+// timer on any context carrying a Done channel (conn.go:171), and finishRead's
+// last act is to overwrite the returned error with ctx.Err() (read.go:255). A
+// peer that pings while its receive side is jammed is a slow client, and the
+// old branch logged it as a clean logout.
+//
+// This asserts the classifier rather than staging the real thing. Forcing a
+// control-frame timeout end to end would mean jamming a peer's receive side,
+// getting it to ping, and then waiting out a five-second constant that lives in
+// the dependency and cannot be shortened from here -- several times the runtime
+// of every other test in this file, to reach a branch one line long. The
+// mechanism is established by reading the dependency; what is worth pinning is
+// that nobody reinstates the branch.
+func TestAReadContextDeadlineIsNotACleanClose(t *testing.T) {
+	for _, err := range []error{
+		errWrapped(context.DeadlineExceeded),
+		errWrapped(context.Canceled),
+	} {
+		reason, detail := mnet.ClassifyRead(err)
+		if reason == mnet.DisconnectClosed {
+			t.Fatalf("a read failing with %v classifies as %q, the reason reserved for a peer that sent a close frame; a jammed slow client would be logged as a clean logout", err, reason)
+		}
+		if reason != mnet.DisconnectPeerGone || detail != mnet.DetailReadError {
+			t.Fatalf("a read failing with %v classifies as %q/%q, want %q/%q",
+				err, reason, detail, mnet.DisconnectPeerGone, mnet.DetailReadError)
+		}
+	}
+}
+
 // TestWriteTimeoutCondemnsASlowClientAndTheReadErrorDoesNotOverwriteIt is the
 // latch, proven by forcing the ordering rather than by reading closeOnce.
 //

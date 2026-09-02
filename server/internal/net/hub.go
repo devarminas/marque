@@ -348,18 +348,27 @@ func (c *Conn) readPump(h *Hub) (reason, detail string) {
 }
 
 // readReason classifies why a read stopped, by cause. A close frame is the peer
-// leaving on purpose and is not a condemnation at all. Anything else means the
-// peer went away or the socket broke.
+// leaving on purpose and is the only thing here that is not a condemnation.
+// Anything else means the peer went away or the socket broke.
 //
 // A read pump reaching this after a slow client has already been condemned
 // classifies the same way and loses: close latches the first condemnation, so
 // the read error stays a consequence rather than becoming the cause.
+//
+// A context error is deliberately not special-cased. It used to map to closed,
+// on the reasoning that readPump passes context.Background() so no deadline of
+// ours can expire. That reasoning was wrong, and wrong in this unit's own
+// domain. The library derives its own five-second contexts for control frames
+// from whatever it is handed (read.go:303, write.go:277), arms a close timer on
+// any context with a Done channel (conn.go:171), and finishRead's last act is
+// to overwrite the error with ctx.Err() (read.go:255). So a peer that pings
+// while its receive side is jammed surfaces DeadlineExceeded here -- a slow
+// client, which the old branch logged as a clean logout. That is a detector's
+// observation overwriting a cause, rule 2's failure mode arriving through a
+// door nobody had checked.
 func readReason(err error) (reason, detail string) {
 	var ce websocket.CloseError
 	if errors.As(err, &ce) {
-		return DisconnectClosed, ""
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return DisconnectClosed, ""
 	}
 	return DisconnectPeerGone, DetailReadError
