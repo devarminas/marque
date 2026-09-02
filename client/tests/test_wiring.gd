@@ -77,10 +77,26 @@ const CLOCK_SKEW_TOLERANCE := 0.95
 ##
 ## Off centre in both axes so the resulting walk is long enough to sample twice
 ## while it is still under way. With the authored camera framing this resolves
-## to roughly six world units from the spawn point; the walk is asserted to be
+## to roughly seven world units from the spawn point; the walk is asserted to be
 ## at least [constant MIN_WALK_DISTANCE] so that a change to the framing fails
 ## here loudly instead of quietly making the walk too short to measure.
-const CLICK_AT := Vector2(0.30, 0.72)
+##
+## [b]It must also miss the inventory panel, which is opaque (M1k).[/b] The
+## headless viewport is 64x64 (NOTES.md) and the panel measures 240x432 anchored
+## 16px off the bottom-right corner, so it covers (0, 0) to (48, 48) and leaves
+## only a 16px strip along the right and bottom edges. This lands at (19.2,
+## 56.32), in the bottom strip, 8px clear of the panel and 7px clear of the
+## viewport edge; a click outside the viewport reaches no [Control] and no
+## picker at all, so both margins matter. At the shipped 1280x720 it is (384,
+## 633.6) against a panel occupying (1024, 272) to (1264, 704), which misses by
+## a wider margin still.
+##
+## The old value, (0.30, 0.72), landed at (19.2, 46.08) — inside the panel, and
+## it reached the world only because the chrome was click-through. That is the
+## coupling M1k inherited: making the panel opaque and moving this constant are
+## one change. [method _test_the_scripted_click_misses_the_opaque_panel] is what
+## stops the two drifting apart again.
+const CLICK_AT := Vector2(0.30, 0.88)
 const MIN_WALK_DISTANCE := 3.0
 
 ## Milliseconds between the two samples of a walk in progress. At 3.0 units per
@@ -109,6 +125,7 @@ class Client:
 	const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 	const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 	const CameraRigScript := preload("res://scripts/camera_rig.gd")
+	const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 
 	var label: String
 	var root: Node3D
@@ -119,6 +136,7 @@ class Client:
 	var camera: Camera3D
 	var local_body: Node3D
 	var remote_players: Node3D
+	var panel: InventoryPanelScript
 
 	var paths: Array[Dictionary] = []
 	var clicks: Array[Vector2] = []
@@ -134,6 +152,7 @@ class Client:
 		camera = root.get_node("CameraRig/Camera3D") as Camera3D
 		local_body = root.get_node("Player") as Node3D
 		remote_players = root.get_node("RemotePlayers") as Node3D
+		panel = root.get_node("UI/InventoryPanel") as InventoryPanelScript
 		root.name = "Client" + label
 		session.joined.connect(_on_joined)
 		session.move_to_requested.connect(_on_move_to_requested)
@@ -248,6 +267,10 @@ func _test_appliers_without_a_server() -> void:
 	_test_unknown_ids_are_ignored(client)
 	_test_paths_reach_the_right_body(client)
 	await _test_a_halted_player_is_placed_and_never_waited_for(client)
+	# Leaves the panel drawn, on purpose: the click test below then proves the
+	# world is reachable in the configuration that ships, rather than in one
+	# where the panel happens to be hidden.
+	await _test_the_scripted_click_misses_the_opaque_panel(client)
 	await _test_a_click_becomes_an_intent(client)
 
 	# Freed before the live half exists, so its picker cannot see the live
@@ -435,6 +458,87 @@ func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> voi
 	client.feed('{"path":{"id":5,"start_tick":301,"points":[[3.5,-1.25]],"speed":3.0}}')
 	await get_tree().process_frame
 	_check_ground(client, 5, Vector2(3.5, -1.25), "a one-element halt path holds at its point")
+
+
+## The inventory panel is opaque (M1k), and [constant CLICK_AT] is the constant
+## that has to miss it.
+##
+## [b]Both halves are needed and neither is enough.[/b] "A click on the panel
+## produced no `move_to`" also holds on a build where the click landed outside
+## the viewport and reached nothing at all, which is why the rect is measured
+## and printed, the scripted click is asserted to be on screen, and the chrome
+## point is asserted to be on screen and inside the panel before it is clicked.
+## A test that only counts intents cannot tell an opaque panel from a click that
+## went nowhere.
+func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
+	client.feed('{"inventory":{"size":28,"slots":[{"slot":0,"kind":"acorn"}]}}')
+	# A rebuilt grid has not sorted its children yet, and a widget with no rect
+	# is a rect that every point misses.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(client.panel.visible, "an inventory frame draws the panel")
+	_check(
+		client.panel.mouse_filter == Control.MOUSE_FILTER_STOP,
+		"and the panel stops clicks rather than letting them through, got filter %d"
+		% client.panel.mouse_filter,
+	)
+
+	var viewport := client.camera.get_viewport()
+	var screen := viewport.get_visible_rect()
+	var panel_rect := client.panel.get_global_rect()
+	print("WIRING panel rect %s in viewport %s" % [panel_rect, screen.size])
+
+	var scripted := screen.size * CLICK_AT
+	_check(
+		screen.has_point(scripted),
+		"the scripted click %v is inside the viewport %s" % [scripted, screen.size],
+	)
+	_check(
+		not panel_rect.has_point(scripted),
+		"and outside the panel %s, which would otherwise swallow it" % [panel_rect],
+	)
+
+	var chrome: Variant = _chrome_point(client, panel_rect, screen)
+	_check(chrome != null, "the panel draws chrome inside the viewport to click on")
+	if chrome == null:
+		return
+	var at: Vector2 = chrome
+	client.clicks.clear()
+	_push_left_click(viewport, at)
+	await get_tree().process_frame
+	_check(
+		client.clicks.is_empty(),
+		"a click on the panel's chrome at %v walks nobody, got %s" % [at, client.clicks],
+	)
+
+
+## A point inside the panel's drawn rect, inside the viewport, and on no slot
+## widget, or null when the panel draws no such point.
+##
+## Derived rather than written down, because the panel's size comes from the
+## theme and the slot metrics, so a literal would go stale the first time either
+## moved — and it would go stale [i]silently[/i]: a point that had drifted onto a
+## slot still produces no `move_to`, so the assertion above it would still pass
+## while testing something else.
+static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> Variant:
+	var slots: Array[Rect2] = []
+	for index in client.panel.slot_count():
+		var slot := client.panel.slot_at(index)
+		if slot != null:
+			slots.append(slot.get_global_rect())
+
+	for inset: Vector2 in [Vector2(4, 4), Vector2(4, 20), Vector2(20, 4), Vector2(20, 20)]:
+		var candidate := panel_rect.end - inset
+		if not screen.has_point(candidate) or not panel_rect.has_point(candidate):
+			continue
+		var on_slot := false
+		for rect in slots:
+			if rect.has_point(candidate):
+				on_slot = true
+				break
+		if not on_slot:
+			return candidate
+	return null
 
 
 ## The click seam, without a socket: a left click on the ground becomes a

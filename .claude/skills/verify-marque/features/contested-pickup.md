@@ -101,13 +101,15 @@ Preconditions:
   no `EvItemDespawned` exists. A recipe that greps the GAMELOG for it finds nothing and
   that is not a defect in the run. Prove the despawn from `pickup_resolved`, which
   causes it, plus both clients dropping the body.
-- **The item must not draw under the inventory panel.** The panel's chrome is
-  click-through today (unit M1k) and a click on it walks the player, so an item behind
-  it produces a run in which no `pickup` ever arrives — a true statement about a
-  scenario that never happened. The client checks the projected position against the
-  panel's own rect and prints `DEMO FAIL` rather than clicking, so this is diagnosed
-  rather than debugged; but if you move `-ItemX`/`-ItemZ` or `-DropClick`, keep them
-  out of the bottom-right quadrant.
+- **The item must not draw under the inventory panel.** The panel is opaque since M1k
+  and swallows every click inside its rect, so an item behind it produces a run in
+  which no `pickup` ever arrives — a true statement about a scenario that never
+  happened. Before M1k the ending differed and the problem did not: the click walked
+  the player instead of picking anything up. The client checks the projected position
+  against the panel's own rect and prints `DEMO FAIL` rather than clicking, so this is
+  diagnosed rather than debugged; but if you move `-ItemX`/`-ItemZ` or `-DropClick`,
+  keep them out of the panel's rect, measured as (1024, 272) to (1264, 704) at
+  1280x720.
 - **The dropped item lands under the dropper's feet**, because that is what a drop
   does (`PROTOCOL.md`, *Drop*). In the third capture it is a sliver of green at the
   base of a capsule, not a clear silhouette. Assert it from the `DEMO item` lines and
