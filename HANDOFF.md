@@ -56,6 +56,6 @@ marker line, and read the tail: a marker is unauthenticated output any suite can
 rendered frames per capture, so under load a capture lands after the walk it brackets and
 every displacement reads zero. A worker cannot see your fleet; that is your job.
 
-Outstanding for the human, not blocking: no C compiler, so `go test -race` has never run.
-`winget install --id MartinStorsjo.LLVM-MinGW.UCRT` fixes it, then re-verify every Go unit
-under `-race` in one pass.
+`go test -race` runs and `main` is clean under it. The toolchain is not on PATH by default;
+`STANDING-ORDERS.md`, *Verified tooling*, has the export line and the standing recipe. Nothing
+about `-race` is outstanding for the human any more.

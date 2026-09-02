@@ -382,9 +382,20 @@ static frame across eighteen measured windows, explicable only by render nondete
 fails in the safe direction, never a false pass. If the demo fails on only "the background is
 not a control" with a still fraction near zero, rerun before investigating.
 
-**Outstanding, needs the human, not blocking anything.** No C compiler, so `-race` has never run
-against the server. See *Verified tooling*. `FOLLOW-UPS.md` holds everything parked for you,
-including four things a first playtest will ask about.
+**The `-race` gap is closed.** The human installed LLVM-MinGW UCRT on 2026-09-02 and the
+re-verification pass the standing orders called for is **done**, because it turned out to be one
+command rather than a unit: `CGO_ENABLED=1 go test -race ./...` from `server/` on `main` at
+`06e542e` exits 0 across all three packages with zero data races, `internal/net` alone taking 86
+seconds under instrumentation. Every merged Go unit is covered by that single run, which is what
+"re-verify every merged Go unit in a single pass" asked for. See *Verified tooling* in
+`STANDING-ORDERS.md` for the PATH and the standing recipe.
+
+The single-goroutine-ownership invariant is therefore no longer verified only by construction.
+It is still not *proved*: a clean run means no race was detected along the paths the tests
+exercise, and the tests are the limit.
+
+**Outstanding, needs the human, not blocking anything.** `FOLLOW-UPS.md` holds everything parked
+for you, including four things a first playtest will ask about.
 
 ## Picking this up in a new session
 
