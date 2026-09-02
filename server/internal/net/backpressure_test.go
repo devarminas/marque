@@ -20,25 +20,41 @@ import (
 // line above.
 //
 // The peer here is the opposite: alive, handshaken, answering at the TCP level,
-// and simply never calling Read.
+// and simply never calling Read. That turns out not to be what makes this pass,
+// and saying so precisely is most of what this comment is for.
 //
-// This comment used to claim that every layer in front of the branch fills
-// first -- kernel receive buffer, then socket buffer, then writePump blocked in
-// ws.Write, and only then the channel. That is not what happens, and the test's
-// own output says so: it reports 65 accepted frames, which is the 64 channel
-// slots plus the one writePump took. A jammed socket absorbs about a megabyte
-// on this machine, sixteen more frames of this size, and that number never
-// appears. The tight Send loop below simply outruns writePump, which is a
-// non-blocking channel send racing a goroutine that has to be scheduled at all.
+// The test reports 65 accepted frames: the 64 channel slots plus the one
+// writePump took. A jammed socket absorbs about a megabyte on this machine,
+// sixteen more frames of this size, and that number never appears. So the socket
+// is never jammed and the peer's refusal to read is irrelevant to the pass.
 //
-// So the socket is never jammed and the peer's refusal to read is not what
-// makes this pass. The large frames still earn their place as insurance: if the
-// scheduler does give writePump a turn, a 64KiB frame keeps it blocked instead
-// of letting it drain the queue faster than the loop fills it.
+// What makes it pass is an asymmetry between a syscall and a channel send.
+// Measured under instrumentation during review: one write syscall costs hundreds
+// of microseconds -- 527us for the 30-byte greeting -- while the 64 non-blocking
+// channel sends below cost far less than that in total. writePump's first write
+// is still in flight when the loop has already filled the queue.
 //
-// What this leaves uncovered is worth naming rather than implying. Nothing here
-// proves that a peer which stops reading is eventually dropped -- only that a
-// full channel drops one. That gap is pre-existing and parked, not fixed here.
+// Frame size is not what does it. The same instrumentation timed a
+// 1,048,611-byte write returning inside one clock tick on an empty socket, so a
+// 64KiB frame does not block either. The large frames are not load-bearing here.
+// They are left alone because changing them is a test change, not a comment fix.
+//
+// Two mechanisms have already been wrong in this comment. The first said every
+// layer in front of the branch fills first. The second, written to correct it,
+// said a 64KiB frame keeps writePump blocked. Both explained the behaviour the
+// test actually shows, and that is exactly why each one felt confirmed by it.
+// Only a measurement separates the mechanism that explains what you see from the
+// one that produces it. This is the third attempt, and it is the first
+// backed by timings rather than by intuition about what ought to be slow.
+//
+// The gap this comment used to claim -- that nothing proves a peer which stops
+// reading is eventually dropped -- is not a gap, and should not have been parked.
+// Two tests stage exactly that peer and both end in a drop:
+//
+//	TestWriteTimeoutCondemnsASlowClientAndTheReadErrorDoesNotOverwriteIt
+//	TestAJammedPongCondemnsTheClientAsPeerGone
+//
+// This test covers the channel branch; those two cover the socket.
 //
 // The hub is driven directly rather than through newHarness because the branch
 // is the net layer's, and the harness owns no way to hand a test the *Conn that

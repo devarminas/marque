@@ -360,9 +360,11 @@ func (c *Conn) readPump(h *Hub) (reason, detail string) {
 // ours can expire. The conclusion was wrong, and wrong in this unit's own
 // domain: a slow client was logged as a clean logout.
 //
-// Observed, by TestAJammedPongCondemnsTheClientAsPeerGone: a peer whose receive
-// side is jammed pings, the read goroutine tries to write the pong, and after
-// five seconds the read fails with
+// Observed. TestAJammedPongCondemnsTheClientAsPeerGone stages it -- a peer whose
+// receive side is jammed pings, the read goroutine tries to write the pong, and
+// five seconds later the read fails -- and asserts the reason and detail. It does
+// not assert the error string below, which was captured under instrumentation
+// during review and exists nowhere in the tree, so do not expect to grep for it:
 //
 //	failed to handle control frame opPing: failed to write control frame
 //	opPong: failed to acquire lock: context deadline exceeded
@@ -371,8 +373,13 @@ func (c *Conn) readPump(h *Hub) (reason, detail string) {
 // wraps whatever context it is handed in a five-second one (write.go:277) and
 // writeFrame's first act is writeFrameMu.lock(ctx), which returns ctx.Err()
 // wrapped when the wait expires (conn.go:291). The mutex is held for the whole
-// of the jammed data-frame write, so the pong waits behind it. Nothing closes
-// the connection at that point -- our own close does, after this classifies.
+// of the jammed data-frame write, so the pong waits behind it.
+//
+// Observed again, under the same instrumentation: nothing in the library closes
+// the connection here. setupWriteTimeout is only reached after writeFrameMu.lock
+// returns (write.go:289), and on this path the lock wait is what fails, so the
+// close timer is never armed at all. Our own close ends it, after this
+// classifies.
 //
 // An earlier version of this comment blamed finishRead's ctx.Err() overwrite at
 // read.go:255. That was wrong: finishRead tests the context it was passed, and
