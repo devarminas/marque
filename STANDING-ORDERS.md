@@ -69,18 +69,28 @@ authenticated as `devarminas`. git 2.55.
 
 Absent: `bun`, so the orch CLI is unavailable. Absent: Postgres, not needed until after M1.
 
-**Absent: any C compiler, so `go test -race` cannot run.** Go's race detector needs cgo, cgo
-needs a C toolchain, and `gcc`, `clang`, `cc`, `x86_64-w64-mingw32-gcc`, `zig`, and `tcc` are
-all missing from PATH and from the usual MSYS2, MinGW, TDM, LLVM, and Strawberry install
-locations. This is a **program-level gap, not a per-unit defect**. It affects every Go unit,
-and it specifically means the single-goroutine-ownership invariant is verified by construction
-and by concurrency tests rather than by the tool that actually proves it. Do not fail a Go unit
-for it and do not make a worker try to install one.
+**`go test -race` runs. Every Go unit's verify recipe uses it.** It is not on PATH by default,
+so put it there:
 
-Fix once, centrally, with `winget install --id MartinStorsjo.LLVM-MinGW.UCRT` or MSYS2
-mingw-w64, then re-verify every merged Go unit under `-race` in a single pass. Until then, a Go
-unit's verify recipe drops `-race` and its ledger row says so explicitly rather than silently
-omitting it.
+    export PATH="/c/Users/armin/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin:$PATH"
+
+That is LLVM-MinGW UCRT `22.1.8-20260616`, `clang` targeting `x86_64-w64-windows-gnu`, exposed
+as `gcc.exe` and `cc.exe`. Go picks it up as `CC=gcc` with `CGO_ENABLED=1`. Run
+`CGO_ENABLED=1 go test -race ./...` from `server/`.
+
+**The baseline is clean, measured rather than assumed.** On `main` at `06e542e`, all three
+packages pass, zero data races, exit 0, with `internal/net` alone taking 86 seconds under
+instrumentation. A race the detector reports on your branch is yours. One reported in code you
+did not touch is a finding against `main` and a new unit; report it and do not fix it.
+
+**Say what ran and what it found, not that the server is race-free.** A clean `-race` run means
+no race was *detected* along the paths the tests exercise. It is not a proof of absence.
+
+This paragraph used to say a C compiler was absent, that `-race` could never run, and that a Go
+unit's ledger row should record dropping it. That was true from M0 until the human installed the
+toolchain mid-session on 2026-09-02, and it was **pasted verbatim into every worker spawn while
+it was true**. It is corrected here rather than deleted, because a worker who read the old
+version will otherwise believe it and negotiate its acceptance list downward.
 
 ## Milestones
 
