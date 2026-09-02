@@ -598,6 +598,15 @@ func TestDisconnectDespawns(t *testing.T) {
 	if got := disconnects[0]["player"]; got != float64(aliceWelcome.You) {
 		t.Fatalf("client_disconnected logged player %v, want %d", got, aliceWelcome.You)
 	}
+	// The reason reaches the log at all, and it is the cause rather than a
+	// detector name. This is the only place the net layer's classification is
+	// checked end to end through the world; net's own tests stop at the event.
+	if got := disconnects[0]["reason"]; got != mnet.DisconnectClosed {
+		t.Fatalf("client_disconnected logged reason %v for a clean logout, want %q", got, mnet.DisconnectClosed)
+	}
+	if got, ok := disconnects[0]["detail"]; ok {
+		t.Fatalf("client_disconnected logged detail %v for a clean logout; only one path can reach it, so the key must be absent", got)
+	}
 }
 
 // TestPlayerIdsAreNotReused covers the id counter. A departed player's id must
@@ -716,6 +725,12 @@ func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
 
+	// None of the goroutines below may touch *testing.T -- only the test's own
+	// goroutine may fail a test, which is the rule drainUntil already states
+	// and parseFrame's bad field already exists for. They report here instead,
+	// and the test goroutine fails on their behalf once they have all stopped.
+	bg := newBackgroundErr()
+
 	// Movers: send intents and keep draining, so nobody is dropped for being
 	// slow while the interesting concurrency happens.
 	for i, c := range clients {
@@ -730,7 +745,10 @@ func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 				case <-stop:
 					return
 				case <-ticker.C:
-					c.moveTo(float64(i)+1, float64(i)-1)
+					if err := c.moveToBackground(float64(i)+1, float64(i)-1); err != nil {
+						bg.report(err)
+						return
+					}
 				}
 			}
 		}(i, c)
@@ -748,10 +766,10 @@ func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 				return
 			default:
 			}
-			c := h.dial("churn")
-			c.welcomeFrame()
-			c.moveTo(5, 5)
-			c.close()
+			if err := h.churnOnce(); err != nil {
+				bg.report(err)
+				return
+			}
 			time.Sleep(5 * time.Millisecond)
 		}
 	}()
@@ -759,6 +777,7 @@ func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 	time.Sleep(duration)
 	close(stop)
 	wg.Wait()
+	bg.check(t)
 
 	// The world survived, and still answers.
 	for _, c := range clients {

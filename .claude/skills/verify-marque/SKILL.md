@@ -263,10 +263,18 @@ produced `DEMO TIMEOUT: fewer than 2 players after 20000ms` in a 50-byte
 and has to guess.
 
 **GAMELOG vocabulary (M0):** `server_started`, `server_stopping`, `client_connected`,
-`client_disconnected` (with a latched, cause-authoritative `reason`), `move_to`,
-`move_to_rejected`, `intent_ignored`, `path_assigned`, `arrived`, `path_replayed`,
-`ticks_dropped`, `frame_dropped`. The constants live in
+`client_disconnected`, `move_to`, `move_to_rejected`, `intent_ignored`, `path_assigned`,
+`arrived`, `path_replayed`, `ticks_dropped`, `frame_dropped`. The constants live in
 `server/internal/game/world.go`; M1 adds new `ev` values rather than changing these.
+
+**`client_disconnected` carries a latched, cause-authoritative `reason` (M1f).** The reason
+names why the connection died, never which component noticed: `closed` for a clean logout,
+`slow_client`, `peer_gone`, `server_shutdown`, `protocol_error`. The first condemnation wins, so
+a read error provoked by a client that was already dropped for being slow is still logged as
+`slow_client`. An optional `detail` names the detector — `send_buffer_full`, `write_timeout`,
+`read_error`, `write_error` — and is absent where only one detector could have fired. Read
+`detail` to learn how a death was noticed; never branch on it, and never read it as the cause.
+`PROTOCOL.md`, "Which reason is authoritative", has the full table.
 
 **DEMO line grammar** (client stdout, written to be grepped):
 

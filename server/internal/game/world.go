@@ -356,7 +356,7 @@ func (w *World) handle(ev mnet.Event) {
 	case mnet.EventFrame:
 		w.handleFrame(ev)
 	case mnet.EventDisconnected:
-		w.removePlayer(ev.Conn, ev.Reason)
+		w.removePlayer(ev.Conn, ev.Reason, ev.Detail)
 	default:
 		panic(fmt.Sprintf("game: unhandled event kind %v", ev.Kind))
 	}
@@ -432,7 +432,11 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 
 // removePlayer retires a connection. This is the only place a player leaves the
 // world, whichever way the connection died.
-func (w *World) removePlayer(conn *mnet.Conn, reason string) {
+//
+// reason is the latched cause and detail names the detector that noticed it,
+// which may be empty. The world does not interpret either: it logs them, and a
+// human reading the log is the only consumer.
+func (w *World) removePlayer(conn *mnet.Conn, reason, detail string) {
 	p, ok := w.players[conn]
 	if !ok {
 		// A connection the hub accepted but the world never saw, or a second
@@ -454,10 +458,17 @@ func (w *World) removePlayer(conn *mnet.Conn, reason string) {
 	// is parked in FOLLOW-UPS.md.
 	w.items.RemovePlayer(p.id)
 
-	w.log.Event(w.tick, EvDisconnected, gamelog.Fields{
+	fields := gamelog.Fields{
 		"player": p.id,
 		"reason": reason,
-	})
+	}
+	// Omitted rather than logged empty: a "detail" key is a promise that two
+	// detectors could have fired, and for a clean close or a shutdown none
+	// could have.
+	if detail != "" {
+		fields["detail"] = detail
+	}
+	w.log.Event(w.tick, EvDisconnected, fields)
 	w.broadcast(mnet.Despawn{ID: p.id}, conn)
 }
 
