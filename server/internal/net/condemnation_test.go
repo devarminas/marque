@@ -15,7 +15,6 @@ package net_test
 
 import (
 	"context"
-	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -45,66 +44,71 @@ const testWriteTimeout = 400 * time.Millisecond
 // in flight runs out its deadline, so the queue cannot fill first.
 const sendPace = testWriteTimeout / 8
 
-// TestWriteTimeoutIsDistinguishableFromABrokenSocket pins a claim about
-// coder/websocket rather than about this package: that a Write which outlives
-// its context's deadline fails with something errors.Is-comparable to
-// context.DeadlineExceeded, and that a Write onto a socket the peer destroyed
-// does not.
+// TestClosingTheSocketUnblocksABlockedWrite pins the claim about
+// coder/websocket that the write pump's deadline now rests on: that CloseNow
+// from another goroutine makes a Write blocked on a jammed socket return.
 //
-// writeReason classifies on exactly that difference, so if a dependency upgrade
-// ever stops wrapping the context error, every write timeout would silently
-// start reporting peer_gone. Three claims about dependencies have already been
-// written into this program's contract files as fact and had to be corrected;
-// this one is executable instead.
-func TestWriteTimeoutIsDistinguishableFromABrokenSocket(t *testing.T) {
-	t.Run("a write that outlives its deadline", func(t *testing.T) {
-		server, peer := websocketPair(t)
-		// The peer never reads, so the write blocks once the socket buffers fill.
-		_ = peer
+// writePump condemns from its own timer and lets that timer's CloseNow abort
+// the write, which only terminates if this holds. It replaces an earlier test
+// that pinned a different dependency claim -- that a deadline-bearing Write
+// fails with something errors.Is-comparable to context.DeadlineExceeded. That
+// claim is true, and building on it was still wrong: the library closes the
+// connection from its own timer goroutine before returning that error, so the
+// read pump could condemn the connection first and a consequence overwrote the
+// cause in five runs out of ten.
+func TestClosingTheSocketUnblocksABlockedWrite(t *testing.T) {
+	server, _ := websocketPair(t)
 
-		err := writeUntilItFails(t, server, testWriteTimeout)
-		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("a timed-out write failed with %v, which errors.Is does not match context.DeadlineExceeded; writeReason cannot tell a slow client from a broken socket", err)
+	failed := make(chan error, 1)
+	go func() {
+		payload := []byte(strings.Repeat("x", fatFrame))
+		for {
+			// No deadline: this write must be unblocked by the close below and
+			// by nothing else, which is the whole point of the test.
+			if err := server.Write(context.Background(), websocket.MessageText, payload); err != nil {
+				failed <- err
+				return
+			}
 		}
-	})
+	}()
 
-	t.Run("a write onto a destroyed socket", func(t *testing.T) {
-		server, peer := websocketPair(t)
-		// Kill the peer outright. The write fails, but not for want of time.
-		if err := peer.CloseNow(); err != nil {
-			t.Fatalf("closing the peer: %v", err)
-		}
+	// Long enough for the writer to fill the socket buffers and jam. The probe
+	// that sized fatFrame measured one megabyte accepted before the second
+	// write blocked.
+	time.Sleep(200 * time.Millisecond)
+	select {
+	case err := <-failed:
+		t.Fatalf("the write failed before the socket was closed: %v; this test never observed a blocked write", err)
+	default:
+	}
 
-		err := writeUntilItFails(t, server, 5*time.Second)
-		if errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("a write onto a destroyed socket failed with %v, which errors.Is matches context.DeadlineExceeded; the two causes are indistinguishable and slow_client would swallow peer_gone", err)
-		}
-	})
+	if err := server.CloseNow(); err != nil {
+		t.Fatalf("closing the server side: %v", err)
+	}
+
+	select {
+	case <-failed:
+	case <-time.After(readTimeout):
+		t.Fatalf("a blocked write was still blocked %v after CloseNow; writePump's timer cannot abort a jammed write and a slow client would never be dropped", readTimeout)
+	}
 }
 
-// TestClassifiersDisagreeAboutTheSameDyingConnection states, as a fact the
-// latch test can lean on, that the read pump and the write pump reach different
-// answers for the failures each sees when a slow client is torn down. Without
-// that, "the reported reason is slow_client" would be consistent with the read
-// pump never having run.
-func TestClassifiersDisagreeAboutTheSameDyingConnection(t *testing.T) {
-	timeoutReason, timeoutDetail := mnet.ClassifyWrite(errWrapped(context.DeadlineExceeded))
-	if timeoutReason != mnet.DisconnectSlow || timeoutDetail != mnet.DetailWriteTimeout {
-		t.Fatalf("a timed-out write classifies as %q/%q, want %q/%q",
-			timeoutReason, timeoutDetail, mnet.DisconnectSlow, mnet.DetailWriteTimeout)
-	}
-
-	// net.ErrClosed is what a read blocked on a socket returns once another
-	// goroutine has called CloseNow on it, which is precisely what the write
-	// pump does when it condemns a connection.
-	readReason, readDetail := mnet.ClassifyRead(errWrapped(net.ErrClosed))
-	if readReason != mnet.DisconnectPeerGone || readDetail != mnet.DetailReadError {
+// TestTheReadPumpWouldCondemnATornDownSocketAsPeerGone states, as the fact the
+// latch test leans on, that the read pump reaches a different answer from the
+// write pump for the failure it sees when a slow client is torn down. Without
+// it, "the reported reason is slow_client" would be consistent with the read
+// pump never having run at all.
+func TestTheReadPumpWouldCondemnATornDownSocketAsPeerGone(t *testing.T) {
+	// net.ErrClosed is what a blocked read returns once another goroutine has
+	// closed the socket under it, which is exactly what condemning a slow
+	// client does.
+	reason, detail := mnet.ClassifyRead(errWrapped(net.ErrClosed))
+	if reason != mnet.DisconnectPeerGone || detail != mnet.DetailReadError {
 		t.Fatalf("a read on a torn-down socket classifies as %q/%q, want %q/%q",
-			readReason, readDetail, mnet.DisconnectPeerGone, mnet.DetailReadError)
+			reason, detail, mnet.DisconnectPeerGone, mnet.DetailReadError)
 	}
-
-	if readReason == timeoutReason {
-		t.Fatalf("both pumps classify a torn-down slow client as %q, so a test asserting that reason cannot show which observation won", readReason)
+	if reason == mnet.DisconnectSlow {
+		t.Fatalf("the read pump classifies a torn-down socket as %q too, so asserting that reason cannot show which observation won", reason)
 	}
 }
 
@@ -336,26 +340,6 @@ func websocketPair(t *testing.T) (server, peer *websocket.Conn) {
 		t.Fatalf("the server never accepted the connection")
 	}
 	return nil, nil
-}
-
-// writeUntilItFails writes fat frames with the given per-frame deadline until
-// one of them fails, and returns that failure.
-func writeUntilItFails(t *testing.T, ws *websocket.Conn, timeout time.Duration) error {
-	t.Helper()
-
-	payload := []byte(strings.Repeat("x", fatFrame))
-	deadline := time.Now().Add(readTimeout)
-	for {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		err := ws.Write(ctx, websocket.MessageText, payload)
-		cancel()
-		if err != nil {
-			return err
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("wrote for %v without a single write failing; the socket never jammed", readTimeout)
-		}
-	}
 }
 
 // errWrapped mimics the layers coder/websocket puts between a cause and the
