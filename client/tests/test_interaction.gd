@@ -596,9 +596,10 @@ func _test_the_intents_match_the_protocol_byte_for_byte() -> void:
 ## [b]The slot clicked is the last one[/b], for a reason that is about the test
 ## environment and not about the game: the headless viewport is 64x64 while the
 ## shipped window is 1280x720, and a 28-slot panel anchored to the bottom-right
-## corner has only its last cell inside a 64x64 rect. A click outside the
-## viewport reaches no [Control] at all — measured, not assumed — so the last
-## cell is the one a real click can land on here. Two different sizes are used
+## corner has only its last cell inside a 64x64 rect. A [Control] does receive a
+## press outside the viewport — M1k probed that and an off-screen slot consumed
+## one — but it fires no [signal BaseButton.pressed] when it does, so the last
+## cell is the one a real click can drop from here. Two different sizes are used
 ## so that the index is genuinely read from the slot rather than being the only
 ## number available.
 func _test_clicking_an_occupied_slot_drops_it() -> void:
@@ -681,43 +682,69 @@ func _test_clicking_an_empty_slot_drops_nothing() -> void:
 ## first was designed. RuneScape's sidebar is opaque, so all three collapse into
 ## one rule and this is the test of it.
 ##
+## [b]Both inventory states, and the empty one is the load-bearing case.[/b]
+## Every player joins holding nothing, so an inventory of 28 empty slots is what
+## the panel spends most of its life drawing, and `FOLLOW-UPS.md` names that
+## state as the exposure. An earlier version of this test fed one occupied slot
+## and nothing else, which left the join state untested: a panel that turned
+## opaque only while the player carried something passed the whole suite and
+## walked the player when clicked at join. That build is a real sabotage, not a
+## hypothetical, and it is what this second case exists to catch.
+func _test_clicking_the_panel_chrome_reaches_nothing() -> void:
+	await _feed(_inventory_frame(WIRE_SIZE, 1))
+	await _check_the_chrome_is_a_wall("carrying one item")
+
+	# The state every player is in the moment they join.
+	await _feed(_inventory_frame(WIRE_SIZE, 0))
+	_check(
+		_panel.occupied_slot_count() == 0,
+		"the join-state panel is drawn holding nothing, got %d occupied"
+		% _panel.occupied_slot_count(),
+	)
+	await _check_the_chrome_is_a_wall("holding nothing, as at join")
+
+
+## Clicks the panel's chrome and asserts the click reached nothing.
+##
 ## [b]The counterfactual is asserted, not assumed.[/b] "No `move_to`" is also
 ## what a click into empty space produces, so the ground under the chrome point
 ## is resolved with the picker first. The picker answers a ray, not the GUI, so
 ## it reports what the click [i]would[/i] have hit — and then the click hits the
 ## panel instead.
-func _test_clicking_the_panel_chrome_reaches_nothing() -> void:
-	await _feed(_inventory_frame(WIRE_SIZE, 1))
+func _check_the_chrome_is_a_wall(state: String) -> void:
 	# A rebuilt grid has not sorted its children yet, and a widget with no rect
-	# is a rect that every point misses.
+	# is a rect that every point misses. Rendering first also means the filter
+	# is judged by what a real click does rather than by reading the property,
+	# which is what `_test_the_panel_is_authored` does before any frame runs.
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_check(_panel.visible, "the full-size panel is drawn")
+	_check(_panel.visible, "the full-size panel is drawn (%s)" % state)
 
 	var screen := _camera.get_viewport().get_visible_rect()
 	var panel_rect := _panel.get_global_rect()
-	print("INTERACTION panel rect %s in viewport %s" % [panel_rect, screen.size])
+	print("INTERACTION panel rect %s in viewport %s (%s)" % [panel_rect, screen.size, state])
 
 	var chrome: Variant = _panel_chrome_point(panel_rect, screen)
-	_check(chrome != null, "the panel draws chrome inside the viewport to click on")
+	_check(chrome != null, "the panel draws chrome inside the viewport to click on (%s)" % state)
 	if chrome == null:
 		return
 	var at: Vector2 = chrome
 	_check(
 		_picker.pick_ground(at) != null,
-		"there is ground under %v, so a click that got through would walk the player" % at,
+		"there is ground under %v, so a click that got through would walk the player (%s)"
+		% [at, state],
 	)
 
 	_watch()
 	await _left_click(at)
 	_check(
 		_move_to_intents.is_empty(),
-		"but a click on the panel's chrome at %v sends no move_to, got %s"
-		% [at, _move_to_intents],
+		"but a click on the panel's chrome at %v sends no move_to (%s), got %s"
+		% [at, state, _move_to_intents],
 	)
 	_check(
 		_pickup_intents.is_empty() and _drop_intents.is_empty(),
-		"and no pickup and no drop either: chrome is not a control, it is a wall",
+		"and no pickup and no drop either (%s): chrome is not a control, it is a wall" % state,
 	)
 
 
@@ -847,9 +874,9 @@ func _click_slot(index: int) -> void:
 	var viewport := slot.get_viewport()
 	var rect := slot.get_global_rect()
 	var centre := rect.get_center()
-	# A click outside the viewport reaches no Control, so a slot that has drifted
-	# off the edge produces no drop and looks exactly like broken wiring. Say
-	# which it is.
+	# A slot that has drifted off the viewport edge still consumes the press and
+	# still fires no `pressed`, so it produces no drop and looks exactly like
+	# broken wiring (NOTES.md, "Godot authoring traps"). Say which it is.
 	_check(
 		rect.has_area() and viewport.get_visible_rect().has_point(centre),
 		"and slot %d is laid out somewhere clickable (%s in a %s viewport)"
