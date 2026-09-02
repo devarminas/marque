@@ -9,8 +9,8 @@ has no reconnect, so it neither clears the world nor pretends.
 ## Sub-features
 
 - `leave-despawn` — survivors' worlds drop the leaver's body.
-- `leave-reason` — the GAMELOG carries a `reason`, one of the six the server
-  actually defines (see Gotchas).
+- `leave-reason` — the GAMELOG carries a `reason`, one of the five causes the server
+  defines, plus an optional `detail` naming the detector (see Gotchas).
 - `leave-freeze` — a client that lost the server keeps its last world, frozen, and
   logs loudly rather than clearing.
 
@@ -48,29 +48,35 @@ Preconditions:
   one of its clients mid-run makes the survivor's own run fail its capture contract.
   Expect exit 1 from the survivor and judge the claim on the logs and frames, not on
   its exit code.
-- **Assert the reasons the server defines, not the ones `PROTOCOL.md` names.** The
-  `Disconnect*` constants in `server/internal/net/hub.go` are the whole list:
+- **`reason` is a cause and `detail` is a detector. Assert the first; read the second
+  and do not branch on it.** Since M1f the `Disconnect*` and `Detail*` constants in
+  `server/internal/net/hub.go` are the whole list, and they agree with
+  `PROTOCOL.md`'s M1 section:
 
-  | Constant | Logged `reason` | When |
+  | Logged `reason` | Logged `detail` | When |
   |---|---|---|
-  | `DisconnectClosed` | `closed` | the peer closed the connection |
-  | `DisconnectReadError` | `read_error` | the connection failed while reading |
-  | `DisconnectWriteError` | `write_error` | the connection failed while writing |
-  | `DisconnectSlow` | `send_buffer_full` | the client could not keep up |
-  | `DisconnectShutdown` | `server_shutdown` | the server is going away |
-  | `DisconnectProtocol` | `protocol_error` | the frame was uninterpretable |
+  | `closed` | absent | the peer sent a close frame; not a failure |
+  | `slow_client` | `send_buffer_full` | the 64-frame send queue was already full |
+  | `slow_client` | `write_timeout` | one write outlived the 5s write timeout |
+  | `peer_gone` | `read_error` | a read failed on anything but a close frame |
+  | `peer_gone` | `write_error` | a write failed, but not for want of time |
+  | `server_shutdown` | absent | the server is going away |
+  | `protocol_error` | absent | the frame was uninterpretable |
 
-  A scripted client that quits on its own schedule lands on `read_error`, and that
-  is what every healthy `run.ps1` and `two_client_demo.ps1` run logs today.
+  `detail` is absent, not empty, wherever only one detector could have fired. A test
+  that asserts the key exists on every line is wrong.
 
-  `PROTOCOL.md`'s M1 section names `peer_gone` and `slow_client` instead. **Neither
-  string exists anywhere under `server/`.** They belong to a recorded decision — the
-  cause is authoritative over the detector, and the first condemnation latches —
-  that unit M1f will implement and nothing implements yet. An agent asserting the
-  protocol's names against today's server reports a defect that is not one, or
-  worse, "fixes" the server to match a document describing the future.
-- Nothing latches yet, and `client_disconnected` carries only `player` and `reason`.
-  There is no `detail` field on it to assert or to avoid; `detail` exists on
-  `move_to_rejected` and nowhere else.
+  **The pairing for a quitting Godot client is inherited, not freshly observed.**
+  Before M1f a client that quit on its own schedule logged `read_error`, which was
+  the old name for "the read failed and it was not a close frame" — so the client
+  does not close cleanly. That same failure now logs `reason: "peer_gone"` with
+  `detail: "read_error"`. The translation is mechanical and nobody has re-run a live
+  client to confirm it. If you drive `run.ps1`, confirm it and say so.
+- **The first condemnation latches, so a `reason` is not always the last thing that
+  went wrong.** A client dropped for being slow has its socket torn down, and the
+  read pump then sees that teardown as a read error. The line still says
+  `slow_client`, because a consequence must not overwrite a cause. Do not read a
+  `slow_client` line as evidence that nothing else failed afterwards; something
+  almost certainly did.
 - M0's ordinary traffic is too sparse to fill the send queue; a stalled client dies
   by timeout minutes later. Do not wait for it in a bounded run.

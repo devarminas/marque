@@ -494,6 +494,40 @@ Revisitable when M2 adds a heartbeat, which changes the traffic rate this sectio
 therefore changes which detector ordinarily fires. It does not change which reason is reported,
 which is the point.
 
+**The vocabulary, complete. M1f, shipped.** Five reasons and four details. A reason is a cause;
+a detail names the detector that noticed and exists only for a human reading a log. Nothing on
+either side of the wire branches on a detail, and the server writes both into
+`client_disconnected`, omitting `detail` where the cause admits only one detector.
+
+| `reason` | `detail` | What happened |
+|---|---|---|
+| `closed` | — | The peer sent a close frame. Not a condemnation. |
+| `slow_client` | `send_buffer_full` | The 64-frame send queue was already full. |
+| `slow_client` | `write_timeout` | One frame's write outlived the five-second write timeout. |
+| `peer_gone` | `read_error` | A read failed on something other than a close frame. |
+| `peer_gone` | `write_error` | A write failed for a reason that was not the timeout. |
+| `server_shutdown` | — | The server is going away. |
+| `protocol_error` | — | The client sent an uninterpretable frame and was told so first. |
+
+**A write error that is not a timeout reports `peer_gone`. M1f, decided, revisitable.** This
+section did not cover it: it named the write *timeout* as a slow-client detector and said
+nothing about a write that fails outright. The call is that "the peer went away or the socket
+broke" above already describes it exactly, and the only thing that differs from the read-side
+case is which pump happened to touch the socket first — which is a detector, and detectors do
+not get to be reasons. So it is `peer_gone` with `detail: "write_error"`.
+
+Revisit if a class of write failure ever turns out to mean something a server can act on
+differently from a vanished peer. Nothing in M1 distinguishes them, and inventing a third cause
+before anything can use it would be inventing a distinction the log's reader cannot act on.
+
+**The write timeout is distinguishable, and that is a fact about a dependency rather than about
+our code.** `coder/websocket` v1.8.15 wraps the write context's own error, so `errors.Is` finds
+`context.DeadlineExceeded`; a write onto a socket the peer destroyed does not match it. That was
+probed against a real jammed peer before the classifier was written, and it is pinned by
+`TestWriteTimeoutIsDistinguishableFromABrokenSocket` rather than trusted, because a dependency
+upgrade that stopped wrapping the context error would silently reclassify every slow client as
+`peer_gone`.
+
 **Client.** Appliers are idempotent, because a redundant message is cheaper to tolerate than to
 prevent.
 

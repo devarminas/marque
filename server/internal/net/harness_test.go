@@ -158,6 +158,79 @@ func (h *harness) wsURL() string {
 	return "ws" + strings.TrimPrefix(h.server.URL, "http") + "/ws"
 }
 
+// backgroundErr collects the first failure from goroutines that are not the
+// test's own.
+//
+// Only the test's own goroutine may touch *testing.T, so a background goroutine
+// records its problem here and the test goroutine fails on its behalf. It is
+// the same shape parseFrame's bad field uses for the reader goroutine, hoisted
+// to something a test can share between several background goroutines.
+type backgroundErr struct {
+	errs chan error
+}
+
+func newBackgroundErr() *backgroundErr { return &backgroundErr{errs: make(chan error, 1)} }
+
+// report records a failure. Only the first is kept: later ones are almost
+// always fallout from it, and the first is the one worth reading.
+func (b *backgroundErr) report(err error) {
+	select {
+	case b.errs <- err:
+	default:
+	}
+}
+
+// check fails the test if any background goroutine reported. Call it from the
+// test's own goroutine, and only once every one of them has stopped.
+func (b *backgroundErr) check(t *testing.T) {
+	t.Helper()
+
+	select {
+	case err := <-b.errs:
+		t.Fatalf("background goroutine: %v", err)
+	default:
+	}
+}
+
+// churnOnce runs one connect, welcome, move, leave cycle and returns its
+// failure instead of raising it.
+//
+// It duplicates what dial and the client helpers do because those all fail
+// through *testing.T, which a background goroutine may not touch. The cycle is
+// the point: connections coming and going underneath live broadcasts.
+func (h *harness) churnOnce() error {
+	ctx, cancel := context.WithTimeout(context.Background(), readTimeout)
+	defer cancel()
+
+	ws, _, err := websocket.Dial(ctx, h.wsURL(), nil)
+	if err != nil {
+		return fmt.Errorf("churn: dial %s: %w", h.wsURL(), err)
+	}
+	// Belt and braces if any step below returns early. A clean Close first
+	// makes this a no-op.
+	defer func() { _ = ws.CloseNow() }()
+
+	typ, data, err := ws.Read(ctx)
+	if err != nil {
+		return fmt.Errorf("churn: read welcome: %w", err)
+	}
+	f := parseFrame(typ, data)
+	if f.bad != "" {
+		return fmt.Errorf("churn: bad frame: %s: %s", f.bad, f.raw)
+	}
+	if f.Welcome == nil {
+		return fmt.Errorf("churn: got a %s frame, want welcome: %s", f.kind(), f.raw)
+	}
+
+	if err := ws.Write(ctx, websocket.MessageText, []byte(`{"move_to":{"x":5,"z":5}}`)); err != nil {
+		return fmt.Errorf("churn: move_to: %w", err)
+	}
+	if err := ws.Close(websocket.StatusNormalClosure, "test done"); err != nil {
+		return fmt.Errorf("churn: close: %w", err)
+	}
+	return nil
+}
+
 func (h *harness) dial(name string) *client {
 	h.t.Helper()
 
@@ -364,6 +437,19 @@ func (c *client) pickup(item mnet.ItemID) {
 func (c *client) moveTo(x, z float64) {
 	c.t.Helper()
 	c.sendRaw(fmt.Sprintf(`{"move_to":{"x":%v,"z":%v}}`, x, z))
+}
+
+// moveToBackground is moveTo for a goroutine that is not the test's own. It
+// returns its failure rather than raising it, for backgroundErr's reason.
+func (c *client) moveToBackground(x, z float64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), readTimeout)
+	defer cancel()
+
+	payload := fmt.Sprintf(`{"move_to":{"x":%v,"z":%v}}`, x, z)
+	if err := c.ws.Write(ctx, websocket.MessageText, []byte(payload)); err != nil {
+		return fmt.Errorf("client %s: write %s: %w", c.name, payload, err)
+	}
+	return nil
 }
 
 func (c *client) drop(slot int) {
@@ -719,5 +805,16 @@ func (c *client) close() {
 	c.t.Helper()
 	if err := c.ws.Close(websocket.StatusNormalClosure, "test done"); err != nil {
 		c.t.Fatalf("client %s: close: %v", c.name, err)
+	}
+}
+
+// destroy drops the TCP connection without a close handshake, which is what a
+// killed process or a pulled cable looks like from the server. The difference
+// from close is the whole of what separates peer_gone from closed, so a test
+// about one of those reasons has to be explicit about which it staged.
+func (c *client) destroy() {
+	c.t.Helper()
+	if err := c.ws.CloseNow(); err != nil {
+		c.t.Fatalf("client %s: destroy: %v", c.name, err)
 	}
 }

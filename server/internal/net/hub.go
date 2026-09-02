@@ -27,14 +27,33 @@ const (
 	eventBuffer = 256
 )
 
-// Disconnect reasons, reported on EventDisconnected.
+// Disconnect reasons, reported on EventDisconnected. A reason names the cause a
+// connection died of, never the component that noticed, and the first
+// condemnation latches (PROTOCOL.md, "Which reason is authoritative").
+//
+// Which of the two slow-client detectors fires depends on the send rate into a
+// jammed socket, which is not something this package controls. A reason that
+// named the detector would therefore have meant a different thing from one
+// death to the next, which is exactly what classifying by cause removes.
 const (
-	DisconnectClosed     = "closed"           // the peer closed the connection
-	DisconnectReadError  = "read_error"       // the connection failed while reading
-	DisconnectWriteError = "write_error"      // the connection failed while writing
-	DisconnectSlow       = "send_buffer_full" // the client could not keep up
-	DisconnectShutdown   = "server_shutdown"  // the server is going away
-	DisconnectProtocol   = "protocol_error"   // the client sent an uninterpretable frame
+	DisconnectClosed   = "closed"          // the peer closed the connection cleanly
+	DisconnectPeerGone = "peer_gone"       // the peer went away or the socket broke
+	DisconnectSlow     = "slow_client"     // the client stopped keeping up
+	DisconnectShutdown = "server_shutdown" // the server is going away
+	DisconnectProtocol = "protocol_error"  // the client sent an uninterpretable frame
+)
+
+// Disconnect details name the detector that noticed, for a human reading a log.
+// A detail never changes what a reason means and no code branches on one: it
+// answers "which of the ways of finding this out actually fired", nothing else.
+//
+// Empty where the cause admits no detector distinction. A clean peer close, a
+// server shutdown, and a protocol refusal each have exactly one path in.
+const (
+	DetailSendBufferFull = "send_buffer_full" // Conn.Send found the queue already full
+	DetailWriteTimeout   = "write_timeout"    // one frame's write outlived writeTimeout
+	DetailWriteError     = "write_error"      // a write failed for some other reason
+	DetailReadError      = "read_error"       // a read failed other than on a close frame
 )
 
 // outgoing is one item in a connection's send queue: either a frame to write,
@@ -72,8 +91,13 @@ type Event struct {
 	// Err is a *RejectError, set when Kind is EventFrame and the frame was
 	// refused. Exactly one of Msg and Err is set.
 	Err error
-	// Reason explains an EventDisconnected. One of the Disconnect constants.
+	// Reason explains an EventDisconnected: the cause, one of the Disconnect
+	// constants.
 	Reason string
+	// Detail names the detector that noticed, one of the Detail constants, or
+	// empty where the cause admits no detector distinction. It is for a human
+	// reading a log; nothing may branch on it.
+	Detail string
 }
 
 // Conn is one client connection.
@@ -86,9 +110,14 @@ type Conn struct {
 	remote string
 	send   chan outgoing
 
+	// writeTimeout is the hub's, copied in at accept time so that writePump
+	// never reads hub state.
+	writeTimeout time.Duration
+
 	closeOnce   sync.Once
 	closed      chan struct{}
 	closeReason string
+	closeDetail string
 }
 
 // Remote is the peer address, for logging only. It is not an identity.
@@ -113,7 +142,7 @@ func (c *Conn) Send(payload []byte) bool {
 	case c.send <- outgoing{payload: payload}:
 		return true
 	default:
-		c.close(DisconnectSlow)
+		c.close(DisconnectSlow, DetailSendBufferFull)
 		return false
 	}
 }
@@ -124,6 +153,10 @@ func (c *Conn) Send(payload []byte) bool {
 //
 // A full buffer means the client is not draining and that last frame would
 // never arrive anyway, so the connection is closed at once instead.
+//
+// It carries no detail: the reasons that travel this way are decided by the
+// world rather than detected by a pump, so there is no second detector a
+// detail could distinguish it from.
 func (c *Conn) CloseAfterFlush(reason string) {
 	select {
 	case <-c.closed:
@@ -134,16 +167,22 @@ func (c *Conn) CloseAfterFlush(reason string) {
 	select {
 	case c.send <- outgoing{closeReason: reason}:
 	default:
-		c.close(reason)
+		c.close(reason, "")
 	}
 }
 
-// close shuts the connection down and records why. The first caller wins: a
-// slow-client drop and a peer-initiated close racing each other still yield one
-// reason and one EventDisconnected.
-func (c *Conn) close(reason string) {
+// close condemns the connection and records the cause. It is the latch: the
+// first caller wins and every later one is a no-op, so a slow-client drop and
+// the read error it goes on to provoke still yield one reason and one
+// EventDisconnected. A consequence never overwrites a cause.
+//
+// detail names the detector that got here first, or is empty. It is latched
+// with the reason, so a log line's reason and detail always describe the same
+// observation rather than two racing ones.
+func (c *Conn) close(reason, detail string) {
 	c.closeOnce.Do(func() {
 		c.closeReason = reason
+		c.closeDetail = detail
 		close(c.closed)
 		// CloseNow is safe to call concurrently with a blocked Read and is what
 		// unblocks it.
@@ -159,6 +198,11 @@ func (c *Conn) close(reason string) {
 type Hub struct {
 	events chan Event
 
+	// writeTimeout is handed to every connection this hub accepts. It is read
+	// once per accept and never written after the hub starts serving, which is
+	// why it needs no lock.
+	writeTimeout time.Duration
+
 	mu     sync.Mutex
 	conns  map[*Conn]struct{}
 	closed bool
@@ -169,9 +213,10 @@ type Hub struct {
 // NewHub returns a hub that is ready to accept connections.
 func NewHub() *Hub {
 	return &Hub{
-		events: make(chan Event, eventBuffer),
-		conns:  make(map[*Conn]struct{}),
-		done:   make(chan struct{}),
+		events:       make(chan Event, eventBuffer),
+		writeTimeout: writeTimeout,
+		conns:        make(map[*Conn]struct{}),
+		done:         make(chan struct{}),
 	}
 }
 
@@ -195,14 +240,15 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	conn := &Conn{
-		ws:     ws,
-		remote: r.RemoteAddr,
-		send:   make(chan outgoing, sendBuffer),
-		closed: make(chan struct{}),
+		ws:           ws,
+		remote:       r.RemoteAddr,
+		send:         make(chan outgoing, sendBuffer),
+		writeTimeout: h.writeTimeout,
+		closed:       make(chan struct{}),
 	}
 
 	if !h.register(conn) {
-		conn.close(DisconnectShutdown)
+		conn.close(DisconnectShutdown, "")
 		return
 	}
 	defer h.unregister(conn)
@@ -210,8 +256,8 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go conn.writePump()
 
 	h.emit(Event{Kind: EventConnected, Conn: conn})
-	reason := conn.readPump(h)
-	h.emit(Event{Kind: EventDisconnected, Conn: conn, Reason: reason})
+	reason, detail := conn.readPump(h)
+	h.emit(Event{Kind: EventDisconnected, Conn: conn, Reason: reason, Detail: detail})
 }
 
 func (h *Hub) register(c *Conn) bool {
@@ -261,22 +307,28 @@ func (h *Hub) Close() {
 	h.mu.Unlock()
 
 	for _, c := range open {
-		c.close(DisconnectShutdown)
+		c.close(DisconnectShutdown, "")
 	}
 }
 
 // readPump reads frames until the connection fails, decoding each one and
-// emitting it. It returns the reason the connection ended.
+// emitting it. It returns the latched reason and detail the connection ended
+// on, which are its own classification only if nothing condemned the
+// connection first.
+//
+// Reading c.closeReason unsynchronised is safe exactly here: close returns only
+// after sync.Once has run the write, so the caller of close happens-after it
+// whether or not it was the caller that won.
 //
 // Decoding happens here, off the world goroutine, but rejection is not reported
 // here: only the world knows the tick number a rejection belongs to, so the
 // error rides along on the event.
-func (c *Conn) readPump(h *Hub) string {
+func (c *Conn) readPump(h *Hub) (reason, detail string) {
 	for {
 		typ, data, err := c.ws.Read(context.Background())
 		if err != nil {
 			c.close(readReason(err))
-			return c.closeReason
+			return c.closeReason, c.closeDetail
 		}
 		if typ != websocket.MessageText {
 			h.emit(Event{
@@ -295,17 +347,41 @@ func (c *Conn) readPump(h *Hub) string {
 	}
 }
 
-// readReason classifies why a read stopped. A clean peer close is not a
-// failure; everything else is.
-func readReason(err error) string {
+// readReason classifies why a read stopped, by cause. A close frame is the peer
+// leaving on purpose and is not a condemnation at all. Anything else means the
+// peer went away or the socket broke.
+//
+// A read pump reaching this after a slow client has already been condemned
+// classifies the same way and loses: close latches the first condemnation, so
+// the read error stays a consequence rather than becoming the cause.
+func readReason(err error) (reason, detail string) {
 	var ce websocket.CloseError
 	if errors.As(err, &ce) {
-		return DisconnectClosed
+		return DisconnectClosed, ""
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return DisconnectClosed
+		return DisconnectClosed, ""
 	}
-	return DisconnectReadError
+	return DisconnectPeerGone, DetailReadError
+}
+
+// writeReason classifies why a write failed, by cause.
+//
+// A write that outlived its own deadline means the peer stopped acknowledging
+// data: the client has stopped keeping up, which is the same condition a full
+// send queue reports and therefore the same reason. Only the detail differs.
+// Any other write failure is the socket itself breaking, which is what
+// peer_gone names.
+//
+// That the timeout is distinguishable at all is a claim about coder/websocket,
+// not about this package: it wraps the context's own error, so errors.Is finds
+// context.DeadlineExceeded. TestWriteTimeoutIsDistinguishableFromABrokenSocket
+// pins that against the dependency rather than trusting it.
+func writeReason(err error) (reason, detail string) {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return DisconnectSlow, DetailWriteTimeout
+	}
+	return DisconnectPeerGone, DetailWriteError
 }
 
 // writePump drains the send buffer onto the socket. It is the only writer, so
@@ -317,14 +393,14 @@ func (c *Conn) writePump() {
 			return
 		case out := <-c.send:
 			if out.payload == nil {
-				c.close(out.closeReason)
+				c.close(out.closeReason, "")
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), c.writeTimeout)
 			err := c.ws.Write(ctx, websocket.MessageText, out.payload)
 			cancel()
 			if err != nil {
-				c.close(DisconnectWriteError)
+				c.close(writeReason(err))
 				return
 			}
 		}

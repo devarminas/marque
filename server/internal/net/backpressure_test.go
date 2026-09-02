@@ -87,6 +87,12 @@ func TestSlowClientIsDroppedWhenItsSendQueueFills(t *testing.T) {
 
 	// Send refused a frame. It refuses for two reasons and they are not the
 	// same event, so the disconnect has to name which one happened.
+	//
+	// This is also the send queue's half of the latch. Filling the queue
+	// condemns the connection and tears the socket down, so the read pump wakes
+	// with net.ErrClosed and would classify it as peer_gone -- and the event
+	// below exists only because that read pump ran to completion. The reason on
+	// it is the one that survived, not the only one that was offered.
 	disconnect := awaitEvent(t, hub, mnet.EventDisconnected)
 	if disconnect.Conn != conn {
 		t.Fatalf("the disconnect is for a different connection than the one that was flooded")
@@ -94,6 +100,10 @@ func TestSlowClientIsDroppedWhenItsSendQueueFills(t *testing.T) {
 	if disconnect.Reason != mnet.DisconnectSlow {
 		t.Fatalf("the connection was dropped for %q after %d queued frames, want %q; a drop for any other reason means this test did not exercise the full send queue",
 			disconnect.Reason, accepted, mnet.DisconnectSlow)
+	}
+	if disconnect.Detail != mnet.DetailSendBufferFull {
+		t.Fatalf("the connection was dropped for %q/%q after %d queued frames, want detail %q; the reason alone cannot say which of the two slow-client detectors fired",
+			disconnect.Reason, disconnect.Detail, accepted, mnet.DetailSendBufferFull)
 	}
 
 	// A dropped connection stays dropped, so the world cannot go on queueing
