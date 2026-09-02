@@ -80,33 +80,51 @@ right. None blocks anything.
   point" above, and it will read the same way: the player cannot tell an item apart from scenery
   except by clicking it. RuneScape has hover text and a right-click menu. Marque has a green box.
 
-## The inventory panel, and a compromise forced by the test harness
+## The inventory panel: fixed by M1k, kept here for the reason it was broken
 
-From M1d. Read the headless-viewport entry in `NOTES.md` first; this is its consequence.
+**Closed.** The panel is opaque and this is no longer a defect. The history stays because the
+shape of the mistake is worth recognising the next time it happens.
 
-**Scheduled as unit M1k. Proven live against a real windowed client and a real server, not
-inferred from the headless suite.** The shipped panel behaves three different ways depending on
-where you click it, and only one of them is intended:
+From M1d. Read the headless-viewport entry in `NOTES.md` first; the panel was its consequence.
 
-- **The chrome walks your character.** A click at (1144, 290), inside the drawn panel rect on a
+The shipped panel used to behave three ways depending on where you clicked it, and only one was
+designed:
+
+- **The chrome walked your character.** A click at (1144, 290), inside the drawn panel rect on a
   pixel reading opaque panel gray, produced `move_to (12.040, -9.565)` on the server and walked
-  the player 12.6 units. The panel's chrome is click-transparent and only slot widgets take
-  input. RuneScape's sidebar is opaque and nothing behind it is reachable. **This is not a design
-  choice, it is a workaround** for the 64x64 headless viewport in `NOTES.md`.
-- **Empty slots eat the click.** A slot `Button` keeps `MOUSE_FILTER_STOP` even when disabled, so
-  clicking an empty slot neither drops, nor walks, nor falls through. Nobody designed this; it is
-  the default doing something reasonable in a context nobody checked.
-- **Occupied slots drop**, which is the one intended behaviour.
-- **The panel is visible from the moment you join**, with 28 empty slots. It hides only before
-  the first `inventory` frame, and the server sends one inside the atomic welcome step. An
-  earlier version of this note said an empty panel hides itself, which is true only of the
-  uninformed state and understated the exposure.
+  the player 12.6 units. The panel's chrome was click-transparent and only slot widgets took
+  input. **That was never a design choice, it was a workaround** for the 64x64 headless viewport.
+- **Empty slots ate the click.** A slot `Button` keeps `MOUSE_FILTER_STOP` even when disabled.
+  Nobody designed that either; it is the default doing something reasonable in a context nobody
+  checked.
+- **Occupied slots dropped**, which was the one intended behaviour.
 
-**The fix is coupled, and that coupling is the unit.** `test_wiring`'s live half clicks at
-`CLICK_AT=(0.30, 0.72)`, which on the 64x64 headless viewport lands *inside* the visible panel,
-in the roughly 12px chrome strip below the last slot row. It reaches the world **only because the
-chrome is click-through**. An opaque panel breaks that suite unless `CLICK_AT` or the panel
-moves. Whoever fixes this inherits both halves.
+M1k made the `PanelContainer` `MOUSE_FILTER_STOP`, which collapses all three into RuneScape's
+rule: everything inside the panel's rect stops at the panel, and an occupied slot drops.
+**The second behaviour was not fixed, it was ratified** — an opaque sidebar swallowing a click
+on an empty slot is what opaque means.
+
+Re-measured live at the same three-region standard the defect was found at: clicks at
+(1144, 290), (1250, 699) and (1029, 500) each produced no `move_to` in the server's event log
+and zero displacement, while a world click in the same run walked the other player 6.2 units.
+
+**The fix was coupled, and that coupling was the unit.** `test_wiring`'s live half clicked at
+`CLICK_AT=(0.30, 0.72)`, which on the 64x64 headless viewport landed *inside* the panel and
+reached the world only because the chrome was click-through. `CLICK_AT` is now (0.30, 0.88), in
+the 16px strip below the panel, and both suites measure the panel's rect on a live frame and
+assert the constant misses it rather than trusting the arithmetic.
+
+**Settled while closing this, and not a defect.** The panel is visible from the moment you join,
+with 28 empty slots; it hides only before the first `inventory` frame, and the server sends one
+inside the atomic welcome step. RuneScape shows the inventory always, so this is correct and
+M1k deliberately left it. It matters more now than it did — an always-visible opaque panel is
+240x432 of permanently unreachable world — which is why the layout item below is the real
+remaining question. An earlier version of this note claimed an empty panel hides itself; that
+was true only of the uninformed state and understated the exposure.
+
+**What is still open here** is what M1d actually pointed at, and it is a layout problem rather
+than an input one:
+
 - **Nothing sizes the UI to the window.** The panel is laid out for 1280x720 and there is no
   stretch mode. That is a project-wide decision rather than a number, and it should be made once
   rather than per-element.

@@ -89,18 +89,31 @@ adding a headless test.
   time any frame runs, so a test that sets the size and asserts it immediately passes while the
   suite it protects runs at 64x64. `DisplayServer` is simply absent: it neither sets nor reports.
 
-  This is not a curiosity, it changed the product. A 28-slot inventory panel laid out for
-  1280x720 covers an entire 64x64 viewport, so under headless test it swallows every click meant
-  for the world. M1d shipped the panel's chrome as `MOUSE_FILTER_IGNORE` with only the slot
-  widgets taking clicks, and made an empty panel hide itself, both to keep other suites passing.
-  **A click on the panel's margin currently walks the player**, which RuneScape's opaque sidebar
-  would never do. That is a real compromise forced by a test-environment artifact, and it is
-  parked in `FOLLOW-UPS.md` rather than pretended to be a design choice.
+  This is not a curiosity, it changed the product, and then it changed the tests instead.
+  Measured: the panel is 240x432, anchored 16px off the bottom-right corner, so at 64x64 its
+  rect is `[P: (-192, -384), S: (240, 432)]` and it covers everything but a 16px strip along
+  the right and bottom edges. At the shipped 1280x720 the same panel occupies (1024, 272) to
+  (1264, 704).
+
+  **M1d chose the panel and lost.** It shipped the whole chrome as `MOUSE_FILTER_IGNORE`, with
+  only the slot widgets taking clicks, so that the suites which need to click the world still
+  had a world to click. The cost was a sidebar you could walk through, which RuneScape's never
+  is: a click on the drawn panel at (1144, 290) produced `move_to (12.040, -9.565)` and walked
+  the player 12.6 units.
+
+  **M1k chose the tests and won.** The panel is `MOUSE_FILTER_STOP` and opaque, and the suites
+  aim at the strip it does not cover — `test_wiring.gd`'s `CLICK_AT` is (0.30, 0.88), which is
+  (19.2, 56.32) at 64x64 and (384, 633.6) at 1280x720, outside the panel at both sizes. Both
+  suites measure the rect on a live frame and assert the constant misses it, so the two cannot
+  drift apart silently again. The lesson is not "avoid opaque UI"; it is that a 64x64 viewport
+  makes screen position a scarce resource, and the scarcity is best spent on the tests rather
+  than on the product.
 
   Corollary: a click outside the 64x64 rect reaches no `Control` at all, so a headless UI test
-  must aim inside it. And `Control.mouse_filter` defaults are not what you would guess.
-  `ColorRect` and `Panel` default to `STOP` (`0`); only `Label` defaults to `IGNORE` (`2`). A
-  `ColorRect` background swallows its own children's clicks.
+  must aim inside it — and now also outside the panel, which leaves a 16px strip to aim at.
+  And `Control.mouse_filter` defaults are not what you would guess. `ColorRect` and `Panel`
+  default to `STOP` (`0`); only `Label` defaults to `IGNORE` (`2`). A `ColorRect` background
+  swallows its own children's clicks.
 - **`%v` in a GDScript format string accepts only vector types, and a `Color` fails it at
   runtime while leaving the assertion green.** Reproduced against 4.7.2, verbatim:
 

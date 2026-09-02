@@ -172,6 +172,7 @@ func _ready() -> void:
 
 	await _test_clicking_an_occupied_slot_drops_it()
 	await _test_clicking_an_empty_slot_drops_nothing()
+	await _test_clicking_the_panel_chrome_reaches_nothing()
 
 	await _test_the_scripted_feed_still_builds_a_world()
 
@@ -211,14 +212,19 @@ func _test_the_panel_is_authored() -> void:
 		"and the grid's column count is authored, not computed (%d)"
 		% [0 if _grid == null else _grid.columns],
 	)
-	# Only the slots take clicks; the chrome lets them through to the world. A
-	# STOP here is what made two older suites fail when this panel first landed,
-	# because a headless viewport is 64x64 and this panel is bigger than that.
-	for chrome in [_panel, _panel.get_node("Margin"), _panel.get_node("Margin/Rows"), _grid]:
+	# The panel is opaque (M1k), and exactly one node makes it so: the panel
+	# stops, its containers stay IGNORE. A container that stopped too would work
+	# today and would move the boundary the next time the tree changed shape, so
+	# where a click stops stays a property of the panel alone.
+	_check(
+		_panel.mouse_filter == Control.MOUSE_FILTER_STOP,
+		"and the panel stops every click inside its rect, got filter %d" % _panel.mouse_filter,
+	)
+	for chrome in [_panel.get_node("Margin"), _panel.get_node("Margin/Rows"), _grid]:
 		var control := chrome as Control
 		_check(
 			control != null and control.mouse_filter == Control.MOUSE_FILTER_IGNORE,
-			"and %s lets a click through to the world behind it"
+			"and %s hands a missed click down to the panel rather than catching it"
 			% [null if control == null else control.name],
 		)
 
@@ -664,6 +670,84 @@ func _test_clicking_an_empty_slot_drops_nothing() -> void:
 	_watch()
 	_session.request_drop(-1)
 	_check(_drop_intents.is_empty(), "and a negative slot index is refused outright")
+
+
+## [b]The M1k claim.[/b] A click on the panel's chrome sends nothing at all.
+##
+## The shipped panel used to behave three ways depending on where you hit it:
+## an occupied slot dropped, an empty slot ate the click, and the chrome walked
+## your character, because everything but the slots was
+## [constant Control.MOUSE_FILTER_IGNORE] so the world showed through. Only the
+## first was designed. RuneScape's sidebar is opaque, so all three collapse into
+## one rule and this is the test of it.
+##
+## [b]The counterfactual is asserted, not assumed.[/b] "No `move_to`" is also
+## what a click into empty space produces, so the ground under the chrome point
+## is resolved with the picker first. The picker answers a ray, not the GUI, so
+## it reports what the click [i]would[/i] have hit — and then the click hits the
+## panel instead.
+func _test_clicking_the_panel_chrome_reaches_nothing() -> void:
+	await _feed(_inventory_frame(WIRE_SIZE, 1))
+	# A rebuilt grid has not sorted its children yet, and a widget with no rect
+	# is a rect that every point misses.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(_panel.visible, "the full-size panel is drawn")
+
+	var screen := _camera.get_viewport().get_visible_rect()
+	var panel_rect := _panel.get_global_rect()
+	print("INTERACTION panel rect %s in viewport %s" % [panel_rect, screen.size])
+
+	var chrome: Variant = _panel_chrome_point(panel_rect, screen)
+	_check(chrome != null, "the panel draws chrome inside the viewport to click on")
+	if chrome == null:
+		return
+	var at: Vector2 = chrome
+	_check(
+		_picker.pick_ground(at) != null,
+		"there is ground under %v, so a click that got through would walk the player" % at,
+	)
+
+	_watch()
+	await _left_click(at)
+	_check(
+		_move_to_intents.is_empty(),
+		"but a click on the panel's chrome at %v sends no move_to, got %s"
+		% [at, _move_to_intents],
+	)
+	_check(
+		_pickup_intents.is_empty() and _drop_intents.is_empty(),
+		"and no pickup and no drop either: chrome is not a control, it is a wall",
+	)
+
+
+## A point inside the panel's drawn rect, inside the viewport, and on no slot
+## widget, or null when the panel draws no such point.
+##
+## Derived rather than written down, because the panel's size comes from the
+## theme and the slot metrics. A literal would go stale the first time either
+## moved, and it would go stale [i]silently[/i]: a point that had drifted onto a
+## slot still sends no `move_to`, so the assertion above it would keep passing
+## while testing something else entirely.
+func _panel_chrome_point(panel_rect: Rect2, screen: Rect2) -> Variant:
+	var slots: Array[Rect2] = []
+	for index in _panel.slot_count():
+		var slot := _panel.slot_at(index)
+		if slot != null:
+			slots.append(slot.get_global_rect())
+
+	for inset: Vector2 in [Vector2(4, 4), Vector2(4, 20), Vector2(20, 4), Vector2(20, 20)]:
+		var candidate := panel_rect.end - inset
+		if not screen.has_point(candidate) or not panel_rect.has_point(candidate):
+			continue
+		var on_slot := false
+		for rect in slots:
+			if rect.has_point(candidate):
+				on_slot = true
+				break
+		if not on_slot:
+			return candidate
+	return null
 
 
 # --------------------------------------------------------------------------

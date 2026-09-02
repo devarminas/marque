@@ -28,16 +28,26 @@ extends PanelContainer
 ## would be showing a fact the client invented, and it would be wrong every time
 ## the server refused (CLAUDE.md, "Client sends intents, never facts").
 ##
-## [b]Only the slots take clicks.[/b] The panel, its margin, its rows and its
-## grid are authored with [constant Control.MOUSE_FILTER_IGNORE], so a click on
-## the panel's chrome falls through to the world behind it and only the slot
-## widgets themselves consume one. The alternative — an opaque panel that eats
-## every click inside its rect, which is RuneScape's behaviour — is the nicer
-## rule and is not what ships here, because a headless Godot viewport is 64x64
-## and a 28-slot panel covers all of it: an opaque panel makes the world
-## unclickable in every automated run, including two suites that predate this
-## one. Revisit when the UI grows a real frame; it wants a click-blocking
-## background of its own rather than a container that happens to be opaque.
+## [b]The panel is opaque.[/b] It is authored with
+## [constant Control.MOUSE_FILTER_STOP], so every click inside its drawn rect
+## stops here: an occupied slot drops, and everything else — chrome, margin,
+## heading, an empty slot — is swallowed. Nothing behind the panel is reachable
+## through it, which is RuneScape's sidebar and so is the answer this game takes
+## (STANDING-ORDERS.md, "Deciding without the human").
+##
+## Exactly one node blocks, and it is this one. [code]Margin[/code],
+## [code]Rows[/code] and [code]Slots[/code] stay
+## [constant Control.MOUSE_FILTER_IGNORE], so a click that misses a slot falls
+## past them to the panel instead of being caught by whichever container
+## happened to be under the cursor. Where a click stops is then a property of
+## the panel alone, and rearranging the containers cannot change it.
+##
+## [b]M1d shipped the opposite[/b], the whole chrome IGNORE, because a headless
+## Godot viewport is 64x64 (NOTES.md) and this panel covers all but a 16px strip
+## of it: an opaque panel left no world for the older suites to click. That was
+## a test-harness workaround wearing the shape of a design decision, and M1k
+## undid it. The suites now aim at the strip the panel does not cover, which is
+## what `test_wiring.gd`'s [code]CLICK_AT[/code] is for.
 ##
 ## [b]It listens to nothing.[/b] `session.gd` owns every connection between the
 ## network and the scene, and it calls [method apply] and hears
@@ -165,10 +175,10 @@ func occupied_slot_count() -> int:
 ## [b]A panel with no slots is hidden, not drawn empty.[/b] There is nothing to
 ## show before the first `inventory`, and an empty box is not an inventory with
 ## nothing in it — it is the absence of anything the server has said. It also
-## has teeth: a [Control] eats every click inside its rect, so a panel showing
-## nothing would sit in front of the world stopping the player walking, for as
-## long as the client is offline. That is not a cosmetic difference, and it
-## caught two existing suites when this panel first went in.
+## has teeth, and more of them since M1k: this panel is opaque, so a panel drawn
+## while the client is uninformed would sit in front of the world swallowing
+## every click inside its rect for as long as the client stays offline. Hiding
+## it is what keeps the world clickable before the first frame arrives.
 func _rebuild(size: int) -> void:
 	if slot_grid == null:
 		push_error("InventoryPanel: the scene did not assign a slot grid")

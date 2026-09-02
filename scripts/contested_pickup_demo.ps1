@@ -98,9 +98,9 @@
     Where the one seeded item lies. Both players spawn at the origin and walk at
     one speed, so any position makes them equidistant; this one is chosen to
     draw in the upper-left of the viewport, well clear of the inventory panel,
-    whose chrome is click-through today (unit M1k) and would turn a click on the
-    item into a walk. The client refuses to click through the panel rather than
-    trusting this default.
+    which is opaque (unit M1k) and would swallow a click aimed at an item drawn
+    underneath it. The client checks the item's screen position against the
+    panel's rect and fails rather than trusting this default.
 
 .PARAMETER DropClick
     Where the winner clicks the ground before dropping, as a viewport fraction.

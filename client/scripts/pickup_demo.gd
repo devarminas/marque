@@ -336,14 +336,18 @@ func _capture(index: int) -> bool:
 ## Where on screen [param body] is drawn, or null when it is somewhere this
 ## script refuses to click.
 ##
-## [b]Two refusals, and both are live defects rather than hypotheticals.[/b] A
-## body behind the camera unprojects to a point in front of it, so the depth
-## test comes first. And the inventory panel's chrome is click-through today
-## (unit M1k): a click that lands on it walks the player instead of picking
-## anything up, so a run whose item happens to draw under the panel would fail
-## on the server saying no `pickup` ever arrived, which is a true statement
-## about a scenario that never happened. Saying so here is the difference
-## between a diagnosed run and an hour of debugging the harness.
+## [b]Two refusals, and neither is hypothetical.[/b] A body behind the camera
+## unprojects to a point in front of it, so the depth test comes first. And the
+## inventory panel is opaque (M1k): a click that lands on it stops there, so a
+## run whose item happens to draw under the panel would fail on the server
+## saying no `pickup` ever arrived — a true statement about a scenario that
+## never happened. Saying so here is the difference between a diagnosed run and
+## an hour of debugging the harness.
+##
+## The refusal predates the panel being opaque and did not change with it. Only
+## the ending changed: the click used to walk this player instead of picking
+## anything up, and now it does nothing at all. Either way the item was never
+## clicked, so either way this is not a run worth reporting on.
 func _screen_position_of(body: Node3D) -> Variant:
 	var camera := _root.get_viewport().get_camera_3d()
 	if camera == null:
@@ -360,9 +364,9 @@ func _screen_position_of(body: Node3D) -> Variant:
 		return null
 	if _panel.visible and _panel.get_global_rect().has_point(screen):
 		_fail(
-			"item %s draws at (%f, %f), under the inventory panel %s, whose chrome is "
+			"item %s draws at (%f, %f), under the inventory panel %s, which is opaque "
 			% [body.name, screen.x, screen.y, _panel.get_global_rect()]
-			+ "click-through (M1k): the click would walk this player, not pick anything up"
+			+ "(M1k): the click would stop at the panel and never reach the item"
 		)
 		return null
 	print("DEMO itemscreen %f %f %f %f" % [screen.x, screen.y, rect.size.x, rect.size.y])
