@@ -357,15 +357,28 @@ func (c *Conn) readPump(h *Hub) (reason, detail string) {
 //
 // A context error is deliberately not special-cased. It used to map to closed,
 // on the reasoning that readPump passes context.Background() so no deadline of
-// ours can expire. That reasoning was wrong, and wrong in this unit's own
-// domain. The library derives its own five-second contexts for control frames
-// from whatever it is handed (read.go:303, write.go:277), arms a close timer on
-// any context with a Done channel (conn.go:171), and finishRead's last act is
-// to overwrite the error with ctx.Err() (read.go:255). So a peer that pings
-// while its receive side is jammed surfaces DeadlineExceeded here -- a slow
-// client, which the old branch logged as a clean logout. That is a detector's
-// observation overwriting a cause, rule 2's failure mode arriving through a
-// door nobody had checked.
+// ours can expire. The conclusion was wrong, and wrong in this unit's own
+// domain: a slow client was logged as a clean logout.
+//
+// Observed, by TestAJammedPongCondemnsTheClientAsPeerGone: a peer whose receive
+// side is jammed pings, the read goroutine tries to write the pong, and after
+// five seconds the read fails with
+//
+//	failed to handle control frame opPing: failed to write control frame
+//	opPong: failed to acquire lock: context deadline exceeded
+//
+// Read, and corrected once: the deadline is the library's, not ours. writeControl
+// wraps whatever context it is handed in a five-second one (write.go:277) and
+// writeFrame's first act is writeFrameMu.lock(ctx), which returns ctx.Err()
+// wrapped when the wait expires (conn.go:291). The mutex is held for the whole
+// of the jammed data-frame write, so the pong waits behind it. Nothing closes
+// the connection at that point -- our own close does, after this classifies.
+//
+// An earlier version of this comment blamed finishRead's ctx.Err() overwrite at
+// read.go:255. That was wrong: finishRead tests the context it was passed, and
+// on this path that is readPump's context.Background(), whose Err is always nil.
+// Same symptom, wrong mechanism, which is the combination that feels confirmed
+// because the symptom really does happen.
 func readReason(err error) (reason, detail string) {
 	var ce websocket.CloseError
 	if errors.As(err, &ce) {

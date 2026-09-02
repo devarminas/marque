@@ -20,13 +20,25 @@ import (
 // line above.
 //
 // The peer here is the opposite: alive, handshaken, answering at the TCP level,
-// and simply never calling Read. Frames pile up in its kernel receive buffer,
-// then in the server's send buffer, then writePump blocks in ws.Write, and only
-// then does the 64-frame channel fill. Every layer in front of the branch has
-// to be full before the branch is reachable at all, which is why this needs
-// large frames rather than many: volume alone would have to outrun the socket
-// buffers for long enough to run into the 5s write timeout instead, and a drop
-// for the wrong reason is not this test passing.
+// and simply never calling Read.
+//
+// This comment used to claim that every layer in front of the branch fills
+// first -- kernel receive buffer, then socket buffer, then writePump blocked in
+// ws.Write, and only then the channel. That is not what happens, and the test's
+// own output says so: it reports 65 accepted frames, which is the 64 channel
+// slots plus the one writePump took. A jammed socket absorbs about a megabyte
+// on this machine, sixteen more frames of this size, and that number never
+// appears. The tight Send loop below simply outruns writePump, which is a
+// non-blocking channel send racing a goroutine that has to be scheduled at all.
+//
+// So the socket is never jammed and the peer's refusal to read is not what
+// makes this pass. The large frames still earn their place as insurance: if the
+// scheduler does give writePump a turn, a 64KiB frame keeps it blocked instead
+// of letting it drain the queue faster than the loop fills it.
+//
+// What this leaves uncovered is worth naming rather than implying. Nothing here
+// proves that a peer which stops reading is eventually dropped -- only that a
+// full channel drops one. That gap is pre-existing and parked, not fixed here.
 //
 // The hub is driven directly rather than through newHarness because the branch
 // is the net layer's, and the harness owns no way to hand a test the *Conn that
