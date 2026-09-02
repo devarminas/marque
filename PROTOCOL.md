@@ -532,24 +532,44 @@ is precisely the confusion the cause-over-detector rule exists to prevent. Fix i
 ever does that, by latching at the world's decision rather than at dequeue.
 
 **The server owns the write deadline for data frames, and that is what makes the latch true
-rather than likely.** Handed a context with a deadline, `coder/websocket` v1.8.15 closes the whole
-connection from its own timer goroutine and only then returns the error (`conn.go`,
+rather than likely.** Handed a context with a deadline, `coder/websocket` v1.8.15 arms a timer
+that closes the whole connection and only then returns the error to the caller (`conn.go:171`,
 `setupWriteTimeout`). So the read pump wakes on an already-dead socket and can condemn it
 `peer_gone` before the write pump has classified anything: the consequence overwrites the cause,
-which is the exact failure rule 2 forbids. **Measured, not reasoned about — the ordering test
-failed five runs in ten.** The write pump therefore runs its own timer, condemns first, and lets
-the resulting close abort the write. By the time anything else can see a dead socket the reason
-is already recorded.
+which is the exact failure rule 2 forbids. The write pump therefore runs its own timer, condemns
+first, and lets the resulting close abort the write. By the time anything else can see a dead
+socket the reason is already recorded.
 
-**"For data frames" is a real limit, not throat-clearing.** The library derives its own
-five-second contexts for *control* frames from whatever it is handed, `context.Background()`
-included (`read.go:303`, `write.go:277`), and arms its close timer on any context with a `Done`
-channel (`conn.go:171`). We cannot take those deadlines away and cannot shorten them. So a ping
-or pong that jams still dies on the library's clock, on the read goroutine, and surfaces as a
-context error — which is why `readReason` classifies a context error as `peer_gone` and not as
-`closed`. Reporting it as a clean logout is the same rule-2 failure wearing different clothes,
-and the first version of this section shipped exactly that bug because it reasoned that
-`context.Background()` has no deadline instead of checking what the library does with it.
+**The race is measured; the mechanism above is read.** Reverting the fix makes the ordering test
+fail repeatedly and reproducibly — five runs in ten when this was written, three in ten and six
+in twenty when a reviewer reran it on a differently loaded machine, every failure the identical
+line. That the *cause* is `setupWriteTimeout`'s close timer is inference from the source, and this
+file has been wrong about this library's internals three times. It is flagged rather than
+polished because the fix does not depend on it: owning the deadline removes the race whatever
+arms the teardown.
+
+**"For data frames" is a real limit, not throat-clearing.** `writeControl` wraps whatever context
+it is handed in a five-second one (`write.go:277`), `context.Background()` included, and
+`writeFrame`'s first act is `writeFrameMu.lock(ctx)`, which returns that context's error wrapped
+when the wait expires (`conn.go:291`). The write mutex is held for the whole of a jammed data
+frame, so a pong queues behind it and dies on the library's clock, on the *read* goroutine. We can
+neither remove that deadline nor shorten it. It reaches the read pump as
+`failed to acquire lock: context deadline exceeded` — which is why `readReason` classifies a
+context error as `peer_gone` and not as `closed`. Reporting it as a clean logout is the same
+rule-2 failure wearing different clothes, and the first version of this section shipped exactly
+that bug because it reasoned that `context.Background()` has no deadline instead of checking what
+the library does with it. `TestAJammedPongCondemnsTheClientAsPeerGone` stages it end to end.
+
+**This paragraph named the wrong mechanism once, and the correction is the point.** It previously
+blamed `finishRead`'s `ctx.Err()` overwrite at `read.go:255` and the connection-closing timer at
+`conn.go:171`. Both were wrong here. `finishRead` tests the context it was *passed*, which on this
+path is `readPump`'s `context.Background()`, whose `Err` is always nil; and nothing in the library
+closes the connection in this scenario — our own `close` does, after the classification. **Three
+separate mechanisms for this library were established by reading during M1f and all three were
+wrong, while the behaviour each described was real.** That is the combination worth naming: the
+symptom happens, so the explanation feels confirmed, and nobody re-checks it. Against this
+dependency, claims about *what happens* are cheap to observe and claims about *why* are not
+trustworthy until they are.
 
 Two dependency claims sit under that, and both were probed against a real jammed peer rather than
 assumed. A deadline-bearing write *does* fail with something `errors.Is`-comparable to
