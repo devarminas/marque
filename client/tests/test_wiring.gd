@@ -86,10 +86,20 @@ const CLOCK_SKEW_TOLERANCE := 0.95
 ## 16px off the bottom-right corner, so it covers (0, 0) to (48, 48) and leaves
 ## only a 16px strip along the right and bottom edges. This lands at (19.2,
 ## 56.32), in the bottom strip, 8px clear of the panel and 7px clear of the
-## viewport edge; a click outside the viewport reaches no [Control] and no
-## picker at all, so both margins matter. At the shipped 1280x720 it is (384,
-## 633.6) against a panel occupying (1024, 272) to (1264, 704), which misses by
-## a wider margin still.
+## viewport edge. At the shipped 1280x720 it is (384, 633.6) against a panel
+## occupying (1024, 272) to (1264, 704), which misses by a wider margin still.
+##
+## [b]Of those two margins only the panel's is load-bearing.[/b] Probed against
+## 4.7.2 on the 64x64 viewport: [method Viewport.push_input] delivers a press
+## whatever its position, and the picker fires exactly when the point is off the
+## panel and the ray meets ground — the viewport rect never enters into it.
+## (19.2, 70), (70, 30) and (19.2, 500) all sit outside the viewport and all
+## reached the picker; (-10, 30) and (-50, 40) sit outside it too and were
+## swallowed, because the panel's rect extends past the viewport and they are
+## inside it. So a point outside the viewport would still walk the player, and
+## would still satisfy a test that only counted intents. Staying inside is about
+## clicking where a player's mouse could actually be, not about the click
+## surviving the trip.
 ##
 ## The old value, (0.30, 0.72), landed at (19.2, 46.08) — inside the panel, and
 ## it reached the world only because the chrome was click-through. That is the
@@ -828,12 +838,23 @@ func _is_idle(client: Client, id: int) -> bool:
 	return avatar.is_idle_at_tick(client.session.tick_clock().estimated_tick())
 
 
+## Presses and releases the left button at a viewport position.
+##
+## [b]The release is not decoration.[/b] The picker acts on the press alone, so
+## a press-only helper looks sufficient and is not: a press over a [Control]
+## leaves that Control holding the viewport's mouse focus, and where the next
+## press goes then depends on an engine re-resolution rule nobody here has
+## probed. Since M1k one of the clicks below deliberately lands on the opaque
+## panel and the next one deliberately does not, so the sequence would rest on
+## that rule. Releasing ends the interaction instead of relying on it.
+## `test_interaction.gd`'s `_click_slot` and `pickup_demo.gd` already send both.
 static func _push_left_click(viewport: Viewport, screen_position: Vector2) -> void:
-	var press := InputEventMouseButton.new()
-	press.button_index = MOUSE_BUTTON_LEFT
-	press.pressed = true
-	press.position = screen_position
-	viewport.push_input(press)
+	for pressed: bool in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = pressed
+		event.position = screen_position
+		viewport.push_input(event)
 
 
 # --------------------------------------------------------------------------
