@@ -501,7 +501,7 @@ either side of the wire branches on a detail, and the server writes both into
 
 | `reason` | `detail` | What happened |
 |---|---|---|
-| `closed` | — | The peer sent a close frame. Not a condemnation. |
+| `closed` | — | The peer sent a close frame, and nothing else produces this. Not a condemnation. |
 | `slow_client` | `send_buffer_full` | The 64-frame send queue was already full. |
 | `slow_client` | `write_timeout` | One frame's write outlived the five-second write timeout. |
 | `peer_gone` | `read_error` | A read failed on something other than a close frame. |
@@ -520,14 +520,36 @@ Revisit if a class of write failure ever turns out to mean something a server ca
 differently from a vanished peer. Nothing in M1 distinguishes them, and inventing a third cause
 before anything can use it would be inventing a distinction the log's reader cannot act on.
 
-**The server owns the write deadline, and that is what makes the latch true rather than likely.**
-Handed a context with a deadline, `coder/websocket` v1.8.15 closes the whole connection from its
-own timer goroutine and only then returns the error (`conn.go`, `setupWriteTimeout`). So the read
-pump wakes on an already-dead socket and can condemn it `peer_gone` before the write pump has
-classified anything: the consequence overwrites the cause, which is the exact failure rule 2
-forbids. **Measured, not reasoned about — the ordering test failed five runs in ten.** The write
-pump therefore runs its own timer, condemns first, and lets the resulting close abort the write.
-By the time anything else can see a dead socket the reason is already recorded.
+**`protocol_error` latches when the close is dequeued, not when the world decides it.** A refusal
+that closes the connection is queued behind the `error` frame explaining it, so that the client
+is told why before the socket goes. The latch therefore does not hold the reason during that gap.
+A client that reads the `error` and closes cleanly in reaction can get its own close frame
+latched as `closed` first, and the server loses the record that it was hung up on for a protocol
+violation. **This cannot happen today**: the Godot client only warns on a server `error` and does
+not close. It is recorded because the obvious next behaviour for a client — close when told you
+sent garbage — is the one that triggers it, and because a violation logged as an ordinary logout
+is precisely the confusion the cause-over-detector rule exists to prevent. Fix it, if a client
+ever does that, by latching at the world's decision rather than at dequeue.
+
+**The server owns the write deadline for data frames, and that is what makes the latch true
+rather than likely.** Handed a context with a deadline, `coder/websocket` v1.8.15 closes the whole
+connection from its own timer goroutine and only then returns the error (`conn.go`,
+`setupWriteTimeout`). So the read pump wakes on an already-dead socket and can condemn it
+`peer_gone` before the write pump has classified anything: the consequence overwrites the cause,
+which is the exact failure rule 2 forbids. **Measured, not reasoned about — the ordering test
+failed five runs in ten.** The write pump therefore runs its own timer, condemns first, and lets
+the resulting close abort the write. By the time anything else can see a dead socket the reason
+is already recorded.
+
+**"For data frames" is a real limit, not throat-clearing.** The library derives its own
+five-second contexts for *control* frames from whatever it is handed, `context.Background()`
+included (`read.go:303`, `write.go:277`), and arms its close timer on any context with a `Done`
+channel (`conn.go:171`). We cannot take those deadlines away and cannot shorten them. So a ping
+or pong that jams still dies on the library's clock, on the read goroutine, and surfaces as a
+context error — which is why `readReason` classifies a context error as `peer_gone` and not as
+`closed`. Reporting it as a clean logout is the same rule-2 failure wearing different clothes,
+and the first version of this section shipped exactly that bug because it reasoned that
+`context.Background()` has no deadline instead of checking what the library does with it.
 
 Two dependency claims sit under that, and both were probed against a real jammed peer rather than
 assumed. A deadline-bearing write *does* fail with something `errors.Is`-comparable to
