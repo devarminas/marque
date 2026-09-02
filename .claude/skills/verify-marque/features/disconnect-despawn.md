@@ -66,12 +66,26 @@ Preconditions:
   `detail` is absent, not empty, wherever only one detector could have fired. A test
   that asserts the key exists on every line is wrong.
 
-  **The pairing for a quitting Godot client is inherited, not freshly observed.**
-  Before M1f a client that quit on its own schedule logged `read_error`, which was
-  the old name for "the read failed and it was not a close frame" — so the client
-  does not close cleanly. That same failure now logs `reason: "peer_gone"` with
-  `detail: "read_error"`. The translation is mechanical and nobody has re-run a live
-  client to confirm it. If you drive `run.ps1`, confirm it and say so.
+  **A quitting Godot client logs `peer_gone`/`read_error`. Observed live, M1f.**
+  `two_client_demo.ps1` against `4c09af7`, two real windowed clients, exit 0, final
+  line `TWO CLIENT DEMO OK`:
+
+      GAMELOG {"detail":"read_error","ev":"client_disconnected","player":2,"reason":"peer_gone","t":70}
+      GAMELOG {"detail":"read_error","ev":"client_disconnected","player":1,"reason":"peer_gone","t":71}
+
+  The cause is `peer_gone` because `main.gd`'s quit path is `get_tree().quit()` and
+  the file contains no `net.close()` at all: the socket just dies, no close frame is
+  ever sent, and the read pump has nothing to tell it the peer meant to leave.
+
+  **The interop suite logs `closed` for what looks like the same event, and that is
+  not a contradiction. Read this before filing a defect.** `interop_test.ps1`
+  produces seven `client_disconnected` events and every one says `closed`, because
+  `test_interop.gd` calls `net.close()` explicitly at `:236` and `:731`. Its clients
+  send a close frame; the shipped client does not. **Both results are correct, and
+  they differ because the clients behave differently, not because the server is
+  inconsistent.** An agent who checks only the suite concludes the real client closes
+  cleanly, which is false — that inference was drawn and caught during M1f. To learn
+  what the shipped client does, drive the demo, not the suite.
 - **The first condemnation latches, so a `reason` is not always the last thing that
   went wrong.** A client dropped for being slow has its socket torn down, and the
   read pump then sees that teardown as a read error. The line still says
