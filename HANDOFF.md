@@ -28,14 +28,33 @@ which is why `contested_pickup_demo.ps1` legitimately failed about 38% of idle-m
 Alongside it, two doc-only comment-cull PRs merged (`server/internal/net` and `client/`), each
 verified as token-identical / harness-identical to its pre-cull baseline.
 
-**One unit is open and it does not block: tick-anchor alignment.** Client-only fix for the skew
-M1j found and correctly left out of scope. `COORDINATION.md`'s M1 section has the full
-measurement M1j took (the three sync checks, their baseline distribution, and why `:718` stays
-strict); read it there rather than working from a summary. Acceptance is behavioral, not a moved
-number: the same 21-run measurement M1j took, same script, same idle-machine discipline, with
-`contested_pickup_demo.ps1`'s pass rate going to approximately 100% rather than ~62%. No
-`server/` change, no `PROTOCOL.md` change, no heartbeat or `seq` field — those are M2 and stay
-reserved. Tick rate stays 150ms.
+**One unit is written, pushed, and unverified: tick-anchor alignment.** Branch
+`tick-anchor-align` at `9974695`, worktree `wt-tick-align`, no PR opened. Client-only fix for the
+skew M1j found and correctly left out of scope. `COORDINATION.md`'s M1 section carries M1j's full
+measurement.
+
+**Do not merge it, and do not treat the writer's report as a verdict.** Its evidence is unusually
+strong for a writer's own: it noticed the unforced 21-run table could not prove anything at a
+1-in-21 flake rate, built a sweep that slides the anchor gap across a whole tick, and got 11 of 15
+runs skewed before against 0 of 15 after in the hot band. That is still a writer proving its own
+fix, which this program does not accept.
+
+**It is blocked on model availability, and the blocker is structural.** Three verifier spawns died
+on API 529s, all on `fable`. The writer was `opus`, and `sonnet` and `haiku` are the same family,
+so `fable` is the only model that satisfies the different-model-family rule. While it is
+unavailable that rule cannot be satisfied at all. Three honest ways forward, and the choice is the
+human's:
+
+- **Wait for `fable`.** Nothing rots. This is the recommended one.
+- **Merge on the writer's evidence**, with the PR body saying plainly that no independent verdict
+  exists.
+- **Verify on `sonnet`** and record the weaker independence in the ledger.
+
+**Do not quietly substitute a same-family verifier.** That produces something shaped like a gate
+that is not one, which is worse than an honest gap.
+
+Its constraints, for whoever picks it up: no `server/` change, no `PROTOCOL.md` change, no
+heartbeat or `seq` field, since those are M2 and stay reserved. Tick rate stays 150ms.
 
 Then **M2**: reconnect, sequence numbers, server-side dedupe. `PROTOCOL.md`'s **M2** markers name
 what is reserved.
@@ -97,4 +116,14 @@ suites tolerate the load. Only the windowed demos do not.
 **`gh pr merge` may be blocked by the permission classifier.** If it is, hand the human the
 command rather than working around it.
 
-Nothing is outstanding for the human.
+**One decision is outstanding for the human**, and it is the `tick-anchor-align` verifier choice
+above. Nothing else is, and nothing is blocked behind it: `main` is green and M2 can start
+without it.
+
+**The first thing M2 needs is already parked.** `PROTOCOL.md`'s Clock section says the client's
+tick estimate "necessarily lags the server by roughly one-way latency". It lags by that **plus a
+per-client uniform `[0, tick_ms)` phase term**, which is the mechanism the tick-anchor unit exists
+to work around and the reason "wait for tick N" reads like a rendezvous when it is not. A
+client-only unit had no standing to fix it. M2's heartbeat is exactly the tick-bearing message
+that would, so correct that sentence as part of M2 rather than after it. `FOLLOW-UPS.md`, *Lost
+rationale, not tuning*, has it written down.
