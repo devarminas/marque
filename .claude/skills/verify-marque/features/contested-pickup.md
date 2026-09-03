@@ -21,6 +21,10 @@ drops it, and the item reappears there in both worlds.
   evidence that both frames reached both clients.
 - `pickup-walk-plausible` — the winner's walk to the item took as many ticks as
   walking that far takes, not one tick.
+- `pickup-loser-halted` — the loser's halt, the one-point `path_assigned` the server
+  sends it on the tick it loses, puts it within `PickupRange` of the item. Every other
+  assertion about the loser is about what it did not receive, and a loser left standing
+  at the origin satisfies all of them.
 - `drop-coordinates` — the dropped item's `item_spawned` x and z equal where its
   dropper arrived, and that point is neither the origin nor where the item was seeded.
 - `seed-coordinates` — the seeded item's `item_spawned` x and z equal what `-item`
@@ -128,6 +132,22 @@ Preconditions:
   race to connect. Both labels have won here. Assert that exactly one won, never which.
 - **The clients agree on a moment through the server's tick clock**, not wall-clock:
   each reads `estimated_tick()` when it can first see both players and the item, adds a
-  fixed lead, and prints the sum. The harness asserts both printed the same number, so
-  "the two clients aimed at different ticks" is a distinct failure from "the server did
-  not resolve a contest". Observed identical on every run so far.
+  fixed lead, and prints the sum. "The two clients aimed at different ticks" is a
+  distinct failure from "the server did not resolve a contest".
+
+  **The two numbers are not identical, and this bullet used to claim they were observed
+  identical on every run.** Measured over 21 idle runs at M1j, they differ by exactly one
+  tick on 15 of them, by nothing on the other 6, and by more than one on none. The cause
+  is in the client: each anchors its own `TickClock` at its own `welcome` and
+  `estimated_tick()` floors the elapsed time, so two clients anchored at different
+  instants inside one 150ms tick cross the floor boundary at different moments and read
+  different numbers for the same instant. A one-tick disagreement is the expected
+  artifact of that, not a fault, so the harness tolerates one tick here and nothing
+  wider.
+
+  **What decides whether a run was a contest is a server-side number, not this one.**
+  The two clients printing the same tick does not mean their intents landed in the same
+  server tick, and printing different ticks does not mean they did not: over those same
+  21 runs the server assigned the two paths on the same tick 13 times, and 7 of those 13
+  were runs whose clients had printed different numbers. The check that decides the
+  milestone is the one on `path_assigned` start ticks.

@@ -161,6 +161,27 @@ $MinDropDisplacement = 2.0
 # sixteen and fails by a mile.
 $MaxWalkTickError = 2
 
+# How far apart the two clients' declared aim ticks may be before their clocks
+# count as disagreeing about more than a boundary.
+#
+# One tick, and the reason is in the client rather than the server. Each client
+# anchors its own TickClock at its own `welcome` and `estimated_tick()` floors
+# the elapsed time, so two clients anchored at different instants inside one
+# 150ms tick sit either side of a floor boundary and read numbers one apart for
+# the same moment. Measured over 21 idle runs at M1j: one apart on 15, equal on
+# 6, wider on none. Seven of those 15 had the server assign both paths on the
+# same tick regardless, so refusing them cost real contests and caught nothing.
+# What refuses a sequence is the start_tick check further down, not this one.
+$MaxAimTickSkew = 1
+
+# How near a player must be to a ground item to take it, in world units. This is
+# `PickupRange` in server/internal/game/items.go.
+#
+# Unlike tick_ms and walk_speed it is not carried in `server_started`, so no run
+# can hand it back and the check below cannot be recalibrated against the binary
+# it is judging. It is the one server constant this script has to trust.
+$ExpectedPickupRange = 0.5
+
 $repo = Split-Path -Parent $PSScriptRoot
 $serverDir = Join-Path $repo "server"
 $clientDir = Join-Path $repo "client"
@@ -529,18 +550,25 @@ try {
         Add-Failure "both clients report joining as player $($ids[0]); they are not two players"
     }
 
-    # The synchronisation, checked before anything that depends on it. Two
-    # clients that picked different moments to click did not run a contest, and
-    # that is a different failure from a server that failed to resolve one.
+    # The clients' own account of the moment they aimed at.
+    #
+    # This is a client-side number and it does not decide whether the run was a
+    # contest. It is each client's own floored estimate of a shared tick, and two
+    # clients anchored either side of a floor boundary report numbers one apart
+    # for the same instant. A one-tick spread is that quantisation, not a failed
+    # contest, so it is printed and tolerated; the server-side start_tick check
+    # below is the one that refuses a sequence. A wider spread is a clock that is
+    # actually wrong, and this is where that shows up.
     $clickTicks = @($running | ForEach-Object { $_.Report.ClickTick })
     Write-Host ("==> clients chose click ticks {0} and {1} (sync ticks {2} and {3})" -f `
         $clickTicks[0], $clickTicks[1], $running[0].Report.SyncTick, $running[1].Report.SyncTick)
     if ($clickTicks[0] -lt 0 -or $clickTicks[1] -lt 0) {
         Add-Failure "a client never reported the tick it chose to click on"
-    } elseif ($clickTicks[0] -ne $clickTicks[1]) {
-        Add-Failure ("the two clients aimed at different server ticks, $($clickTicks[0]) and " +
-            "$($clickTicks[1]); they did not contest the item and this run says nothing about " +
-            "what the server does when they do")
+    } elseif ([math]::Abs($clickTicks[0] - $clickTicks[1]) -gt $MaxAimTickSkew) {
+        Add-Failure ("the two clients aimed at server ticks $($clickTicks[0]) and " +
+            "$($clickTicks[1]), $([math]::Abs($clickTicks[0] - $clickTicks[1])) apart. Anchoring " +
+            "alone separates two clocks by at most one tick, so they disagree about more than " +
+            "which side of a tick boundary they are on and neither one's aim can be trusted.")
     }
 
     # ------------------------------------------------------------------
@@ -729,10 +757,77 @@ try {
         $gap = [int]$lost[0].t - [int]$resolved[0].t
         Write-Host ("==> server: the contest resolved on tick {0} and was lost on tick {1}; gap {2} tick(s)" -f `
             $resolved[0].t, $lost[0].t, $gap)
+        # This gap does not back up the start_tick check above, and it is worth
+        # saying so where someone would otherwise assume it. resolvePickup tests
+        # liveness before range, so a loser is condemned at whatever distance it
+        # is standing at, on the tick the winner takes the item. That is gap 0,
+        # and it holds only because the loser is later in join order than the
+        # winner: step() resolves over w.order, so the later joiner is visited
+        # second, in the same pass the item changes hands. An earlier-joining
+        # loser would be visited first, see the item still live and itself out
+        # of range, and return unresolved; it is condemned on the next tick
+        # instead, at gap 1. The loser is always the later joiner here, because
+        # both players enter PickupRange on the same tick and whichever of them
+        # w.order reaches first is by construction the winner. Measured at M1j:
+        # 0 on all 21 idle runs, including all 8 whose paths started a tick
+        # apart. It catches a condemnation deferred to a later tick, and nothing
+        # about the skew.
         if ($gap -ne 0) {
             Add-Failure ("the item was taken on tick $($resolved[0].t) and lost on tick $($lost[0].t), " +
                 "$gap tick(s) apart. A same-tick contest is decided inside one pass of the tick loop; " +
                 "this one was decided across ticks, so the two players did not reach the item together.")
+        }
+    }
+
+    # ------------------------------------------------------------------
+    # Where the loser stopped.
+    #
+    # Every other assertion here about the loser is about what it did not
+    # receive: no pickup_resolved, no slot. A build that condemned the loser
+    # while it still stood at the origin satisfies all of them, and one did.
+    # `pickup_lost` carries `player` and `item` and no coordinates, so the halt
+    # losePickup assigns on the same tick is the only server-side record of
+    # where the loser was: a path of one point, at the position it stopped at.
+    #
+    # The loser is not standing on the item. resolvePickup tests liveness before
+    # range, so the loser is condemned wherever it happens to be, and here that
+    # is within PickupRange and one tick short of arriving. It reads that way
+    # only because the loser is later in join order than the winner: step()
+    # resolves over w.order, so the later joiner is visited in the same pass the
+    # winner closes the last fraction of a unit. An earlier-joining loser would
+    # be visited while the item was still live, return unresolved, and be
+    # condemned a tick later, one step further along its own walk. Either way,
+    # asserting the loser reached the item's coordinates would fail every
+    # healthy run.
+    # ------------------------------------------------------------------
+    if ($loser -ge 1 -and $lost.Count -eq 1 -and $seedItem -ge 1) {
+        $lossTick = [int]$lost[0].t
+        # Not a pipe. Select-Events returns its List through `return , $hits` to
+        # stop a single hit unrolling, so piping it hands Where-Object the list
+        # itself as one object rather than its elements.
+        $halts = New-Object System.Collections.Generic.List[object]
+        foreach ($candidate in (Select-Events $events "path_assigned" $loser)) {
+            if ([int]$candidate.t -ne $lossTick) { continue }
+            $halts.Add($candidate)
+        }
+        if ($halts.Count -ne 1) {
+            Add-Failure ("the server assigned player $loser $($halts.Count) path(s) on tick $lossTick, " +
+                "want exactly 1 -- the halt losePickup sends. Without it the run holds no record of " +
+                "where the loser was when it lost.")
+        } elseif ($halts[0].points.Count -ne 1) {
+            Add-Failure ("player $loser's halt on tick $lossTick carries $($halts[0].points.Count) " +
+                "point(s); a halt is one point, and that point is where the loser stopped")
+        } else {
+            $stopped = $halts[0].points[0]
+            $reach = Get-Distance ([double]$stopped[0]) ([double]$stopped[1]) $ItemX $ItemZ
+            Write-Host ("==> server: player {0} halted at ({1}, {2}) on tick {3}, {4:N3} units from item {5}; PickupRange is {6}" -f `
+                $loser, $stopped[0], $stopped[1], $lossTick, $reach, $seedItem, $ExpectedPickupRange)
+            if ($reach -gt $ExpectedPickupRange) {
+                Add-Failure ("player $loser was condemned at ($($stopped[0]), $($stopped[1])), " +
+                    "$([math]::Round($reach, 3)) units from item $seedItem and outside the " +
+                    "$ExpectedPickupRange-unit PickupRange. It lost a contest for an item it was " +
+                    "standing too far away to have taken.")
+            }
         }
     }
 

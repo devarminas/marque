@@ -43,10 +43,15 @@
     So the second layer reads the server's NDJSON event log and asserts, per
     player id resolved from that client's `DEMO joined` line: `client_connected`,
     a `move_to`, a `path_assigned`, and an `arrived` whose coordinates match that
-    path's endpoint. `arrived` is the one event a frozen server cannot fake: the
-    tick loop emits it only after it has actually walked a player to the end of
-    its polyline. The two layers are then tied together — the point the server
-    says the phase-1 walker stopped at is the point both clients drew it at.
+    path's endpoint. `arrived` is what a frozen server cannot fake: the tick loop
+    emits it only after it has advanced a player onto the last point of its
+    polyline. That is all it proves. A tick loop that crossed the whole polyline
+    in a single step emits an arrival just as well formed, so the arrival's tick
+    is checked against the path's as well: covering that span takes as many ticks
+    as the server's own logged walk speed and tick rate say it takes, and a
+    teleporting loop misses that count by an order of magnitude. The two layers
+    are then tied together. The point the server says the phase-1 walker stopped
+    at is the point both clients drew it at.
 
     Two traps this script exists to step around, both from NOTES.md:
 
@@ -117,6 +122,21 @@ $StillCameraMaxDiff = 0.10
 # How many times more of the frame a walking client's own camera has to disturb
 # than a standing one does. Measured at 32x and 37x on a healthy run.
 $MovingCameraDiffRatio = 8.0
+
+# The server's own tick rate and walk speed, restated. Both are read back out of
+# the run's `server_started` line rather than trusted from here; these are the
+# expected values, and a mismatch is a failure rather than a silent
+# recalibration against whatever the binary happened to be built with.
+$ExpectedTickMS = 150
+$ExpectedWalkSpeed = 3.0
+
+# How far off the ideal a walk's duration may be, in ticks, before the tick loop
+# counts as implausible. A walk of `span` units takes `ceil(span / (WalkSpeed *
+# TickDuration))` ticks exactly, in a healthy run, every time; the tolerance is
+# for a path assigned on a tick boundary, not for a server that crossed the
+# world in one step. The scripted clicks land about six units out, which is
+# fourteen-odd ticks; a server that moves 1000.0 units per tick does it in one.
+$MaxWalkTickError = 2
 
 $repo = Split-Path -Parent $PSScriptRoot
 $serverDir = Join-Path $repo "server"
@@ -545,6 +565,24 @@ try {
         $failures.Add("the server wrote no GAMELOG events to $serverOut; this run contains no server-side evidence at all")
     }
 
+    # The run's own constants, read back rather than assumed. A binary built with
+    # a different tick rate or a different walk speed would make every walk
+    # duration below meaningless, and would do it silently.
+    $perTick = $ExpectedWalkSpeed * $ExpectedTickMS / 1000.0
+    $started = @($events | Where-Object { $_.ev -eq "server_started" })
+    if ($started.Count -ne 1) {
+        $failures.Add("the log holds $($started.Count) server_started event(s), want 1")
+    } else {
+        $boot = $started[0]
+        if ([int]$boot.tick_ms -ne $ExpectedTickMS) {
+            $failures.Add("the server ticks every $($boot.tick_ms)ms; this script's walk durations assume $ExpectedTickMS")
+        }
+        if ([double]$boot.walk_speed -ne $ExpectedWalkSpeed) {
+            $failures.Add("the server walks at $($boot.walk_speed) units/s; this script's walk durations assume $ExpectedWalkSpeed")
+        }
+        $perTick = [double]$boot.walk_speed * [int]$boot.tick_ms / 1000.0
+    }
+
     $arrivedAt = @{}
     foreach ($client in $running) {
         $label = $client.Label
@@ -600,8 +638,19 @@ try {
                 "The clients walked the polyline they were handed, but the server's world never moved."))
             continue
         }
-        Write-Host ("==> server: player {0} got a {1:N3}-unit path at tick {2} and arrived at ({3:N3}, {4:N3}) on tick {5}" -f `
-            $id, $span, $path.start_tick, [double]$arrived.x, [double]$arrived.z, $arrived.t)
+        # The arrival above says the walk finished, not that it was walked. A
+        # tick loop moving players 1000.0 units per step reaches the endpoint on
+        # its first tick and logs an arrival indistinguishable from a healthy
+        # one. Its duration is the part it cannot forge.
+        $took = [int]$arrived.t - [int]$path.start_tick
+        $expected = [int][math]::Ceiling($span / $perTick)
+        Write-Host ("==> server: player {0} got a {1:N3}-unit path at tick {2} and arrived at ({3:N3}, {4:N3}) on tick {5}, {6} tick(s) later; walking that far takes {7}" -f `
+            $id, $span, $path.start_tick, [double]$arrived.x, [double]$arrived.z, $arrived.t, $took, $expected)
+        if ([math]::Abs($took - $expected) -gt $MaxWalkTickError) {
+            $failures.Add(("player $id (client $label) crossed $([math]::Round($span, 3)) units in $took tick(s), " +
+                "but at $ExpectedWalkSpeed units per second on ${ExpectedTickMS}ms ticks that walk takes $expected. " +
+                "The server's world did not walk the path, it jumped it."))
+        }
         $arrivedAt[$id] = [double[]] @([double]$arrived.x, [double]$arrived.z)
     }
 
