@@ -11,6 +11,8 @@ package game
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"time"
@@ -188,9 +190,39 @@ type Transport interface {
 	Events() <-chan mnet.Event
 }
 
-// player is one connected player's authoritative state.
+// sessionTokenBytes is how much randomness a session token carries. Sixteen
+// bytes is the 32 hex characters PROTOCOL.md fixes, and 128 bits is far enough
+// past the birthday bound that no uniqueness check is written anywhere: a
+// collision is not a case the code handles, it is a case that does not happen.
+const sessionTokenBytes = 16
+
+// newSessionToken mints one player's durable identity.
+//
+// Opaque to everyone, including this server: nothing derives a player id from
+// it, nothing orders two of them, and it is never written to the event log.
+func newSessionToken() string {
+	var raw [sessionTokenBytes]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		// The system entropy source failed. There is no degraded token worth
+		// issuing, and issuing a guessable one would be worse than not starting.
+		panic(fmt.Sprintf("game: reading %d bytes for a session token: %v", sessionTokenBytes, err))
+	}
+	return hex.EncodeToString(raw[:])
+}
+
+// player is one player's authoritative state.
+//
+// A player is a durable entity and the connection is a field on it, rather than
+// the connection being the player. Nothing here is keyed on the socket.
 type player struct {
-	id   mnet.PlayerID
+	id mnet.PlayerID
+
+	// session is this player's durable identity: minted once, the same across
+	// every connection the player ever has, and never logged.
+	session string
+
+	// conn is the socket this player is speaking through, or nil when it has
+	// none. Everything that writes to a player checks it.
 	conn *mnet.Conn
 
 	// pos is the player's position at the current tick, not an interpolated
@@ -230,13 +262,22 @@ type World struct {
 	tick   int64
 	nextID mnet.PlayerID
 
-	players map[*mnet.Conn]*player
+	// players is every player in the world, by the id that names them
+	// everywhere else in the protocol.
+	players map[mnet.PlayerID]*player
+	// byConn finds the player speaking through a socket. Only players with a
+	// live connection appear here, so a lookup that misses is the answer to
+	// "does the world know this socket", not a bug.
+	byConn map[*mnet.Conn]*player
+	// bySession finds a player by its durable identity. Every player in
+	// w.players has exactly one entry here for its whole life in the world.
+	bySession map[string]*player
 	// order keeps iteration deterministic. Go randomises map iteration, which
 	// would make welcome's player list and broadcast order differ run to run,
 	// and replay diffs are only useful when two identical runs agree. It is
 	// also the tiebreaker for a contested pickup, so it is load-bearing for
 	// game rules and not only for logs.
-	order []*mnet.Conn
+	order []*player
 }
 
 // NewWorld returns an empty world reading intents from transport and keeping
@@ -255,7 +296,9 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store) *World {
 		transport: transport,
 		log:       log,
 		items:     store,
-		players:   make(map[*mnet.Conn]*player),
+		players:   make(map[mnet.PlayerID]*player),
+		byConn:    make(map[*mnet.Conn]*player),
+		bySession: make(map[string]*player),
 	}
 }
 
@@ -322,8 +365,7 @@ func (w *World) step() {
 	w.tick++
 	distance := WalkSpeed * TickDuration.Seconds()
 
-	for _, conn := range w.order {
-		p := w.players[conn]
+	for _, p := range w.order {
 		if !p.walking() {
 			continue
 		}
@@ -342,8 +384,8 @@ func (w *World) step() {
 	// player in this same pass finds it gone. Never a range over w.players,
 	// whose iteration order Go randomises; the winner of a contest must be the
 	// same in two identical runs.
-	for _, conn := range w.order {
-		if p := w.players[conn]; p.pending != 0 {
+	for _, p := range w.order {
+		if p.pending != 0 {
 			w.resolvePickup(p)
 		}
 	}
@@ -370,14 +412,21 @@ func (w *World) handle(ev mnet.Event) {
 // before it is not. That is what keeps two clients joining in the same tick
 // from either missing a player or seeing one twice.
 func (w *World) addPlayer(conn *mnet.Conn) {
-	if _, dup := w.players[conn]; dup {
+	if _, dup := w.byConn[conn]; dup {
 		panic("game: connection announced twice")
 	}
 
 	w.nextID++
-	p := &player{id: w.nextID, conn: conn, pos: Point{X: spawnX, Z: spawnZ}}
-	w.players[conn] = p
-	w.order = append(w.order, conn)
+	p := &player{
+		id:      w.nextID,
+		session: newSessionToken(),
+		conn:    conn,
+		pos:     Point{X: spawnX, Z: spawnZ},
+	}
+	w.players[p.id] = p
+	w.byConn[conn] = p
+	w.bySession[p.session] = p
+	w.order = append(w.order, p)
 	w.items.AddPlayer(p.id)
 
 	w.log.Event(w.tick, EvConnected, gamelog.Fields{
@@ -385,9 +434,20 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		"remote": conn.Remote(),
 	})
 
+	w.sendJoinStep(p)
+	w.broadcast(mnet.Spawn{ID: p.id, X: p.pos.X, Z: p.pos.Z}, p)
+}
+
+// sendJoinStep composes and enqueues the whole atomic welcome step for one
+// player: the world, then one path per walker, then that player's own
+// inventory.
+//
+// It is separate from addPlayer because the step is about handing a connection
+// the world, and admitting a new player is only one of the ways a connection
+// comes to need it.
+func (w *World) sendJoinStep(p *player) {
 	states := make([]mnet.PlayerState, 0, len(w.order))
-	for _, c := range w.order {
-		other := w.players[c]
+	for _, other := range w.order {
 		states = append(states, mnet.PlayerState{ID: other.id, X: other.pos.X, Z: other.pos.Z})
 	}
 	w.send(p, mnet.Welcome{
@@ -408,8 +468,7 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 	// the only way back to what the newcomer was told is to re-simulate the
 	// walk from its original path_assigned -- which nothing in the log would
 	// tell a reader was necessary.
-	for _, c := range w.order {
-		other := w.players[c]
+	for _, other := range w.order {
 		if !other.walking() {
 			continue
 		}
@@ -426,8 +485,6 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 	// has been told everything the step describes (PROTOCOL.md, "Ordering and
 	// the join race").
 	w.sendInventory(p)
-
-	w.broadcast(mnet.Spawn{ID: p.id, X: p.pos.X, Z: p.pos.Z}, conn)
 }
 
 // removePlayer retires a connection. This is the only place a player leaves the
@@ -437,26 +494,13 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 // which may be empty. The world does not interpret either: it logs them, and a
 // human reading the log is the only consumer.
 func (w *World) removePlayer(conn *mnet.Conn, reason, detail string) {
-	p, ok := w.players[conn]
+	p, ok := w.byConn[conn]
 	if !ok {
 		// A connection the hub accepted but the world never saw, or a second
 		// disconnect for one it already retired. Neither should happen; neither
 		// is worth killing the server over.
 		return
 	}
-
-	delete(w.players, conn)
-	for i, c := range w.order {
-		if c == conn {
-			w.order = append(w.order[:i], w.order[i+1:]...)
-			break
-		}
-	}
-	// Whatever they were carrying leaves with them. M1 has no persistence and
-	// no drop-on-logout, so this is deletion rather than a transfer to the
-	// ground; making it a transfer is a design decision, not a bug fix, and it
-	// is parked in FOLLOW-UPS.md.
-	w.items.RemovePlayer(p.id)
 
 	fields := gamelog.Fields{
 		"player": p.id,
@@ -469,11 +513,37 @@ func (w *World) removePlayer(conn *mnet.Conn, reason, detail string) {
 		fields["detail"] = detail
 	}
 	w.log.Event(w.tick, EvDisconnected, fields)
-	w.broadcast(mnet.Despawn{ID: p.id}, conn)
+
+	w.retire(p)
+}
+
+// retire takes a player out of the world for good: every index forgets them,
+// whatever they were carrying is deleted, and everyone else is told the body is
+// gone.
+//
+// Whatever they were carrying leaves with them. M1 has no persistence and no
+// drop-on-logout, so this is deletion rather than a transfer to the ground;
+// making it a transfer is a design decision, not a bug fix, and it is parked in
+// FOLLOW-UPS.md.
+func (w *World) retire(p *player) {
+	delete(w.players, p.id)
+	delete(w.bySession, p.session)
+	if p.conn != nil {
+		delete(w.byConn, p.conn)
+	}
+	for i, other := range w.order {
+		if other == p {
+			w.order = append(w.order[:i], w.order[i+1:]...)
+			break
+		}
+	}
+	w.items.RemovePlayer(p.id)
+
+	w.broadcast(mnet.Despawn{ID: p.id}, p)
 }
 
 func (w *World) handleFrame(ev mnet.Event) {
-	p, ok := w.players[ev.Conn]
+	p, ok := w.byConn[ev.Conn]
 	if !ok {
 		// The hub emits EventConnected before any frame, so this is defensive.
 		// It is logged rather than dropped because reaching it means the
@@ -716,26 +786,37 @@ func (w *World) pathMessage(p *player) mnet.Path {
 	}
 }
 
-// send queues one message for one player.
+// send queues one message for one player, and does nothing for a player with no
+// connection.
+//
+// Dropping the frame is right rather than merely convenient: a message to a
+// player nobody is listening for is not lost state. Every message this server
+// sends is either a full restatement (welcome, inventory) or an announcement
+// that is restated on the next join step (spawn, path, item_spawn), so a
+// connection that arrives later is told everything it missed by the step that
+// admits it.
 func (w *World) send(p *player, msg mnet.ServerMessage) {
+	if p.conn == nil {
+		return
+	}
 	p.conn.Send(mustEncode(msg))
 }
 
-// broadcast queues one message for every player except the connection in
-// skip, which may be nil to reach everyone.
+// broadcast queues one message for every player except the one in skip, which
+// may be nil to reach everyone.
 //
 // Encoding happens once. Send never blocks, so a client that has stopped
 // draining cannot stall the tick; it is dropped and reappears here as a
 // disconnect on a later event, which is why this loop can safely ignore the
 // result. Nothing outside this goroutine can mutate w.order, so a connection
 // dying mid-broadcast cannot disturb the iteration either.
-func (w *World) broadcast(msg mnet.ServerMessage, skip *mnet.Conn) {
+func (w *World) broadcast(msg mnet.ServerMessage, skip *player) {
 	payload := mustEncode(msg)
-	for _, conn := range w.order {
-		if conn == skip {
+	for _, p := range w.order {
+		if p == skip || p.conn == nil {
 			continue
 		}
-		conn.Send(payload)
+		p.conn.Send(payload)
 	}
 }
 
