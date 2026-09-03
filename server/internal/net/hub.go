@@ -219,6 +219,8 @@ func (h *Hub) Close() {
 	}
 	h.closed = true
 	close(h.done)
+	// Snapshot and release the lock before closing sockets: a connection's
+	// teardown path takes this same lock to unregister itself.
 	open := make([]*Conn, 0, len(h.conns))
 	for c := range h.conns {
 		open = append(open, c)
