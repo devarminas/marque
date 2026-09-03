@@ -126,11 +126,19 @@ Preconditions:
   in every other client's world for the whole grace. That is correct behaviour and not a
   leak.
 
-  **Predicted and not yet observed**, because M2a is a server-only unit that ran neither
-  demo: a demo run should now end with `player_suspended` for each client and no closing
-  `despawn`, since both quit within a second of each other and the process exits long before
-  a sixty-second grace could run out. Check it the next time either demo is driven, and
-  correct this paragraph rather than trusting it.
+  **Observed on both demos at `27c602d`, by M2a's first verifier.** A demo run ends with
+  `client_disconnected` carrying `reason=peer_gone` and `detail=read_error`, then one
+  `player_suspended` per player, and then nothing: **zero `despawn` and zero
+  `player_expired`**, because both clients quit within a second of each other and the process
+  exits long before a sixty-second grace can run out.
+
+      two_client_demo.ps1       player_suspended  t:79   expires_tick:479
+      contested_pickup_demo.ps1 player_suspended  t:125  expires_tick:525
+
+  So a demo's log ending with bodies still in the world is the expected shape now, and an
+  agent grepping a demo transcript for a closing `despawn` will not find one. This paragraph
+  was written as a prediction by the unit that shipped the change, which ran neither demo,
+  and is promoted here to an observation.
 
   **The interop suite logs `closed` for what looks like the same event, and that is
   not a contradiction. Read this before filing a defect.** `interop_test.ps1`

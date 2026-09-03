@@ -9,6 +9,7 @@ package net_test
 // the connection dies", is the contract.
 
 import (
+	"net"
 	"regexp"
 	"testing"
 	"time"
@@ -31,6 +32,15 @@ const shortGrace = 4
 // derived from a real one, because a token this server issued and then retired
 // is a different case and has its own tests.
 const unknownToken = "ffffffffffffffffffffffffffffffff"
+
+// waitInsideTheGrace lets several ticks of the grace pass before a resume.
+//
+// Without it a test resumes within a tick of the suspension and proves only
+// that state survives a socket death, which a grace of one tick would also
+// satisfy. M2a's second verifier found exactly that: the two tests below still
+// passed under a one-tick grace. Sleeping here makes them fail under one, which
+// is the difference between testing the grace and testing around it.
+const waitInsideTheGrace = 4 * game.TickDuration
 
 // joinStep is one connection's whole atomic welcome step: the welcome, the path
 // replays, and the inventory that ends it.
@@ -156,6 +166,11 @@ func TestAResumedPlayerIsTheSamePlayer(t *testing.T) {
 	}
 }
 
+// tokenScanGrace is short enough to sit through an expiry and long enough that
+// a resume comfortably lands inside it. Both have to happen in one run of
+// TestNoSessionTokenIsLoggedAnywhere, which is what fixes it between the two.
+const tokenScanGrace = 20
+
 // TestNoSessionTokenIsLoggedAnywhere holds the rule that keeps a token out of
 // every place an event log gets pasted.
 //
@@ -163,23 +178,60 @@ func TestAResumedPlayerIsTheSamePlayer(t *testing.T) {
 // writes, because the rule is about the log and not about those five: a token
 // added to any other line later is caught here without anybody remembering to
 // come back and look.
+//
+// It drives all six paths a token can take through the server -- a fresh join,
+// a suspension, a resume, an unknown token, a refusal, and an expiry -- because
+// the scan can only catch a leak on a path the run actually walked. It covered
+// four of the six until M2a's second verifier pointed out that refuse and
+// expire were not among them, which is exactly the shape of hole this test
+// exists to not have.
 func TestNoSessionTokenIsLoggedAnywhere(t *testing.T) {
-	h := newHarness(t, acornAt(1, 0))
+	h := newHarnessWithGrace(t, tokenScanGrace, acornAt(1, 0))
 
+	// Join, and carry something, so the item events are in the scan too.
 	alice := h.dial("alice")
 	first := alice.welcome()
 	alice.pickup(first.Items[0].ID)
 	alice.awaitInventory()
+
+	// Suspend, then resume.
 	alice.destroy()
 	h.awaitEvents(game.EvPlayerSuspended, 1)
-
-	readJoinStep(h.dialResume("alice-again", first.Session))
+	resumed := h.dialResume("alice-again", first.Session)
+	readJoinStep(resumed)
 	h.awaitEvents(game.EvPlayerResumed, 1)
 
+	// Refuse: alice's token while alice is connected.
+	intruder := h.dialResume("intruder", first.Session)
+	intruder.errorFrame()
+	intruder.expectClosed()
+	h.awaitEvents(game.EvResumeRefused, 1)
+
+	// Unknown: a well-formed token naming nobody.
 	readJoinStep(h.dialResume("stranger", unknownToken))
 	h.awaitEvents(game.EvResumeUnknown, 1)
 
-	for _, token := range []string{first.Session, unknownToken} {
+	// Expire: a second player left to run its grace out.
+	bob := h.dial("bob")
+	// readJoinStep, not welcome: alice may still be walking to the acorn, and
+	// then bob's join step carries a replay for her between the two frames.
+	bobFirst := readJoinStep(bob).welcome
+	bob.destroy()
+	h.awaitEvents(game.EvPlayerExpired, 1)
+
+	// Every event name the six paths can produce has now been written at least
+	// once, so a token in any of them is in the log this scans.
+	for _, name := range []string{
+		game.EvConnected, game.EvDisconnected, game.EvPlayerSuspended,
+		game.EvPlayerResumed, game.EvResumeRefused, game.EvResumeUnknown,
+		game.EvPlayerExpired,
+	} {
+		if got := h.eventsNamed(name); len(got) == 0 {
+			t.Fatalf("no %s event was written, so the scan below never looked at one", name)
+		}
+	}
+
+	for _, token := range []string{first.Session, bobFirst.Session, unknownToken} {
 		for _, ev := range h.logEvents() {
 			for key, value := range ev {
 				if s, isString := value.(string); isString && s == token {
@@ -190,6 +242,72 @@ func TestNoSessionTokenIsLoggedAnywhere(t *testing.T) {
 	}
 }
 
+// TestEveryResumeEventNamesTheConnectionItIsAbout holds the field sets
+// PROTOCOL.md's log-vocabulary table fixes.
+//
+// The remote address is the only thing a refusal or an unknown token has to
+// say: there is no player to name, because no player was created. So an empty
+// or missing remote makes those two lines say nothing at all, and a player id
+// on them would file a connection the world turned away under the id of a
+// player who is connected and unaffected.
+func TestEveryResumeEventNamesTheConnectionItIsAbout(t *testing.T) {
+	h := newHarness(t)
+
+	alice := h.dial("alice")
+	first := alice.welcome()
+	aliceRemote := remoteOf(t, h.awaitEvents(game.EvConnected, 1)[0])
+
+	// Refused: a second live socket, so its remote must differ from alice's.
+	intruder := h.dialResume("intruder", first.Session)
+	intruder.errorFrame()
+	intruder.expectClosed()
+	refused := h.awaitEvents(game.EvResumeRefused, 1)[0]
+	if got := remoteOf(t, refused); got == aliceRemote {
+		t.Fatalf("resume_refused names %q, which is the remote of the connection that already holds the player", got)
+	}
+	if _, named := refused["player"]; named {
+		t.Fatalf("resume_refused names a player: %+v; no player was created for it, and naming the one it asked for files it under an uninvolved id", refused)
+	}
+
+	// Unknown: same, and it also has no player to name.
+	stranger := h.dialResume("stranger", unknownToken)
+	stranger.welcome()
+	unknown := h.awaitEvents(game.EvResumeUnknown, 1)[0]
+	remoteOf(t, unknown)
+	if _, named := unknown["player"]; named {
+		t.Fatalf("resume_unknown names a player: %+v; the token named nobody", unknown)
+	}
+
+	// Resumed: this one does name a player, and the remote is the new socket's.
+	alice.destroy()
+	h.awaitEvents(game.EvPlayerSuspended, 1)
+	readJoinStep(h.dialResume("alice-again", first.Session))
+	resumed := h.awaitEvents(game.EvPlayerResumed, 1)[0]
+	remoteOf(t, resumed)
+	if got := resumed["player"]; got != float64(first.You) {
+		t.Fatalf("player_resumed names player %v, want %d", got, first.You)
+	}
+}
+
+// remoteOf reads an event's remote address, insisting it is a host and a port
+// rather than merely a non-empty string. A remote that does not parse is a
+// field that looks present to a reader and is useless to one.
+func remoteOf(t *testing.T, ev map[string]any) string {
+	t.Helper()
+
+	value, present := ev["remote"]
+	if !present {
+		t.Fatalf("%v carries no remote: %+v", ev["ev"], ev)
+	}
+	remote, isString := value.(string)
+	if !isString {
+		t.Fatalf("%v carries a non-string remote %#v", ev["ev"], value)
+	}
+	if _, _, err := net.SplitHostPort(remote); err != nil {
+		t.Fatalf("%v carries remote %q, which is not host:port: %v", ev["ev"], remote, err)
+	}
+	return remote
+}
 // TestAResumedPlayerKeepsItsInventory is acceptance 3. An inventory that dies
 // with the socket is what makes reconnect worthless.
 func TestAResumedPlayerKeepsItsInventory(t *testing.T) {
@@ -206,6 +324,7 @@ func TestAResumedPlayerKeepsItsInventory(t *testing.T) {
 
 	alice.destroy()
 	h.awaitEvents(game.EvPlayerSuspended, 1)
+	time.Sleep(waitInsideTheGrace)
 
 	step := readJoinStep(h.dialResume("alice-again", first.Session))
 	if len(step.inventory.Slots) != 1 {
@@ -244,6 +363,7 @@ func TestAResumedWalkerIsToldWhereItsOwnBodyIs(t *testing.T) {
 	time.Sleep(4 * game.TickDuration)
 	alice.destroy()
 	h.awaitEvents(game.EvPlayerSuspended, 1)
+	time.Sleep(waitInsideTheGrace)
 
 	step := readJoinStep(h.dialResume("alice-again", first.Session))
 	replay, ok := step.pathFor(first.You)

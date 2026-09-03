@@ -706,6 +706,14 @@ tick counter is the clock (see *Clock*), and a suspension that expired against `
 would be the one rule in the game that a paused process gets wrong. A suspension that reaches
 its expiry tick retires the player exactly as a clean logout does, `despawn` included.
 
+**Each suspension restarts the grace; it is not a budget spent across a session.** A player that
+is suspended, resumed, and suspended again gets a full `ResumeGraceTicks` from the second death,
+because the second death is a fresh accident and nothing about the first one makes the player
+less likely to come back. The alternative, a total the player is allowed across its whole life,
+would retire somebody mid-reconnect for having reconnected before, which is the opposite of what
+the grace is for. Resuming clears the expiry outright: a connected player has no expiry tick at
+all.
+
 **Resume.** A connection presenting a suspended player's token is handed that player: the
 ordinary atomic welcome step, with the same `you` and the same `session`, the world as of now,
 one re-anchored `path` per walker **including its own**, and then its `inventory`. **No `spawn`
@@ -759,9 +767,12 @@ logged out. Frozen state is stale, but there is no UI to explain either conditio
 stale-and-announced beats false-and-silent.
 
 **Freezing is still the rule, and M2a changed what it costs rather than what it is.** The
-sentence above about a dead socket being terminal is now true only of the client: the server
-holds the body and the inventory for the grace, so a frozen world is no longer stale about
-something that is gone, it is stale about something that is waiting. Reconnecting is what
+sentence above about a dead socket being terminal is now true only of the client, and only for
+the two deaths that suspend. After a `peer_gone` or a `slow_client` death the server holds the
+body and the inventory for the grace, so a frozen world is stale about something that is waiting
+rather than about something that is gone. After a `closed` or a `protocol_error` death it holds
+nothing at all, the player is retired at once, and the frozen world is stale in the old sense:
+those bodies are gone and are not coming back. Reconnecting is what
 cashes that in, and no shipped client does it yet — the client half of reconnect is a later M2
 unit, and M2a is server-only.
 
