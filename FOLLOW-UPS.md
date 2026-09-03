@@ -85,6 +85,21 @@ right. None blocks anything.
 **Closed.** The panel is opaque and this is no longer a defect. The history stays because the
 shape of the mistake is worth recognising the next time it happens.
 
+**One known limit of the suite that guards it, parked deliberately.** The tests check the
+panel's `mouse_filter` at a single instant, a frame or two after an `inventory` feed, and never
+in the steady state. A verifier demonstrated this: re-arm the filter on every inventory frame
+and drop it to IGNORE seven frames later, and the entire suite stays green at `PASS: 573` while
+the panel is click-through again. **The plausible form of that bug is caught** — M1k's whole
+finding was that the *state-dependent* version (opaque only while holding something) passed, and
+closing it is what the empty-join-state assertions do. What remains uncaught is the
+*time-dependent* version, which is a timer rather than a refactor anyone would write.
+
+Two ways to close the class rather than the instance, neither implemented and neither obviously
+worth it: assert that no script assigns `mouse_filter` at runtime, which would encode
+`CLAUDE.md`'s scene-authoring rule as a check; or add a late chrome click to `test_wiring`'s live
+half, hundreds of frames after the real server's `inventory` frame. The first is the better
+shape. Do it if a second UI panel ever ships, not before.
+
 From M1d. Read the headless-viewport entry in `NOTES.md` first; the panel was its consequence.
 
 The shipped panel used to behave three ways depending on where you clicked it, and only one was

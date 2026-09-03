@@ -94,81 +94,28 @@ version will otherwise believe it and negotiate its acceptance list downward.
 
 ## Milestones
 
-Full detail in `NOTES.md`. Summary:
+Full detail in `NOTES.md`. Program state, verdicts, and the per-unit history live in
+`COORDINATION.md`, which is coordinator-facing and never pasted. This section is only what a
+worker needs to know about where the program is.
 
-- **M0**, pilot. Two clients connect, click to move, see each other walk. Stubbed straight-line
-  pathing, no DB, no items, hardcoded player ids. JSON event log wired from tick zero.
-  Split into five units, one PR each, per **Unit sizing** in `COORDINATION.md`.
-  - **M0a**, Go server, complete and self-verifying. Protocol, tick loop, stubbed pathing,
-    event log, WebSocket hub, two-real-client integration test. Depends on nothing.
-  - **M0c**, Godot world and camera. Scene with ground, lighting, camera rig, and the empty
-    container avatars will hang off. Orbit controller and click-to-ground raycast. Zero
-    networking. Depends on nothing, so it runs alongside M0a.
-  - **M0b**, Godot to Go interop. The smallest possible script that connects to the real
-    server, sends a scripted `move_to`, and asserts on `welcome` and `path`. Headless, no
-    rendering. Exists to retire the highest-risk assumption in the program in the smallest
-    diff that can. Needs M0a and M0c.
-  - **M0d**, the polyline walker. A node that interpolates a position from `points`,
-    `start_tick`, and `speed`. Pure client logic, unit-tested headless against a fake path
-    with no server involved. Needs M0c.
-  - **M0e**, wiring. Network state drives avatar spawn and despawn, avatars walk their paths,
-    a ground click sends a `move_to`. This is where "two clients see each other walk" is
-    proven. Needs everything above.
+- **M0, closed.** Two clients connect, click to move, and each sees the other walk. Seven
+  units, seven PRs, verified in both directions by observation rather than inference.
+- **M1, closed.** One item on the ground, two clients click it, exactly one gets it. Pickup and
+  drop, in-memory store behind a `Store` interface. Ten units, ten PRs. **The wire contract for
+  all of it is in `PROTOCOL.md` under the M1 markers. Read it; do not re-derive it and do not
+  negotiate with it.**
+- **M1j, the one open unit.** PowerShell and markdown. Harden both demos and correct two
+  documents. `two_client_demo.ps1` still passes a *teleporting* server, because it asserts the
+  server finished a walk and never that it walked; `contested_pickup_demo.ps1` already carries
+  the plausibility check to port. `contested_pickup_demo.ps1` asserts nothing about player
+  position, so a loser halted at the wrong coordinates passes it.
+- **M2, next.** Reconnect. Sequence numbers and server-side dedupe. `PROTOCOL.md`'s **M2**
+  markers name what is reserved.
 
-  M0a and M0c have no dependency on each other and run concurrently. M0b and M0d likewise.
-  Only M0e is a genuine join.
-- **M1**, MVP. One item on the ground, two clients click it, exactly one gets it. Pickup and
-  drop. In-memory store behind a `Store` interface. Postgres and surviving a restart are out of
-  scope. **The wire contract for all of it is already written**: `PROTOCOL.md`, the sections
-  marked **M1**. Read them; do not re-derive them and do not negotiate with them.
-  - **M1a**, Go. The `Store` interface, ground items, inventory, the `pickup` intent, and
-    contested resolution. Ends in a Go test where two real WebSocket clients race for one item
-    and exactly one wins. Depends on nothing.
-  - **M1c**, Godot. The second registry: a ground-item body and an item container driven by
-    `welcome.items`, `item_spawn`, and `item_despawn`. Verified against scripted frames, no
-    server. Depends on nothing, so it runs alongside M1a.
-  - **M1b**, Go. `drop`, pickup's reverse transaction. Needs M1a.
-
-    This line used to say "and the full-inventory refusal", which was wrong when written.
-    **A drop empties a slot and can never find the inventory full.** That refusal belongs to
-    pickup on arrival, `PROTOCOL.md` has always said so, and M1a shipped it. Its writer caught
-    the contradiction and reported it rather than inventing a case to satisfy the summary.
-  - **M1d**, Godot. Clicking an item sends `pickup`, and an inventory panel fed by `inventory`.
-    Needs M1a and M1c.
-  - **M1e**, the milestone. Two real clients race for one item; exactly one gets it, by
-    observation. A `scripts/` demo alongside `two_client_demo.ps1`. Needs everything above.
-
-  Four more units, none in the original cut, each opened because something real was found:
-
-  - **M1f**, Go. Implement the slow-client condemnation decision `PROTOCOL.md` now records:
-    classify by cause, latch on first condemnation. Found because a worker wrote `slow_client`
-    and `peer_gone` into a document as if they were current behaviour when nothing implements
-    them. Independent of everything else.
-  - **M1g**, PowerShell and markdown. Make `two_client_demo.ps1` assert server state, stop it
-    deleting the event log, stop both harnesses running into a dirty output directory, and land
-    the verification skill that PR #9 failed on. **Blocks M1e**, which otherwise inherits a demo
-    that cannot tell a frozen server from a live one.
-  - **M1h**, Godot. Merged, PR #11, `unit-test-verified`. Two over-tight assertions in
-    `client/tests/test_interop.gd` asserted on a session-wide accumulator of unknown top-level
-    keys, plus the receiver's half of the null-list rule.
-
-    **The sentence that used to be here said "any M1 message trips them and `inventory` does".
-    That was false, and it was already false when it was committed.** `inventory` became a
-    *known* message when M1c merged at 11:16:11, so it never reaches the unknown path at all;
-    this line landed at 11:16:56, forty-five seconds later. The write and the merge raced and
-    the write lost. M1a saw those assertions fail only because its branch predated the merge.
-    The assertions were still worth fixing, because any genuinely unknown key breaks them, but
-    M1a's real exposure was the null rule alone. Recorded because a coordinator writing program
-    state from a worker's report, forty-five seconds after the thing that falsified it, is a
-    failure mode worth naming.
-  - **M1k**, Godot. Make the inventory panel opaque and move whatever depends on it being
-    click-through. Three behaviours today, one intended: chrome walks you, empty slots eat the
-    click, occupied slots drop. Proven live, not inferred. `test_wiring`'s live half clicks
-    through the panel on purpose, so `CLICK_AT` or the panel has to move with it.
-  - **M1i**, Go, small and unscheduled. `hub_test.go:752` calls a `*testing.T`-touching helper
-    from a background goroutine, which the harness's own comment forbids. Pre-existing,
-    test-only, found while reading. Not blocking anything.
-- **M2**. Reconnect. Sequence numbers and server-side dedupe.
+**This section used to carry a paragraph of history per unit, seventy-eight lines of it, for
+units that are all now merged.** Every line here is paid for on every worker spawn, which is the
+whole reason this file states that it is kept short. The history was not deleted; it is in
+`COORDINATION.md` where a coordinator can read it and a worker does not have to skim past it.
 
 ## Pasting these orders
 

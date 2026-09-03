@@ -196,6 +196,24 @@ A worker asserting one of these is usually right about the *behaviour* and wrong
 *mechanism*, which is the worst combination, because the symptom it describes really does
 happen and that makes the explanation feel confirmed.
 
+**M1f produced four more, all about `coder/websocket`, and the fourth landed inside the
+correction for the third.** Behaviour right every time, mechanism wrong every time. The
+sharpest form of the rule came out of it and is now in the code: **only a measurement separates
+the mechanism that explains what you see from the one that produces it.** Two practical
+corollaries, both paid for. Probing a dependency's *return value* does not probe its *side
+effects*; M1f confirmed by probe that a write timeout is `errors.Is`-comparable, which was
+correct and useless, because the claim it needed was about ordering. And reasoning about what
+*we* pass a library says nothing about the contexts the library *derives*: `readPump` passes
+`context.Background()`, yet the library builds its own five-second contexts for control frames,
+which made a "this branch is unreachable" claim false and hid a slow client being logged as a
+clean close.
+
+**The structural answer is a test that pins the scenario, not a comment that explains it.** M1f
+declined an end-to-end test on costed grounds a coordinator accepted; its verifier was asked to
+show a mechanism rather than assert one and **built the test instead**, which settled it. When a
+unit's correctness rests on a dependency's side effects, price the end-to-end test rather than
+reasoning about the dependency a fourth time.
+
 ## The coordinator's fleet is part of the environment
 
 **Never run a timing-sensitive verification concurrently with other Godot work.** This cost a
@@ -311,7 +329,7 @@ it, proven by observation.** Measured on `main` at `87f2a82` by the coordinator,
 CONTESTED PICKUP DEMO OK
 ```
 
-Seven units merged, each with a verdict in its PR body, which is the ledger.
+Nine units merged, each with a verdict in its PR body, which is the ledger.
 
 | Unit | PR | Verdicts | What |
 |---|---|---|---|
@@ -322,14 +340,27 @@ Seven units merged, each with a verdict in its PR body, which is the ledger.
 | M1b | #12 | `unit-test-verified` | `drop`, pickup's reverse transaction, and a new id every time |
 | M1d | #13 | `live-ui-verified` | Clicking an item picks it up; the inventory panel |
 | M1e | #14 | `live-ui-verified`, `sabotage-holds-with-findings` | **The milestone.** Two clients, one item, exactly one holder |
+| M1k | #15 | `conformance-holds-with-findings`, `sabotage-holds-with-findings` | The inventory panel is opaque, and the test that clicked through it moved |
+| M1f | #16 | `conformance-holds-with-findings`, `sabotage-holds-with-findings` | Classify a dead connection by cause, latch the first condemnation. Absorbed M1i |
 
-**Three units still open, none blocking.** **M1j** hardens the demos: `two_client_demo.ps1` still
-passes a teleporting server, `contested_pickup_demo.ps1` asserts no player position so a
-teleported loser passes it, its aim check refuses about 29% of runs on a one-tick anchor skew,
-and `SKILL.md` carries a false causal claim about the frozen-server sabotage. **M1k** makes the
-inventory panel opaque, which is a live product defect proven against a windowed client. **M1f**
-implements the slow-client condemnation latch the contract records and nothing yet builds, and
-absorbs **M1i**, `hub_test.go`'s background-goroutine `*testing.T` use.
+**One unit still open, and it does not block.** **M1j** hardens the demos and corrects two
+documents. `two_client_demo.ps1` still passes a *teleporting* server, because it asserts that the
+server finished a walk and never that it walked; `contested_pickup_demo.ps1` already carries the
+plausibility check to port. `contested_pickup_demo.ps1` asserts nothing about player position, so
+a loser halted at the wrong coordinates passes it. `SKILL.md` blames the frozen-server sabotage
+for a `DEMO TIMEOUT` that was machine load, and `features/contested-pickup.md` claims the two
+clients' sync ticks were identical on every run, which M1k falsified by observing 32 against 33.
+
+**Three sync checks, not one, and the handover conflated them.** They are
+`contested_pickup_demo.ps1:541` (client-side declared aim ticks equal), `:718` (server-side
+`path_assigned` start ticks equal), and `:732` (resolve tick equals loss tick, gap 0). An earlier
+handover said the aim check "can safely tolerate one tick". **Treat that as a hypothesis, because
+it looks wrong for `:718`**: both players spawn equidistant, so paths starting a tick apart mean
+arrivals a tick apart, and that run is a *sequence, not a contest* — which is what the milestone
+sentence forbids and what `:732` would independently catch. M1k's writer saw `:718` fail once, at
+32 against 33, **with a Go toolchain process running**, which raises the untested alternative that
+the skew is load-induced and the honest fix is not a wider tolerance at all. Measure a
+distribution, idle and loaded, before changing anything.
 
 **What M1 cost beyond its plan.** It was cut as five units and ran to ten. Every addition came
 from a verifier finding something real, never from the plan growing: a client assertion that
@@ -338,13 +369,27 @@ the player, a contract decision nobody had implemented, and a test-only defect f
 reading. **That ratio is the argument for the verification discipline**, not the ceremony around
 it. Five verifiers each invented a false pass nobody had listed, and four of the five were real.
 
-Two commands tell you the stack is alive:
+**M1k and M1f kept the ratio.** M1k's verifier invented a sabotage that left the whole suite
+green while a live client walked on a chrome click, because every chrome test fed an occupied
+inventory and nothing exercised the empty panel every player has at join. M1f's central bug was
+found by `-race` under `-count=10` and reported no race at all: the WebSocket library closes the
+connection from its own timer before `Write` returns, so the read pump condemned `peer_gone` over
+the real cause. Both were invisible to a green suite.
+
+Two commands tell you the stack is alive. **Redirect them to a file; do not pipe them.**
+`interop_test.ps1 | tail -40` sat for fifteen minutes after the Godot runner had already written
+its own final `PASS:` line, with the server still alive and the script's cleanup never reached,
+while `> out.txt 2>&1` finished in about two minutes, exit 0. A stale work directory from an
+earlier session shows the same signature, so it is not a one-off. **The mechanism is not
+established and should not be guessed at.**
 
 - `powershell -ExecutionPolicy Bypass -File scripts/interop_test.ps1` builds the server, binds a
-  free port, runs the whole Godot suite against a live `marqued`, and shuts it down. **463
-  assertions across 8 suites** as of M1a merging, measured on `main` at `ef5eda8`. This number
-  goes stale every time a unit adds a suite, so treat it as "what it was last time somebody
-  looked" and report the number you got.
+  free port, runs the whole Godot suite against a live `marqued`, and shuts it down. **573
+  assertions across 9 suites** as of M1k merging, measured on `main`; INTERACTION 104/0,
+  WIRING 95/0, INTEROP 91/0. This number goes stale every time a unit adds a suite, so treat it
+  as "what it was last time somebody looked" and report the number you got.
+- `CGO_ENABLED=1 go test -race ./...` from `server/`, with the PATH export in
+  `STANDING-ORDERS.md`. Exit 0, zero data races, `internal/net` about 93 seconds.
 - `powershell -ExecutionPolicy Bypass -File scripts/two_client_demo.ps1` runs two real windowed
   clients. **Read the next paragraph before you believe what it tells you.**
 
