@@ -87,15 +87,46 @@ func is_anchored() -> bool:
 
 ## The tick the server is estimated to be on right now.
 ##
-## Returns [constant UNANCHORED_TICK] until [method anchor] is called. The
-## estimate lags the server by roughly one-way latency, which is why a freshly
-## arrived [code]path[/code] can carry a [code]start_tick[/code] ahead of it;
-## see [code]polyline_walker.gd[/code], which clamps that case rather than
+## Returns [constant UNANCHORED_TICK] until [method anchor] is called.
+##
+## The estimate lags the server by one-way latency [b]plus however far into a
+## tick the anchoring [code]welcome[/code] was composed[/b]. A connection is
+## answered on the world goroutine's event arm and not inside
+## [code]step[/code] ([code]server/internal/game/world.go[/code],
+## [code]Run[/code]), so that second term lands anywhere in
+## [code][0, tick_ms)[/code] and is a different amount for every client.
+##
+## [b]Two clients reading the same tick number are therefore not reading it at
+## the same instant[/b], and nothing a client can observe today narrows that
+## down: [code]welcome[/code] and [code]path[/code] are the only frames carrying
+## a tick, and both are composed mid-tick. Anything that needs two clients to
+## act together must rendezvous on a shared event rather than on a tick number;
+## [code]pickup_demo.gd[/code] is the worked example.
+##
+## The same offset is why a freshly arrived [code]path[/code] can carry a
+## [code]start_tick[/code] ahead of the estimate; see
+## [code]polyline_walker.gd[/code], which clamps that case rather than
 ## rewinding.
 func estimated_tick() -> int:
+	return estimated_tick_at(_now_usec.call())
+
+
+## The tick the server is estimated to be on at monotonic time [param at_usec].
+##
+## Any moment, before or after now. The estimate is a formula over the anchor
+## and not a running count, so naming a moment costs what naming now costs. A
+## caller holding a moment must ask about that moment rather than reading
+## [method estimated_tick] beside it, or the two reads can land either side of a
+## tick boundary and disagree by one.
+##
+## [method @GlobalScope.floori] rather than integer division: truncation and
+## floor disagree on negatives, [param at_usec] may precede the anchor, and a
+## caller may inject a time source this class cannot vouch for. The formula in
+## PROTOCOL.md says floor.
+func estimated_tick_at(at_usec: int) -> int:
 	if not is_anchored():
 		return UNANCHORED_TICK
-	return _anchor_tick + _elapsed_ticks()
+	return _anchor_tick + floori(float(at_usec - _anchor_usec) / float(_tick_usec))
 
 
 ## Milliseconds per tick as reported by the server, or 0 before anchoring.
@@ -107,13 +138,3 @@ func tick_ms() -> int:
 	if not is_anchored():
 		return 0
 	return _tick_usec / _USEC_PER_MSEC
-
-
-## Whole ticks elapsed since the anchor.
-##
-## [method @GlobalScope.floori] rather than integer division: truncation and
-## floor disagree on negatives, and a caller may inject a time source this class
-## cannot vouch for. The formula in PROTOCOL.md says floor.
-func _elapsed_ticks() -> int:
-	var elapsed_usec: int = _now_usec.call() - _anchor_usec
-	return floori(float(elapsed_usec) / float(_tick_usec))

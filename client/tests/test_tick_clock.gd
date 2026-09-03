@@ -40,6 +40,8 @@ func run(assertions: Assertions) -> void:
 	_test_sub_tick_time_floors(assertions)
 	_test_a_stall_does_not_lose_ticks(assertions)
 	_test_real_monotonic_time_advances_without_frames(assertions)
+	_test_estimating_at_a_named_moment(assertions)
+	_test_a_tick_number_is_not_a_moment(assertions)
 	_test_re_anchoring_moves_the_origin(assertions)
 	print("  (the three ERROR lines below are the rejections under test)")
 	_test_invalid_anchors_are_rejected(assertions)
@@ -170,6 +172,99 @@ func _test_real_monotonic_time_advances_without_frames(assertions: Assertions) -
 	assertions.check(
 		advanced <= expected + 4,
 		"the real stall did not overshoot wildly (%d ticks for %dms)" % [advanced, REAL_STALL_MSEC],
+	)
+
+
+## `estimated_tick_at` answers about a moment the caller names, which is what
+## lets one already-fixed instant be described in ticks without a second clock
+## read that could land on the other side of a boundary.
+func _test_estimating_at_a_named_moment(assertions: Assertions) -> void:
+	var fake := FakeMonotonicClock.new()
+	var clock := TickClock.new(fake.read)
+
+	assertions.check(
+		clock.estimated_tick_at(0) == TickClock.UNANCHORED_TICK,
+		"an un-anchored clock knows nothing about any moment, not just about now",
+	)
+
+	clock.anchor(500, TICK_MS)
+	var anchored_at := fake.now_usec
+	assertions.check(
+		clock.estimated_tick_at(anchored_at) == 500, "the anchor instant estimates the anchor tick"
+	)
+	assertions.check(
+		clock.estimated_tick_at(anchored_at + 20 * TICK_MS * USEC_PER_MSEC) == 520,
+		"twenty ticks past the anchor estimates twenty ticks on",
+	)
+	assertions.check(
+		clock.estimated_tick_at(anchored_at - USEC_PER_MSEC) == 499,
+		"a moment before the anchor floors backwards rather than truncating towards it",
+	)
+
+	# The identity pickup_demo.gd's click deadline rests on. A lead of a whole
+	# number of ticks from any moment names a tick exactly that many on, whatever
+	# sub-tick offset the anchor happens to carry.
+	fake.advance_msec(37)
+	var moment := fake.now_usec
+	for lead: int in [1, 20, 400]:
+		assertions.check(
+			(clock.estimated_tick_at(moment + lead * TICK_MS * USEC_PER_MSEC)
+				== clock.estimated_tick_at(moment) + lead),
+			"a %d-tick lead from an arbitrary moment names a tick %d on" % [lead, lead],
+		)
+
+	assertions.check(
+		clock.estimated_tick_at(fake.now_usec) == clock.estimated_tick(),
+		"estimating at now is estimating now",
+	)
+
+
+## [b]Why the contested-pickup demo cannot rendezvous on a tick number.[/b]
+##
+## Two clients anchor to the same server tick at different points inside it,
+## because the server composes `welcome` on its event arm rather than in `step`.
+## They then agree on the tick number and disagree on the moment it names by as
+## much as a whole tick.
+func _test_a_tick_number_is_not_a_moment(assertions: Assertions) -> void:
+	# One timeline read by both clocks. A fake each would advance the two from
+	# their own anchors in lockstep and measure nothing.
+	var shared := FakeMonotonicClock.new()
+	var early_clock := TickClock.new(shared.read)
+	var late_clock := TickClock.new(shared.read)
+
+	# Server tick 900 is current at both instants. The second client's welcome
+	# was composed 100ms further into it than the first client's.
+	var offset_msec := 100
+	early_clock.anchor(900, TICK_MS)
+	shared.advance_msec(offset_msec)
+	late_clock.anchor(900, TICK_MS)
+
+	assertions.check(
+		early_clock.estimated_tick() == late_clock.estimated_tick(),
+		"at one instant both clients report tick %d" % early_clock.estimated_tick(),
+	)
+
+	var target := 900 + 20
+	var early_msec := -1
+	var late_msec := -1
+	for step in range(0, 40 * TICK_MS):
+		var now_msec := offset_msec + step
+		if early_msec < 0 and early_clock.estimated_tick() >= target:
+			early_msec = now_msec
+		if late_msec < 0 and late_clock.estimated_tick() >= target:
+			late_msec = now_msec
+		shared.advance_msec(1)
+
+	assertions.check(
+		early_msec >= 0 and late_msec >= 0, "both clocks reached the rendezvous tick"
+	)
+	assertions.check(
+		late_msec - early_msec == offset_msec,
+		(
+			"the two clients act %dms apart on the same tick number, the whole offset between "
+			% (late_msec - early_msec)
+			+ "their anchors; want %d" % offset_msec
+		),
 	)
 
 
