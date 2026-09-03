@@ -9,8 +9,13 @@ Amend this file first, then change code. Never the reverse.
 
 Status: **M0 and M1 shipped.** Everything marked **M1** is implemented and on the wire, so a
 reader looking at today's code will find all of it. **M2 is in progress.** Each **M2** marker
-names the unit that discharges it: a marker reading plain **M2** is still reserved and nobody is
-writing it, and one reading **M2a** or **M2b** is somebody's live contract.
+names the unit that discharges it. A marker reading plain **M2** is still reserved and nobody is
+writing it. A marker naming a unit and marked *shipped* is implemented and on the wire, exactly
+as an **M1** marker is. A marker naming a unit without that mark is somebody's live contract.
+
+**M2a** and **M2b** are shipped. The three-way form above replaces a sentence that listed the
+live units by name, which put every later unit in the position of editing a status line that was
+about somebody else.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -95,15 +100,71 @@ there is map content; it is a placeholder chosen to be finite, not chosen to be 
 
 The client sends intents and never facts. It has zero authority.
 
+### Sequence numbers. **M2b**, shipped.
+
+**Any client-to-server body may carry `seq`, an integer of at least 1.**
+
+    {"move_to":{"x":42.3,"z":17.8,"seq":5}}
+    {"pickup":{"item":7,"seq":6}}
+    {"drop":{"slot":3,"seq":7}}
+
+It is specified here, once, rather than in each message below, and it is **parsed once at the
+envelope**, in the same step that reads the single top-level key. No message body declares it and
+no message body may give it a different meaning. This paragraph used to sit inside `move_to`
+because that is where M1 happened to reserve it, which read as though `seq` were one message's
+field.
+
+The server keeps one number per player, `last_seq`, and it is a **high-water mark** rather than a
+set of the numbers it has seen.
+
+- **Absent is unsequenced**, applied exactly as it was before this unit. Every client built
+  before **M2e** sends no `seq` and is exactly as correct as it was.
+- **A `seq` at or below `last_seq` is a duplicate.** It is not applied, and **it is not
+  answered**. The server logs `intent_duplicate` with `player`, `re`, `seq` and `last_seq`, and
+  sends nothing at all.
+- **A `seq` above `last_seq` is applied, and `last_seq` becomes `seq`**, even when the intent is
+  then refused. A refused intent was received and decided, and its retry would be refused for the
+  same reason, so consuming the number costs nothing.
+- **Gaps are accepted.** `seq` 3 followed by `seq` 10 applies both and leaves `last_seq` at 10. A
+  high-water mark cannot express "4 through 9 are still coming", and nothing here needs it to,
+  because the client is the only thing that knows what it skipped.
+- **A `seq` that is 0, negative, fractional, or not a number is a `malformed_json` refusal**
+  carrying `re`, and the connection is kept. Zero is refused rather than read as absent: a client
+  that computed a sequence number and got zero has a bug, and the server should name it rather
+  than quietly downgrade the frame to unsequenced.
+- **`last_seq` is per player, not per connection.** It is 0 at a fresh join, it survives
+  suspension and resume because the player does (see *When the connection dies*), and it dies
+  with the player.
+- **`move_to`, `pickup` and `drop` log events carry `seq` when the frame did**, and omit the
+  field when it did not. That is what lets a reader of the event log tell a first application
+  from a retry without joining two lines together.
+
+**A `seq` the envelope accepted is consumed even when the body is then refused.** A frame whose
+`seq` parses and whose body does not, `{"move_to":{"x":1,"seq":5}}`, is refused for the missing
+`z` and still leaves `last_seq` at 5. The alternative makes `last_seq` depend on whether the
+server liked the body, and `last_seq` is the only thing that tells a client where its numbering
+stands. A number the client cannot predict from what it sent is not a restatement of anything.
+The cost is narrow and worth naming: a client that reuses one `seq` for a corrected body has the
+correction deduped. That is a client sending two different intents under one number, which this
+protocol has never let mean anything.
+
+**There are no acks, and that is a decision rather than an omission.** `welcome.last_seq` is a
+cumulative restatement of where the player's numbering stands, in the same doctrine as
+`inventory` and as `welcome` itself, and a restatement cannot drift. A per-intent ack would be
+one frame per intent carrying something the client can already derive, and the only client that
+needs more is one that replays unacknowledged intents. No client does. **Revisitable the first
+time one does.**
+
+That is also why a duplicate is answered with nothing. An `error` naming the duplicate would be
+an ack wearing a different hat, and it would teach clients to branch on it. A client learns the
+truth from the `welcome` and `inventory` restatements it is already sent, never from an answer to
+a retry.
+
 ### `move_to`
 
     {"move_to":{"x":42.3,"z":17.8}}
 
 A request to walk to a point. The server decides whether it is legal and what path results.
-
-**M2b.** Any client-to-server body may carry an integer `seq`. Servers before M2 ignore it per
-compatibility rule 2. Reserved now so that M2's dedupe fills in a field rather than
-renegotiating every intent's contract.
 
 ### `pickup`. **M1**
 
@@ -143,6 +204,24 @@ It is a sibling of `you` rather than of `players`, for the reason `items` is a s
 the receiving client, and everything else in it is the world. See *Identity* for what a client
 does with it. A pre-M2 client ignores the field under compatibility rule 2 and is exactly as
 correct as it was before, because a client that never sends a token never resumes.
+
+**M2b** adds `last_seq`, the highest sequence number this server has accepted from this player:
+
+    {"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,
+                "tick_ms":150,"tick":142,
+                "players":[{"id":1,"x":0.0,"z":0.0}],
+                "items":[]}}
+
+It is `0` at a fresh join and on every `welcome` to a player that has never sent a `seq`. The key
+is always present; it is never omitted and never `null`. It rides in **every** `welcome`,
+including a resumed one, and a resumed one is the whole point: it is where a reconnecting client
+reads how far its numbering got before the socket died. There are no acks, so this is the only
+thing that says so. See *Sequence numbers*.
+
+It is a third sibling of `you` and `session` for their reason. Those three are what this message
+says about the receiving client, and everything else in it is the world. A pre-M2 client ignores
+it under compatibility rule 2 and is exactly as correct as it was before, because a client that
+never sends a `seq` is never deduped.
 
 **M1** adds a sibling array, `items`, listing every item lying on the ground as of the same
 tick:
@@ -785,6 +864,10 @@ a GDScript client will get it subtly wrong.
   `path.start_tick` are 64-bit integers on the wire and arrive as floats. Convert with `int(...)`
   before comparing. No precision is lost, since a float64 holds tick counts exactly for far
   longer than this project will run, but a GDScript `==` against an int will bite someone.
+- **`welcome.last_seq` is a 64-bit integer and arrives as a float too**, for the reason above.
+  Convert with `int(...)` before comparing it to the number you last sent. A client resuming its
+  numbering from `float` arithmetic will be right for far longer than this project runs and wrong
+  in the one way that is hard to see coming.
 - **Coordinates have two encodings, deliberately.** `welcome.players[]` and `spawn` use
   `{"id":..,"x":..,"z":..}` because they carry an id. `path.points` uses `[[x,z],...]` because
   an array is materially smaller for a polyline. So a client writes `Vector2(d.x, d.z)` in one
@@ -804,7 +887,11 @@ a GDScript client will get it subtly wrong.
 Named so nobody adds them thinking they were forgotten.
 
 - No authentication. Ids are sequential and unverified.
-- No sequence numbers or acks. **M2b.**
+- No acks. **M2b** ships sequence numbers, so this line no longer covers them: `seq` is on the
+  wire and the server dedupes on it. What M2b deliberately did **not** ship is an
+  acknowledgement message. `welcome.last_seq` is a cumulative restatement and stands in for one,
+  which is enough for every client that does not replay, and no client replays. **Revisitable**
+  the first time one does. See *Sequence numbers*.
 - No heartbeat. **M2d.**
 - No authentication behind the session token. **M2a** makes a connection able to prove which
   player it was, and nothing more: a token is a bearer credential over a plaintext socket, so
