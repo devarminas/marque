@@ -348,7 +348,14 @@ documents. `two_client_demo.ps1` still passes a *teleporting* server, because it
 server finished a walk and never that it walked; `contested_pickup_demo.ps1` already carries the
 plausibility check to port. `contested_pickup_demo.ps1` asserts nothing about player position, so
 a loser halted at the wrong coordinates passes it. `SKILL.md` blames the frozen-server sabotage
-for a `DEMO TIMEOUT` that was machine load, and `features/contested-pickup.md` claims the two
+for a `DEMO TIMEOUT` **that the sabotage cannot produce** — observed twice, by that unit's own
+commit and again by M1j's verifier, which ran the frozen sabotage and got a clean failure on
+`0 arrived event(s)` with both client stderr files empty and no timeout at all. **Load is the
+remaining explanation and nobody has reproduced it.** This file previously said "that was machine
+load" flatly and pointed at *The coordinator's fleet is part of the environment* as the evidence;
+that section is M1g's zero-displacement story and does not mention the timeout once. The negative
+is established, the positive is not, and the two must not be written as one sentence.
+`features/contested-pickup.md` claims the two
 clients' sync ticks were identical on every run, which M1k falsified by observing 32 against 33.
 
 **Three sync checks, not one, and the handover conflated them.** They are

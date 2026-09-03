@@ -36,7 +36,9 @@ than working from a summary. In short:
 - Three sync checks exist, not one. **Measure a distribution, idle and loaded, before changing
   any of them.** The evidence points at load-induced skew rather than a tolerance that is too
   tight.
-- `SKILL.md` blames the frozen-server sabotage for a `DEMO TIMEOUT` that was machine load.
+- `SKILL.md` blames the frozen-server sabotage for a `DEMO TIMEOUT` the sabotage cannot produce,
+  observed twice. Load is the remaining explanation and nobody has reproduced it; say it that way
+  rather than asserting the positive.
   `features/contested-pickup.md` claims the sync ticks were identical on every run; that is
   falsified.
 
