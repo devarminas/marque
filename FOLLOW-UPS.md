@@ -275,3 +275,26 @@ because `y` never crosses the wire and the M0 world is a flat plane. They are tw
 fact. When terrain lands, both become a query against the same ground service, and they should
 move together: an item resting at a different height from the player standing over it is the
 failure this note exists to prevent.
+
+## Lost rationale, not tuning
+
+Not numbers, not feel — documentation debts, parked here for the same reason as everything else
+above: real, and cheap to lose permanently if nobody writes them down before the context that
+produced them is gone.
+
+- **Two comment deletions in the `cleanup-client-comments` cull (PR #19) cost rationale that
+  lives nowhere else.** The per-constant tick-offset derivations in `client/scripts/pickup_demo.gd`
+  are now "they must stay in this order" with no numbers explaining why. And nothing in the repo
+  says why the pickup demo is a second scripted-client mode rather than a `--shots` flag on the
+  existing one. Neither is a behavioural contract, so neither blocked that PR, but both are worth
+  a human (or a future unit) reconstructing and writing back down before the reasoning is fully
+  forgotten.
+- **`PROTOCOL.md`'s Clock section understates the client's tick-estimate error.** It says the
+  estimate "necessarily lags the server by roughly one-way latency." The tick-anchor-alignment
+  unit's writer found that this is incomplete: each client's `TickClock` anchors at its own
+  `welcome` receipt, so the estimate lags by one-way latency **plus a uniform `[0, tick_ms)` phase
+  term that differs per client**, from where in the current tick the anchor happened to land. That
+  phase term is exactly what made "wait for tick N" look like a rendezvous between two clients when
+  it wasn't one — the finding the whole tick-anchor-alignment unit exists to fix. The unit is
+  client-only and forbidden from touching `PROTOCOL.md`, so the correction never reached the
+  contract file itself. Whoever next has standing to edit `PROTOCOL.md` should fold this in.
