@@ -50,6 +50,12 @@ Preconditions:
   path's `start_tick` whose coordinates match its endpoint. Then the two layers
   tied together: the phase-1 walker's `arrived` point is within 0.05 units of where
   both clients drew that body in shot 4.
+
+  **The arrival's tick is checked too, not just its coordinates.** A tick loop that
+  crossed the whole polyline in one step emits an arrival at the right place and was
+  passing this demo until M1j. Crossing that span takes `ceil(span / (walk_speed *
+  tick_ms))` ticks, within two, measured against the `walk_speed` and `tick_ms` the
+  run's own `server_started` reports rather than against constants in the script.
 - **The evidence survives the run.** Everything lands in `-OutDir`, default
   `$env:TEMP\marque-two-client`: the eight PNGs, `client-a.stdout.log` and
   `client-b.stdout.log` with their stderr companions, and `server.stdout.ndjson`,
