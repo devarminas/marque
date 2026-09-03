@@ -65,8 +65,7 @@ what is reserved.
 reason about the domain. You launch agents, gate on their output, and move to the next unit. If
 you find yourself designing something, you have taken a worker's job.
 
-One unit at a time, in this order. Every agent is `pstack:poteto-agent`, which reads `poteto-mode`
-before it works. A bare model-lane agent skips that read and drifts.
+One unit at a time, in this order. Every agent is `poteto-agent`. A bare model-lane agent skips that read and drifts.
 
 1. **Write.** One unit, one branch, one worktree under `C:\Users\armin\Documents\Projects\game\`.
    `git worktree add`. Model `opus`. Paste `STANDING-ORDERS.md` **verbatim** and name the SHA you
