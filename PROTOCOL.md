@@ -7,9 +7,14 @@ is wrong.
 
 Amend this file first, then change code. Never the reverse.
 
-Status: M0 shipped. **M1's messages are specified here and not yet implemented**; sections
-marked **M1** are the contract the M1 units are being written against, so a reader looking at
-today's code will not find them. Sections marked **M2** are reserved and nobody is writing them.
+Status: **M0 and M1 shipped.** Everything marked **M1** is implemented and on the wire, so a
+reader looking at today's code will find all of it. **M2 is in progress.** Each **M2** marker
+names the unit that discharges it: a marker reading plain **M2** is still reserved and nobody is
+writing it, and one reading **M2a** or **M2b** is somebody's live contract.
+
+This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
+for the whole of M1 because correcting it was never any unit's job. It is a status line; being
+stale is the only way it can fail.
 
 ## Envelope
 
@@ -74,8 +79,8 @@ arrived `path` can carry a `start_tick` in the client's perceived future. **Elap
 `start_tick` is clamped at zero**; a negative elapsed means "has not started yet", not
 "rewind".
 
-**M2.** A periodic `{"tick":{"t":N}}` heartbeat for drift correction and liveness. Reserved,
-not sent in M0. Rule 1 above is what makes adding it free.
+**M2d.** A periodic `{"tick":{"t":N}}` heartbeat for drift correction and liveness. Reserved,
+not sent in M0 or M1. Rule 1 above is what makes adding it free.
 
 ## Coordinates
 
@@ -96,7 +101,7 @@ The client sends intents and never facts. It has zero authority.
 
 A request to walk to a point. The server decides whether it is legal and what path results.
 
-**M2.** Any client-to-server body may carry an integer `seq`. Servers before M2 ignore it per
+**M2b.** Any client-to-server body may carry an integer `seq`. Servers before M2 ignore it per
 compatibility rule 2. Reserved now so that M2's dedupe fills in a field rather than
 renegotiating every intent's contract.
 
@@ -126,6 +131,19 @@ a client that could name the item id could name one it does not own.
 The first message on every connection. `you` is this client's own id. `players` is every player
 in the world **including itself**, at its position as of `tick`.
 
+**M2a** adds `session`, this player's durable identity:
+
+    {"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934",
+                "tick_ms":150,"tick":142,
+                "players":[{"id":1,"x":0.0,"z":0.0}],
+                "items":[]}}
+
+It is a sibling of `you` rather than of `players`, for the reason `items` is a sibling of
+`players` and `inventory` is not: `you` and `session` are the two things this message says about
+the receiving client, and everything else in it is the world. See *Identity* for what a client
+does with it. A pre-M2 client ignores the field under compatibility rule 2 and is exactly as
+correct as it was before, because a client that never sends a token never resumes.
+
 **M1** adds a sibling array, `items`, listing every item lying on the ground as of the same
 tick:
 
@@ -138,13 +156,19 @@ inventory is not in `welcome`**; it is private to one player rather than part of
 it arrives as a separate `inventory` message inside the same atomic step. A pre-M1 client
 ignores the `items` field under compatibility rule 2 and is exactly as correct as it was before.
 
-**A repeated `welcome` is a full restatement of the world, not a patch.** The server sends
-exactly one today, so nothing depends on this yet. But "first message on every connection"
-constrains position and never constrained multiplicity, and M2's reconnect makes the answer
-load-bearing. A client receiving a second `welcome` frees every body, re-anchors its clock, and
-rebuilds from the list. That is the only reading consistent with `welcome` being the whole world
-restated: anything the client believed beforehand is stale by definition. It also hands M2's
-reconnect its re-anchoring for free.
+**A repeated `welcome` is a full restatement of the world, not a patch.** "First message on every
+connection" constrains position and never constrained multiplicity. A client receiving a second
+`welcome` frees every body, re-anchors its clock, and rebuilds from the list. That is the only
+reading consistent with `welcome` being the whole world restated: anything the client believed
+beforehand is stale by definition.
+
+**M2a makes that true on the wire rather than hypothetical.** A resumed connection receives the
+ordinary welcome step — the same `you`, the same `session`, the world as of now, the path
+replays, then its `inventory` — and it is a second `welcome` for that player by construction. It
+is one connection's first `welcome` and one player's second, and the rule above is written from
+the player's side because that is the side that has stale beliefs to discard. This paragraph
+used to end "the server sends exactly one today, so nothing depends on this yet"; something
+depends on it now.
 
 Immediately after, the server sends one `path` per player currently mid-walk, so a joining
 client learns in-flight movement through the same code path as live movement. There is no
@@ -490,11 +514,12 @@ the description had to be corrected once already by a probe against a real stall
 semantics that depends on winning a race we do not control is a semantics that will be wrong
 again. Classifying and latching does not depend on it at all.
 
-Revisitable when M2 adds a heartbeat, which changes the traffic rate this section measured and
+Revisitable when **M2d** adds a heartbeat, which changes the traffic rate this section measured and
 therefore changes which detector ordinarily fires. It does not change which reason is reported,
 which is the point.
 
-**The vocabulary, complete. M1f, shipped.** Five reasons and four details. A reason is a cause;
+**The vocabulary, complete. M1f, shipped; `refused` added by M2a.** Six reasons and four
+details. A reason is a cause;
 a detail names the detector that noticed and exists only for a human reading a log. Nothing on
 either side of the wire branches on a detail, and the server writes both into
 `client_disconnected`, omitting `detail` where the cause admits only one detector.
@@ -508,6 +533,19 @@ either side of the wire branches on a detail, and the server writes both into
 | `peer_gone` | `write_error` | A write failed for a reason that was not the timeout. |
 | `server_shutdown` | — | The server is going away. |
 | `protocol_error` | — | The client sent an uninterpretable frame and was told so first. |
+| `refused` | — | **M2a.** The connection presented a session token whose player is still connected, and was closed at the door. |
+
+**`refused` is the one reason that never appears in a `client_disconnected` line, and that is
+the rule rather than an omission.** Every other row describes a connection the world admitted
+and then lost, so the world has a player id to log it against. A refused connection is turned
+away before any player exists for it: nothing is created, nothing is broadcast, and the only
+record is one `resume_refused` naming the remote address. A reader counting
+`client_disconnected` to ask "how many players left" must not be handed connections that never
+arrived.
+
+It joins this table anyway, because the table is the closed vocabulary of latched reasons and a
+reason that is latched but undocumented is worse than one that is documented as never being
+logged here. *When the connection dies*, server half, is where the refusal itself is specified.
 
 **A write error that is not a timeout reports `peer_gone`. M1f, decided, revisitable.** This
 section did not cover it: it named the write *timeout* as a slow-client detector and said
@@ -598,19 +636,118 @@ stale by definition, and items are part of the world it restates.
 
 ## Identity
 
-Player ids are integers assigned sequentially from 1 as connections arrive. They are
-connection-scoped, are never reused within a process lifetime, and carry no meaning across a
-restart. `welcome` reissues `you` on every connection, so nothing may assume an id is stable.
+Player ids are integers assigned sequentially from 1 as players enter the world. They are never
+reused within a process lifetime and carry no meaning across a restart. `welcome` reissues `you`
+on every connection, so nothing may assume an id is stable.
+
+**This paragraph used to say ids are "connection-scoped" and that one is assigned "as
+connections arrive", and M2a made both false.** A player now outlives its socket, so the id is
+scoped to the player and a resumed connection is handed the id it had before. Two connections
+therefore share one id over a player's life, one after the other and never at once. The rule
+that survives unchanged is the one that matters to a client: read `you` out of every `welcome`
+and never assume it.
 
 **M1** adds item ids, which are a **separate sequence in a separate space**. See *Items and
 inventory*, *Entity naming*. Player 1 and item 1 are unrelated.
 
 There is no connection limit in M0.
 
-**M2.** Reconnect requires mapping a connection to a durable identity before per-identity
-sequence dedupe means anything. That mapping does not exist yet and M0 must not pretend it does.
+### The session token. **M2a**, shipped.
+
+Reconnect requires mapping a connection to a durable identity before per-identity sequence
+dedupe means anything. `welcome.session` is that mapping.
+
+- **It is an opaque string, 32 hexadecimal characters from a cryptographic random source.** One
+  per player, minted when the player enters the world, **the same across every resume of that
+  player**, and gone when the player leaves it. Opaque means opaque: nothing derives a player id
+  from it, nothing orders two of them, and a client that parses it is reading a number that is
+  not there.
+- **It is never written to the event log.** Every event that is about a resume names the player
+  id or the remote address instead. A token in a log is a token in every place a log is pasted,
+  and the log is read by agents and quoted into pull requests.
+- **A client presents it as the `session` query parameter of the WebSocket URL**,
+  `ws://host/ws?session=<token>`. One mechanism, deliberately: a header would work equally well
+  and having two ways to say the same thing means one of them is eventually the wrong one.
+
+  Verified 2026-09-03 against a stdlib Go handler: Godot 4.7.2's
+  `WebSocketPeer.connect_to_url("ws://.../ws?session=qry123")` arrives with
+  `r.URL.RawQuery == "session=qry123"`. `handshake_headers` also exists and also arrives; it is
+  not used.
+- **A connection presenting no token is a fresh join**, which is every connection before M2a and
+  every first connection after it.
+
+What a client does with it is one rule: **keep the token from your last `welcome`, and present
+it on your next connection to the same server.** A token whose player has expired or is unknown
+gets a fresh player, and the client can tell because `you` and `session` both differ from what
+it held. A token is not a login and is not a secret worth defending; see *Deliberately absent*.
 
 ## When the connection dies
+
+### Server. **M2a**, shipped.
+
+**Deaths split by cause, never by detector and never by detail.** The reason the connection died
+already answers whether the player meant to go, so nothing new has to be decided at the socket.
+
+- **`closed` and `protocol_error` retire the player at once**, exactly as M1 did: `despawn` is
+  broadcast, the inventory is deleted, the id is never issued again, and the session token dies
+  with the player. `server_shutdown` needs no rule; the world is going away underneath it.
+- **`peer_gone` and `slow_client` suspend the player** for `ResumeGraceTicks`, which is **400
+  ticks, sixty seconds at 150 ms**. The body stays in the world. No `despawn` is broadcast,
+  because nothing about the world has changed for anyone else: the walk finishes on schedule, a
+  pending pickup resolves into the kept inventory, and every frame the suspended player would
+  have received is dropped.
+
+RuneScape is the tiebreaker and it splits them the same way. Logging out removes you from the
+world at once. A dropped connection leaves your character standing there for a while, which is
+what makes reconnecting worth doing.
+
+**Expiry is counted in ticks, checked in the tick loop, and never against a wall clock.** The
+tick counter is the clock (see *Clock*), and a suspension that expired against `time.Now()`
+would be the one rule in the game that a paused process gets wrong. A suspension that reaches
+its expiry tick retires the player exactly as a clean logout does, `despawn` included.
+
+**Resume.** A connection presenting a suspended player's token is handed that player: the
+ordinary atomic welcome step, with the same `you` and the same `session`, the world as of now,
+one re-anchored `path` per walker **including its own**, and then its `inventory`. **No `spawn`
+is broadcast**, because everybody already has that body and a second one would be a duplicate
+avatar. From every other client's side a resume is not an event at all.
+
+**A token whose player is still connected is refused, not superseded.** The new connection
+receives `{"error":{"msg":"session is still connected"}}`, with no `re` because no message was
+rejected, and the socket is closed behind it. No player is created for it and it is never
+admitted to the world. The connection that already holds the player is untouched.
+
+That is RuneScape's "already logged in" answer, and it is the only one available today:
+superseding would mean telling the older connection to stop, and there is no server-to-client
+"you have been replaced" signal in this protocol. Inventing one to serve a case nobody has hit
+would be inventing a message before anything can use it. **Revisitable**, and the thing to
+revisit if a real client ever gets stuck holding its own player out.
+
+**An unknown or expired token is a fresh join**, logged and otherwise indistinguishable from a
+connection that presented nothing. The client can tell, because `you` and `session` differ from
+what it held.
+
+**Log vocabulary.** Five events, each with its own field set, and no field added to an existing
+event:
+
+| Event | Fields | When |
+|---|---|---|
+| `player_suspended` | `player`, `expires_tick` | a `peer_gone` or `slow_client` death |
+| `player_resumed` | `player`, `remote` | a connection presented a suspended player's token |
+| `player_expired` | `player` | the grace ran out and the body was retired |
+| `resume_refused` | `remote` | the token named a player that is still connected |
+| `resume_unknown` | `remote` | a token was presented and named nothing |
+
+`client_disconnected` is still logged for every socket death the world admitted, with its
+latched reason, exactly as M1 wrote it. A suspension is a `client_disconnected` followed by a
+`player_suspended`, not one instead of the other: the socket really did die, and the reason it
+died is what decided the suspension.
+
+None of the five carries the token, per *Identity*. `resume_refused` and `resume_unknown` carry
+`remote` and no player id because there is no player to name: one refers to a connection the
+world declined to admit, and the other to a token that names nothing.
+
+### Client.
 
 **A client freezes the world it has and logs loudly. It does not clear it.**
 
@@ -618,9 +755,15 @@ The compatibility rules above govern frames. This governs the socket itself, whi
 did. M0 has no reconnect, so a dead socket is terminal for that session.
 
 Clearing the world on disconnect asserts something the server never said, namely that everyone
-logged out. Frozen state is stale, but M0 has no UI to explain either condition, and stale-and-
-announced beats false-and-silent. Revisit with M2, which is the first milestone where a client
-can do something better than freeze.
+logged out. Frozen state is stale, but there is no UI to explain either condition, and
+stale-and-announced beats false-and-silent.
+
+**Freezing is still the rule, and M2a changed what it costs rather than what it is.** The
+sentence above about a dead socket being terminal is now true only of the client: the server
+holds the body and the inventory for the grace, so a frozen world is no longer stale about
+something that is gone, it is stale about something that is waiting. Reconnecting is what
+cashes that in, and no shipped client does it yet — the client half of reconnect is a later M2
+unit, and M2a is server-only.
 
 ## Decoding notes for the Godot side
 
@@ -650,8 +793,13 @@ a GDScript client will get it subtly wrong.
 Named so nobody adds them thinking they were forgotten.
 
 - No authentication. Ids are sequential and unverified.
-- No sequence numbers or acks. **M2.**
-- No heartbeat. **M2.**
+- No sequence numbers or acks. **M2b.**
+- No heartbeat. **M2d.**
+- No authentication behind the session token. **M2a** makes a connection able to prove which
+  player it was, and nothing more: a token is a bearer credential over a plaintext socket, so
+  anyone who can read the wire can resume as you. That is the same standard as the ids above,
+  which are sequential and unverified, and it is stated here so nobody mistakes the token for a
+  login.
 - No banking, trading, crafting, or item stacking. M1 has one item type, one item per slot, and
   the ground as the only container outside a player's own inventory.
 - No item ownership, drop timers, or per-player visibility. RuneScape hides a drop from everyone
