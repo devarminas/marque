@@ -26,7 +26,24 @@ const (
 	DisconnectSlow     = "slow_client"
 	DisconnectShutdown = "server_shutdown"
 	DisconnectProtocol = "protocol_error"
+	// DisconnectRefused: the connection presented a session token whose player
+	// is still connected, and was turned away at the door.
+	//
+	// It is the one reason that never reaches a client_disconnected line,
+	// because the world never admitted the connection and so has no player to
+	// log it against (PROTOCOL.md, "Which reason is authoritative"). The hub
+	// does not know that; it latches this like any other reason and the world
+	// decides what to record.
+	DisconnectRefused = "refused"
 )
+
+// SessionParam is the WebSocket URL query parameter carrying a resuming
+// client's session token, as in ws://host/ws?session=<token>.
+//
+// One mechanism and not two: a handshake header would work equally well, and
+// having both means one of them is eventually the wrong one (PROTOCOL.md,
+// "The session token").
+const SessionParam = "session"
 
 const (
 	DetailSendBufferFull = "send_buffer_full"
@@ -73,6 +90,7 @@ type Event struct {
 type Conn struct {
 	ws           *websocket.Conn
 	remote       string
+	session      string
 	send         chan outgoing
 	writeTimeout time.Duration
 
@@ -84,6 +102,12 @@ type Conn struct {
 
 // Remote is the peer address, for logging only. It is not an identity.
 func (c *Conn) Remote() string { return c.remote }
+
+// Session is the session token this connection presented at the door, or empty
+// when it presented none. It is a claim, not a fact: this package neither knows
+// which tokens exist nor what one entitles a connection to, and the world is
+// what decides.
+func (c *Conn) Session() string { return c.session }
 
 // Send queues one encoded frame and reports whether it was accepted. It never
 // blocks.
@@ -158,6 +182,12 @@ func (h *Hub) Events() <-chan Event { return h.events }
 // ServeHTTP upgrades a request to WebSocket and blocks for the connection's
 // lifetime.
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Read before the upgrade, while the request is unambiguously still a
+	// request. Nothing about the token is checked here: an unparseable or
+	// absurd one is a claim the world will fail to match, which is the same
+	// answer it gives an expired one.
+	session := r.URL.Query().Get(SessionParam)
+
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
 	})
@@ -168,6 +198,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn := &Conn{
 		ws:           ws,
 		remote:       r.RemoteAddr,
+		session:      session,
 		send:         make(chan outgoing, sendBuffer),
 		writeTimeout: h.writeTimeout,
 		closed:       make(chan struct{}),

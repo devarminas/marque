@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -105,10 +106,21 @@ func acornAt(x, z float64) seed { return seed{kind: game.KindAcorn, x: x, z: z} 
 // order marqued does.
 func newHarness(t *testing.T, seeds ...seed) *harness {
 	t.Helper()
+	return newHarnessWithGrace(t, game.ResumeGraceTicks, seeds...)
+}
+
+// newHarnessWithGrace is newHarness with the resume grace shortened, for the
+// one test that has to watch a suspended player expire.
+//
+// Sixty seconds of production grace is not something a test can wait out, and
+// nothing else in the suite cares what the number is: every other test either
+// resumes well inside it or never suspends at all.
+func newHarnessWithGrace(t *testing.T, grace int64, seeds ...seed) *harness {
+	t.Helper()
 
 	logs := &syncBuffer{}
 	hub := mnet.NewHub()
-	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore())
+	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore(), grace)
 
 	// Before Run, which is the only time seeding is safe: after it, the world
 	// goroutine owns the store.
@@ -233,13 +245,27 @@ func (h *harness) churnOnce() error {
 
 func (h *harness) dial(name string) *client {
 	h.t.Helper()
+	return h.dialURL(name, h.wsURL())
+}
+
+// dialResume connects presenting a session token, the way a client that held a
+// welcome comes back. It builds the URL the same way a client does rather than
+// reaching for an in-process shortcut, because the query parameter surviving
+// the handshake is part of what is being tested.
+func (h *harness) dialResume(name, token string) *client {
+	h.t.Helper()
+	return h.dialURL(name, h.wsURL()+"?"+mnet.SessionParam+"="+url.QueryEscape(token))
+}
+
+func (h *harness) dialURL(name, target string) *client {
+	h.t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), readTimeout)
 	defer cancel()
 
-	ws, _, err := websocket.Dial(ctx, h.wsURL(), nil)
+	ws, _, err := websocket.Dial(ctx, target, nil)
 	if err != nil {
-		h.t.Fatalf("client %s: dial %s: %v", name, h.wsURL(), err)
+		h.t.Fatalf("client %s: dial %s: %v", name, target, err)
 	}
 	h.t.Cleanup(func() { _ = ws.CloseNow() })
 
