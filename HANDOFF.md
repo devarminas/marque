@@ -20,27 +20,22 @@ after it had already passed.
     powershell -ExecutionPolicy Bypass -File scripts/interop_test.ps1 > out1.txt 2>&1
     powershell -ExecutionPolicy Bypass -File scripts/contested_pickup_demo.ps1 > out2.txt 2>&1
 
-**M0 and M1 are both done and merged.** Sixteen PRs, each with a verdict in its body, which is
-that unit's ledger row. Two clients race for one item and exactly one gets it, by observation.
+**M0 and M1 are both done and merged, M1j included.** Nineteen PRs, each with a verdict in its
+body, which is that unit's ledger row. Two clients race for one item and exactly one gets it, by
+observation. M1j hardened both demos, corrected two documents, and reported one thing it found but
+did not fix: two clients agree on a tick number, not a moment, and can reach it up to 150ms apart,
+which is why `contested_pickup_demo.ps1` legitimately failed about 38% of idle-machine runs.
+Alongside it, two doc-only comment-cull PRs merged (`server/internal/net` and `client/`), each
+verified as token-identical / harness-identical to its pre-cull baseline.
 
-**One unit is open and it does not block: M1j.** PowerShell and markdown, no Go and no GDScript.
-Harden both demos and correct two documents. `COORDINATION.md`'s M1 section has the full scope
-including a correction to an earlier handover that got the fix backwards; read it there rather
-than working from a summary. In short:
-
-- `two_client_demo.ps1` passes a *teleporting* server. It asserts the server finished a walk,
-  never that it walked. `contested_pickup_demo.ps1` already carries the plausibility check to
-  port.
-- `contested_pickup_demo.ps1` asserts nothing about player position, so a loser halted at the
-  wrong coordinates passes it.
-- Three sync checks exist, not one. **Measure a distribution, idle and loaded, before changing
-  any of them.** The evidence points at load-induced skew rather than a tolerance that is too
-  tight.
-- `SKILL.md` blames the frozen-server sabotage for a `DEMO TIMEOUT` the sabotage cannot produce,
-  observed twice. Load is the remaining explanation and nobody has reproduced it; say it that way
-  rather than asserting the positive.
-  `features/contested-pickup.md` claims the sync ticks were identical on every run; that is
-  falsified.
+**One unit is open and it does not block: tick-anchor alignment.** Client-only fix for the skew
+M1j found and correctly left out of scope. `COORDINATION.md`'s M1 section has the full
+measurement M1j took (the three sync checks, their baseline distribution, and why `:718` stays
+strict); read it there rather than working from a summary. Acceptance is behavioral, not a moved
+number: the same 21-run measurement M1j took, same script, same idle-machine discipline, with
+`contested_pickup_demo.ps1`'s pass rate going to approximately 100% rather than ~62%. No
+`server/` change, no `PROTOCOL.md` change, no heartbeat or `seq` field — those are M2 and stay
+reserved. Tick rate stays 150ms.
 
 Then **M2**: reconnect, sequence numbers, server-side dedupe. `PROTOCOL.md`'s **M2** markers name
 what is reserved.

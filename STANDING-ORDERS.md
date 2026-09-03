@@ -100,15 +100,16 @@ worker needs to know about where the program is.
 
 - **M0, closed.** Two clients connect, click to move, and each sees the other walk. Seven
   units, seven PRs, verified in both directions by observation rather than inference.
-- **M1, closed.** One item on the ground, two clients click it, exactly one gets it. Pickup and
-  drop, in-memory store behind a `Store` interface. Ten units, ten PRs. **The wire contract for
-  all of it is in `PROTOCOL.md` under the M1 markers. Read it; do not re-derive it and do not
-  negotiate with it.**
-- **M1j, the one open unit.** PowerShell and markdown. Harden both demos and correct two
-  documents. `two_client_demo.ps1` still passes a *teleporting* server, because it asserts the
-  server finished a walk and never that it walked; `contested_pickup_demo.ps1` already carries
-  the plausibility check to port. `contested_pickup_demo.ps1` asserts nothing about player
-  position, so a loser halted at the wrong coordinates passes it.
+- **M1, closed, M1j included.** One item on the ground, two clients click it, exactly one gets
+  it. Pickup and drop, in-memory store behind a `Store` interface. Eleven units, eleven PRs.
+  **The wire contract for all of it is in `PROTOCOL.md` under the M1 markers. Read it; do not
+  re-derive it and do not negotiate with it.** M1j hardened both demos, corrected two documents,
+  and reported (but did not fix) that two clients agree on a tick number rather than a moment.
+- **Tick-anchor alignment, the one open unit.** Client-only. Fixes the skew M1j found: two
+  clients' independently-anchored tick clocks can read the same tick number up to 150ms apart,
+  which is why `contested_pickup_demo.ps1` legitimately failed about 38% of idle-machine runs.
+  No `server/` change, no `PROTOCOL.md` change, no heartbeat or `seq` field. Tick rate stays
+  150ms.
 - **M2, next.** Reconnect. Sequence numbers and server-side dedupe. `PROTOCOL.md`'s **M2**
   markers name what is reserved.
 

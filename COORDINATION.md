@@ -342,21 +342,54 @@ Nine units merged, each with a verdict in its PR body, which is the ledger.
 | M1e | #14 | `live-ui-verified`, `sabotage-holds-with-findings` | **The milestone.** Two clients, one item, exactly one holder |
 | M1k | #15 | `conformance-holds-with-findings`, `sabotage-holds-with-findings` | The inventory panel is opaque, and the test that clicked through it moved |
 | M1f | #16 | `conformance-holds-with-findings`, `sabotage-holds-with-findings` | Classify a dead connection by cause, latch the first condemnation. Absorbed M1i |
+| M1j | #17 | `sabotage-holds-with-findings` | Hardened both demos, corrected two documents, measured the three sync checks |
 
-**One unit still open, and it does not block.** **M1j** hardens the demos and corrects two
-documents. `two_client_demo.ps1` still passes a *teleporting* server, because it asserts that the
-server finished a walk and never that it walked; `contested_pickup_demo.ps1` already carries the
-plausibility check to port. `contested_pickup_demo.ps1` asserts nothing about player position, so
-a loser halted at the wrong coordinates passes it. `SKILL.md` blames the frozen-server sabotage
-for a `DEMO TIMEOUT` **that the sabotage cannot produce** — observed twice, by that unit's own
-commit and again by M1j's verifier, which ran the frozen sabotage and got a clean failure on
-`0 arrived event(s)` with both client stderr files empty and no timeout at all. **Load is the
-remaining explanation and nobody has reproduced it.** This file previously said "that was machine
-load" flatly and pointed at *The coordinator's fleet is part of the environment* as the evidence;
-that section is M1g's zero-displacement story and does not mention the timeout once. The negative
-is established, the positive is not, and the two must not be written as one sentence.
-`features/contested-pickup.md` claims the two
-clients' sync ticks were identical on every run, which M1k falsified by observing 32 against 33.
+**M1j is closed.** It hardened both demos and corrected two documents. `two_client_demo.ps1` now
+checks the arrival's tick against the path's, so a *teleporting* server no longer passes it merely
+for finishing a walk; sabotaged with `distance := 1000.0`, caught. `contested_pickup_demo.ps1` now
+asserts the loser's halt position is within `PickupRange` of the item rather than only what it did
+not receive; sabotaged with a fixed `(50, 50)` halt, caught at 77.782 units. `SKILL.md` no longer
+blames the frozen-server sabotage for a `DEMO TIMEOUT` it cannot produce — observed twice, by
+M1j's own commit and again by its verifier, both a clean failure on `0 arrived event(s)` with
+empty client stderr and no timeout. **Load is the remaining explanation and nobody has reproduced
+it**, and the text says exactly that rather than asserting the positive. `features/contested-
+pickup.md` no longer claims the sync ticks were identical on every run, which M1k had already
+falsified by observing 32 against 33.
+
+**The verifier caught the writer overstating its own mechanism, after an initial ready-to-merge
+call, and the fix landed as a same-branch follow-up rather than a force-push.** The writer's
+`:732` comment said a loser is condemned "at whatever distance it is still standing at,"
+unconditionally. `resolvePickup` does test `!live` before range, but `step()`
+resolves pending pickups in **join order**, and that's what actually decides the outcome: a loser
+condemned on the winning tick (gap 0) has to be the *later* joiner. An earlier-joining loser would
+see the item still live, find itself out of range, return unresolved, and be condemned a tick
+later instead (gap 1). This demo's loser is always the later joiner, which is why the writer
+measured gap 0 on all 8 of its skewed-start runs — but `:732` is not a general backstop for
+`:718`, only a coincidence of this demo's fixed roles. The verifier proved the split with a
+throwaway Go test against `resolvePickup`/`step`, run and deleted, `git diff --stat` clean before
+and after. Fixed in `82da058`, shown disjoint from the verified `59ffb3d` before the verdict
+extended across it.
+
+**Two comment-cull PRs closed alongside M1j, unplanned but real.** A comment audit had already
+found five false comments split across `server/` and `client/`, one citing a test
+(`TestClassifiersDisagreeAboutTheSameDyingConnection`) that turned out to be a dangling reference
+rather than a fabrication — it existed at `8cebda1` and was removed at `9e50b18` when a
+replacement landed. `cleanup-go-comments` (PR #18) was verified by a token-stream lever
+(`go/scanner` over both revisions, comments excluded, byte-identical) plus an independent `-race`
+rerun; one commit-message overstatement and one over-cut true comment (`Hub.Close`'s lock-ordering
+note) were restored in a follow-up commit. `cleanup-client-comments` (PR #19) was verified by a
+hand read plus a scripted comment/whitespace stripper, and by rerunning `interop_test.ps1` on both
+sides of the cull with an identical 573-assertion, 9-suite result and a line-for-line matching
+assertion set.
+
+**One unit is open, and it does not block: tick-anchor alignment.** `client`-only, briefed
+directly against the baseline table below. Two clients anchor `TickClock.estimated_tick()`
+independently, at their own `welcome` receipt, against their own monotonic clock, so two clients
+that believe they are both "at tick N" can be there at real-world instants up to 150ms apart —
+which is why `contested_pickup_demo.ps1` legitimately failed about 38% of idle-machine runs.
+Acceptance is the same 21-run measurement below, same script, going from ~62% overall pass to
+approximately 100%; no `server/` or `PROTOCOL.md` change, and M2's heartbeat and `seq` field stay
+reserved.
 
 **Three sync checks, not one, and the handover conflated them.** They are
 `contested_pickup_demo.ps1:541` (client-side declared aim ticks equal), `:718` (server-side
@@ -418,12 +451,25 @@ M0's milestone verdict always stood, because M0e's verifier read the event log i
 interop suite carries ninety server-side assertions. The demo alone did not, and this file
 described it as a milestone proof for a milestone and a half.
 
-**The next false pass in the family is still open, and it is unit M1j.** A *teleporting* server
-passes. With `distance := 1000.0` the world crosses a whole path in one tick and emits a
-perfectly-formed `arrived`, and the demo prints OK. A 6.204-unit walk at `WalkSpeed` 3.0 on 150ms
-ticks takes 14 ticks and every healthy run shows exactly 14, but nothing asserts that the span is
-**plausible**. So the demo currently proves the server *finished* the walk, not that it *walked*.
-The tell is already printed in the demo's own `==> server:` line.
+**The next false pass in the family was closed by M1j.** A *teleporting* server used to pass. With
+`distance := 1000.0` the world crossed a whole path in one tick and emitted a perfectly-formed
+`arrived`, and the demo printed OK. A 6.204-unit walk at `WalkSpeed` 3.0 on 150ms ticks takes 14
+ticks and every healthy run shows exactly 14, and the demo now asserts that span is **plausible**
+rather than merely that the server *finished* the walk. Sabotaged and caught; see the M1j entry
+above.
+
+**The baseline measurement that unlocked the `:541`/`:718` decision, and that tick-anchor
+alignment's acceptance criterion is measured against:**
+
+| Check | M1j baseline (n=21, idle) | M1j baseline (n=6, loaded) |
+|---|---|---|
+| Clients' aim ticks differ by 1 (`:541`) | 15 of 21, never more | 3 of 6 |
+| Server start ticks differ by 1 (`:718`) | 8 of 21, never more | 1 of 6 |
+| Resolve/loss gap is 0 (`:732`) | 21 of 21 | 6 of 6 |
+| Demo passes overall | 13 of 21 (~62%) | 3 of 6 |
+
+Loaded rates are lower than idle, not higher, which at n=6 is no signal — load is not the cause,
+client-side clock quantization is, and it predicts a rate independent of load.
 
 **The demo is load-fragile and must run on an idle machine.** See *The coordinator's fleet is part
 of the environment* above.
@@ -455,7 +501,8 @@ Everything a coordinator needs is in this repo. Nothing lives only in a chat tra
 this file, then `COORDINATION.md`, `PROTOCOL.md`, `NOTES.md`, and `FOLLOW-UPS.md`. Each merged
 PR body is that unit's ledger row: verdict, head SHA, and the commands actually run.
 
-**M0 is closed and `main` is green. M1 is scoped and open.**
+**M0 and M1 are both closed, M1j included, and `main` is green.** Tick-anchor alignment, the
+client-only fix M1j reported and left out of scope, is the one open unit; M2 is next after it.
 
 The two protocol decisions that were due before M1's first message are **both settled and
 written into `PROTOCOL.md`**, with their reasoning:
