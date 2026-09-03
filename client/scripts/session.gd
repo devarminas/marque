@@ -64,9 +64,39 @@ const TickClock := preload("res://scripts/tick_clock.gd")
 ## engine's own `--` separator.
 const SERVER_ARG := "--server"
 
+## Heartbeats of silence this session tolerates before it abandons the socket.
+## **M2c.**
+##
+## Three, per `PROTOCOL.md`, "Clock": one lost or late heartbeat must not be a
+## disconnect, and three intervals is the smallest window that survives one.
+const LIVENESS_HEARTBEATS := 3
+
 ## Emitted once `welcome` has been applied: the clock is anchored, this client
 ## knows its own id, and every player the server listed has a body.
 signal joined(you: int)
+
+## Emitted whenever a heartbeat moved the clock. **M2c.**
+##
+## [param delta] is signed and is `t` minus what this client estimated at
+## receipt, so a positive delta means the client was running behind the server.
+## A heartbeat that agrees with the estimate emits nothing, which is the same
+## silence it logs (`PROTOCOL.md`, "Clock").
+##
+## Observable for the reason [signal move_to_requested] is: it is the only way
+## to assert the correction without reading stdout, and this unit has to be
+## verifiable before any server sends a `tick`.
+signal clock_corrected(delta: int, at_tick: int)
+
+## Emitted when the server went silent past the liveness window and the socket
+## was abandoned. **M2c.**
+##
+## [param silent_msec] is the window that elapsed, not the time since the last
+## frame of any kind: the window is measured from the last [i]tick-bearing[/i]
+## frame, and `welcome` is one of those.
+##
+## The session does not reconnect afterwards. This signal is where M2f will
+## hang that, and it is where a UI will hang the thing a player should be told.
+signal server_unresponsive(silent_msec: int)
 
 ## Emitted whenever a ground click is forwarded as a `move_to`, whether or not
 ## the socket was open to carry it.
@@ -122,6 +152,21 @@ var _clock := TickClock.new()
 var _you := 0
 ## `welcome.tick_ms`, or 0 before `welcome`. Every walker is built from it.
 var _tick_ms := 0
+## `welcome.heartbeat_ticks`, or 0 when the server named none. **M2c.** Zero is
+## liveness off, which is every server before M2d (`PROTOCOL.md`, "Clock").
+var _heartbeat_ticks := 0
+## Monotonic milliseconds by which a `tick` must have arrived, or 0 when no
+## liveness timer is armed. **M2c.**
+##
+## A deadline rather than an accumulated countdown, for the reason the clock
+## itself is anchored rather than accumulated (`PROTOCOL.md`, "Clock"): a
+## stalled window stops producing frames, and a countdown fed by frame deltas
+## would stop counting the silence exactly when the silence started mattering.
+##
+## Zero cannot collide with a real deadline: [method Time.get_ticks_msec] is
+## non-negative and the window is strictly positive, so an armed deadline is
+## always at least one.
+var _liveness_deadline_msec := 0
 ## Player id to [code]player_avatar.gd[/code]. The local player is in here too,
 ## under its own id, pointing at the authored node.
 var _avatars := {}
@@ -148,6 +193,7 @@ func _ready() -> void:
 
 	_net.welcomed.connect(_on_welcomed)
 	_net.welcome_items.connect(_on_welcome_items)
+	_net.tick_received.connect(_on_tick_received)
 	_net.spawned.connect(_on_spawned)
 	_net.despawned.connect(_on_despawned)
 	_net.path_assigned.connect(_on_path_assigned)
@@ -304,6 +350,7 @@ func _on_welcomed(
 	you: int,
 	tick_ms: int,
 	tick: int,
+	heartbeat_ticks: int,
 	player_ids: PackedInt64Array,
 	player_positions: PackedVector2Array,
 ) -> void:
@@ -324,6 +371,12 @@ func _on_welcomed(
 	# PROTOCOL.md, "Clock": anchored from welcome against a monotonic source,
 	# never accumulated from frame deltas.
 	_clock.anchor(tick, tick_ms)
+	# M2c. `welcome` is a tick-bearing frame, so it opens the liveness window
+	# rather than only configuring it: a server that promises heartbeats and
+	# then sends none has to be caught, and waiting for a first `tick` to start
+	# the timer is exactly the case that would never fire.
+	_heartbeat_ticks = heartbeat_ticks
+	_rearm_liveness()
 
 	for index in player_ids.size():
 		var id := int(player_ids[index])
@@ -368,6 +421,103 @@ func _on_welcome_items(
 
 	if not _items.is_empty():
 		print("session: %d ground item(s) in the world" % _items.size())
+
+
+## `tick`, the server's heartbeat. **M2c.** `PROTOCOL.md`, "Clock".
+##
+## Two jobs, and only one of them is conditional. The liveness window reopens on
+## every heartbeat that decodes, including one that agrees with the estimate:
+## the frame is proof the server is alive whatever it says about the clock. The
+## correction happens only when `t` and the estimate disagree.
+##
+## The comparison is made [i]at receipt[/i], before anything else in this
+## function can cost wall time, because the estimate is a function of now.
+func _on_tick_received(t: int) -> void:
+	if not _clock.is_anchored():
+		# Nothing reaches a connection before its `welcome` (PROTOCOL.md,
+		# "Ordering and the join race") and there would be no tick_ms to
+		# re-anchor with anyway. Defence against a broken peer, not a flow.
+		push_error("session: tick %d before welcome; ignoring" % t)
+		return
+
+	var estimate := _clock.estimated_tick()
+	_rearm_liveness()
+	if t == estimate:
+		# Agreement is the ordinary case. A line per heartbeat would bury the
+		# corrections this log exists for.
+		return
+
+	var delta := t - estimate
+	_clock.anchor(t, _tick_ms)
+	print(correction_line(delta, t))
+	clock_corrected.emit(delta, t)
+
+
+## The line [method _on_tick_received] prints for a correction of [param delta]
+## ticks at heartbeat [param at_tick]. **M2c.**
+##
+## Public and static so a test can assert the rendered text without capturing
+## stdout. The format is `PROTOCOL.md`'s, verbatim, and the signed `%+d` is the
+## part worth pinning: the sign is the diagnosis, and a formatter that dropped
+## it would leave every correction line reading as if the client were behind.
+static func correction_line(delta: int, at_tick: int) -> String:
+	return "session: clock corrected by %+d tick(s) at heartbeat %d" % [delta, at_tick]
+
+
+## True while a liveness timer is running. **M2c.**
+##
+## False before `welcome`, false for a server that named no `heartbeat_ticks`,
+## and false again once the window has expired or the socket has gone.
+func is_liveness_armed() -> bool:
+	return _liveness_deadline_msec != 0
+
+
+## Reopens the liveness window from now, or leaves it shut. **M2c.**
+##
+## Called from every tick-bearing frame. With no `heartbeat_ticks` this disarms
+## rather than merely declining to arm, so that a second `welcome` from a server
+## that has stopped promising heartbeats turns the timer off instead of leaving
+## the previous one running against a rule nobody restated.
+func _rearm_liveness() -> void:
+	if _heartbeat_ticks <= 0 or _tick_ms <= 0:
+		_liveness_deadline_msec = 0
+		return
+	_liveness_deadline_msec = Time.get_ticks_msec() + _liveness_window_msec()
+
+
+func _liveness_window_msec() -> int:
+	return LIVENESS_HEARTBEATS * _heartbeat_ticks * _tick_ms
+
+
+## The liveness timer. **M2c.** Does nothing at all unless a server has said it
+## sends heartbeats, which no server does before M2d.
+##
+## [method Time.get_ticks_msec] is monotonic, so this measures silence rather
+## than frames. A window that stops producing frames is exactly the condition
+## under which a frame-counted timeout would never fire.
+func _process(_delta: float) -> void:
+	if _liveness_deadline_msec == 0:
+		return
+	if Time.get_ticks_msec() < _liveness_deadline_msec:
+		return
+
+	var window := _liveness_window_msec()
+	# Disarmed before abandoning, not after: `abandon` emits `disconnected`
+	# synchronously, and a handler that ran with the deadline still in the past
+	# would find this function ready to fire again on the next frame.
+	_liveness_deadline_msec = 0
+	push_error(
+		(
+			"session: no tick for %d ms (%d heartbeat(s) of %d tick(s) at %d ms);"
+			+ " abandoning the socket"
+		) % [window, LIVENESS_HEARTBEATS, _heartbeat_ticks, _tick_ms]
+	)
+	server_unresponsive.emit(window)
+	if _net != null:
+		# Abandoned, never closed. A close frame would tell the server this
+		# player logged out; a dropped transport tells it `peer_gone`, which is
+		# the case that suspends (PROTOCOL.md, "Clock").
+		_net.abandon()
 
 
 ## `item_spawn`. **M1.** Idempotent: an item id already known is replaced, never
@@ -453,15 +603,21 @@ func _on_server_error(re: String, message: String) -> void:
 	push_warning('session: server refused "%s": %s' % [re, message])
 
 
-## M0 has no reconnect (PROTOCOL.md, "Deliberately absent"), so there is nothing
-## to do but say so loudly.
+## Nothing reconnects yet (PROTOCOL.md, "Deliberately absent"; M2f), so there is
+## nothing to do but say so loudly and stop the clocks that only mean something
+## while a socket is up.
 ##
 ## The world is deliberately left standing rather than cleared. A frozen last
 ## known state is a worse lie than an empty one only if nobody is told, and this
 ## is the telling; an empty field would look like everyone logged out. There is
-## no UI in M0 to say it better. Revisitable when M2 adds reconnect.
+## no UI yet to say it better. Revisitable when M2f adds reconnect.
 func _on_disconnected(code: int, reason: String) -> void:
-	push_warning('session: disconnected, code %d "%s"; M0 does not reconnect' % [code, reason])
+	# M2c. Whatever ended the socket — a server close, a peer that vanished, or
+	# this session abandoning it — there is no longer anything that could send a
+	# `tick`, so a timer waiting for one would fire on a connection that is
+	# already gone.
+	_liveness_deadline_msec = 0
+	push_warning('session: disconnected, code %d "%s"; nothing reconnects yet' % [code, reason])
 
 
 func _on_ground_clicked(x: float, z: float) -> void:

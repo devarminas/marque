@@ -9,7 +9,8 @@ Amend this file first, then change code. Never the reverse.
 
 Status: M0 shipped. **M1's messages are specified here and not yet implemented**; sections
 marked **M1** are the contract the M1 units are being written against, so a reader looking at
-today's code will not find them. Sections marked **M2** are reserved and nobody is writing them.
+today's code will not find them. Sections marked **M2** are reserved except where a unit is
+named: **M2c** marks the client's half of the heartbeat under *Clock*, which is written.
 
 ## Envelope
 
@@ -74,8 +75,61 @@ arrived `path` can carry a `start_tick` in the client's perceived future. **Elap
 `start_tick` is clamped at zero**; a negative elapsed means "has not started yet", not
 "rewind".
 
-**M2.** A periodic `{"tick":{"t":N}}` heartbeat for drift correction and liveness. Reserved,
-not sent in M0. Rule 1 above is what makes adding it free.
+**M2.** A periodic `{"tick":{"t":N}}` heartbeat for drift correction and liveness. Rule 1 above
+is what made adding it free.
+
+**The client's half is specified below and is implemented. What sends one is M2d**, and until
+that lands no server emits `tick` at all — which is why every rule here has to keep working
+against a server that never sends one.
+
+### Receiving `tick`. **M2c.**
+
+The client compares `t` against its own `estimated_tick()` **at receipt**, and:
+
+- **`t` differs from the estimate.** Re-anchor the clock at `t` — the same `anchor(t, tick_ms)`
+  call `welcome` makes, so a heartbeat, a reconnect and a join correct the clock through one
+  code path — and log the signed delta on one line:
+
+      session: clock corrected by %+d tick(s) at heartbeat %d
+
+  The delta is signed because its sign is the diagnosis: a client running ahead of the server
+  and one running behind it are different faults, and an unsigned magnitude names neither.
+- **`t` equals the estimate.** Do nothing, and log nothing. Agreement is the ordinary case once
+  the clock is right, so a line per heartbeat would bury the corrections this log exists for.
+- **`tick` before `welcome`.** Logged and ignored. There is no `tick_ms` to anchor with, and
+  nothing reaches a connection before its `welcome` (*Ordering and the join race*), so this is
+  defence against a broken peer rather than a flow.
+- **`tick` with no numeric `t`.** Dropped with a loud log, connection kept, exactly as any other
+  unparseable body is (*Compatibility*).
+
+### Liveness. **M2c.**
+
+`welcome` may carry an integer `heartbeat_ticks`: the interval, in ticks, at which the server
+intends to send `tick`. **Absent, zero, or unreadable means liveness is off.**
+
+Off has to be the default, because it is what every server before M2d says. A client that
+defaulted the field to anything else would abandon every session it opened against one, on a
+timer, which looks exactly like a network fault. A `heartbeat_ticks` that is present but
+negative or not a number is logged and read as zero rather than dropping the whole `welcome`:
+that is the same call this file already makes for `welcome.items` being `null`, and for the same
+reason — the cost of strictness there is that the client never joins and sits frozen forever.
+
+With `heartbeat_ticks > 0`, the client abandons the socket once no `tick` has arrived for
+
+    3 * heartbeat_ticks * tick_ms
+
+milliseconds, measured from the **last tick-bearing frame**. `welcome` counts as one, so the
+window opens at the join rather than at the first heartbeat, and a server that promises
+heartbeats and then sends none is caught. Three intervals rather than one, so that a single
+lost or late heartbeat is not a disconnect. The client logs loudly first.
+
+**Abandoning is not closing, and the difference is the whole point.** The client drops the
+transport without sending a close frame. A close frame is a logout, and a socket that went
+silent is not a logout: the server must see a read error and record `peer_gone`, which is the
+suspending case, rather than `closed`. A client that closed politely here would tell the server
+its player had quit, which is precisely the state it is trying not to lose.
+
+The client does not reconnect afterwards. That is M2f.
 
 ## Coordinates
 
@@ -651,7 +705,8 @@ Named so nobody adds them thinking they were forgotten.
 
 - No authentication. Ids are sequential and unverified.
 - No sequence numbers or acks. **M2.**
-- No heartbeat. **M2.**
+- No heartbeat on the wire. **M2.** The client's side of `tick` is specified under *Clock* and
+  implemented (M2c); nothing sends one yet.
 - No banking, trading, crafting, or item stacking. M1 has one item type, one item per slot, and
   the ground as the only container outside a player's own inventory.
 - No item ownership, drop timers, or per-player visibility. RuneScape hides a drop from everyone
