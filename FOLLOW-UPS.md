@@ -234,10 +234,15 @@ Shipped from M1a. Every number here was chosen to be usable, not good.
 
 Decisions M1a made that a human may want to overturn:
 
-- **A player's inventory is deleted when they disconnect.** There is no persistence in M1 and no
-  drop-on-logout, so whatever they were carrying leaves the world with them rather than falling
-  at their feet. It is one line in `World.removePlayer`. RuneScape drops on death, not on
+- **A player's inventory is deleted when they leave the world for good.** There is no
+  persistence and no drop-on-logout, so whatever they were carrying goes with them rather than
+  falling at their feet. It is one line in `World.retire`. RuneScape drops on death, not on
   logout, so this is not obviously wrong; it is just undecided.
+
+  **This entry read "deleted when they disconnect" until M2a, and those stopped being the same
+  event.** A socket dying abruptly now suspends the player instead of retiring them, so the
+  inventory survives the disconnect and is handed back on resume. It is deleted only on an
+  actual retirement: a clean logout, a protocol refusal, or the grace running out.
 - **Join order decides a contested pickup**, which is decidable rather than fair. The first
   player to have connected wins every race they are in. Revisit the first time it feels unfair
   to a human, which needs a human playing.
@@ -250,6 +255,27 @@ walker exactly on the final waypoint, so resolution happens at latest on the arr
 any range. The old constraint left `0.5` guarded by five hundredths of a unit against a silent
 failure. It is corrected here rather than left standing, because this file's whole audience is a
 human tuning a number, and a dead constraint is the worst thing to hand them.
+
+## Reconnect (M2a)
+
+- **`ResumeGraceTicks`, currently `400` ticks, which is sixty seconds at 150ms.** How long your
+  character stands in the world after your connection dies before the server gives up on you.
+  Lives in `server/internal/game/world.go` and is reported in the run's `server_started` line as
+  `resume_grace`, so a script reads it rather than assuming it.
+
+  Too short and a client that crashes and restarts finds its body already gone, which is the
+  whole feature failing quietly at the only moment anybody would use it. Too long and every
+  dropped connection leaves furniture: a body standing in the world, holding its items, winning
+  contested pickups it walked to before it died, and unable to be told anything. RuneScape's is
+  about a minute, which is where 400 came from, and RuneScape also logs you out on inactivity,
+  which Marque does not. Nobody has watched this number with a real client yet.
+
+- **A token whose player is still connected is refused rather than superseding it.** RuneScape's
+  "already logged in" answer. It is the only one available today, because superseding needs a
+  server-to-client "you have been replaced" message that does not exist. Revisit the first time a
+  human gets locked out of their own character by a half-dead socket that has not yet been
+  noticed — which is a real scenario, because the grace is exactly the window in which it can
+  happen. `PROTOCOL.md`, *When the connection dies*, has the reasoning.
 
 ## Ground items (M1c)
 

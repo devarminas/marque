@@ -11,6 +11,8 @@ package game
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"time"
@@ -64,6 +66,19 @@ const WorldHalfExtent = 128.0
 // Revisitable.
 const MinPathLength = 1e-3
 
+// ResumeGraceTicks is how long a player's body stays in the world after its
+// socket died abruptly, in ticks. Four hundred is sixty seconds at 150ms.
+//
+// Ticks and not a duration, because the tick counter is the clock and nothing
+// in game logic reads wall-clock time (PROTOCOL.md, "Clock"). A grace measured
+// against time.Now would be the one rule in the game a paused process gets
+// wrong.
+//
+// A placeholder chosen to be long enough to survive restarting a client and
+// short enough that an abandoned body is not furniture. Parked in
+// FOLLOW-UPS.md.
+const ResumeGraceTicks = 400
+
 // Spawn point. Everyone enters the world at the origin; M0 has no collision, so
 // stacking is free. Revisitable once there is a map with a sensible entrance.
 const (
@@ -83,6 +98,34 @@ const (
 	EvPathAssigned   = "path_assigned"
 	EvArrived        = "arrived"
 	EvTicksDropped   = "ticks_dropped"
+
+	// The five events a resume can produce, each with its own field set and no
+	// field added to an existing event. None of them carries a session token:
+	// a token in a log is a token in every place a log is pasted, and this log
+	// is read by agents and quoted into pull requests (PROTOCOL.md,
+	// "The session token").
+	//
+	// EvPlayerSuspended is a socket dying without its player leaving. It is
+	// logged *after* the EvDisconnected for the same death rather than instead
+	// of it: the socket really did die, and its latched reason is what decided
+	// the suspension, so a reader has to see both lines to see why.
+	EvPlayerSuspended = "player_suspended"
+	// EvPlayerResumed is a connection being handed a suspended player. It
+	// carries the remote address because that is the only new fact about it;
+	// the player is the one it always was.
+	EvPlayerResumed = "player_resumed"
+	// EvPlayerExpired is a grace running out. The retirement that follows is
+	// the same one a clean logout gets, despawn included.
+	EvPlayerExpired = "player_expired"
+	// EvResumeRefused is a token whose player is still connected. It names only
+	// the remote address, because no player was created for it: naming the
+	// player it asked for would file a connection the world turned away under
+	// the id of a player who is sitting there connected and unaffected.
+	EvResumeRefused = "resume_refused"
+	// EvResumeUnknown is a token that names nothing, whether stale, expired or
+	// invented. One event for all three, for the reason ReasonUnknownItem is
+	// one reason: the server must not tell a client which identities exist.
+	EvResumeUnknown = "resume_unknown"
 
 	// EvPathReplayed is one path frame sent to a joining client to describe a
 	// walk that was already in flight. It carries the same fields as
@@ -188,9 +231,39 @@ type Transport interface {
 	Events() <-chan mnet.Event
 }
 
-// player is one connected player's authoritative state.
+// sessionTokenBytes is how much randomness a session token carries. Sixteen
+// bytes is the 32 hex characters PROTOCOL.md fixes, and 128 bits is far enough
+// past the birthday bound that no uniqueness check is written anywhere: a
+// collision is not a case the code handles, it is a case that does not happen.
+const sessionTokenBytes = 16
+
+// newSessionToken mints one player's durable identity.
+//
+// Opaque to everyone, including this server: nothing derives a player id from
+// it, nothing orders two of them, and it is never written to the event log.
+func newSessionToken() string {
+	var raw [sessionTokenBytes]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		// The system entropy source failed. There is no degraded token worth
+		// issuing, and issuing a guessable one would be worse than not starting.
+		panic(fmt.Sprintf("game: reading %d bytes for a session token: %v", sessionTokenBytes, err))
+	}
+	return hex.EncodeToString(raw[:])
+}
+
+// player is one player's authoritative state.
+//
+// A player is a durable entity and the connection is a field on it, rather than
+// the connection being the player. Nothing here is keyed on the socket.
 type player struct {
-	id   mnet.PlayerID
+	id mnet.PlayerID
+
+	// session is this player's durable identity: minted once, the same across
+	// every connection the player ever has, and never logged.
+	session string
+
+	// conn is the socket this player is speaking through, or nil when it has
+	// none. Everything that writes to a player checks it.
 	conn *mnet.Conn
 
 	// pos is the player's position at the current tick, not an interpolated
@@ -209,9 +282,20 @@ type player struct {
 	// item ids start at 1 and are never reused, so no live item can ever be
 	// mistaken for "none".
 	pending mnet.ItemID
+
+	// expiresTick is the tick at which a suspended player is retired. It is
+	// meaningful only while suspended and is zero the rest of the time; the
+	// sweep in step tests conn first, which is what keeps a connected player's
+	// zero from reading as "expired at tick 0".
+	expiresTick int64
 }
 
 func (p *player) walking() bool { return len(p.remaining) > 0 }
+
+// suspended reports whether the player is in the world with nobody listening.
+// Its walk still advances and its pending pickup still resolves; only the
+// frames go nowhere.
+func (p *player) suspended() bool { return p.conn == nil }
 
 // World is the authoritative game state.
 //
@@ -230,32 +314,59 @@ type World struct {
 	tick   int64
 	nextID mnet.PlayerID
 
-	players map[*mnet.Conn]*player
+	// resumeGrace is how many ticks a suspended player is kept. Fixed at
+	// construction: a value that could change while players are suspended would
+	// mean two of them are waiting on different rules.
+	resumeGrace int64
+
+	// players is every player in the world, by the id that names them
+	// everywhere else in the protocol.
+	players map[mnet.PlayerID]*player
+	// byConn finds the player speaking through a socket. Only players with a
+	// live connection appear here, so a lookup that misses is the answer to
+	// "does the world know this socket", not a bug.
+	byConn map[*mnet.Conn]*player
+	// bySession finds a player by its durable identity. Every player in
+	// w.players has exactly one entry here for its whole life in the world.
+	bySession map[string]*player
 	// order keeps iteration deterministic. Go randomises map iteration, which
 	// would make welcome's player list and broadcast order differ run to run,
 	// and replay diffs are only useful when two identical runs agree. It is
 	// also the tiebreaker for a contested pickup, so it is load-bearing for
 	// game rules and not only for logs.
-	order []*mnet.Conn
+	order []*player
 }
 
 // NewWorld returns an empty world reading intents from transport and keeping
-// items in store.
+// items in store, holding a suspended player for resumeGrace ticks.
 //
 // The store must be used by nobody else. Once Run starts, its goroutine is the
 // only thing allowed to touch it.
-func NewWorld(transport Transport, log *gamelog.Logger, store Store) *World {
+//
+// resumeGrace is a parameter rather than a constant read straight from
+// ResumeGraceTicks so that a test can reach the expiry branch in under a second
+// instead of waiting out the production sixty. It must be at least one tick: a
+// grace of zero would make a suspension expire on the tick after it began,
+// which is retiring the player with extra log lines rather than a shorter
+// grace, and it would make every assertion about resuming silently vacuous.
+func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace int64) *World {
 	if transport == nil {
 		panic("game: nil transport")
 	}
 	if store == nil {
 		panic("game: nil store")
 	}
+	if resumeGrace < 1 {
+		panic(fmt.Sprintf("game: resume grace of %d ticks; it must be at least 1", resumeGrace))
+	}
 	return &World{
-		transport: transport,
-		log:       log,
-		items:     store,
-		players:   make(map[*mnet.Conn]*player),
+		transport:   transport,
+		log:         log,
+		items:       store,
+		resumeGrace: resumeGrace,
+		players:   make(map[mnet.PlayerID]*player),
+		byConn:    make(map[*mnet.Conn]*player),
+		bySession: make(map[string]*player),
 	}
 }
 
@@ -312,18 +423,18 @@ func (w *World) stepAll(owed *time.Duration) {
 // decides is decided here, on this goroutine, with nothing observable in
 // between.
 //
-// Movement and pickup resolution are two passes rather than one, so that "a
-// pending pickup resolves after movement has advanced" (PROTOCOL.md, "Pickup")
-// is true of every player and not only of the player being visited. The passes
-// happen to be equivalent today, because resolving reads only the resolving
-// player's own position; the day a rule reads somebody else's, one pass would
-// be wrong and nothing would say so.
+// Movement, pickup resolution and expiry are three passes rather than one, so
+// that "a pending pickup resolves after movement has advanced" (PROTOCOL.md,
+// "Pickup") is true of every player and not only of the player being visited.
+// The first two happen to be equivalent today, because resolving reads only the
+// resolving player's own position; the day a rule reads somebody else's, one
+// pass would be wrong and nothing would say so. The third is separate for a
+// harder reason: it removes players from w.order.
 func (w *World) step() {
 	w.tick++
 	distance := WalkSpeed * TickDuration.Seconds()
 
-	for _, conn := range w.order {
-		p := w.players[conn]
+	for _, p := range w.order {
 		if !p.walking() {
 			continue
 		}
@@ -342,17 +453,23 @@ func (w *World) step() {
 	// player in this same pass finds it gone. Never a range over w.players,
 	// whose iteration order Go randomises; the winner of a contest must be the
 	// same in two identical runs.
-	for _, conn := range w.order {
-		if p := w.players[conn]; p.pending != 0 {
+	for _, p := range w.order {
+		if p.pending != 0 {
 			w.resolvePickup(p)
 		}
 	}
+
+	// Last, so that a suspended player's final tick is a whole one: it moves
+	// and it resolves whatever it was walking to, and only then does the grace
+	// run out. Expiring first would silently shorten every grace by a tick and
+	// would lose the last pickup of a player who arrived on exactly this one.
+	w.expireSuspended()
 }
 
 func (w *World) handle(ev mnet.Event) {
 	switch ev.Kind {
 	case mnet.EventConnected:
-		w.addPlayer(ev.Conn)
+		w.admit(ev.Conn)
 	case mnet.EventFrame:
 		w.handleFrame(ev)
 	case mnet.EventDisconnected:
@@ -362,7 +479,81 @@ func (w *World) handle(ev mnet.Event) {
 	}
 }
 
-// addPlayer admits a connection to the world.
+// admit decides what a new connection gets: its own player, somebody's player
+// back, or the door.
+//
+// Four cases and they are decided here rather than scattered, because they are
+// four answers to one question and a reader has to be able to see that the four
+// are exhaustive.
+func (w *World) admit(conn *mnet.Conn) {
+	if _, dup := w.byConn[conn]; dup {
+		panic("game: connection announced twice")
+	}
+
+	token := conn.Session()
+	if token == "" {
+		w.addPlayer(conn)
+		return
+	}
+
+	claimed, known := w.bySession[token]
+	switch {
+	case !known:
+		// Stale, expired, or invented; one answer for all three, because the
+		// server must not tell a client which identities exist. The client can
+		// still tell it did not resume, because the welcome it gets back names
+		// a different you and a different session.
+		w.log.Event(w.tick, EvResumeUnknown, gamelog.Fields{"remote": conn.Remote()})
+		w.addPlayer(conn)
+	case !claimed.suspended():
+		w.refuseResume(conn)
+	default:
+		w.resumePlayer(claimed, conn)
+	}
+}
+
+// refuseResume turns away a connection presenting a token whose player is still
+// connected.
+//
+// Refused and not superseded: the connection that holds the player is not
+// touched, and no player is created for this one. Superseding would mean
+// telling the older connection it had been replaced, and no such message
+// exists (PROTOCOL.md, "When the connection dies").
+//
+// It writes to the socket directly rather than through send, because send takes
+// a player and the whole point of this path is that there is not one.
+func (w *World) refuseResume(conn *mnet.Conn) {
+	w.log.Event(w.tick, EvResumeRefused, gamelog.Fields{"remote": conn.Remote()})
+	// No "re": nothing this connection sent was rejected. It never got as far
+	// as sending anything.
+	conn.Send(mustEncode(mnet.Error{Msg: "session is still connected"}))
+	conn.CloseAfterFlush(mnet.DisconnectRefused)
+}
+
+// resumePlayer hands a suspended player to the connection that proved it holds
+// that player's token.
+//
+// No spawn is broadcast and nothing at all is sent to anybody else: every other
+// client has had that body on screen the whole time, and a spawn would be a
+// duplicate avatar. From outside, a resume is not an event.
+func (w *World) resumePlayer(p *player, conn *mnet.Conn) {
+	p.conn = conn
+	p.expiresTick = 0
+	w.byConn[conn] = p
+
+	w.log.Event(w.tick, EvPlayerResumed, gamelog.Fields{
+		"player": p.id,
+		"remote": conn.Remote(),
+	})
+
+	// The ordinary join step, unchanged: the world as of now, one re-anchored
+	// path per walker, then this player's inventory. The player's own walk is
+	// among those replays, because it is in w.order and it never stopped, which
+	// is how a resuming client is told where its own body actually is.
+	w.sendJoinStep(p)
+}
+
+// addPlayer gives a connection a brand new player.
 //
 // Welcome and its path replays are composed and enqueued here, in one step, on
 // the goroutine that owns the world. Nothing interleaves with it, so any
@@ -370,14 +561,17 @@ func (w *World) handle(ev mnet.Event) {
 // before it is not. That is what keeps two clients joining in the same tick
 // from either missing a player or seeing one twice.
 func (w *World) addPlayer(conn *mnet.Conn) {
-	if _, dup := w.players[conn]; dup {
-		panic("game: connection announced twice")
-	}
-
 	w.nextID++
-	p := &player{id: w.nextID, conn: conn, pos: Point{X: spawnX, Z: spawnZ}}
-	w.players[conn] = p
-	w.order = append(w.order, conn)
+	p := &player{
+		id:      w.nextID,
+		session: newSessionToken(),
+		conn:    conn,
+		pos:     Point{X: spawnX, Z: spawnZ},
+	}
+	w.players[p.id] = p
+	w.byConn[conn] = p
+	w.bySession[p.session] = p
+	w.order = append(w.order, p)
 	w.items.AddPlayer(p.id)
 
 	w.log.Event(w.tick, EvConnected, gamelog.Fields{
@@ -385,13 +579,25 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		"remote": conn.Remote(),
 	})
 
+	w.sendJoinStep(p)
+	w.broadcast(mnet.Spawn{ID: p.id, X: p.pos.X, Z: p.pos.Z}, p)
+}
+
+// sendJoinStep composes and enqueues the whole atomic welcome step for one
+// player: the world, then one path per walker, then that player's own
+// inventory.
+//
+// It is separate from addPlayer because the step is about handing a connection
+// the world, and admitting a new player is only one of the ways a connection
+// comes to need it.
+func (w *World) sendJoinStep(p *player) {
 	states := make([]mnet.PlayerState, 0, len(w.order))
-	for _, c := range w.order {
-		other := w.players[c]
+	for _, other := range w.order {
 		states = append(states, mnet.PlayerState{ID: other.id, X: other.pos.X, Z: other.pos.Z})
 	}
 	w.send(p, mnet.Welcome{
 		You:     p.id,
+		Session: p.session,
 		TickMS:  int(TickDuration.Milliseconds()),
 		Tick:    w.tick,
 		Players: states,
@@ -408,8 +614,7 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 	// the only way back to what the newcomer was told is to re-simulate the
 	// walk from its original path_assigned -- which nothing in the log would
 	// tell a reader was necessary.
-	for _, c := range w.order {
-		other := w.players[c]
+	for _, other := range w.order {
 		if !other.walking() {
 			continue
 		}
@@ -426,37 +631,40 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 	// has been told everything the step describes (PROTOCOL.md, "Ordering and
 	// the join race").
 	w.sendInventory(p)
-
-	w.broadcast(mnet.Spawn{ID: p.id, X: p.pos.X, Z: p.pos.Z}, conn)
 }
 
-// removePlayer retires a connection. This is the only place a player leaves the
-// world, whichever way the connection died.
+// suspends reports whether a socket death leaves the player standing.
+//
+// It is the whole of the split, and it keys on the latched cause because the
+// cause is the only thing that says whether the player meant to go. A clean
+// close and a protocol refusal are departures. A vanished peer and a client
+// that stopped keeping up are accidents, and RuneScape leaves your character
+// in the world after one of those (PROTOCOL.md, "When the connection dies").
+//
+// A whitelist and not a blacklist: a reason invented later suspends nobody
+// until somebody decides it should, which is the failure that loses a body
+// rather than the one that leaks one.
+func suspends(reason string) bool {
+	return reason == mnet.DisconnectPeerGone || reason == mnet.DisconnectSlow
+}
+
+// removePlayer answers a dead socket, either by suspending its player or by
+// retiring it.
 //
 // reason is the latched cause and detail names the detector that noticed it,
-// which may be empty. The world does not interpret either: it logs them, and a
-// human reading the log is the only consumer.
+// which may be empty. The world logs both and interprets only the reason, and
+// only to the extent suspends does.
 func (w *World) removePlayer(conn *mnet.Conn, reason, detail string) {
-	p, ok := w.players[conn]
+	p, ok := w.byConn[conn]
 	if !ok {
-		// A connection the hub accepted but the world never saw, or a second
-		// disconnect for one it already retired. Neither should happen; neither
-		// is worth killing the server over.
+		// A connection the world never admitted, which since M2a is the
+		// ordinary fate of a refused resume, or a second disconnect for one it
+		// already retired. Neither produces a client_disconnected line: the
+		// world has no player to log it against, and a reader counting those to
+		// ask how many players left must not be handed connections that never
+		// arrived.
 		return
 	}
-
-	delete(w.players, conn)
-	for i, c := range w.order {
-		if c == conn {
-			w.order = append(w.order[:i], w.order[i+1:]...)
-			break
-		}
-	}
-	// Whatever they were carrying leaves with them. M1 has no persistence and
-	// no drop-on-logout, so this is deletion rather than a transfer to the
-	// ground; making it a transfer is a design decision, not a bug fix, and it
-	// is parked in FOLLOW-UPS.md.
-	w.items.RemovePlayer(p.id)
 
 	fields := gamelog.Fields{
 		"player": p.id,
@@ -469,11 +677,77 @@ func (w *World) removePlayer(conn *mnet.Conn, reason, detail string) {
 		fields["detail"] = detail
 	}
 	w.log.Event(w.tick, EvDisconnected, fields)
-	w.broadcast(mnet.Despawn{ID: p.id}, conn)
+
+	if suspends(reason) {
+		w.suspend(p)
+		return
+	}
+	w.retire(p)
+}
+
+// suspend takes a player's connection away and leaves everything else standing.
+//
+// No despawn, because nothing about the world changed for anybody else: the
+// body is where it was, the walk it is on continues, and a pending pickup
+// resolves into an inventory that is still theirs. The only difference is that
+// every frame addressed to this player is now dropped, which send handles.
+func (w *World) suspend(p *player) {
+	delete(w.byConn, p.conn)
+	p.conn = nil
+	p.expiresTick = w.tick + w.resumeGrace
+
+	w.log.Event(w.tick, EvPlayerSuspended, gamelog.Fields{
+		"player":       p.id,
+		"expires_tick": p.expiresTick,
+	})
+}
+
+// expireSuspended retires every player whose grace has run out.
+//
+// Two passes because retire mutates w.order, and iterating a slice while
+// removing from it is the bug this shape exists to not write. The snapshot
+// allocates nothing on the overwhelming majority of ticks, on which nobody is
+// suspended and the append never runs.
+func (w *World) expireSuspended() {
+	var expired []*player
+	for _, p := range w.order {
+		if p.suspended() && w.tick >= p.expiresTick {
+			expired = append(expired, p)
+		}
+	}
+	for _, p := range expired {
+		w.log.Event(w.tick, EvPlayerExpired, gamelog.Fields{"player": p.id})
+		w.retire(p)
+	}
+}
+
+// retire takes a player out of the world for good: every index forgets them,
+// whatever they were carrying is deleted, and everyone else is told the body is
+// gone.
+//
+// Whatever they were carrying leaves with them. M1 has no persistence and no
+// drop-on-logout, so this is deletion rather than a transfer to the ground;
+// making it a transfer is a design decision, not a bug fix, and it is parked in
+// FOLLOW-UPS.md.
+func (w *World) retire(p *player) {
+	delete(w.players, p.id)
+	delete(w.bySession, p.session)
+	if p.conn != nil {
+		delete(w.byConn, p.conn)
+	}
+	for i, other := range w.order {
+		if other == p {
+			w.order = append(w.order[:i], w.order[i+1:]...)
+			break
+		}
+	}
+	w.items.RemovePlayer(p.id)
+
+	w.broadcast(mnet.Despawn{ID: p.id}, p)
 }
 
 func (w *World) handleFrame(ev mnet.Event) {
-	p, ok := w.players[ev.Conn]
+	p, ok := w.byConn[ev.Conn]
 	if !ok {
 		// The hub emits EventConnected before any frame, so this is defensive.
 		// It is logged rather than dropped because reaching it means the
@@ -716,26 +990,37 @@ func (w *World) pathMessage(p *player) mnet.Path {
 	}
 }
 
-// send queues one message for one player.
+// send queues one message for one player, and does nothing for a player with no
+// connection.
+//
+// Dropping the frame is right rather than merely convenient: a message to a
+// player nobody is listening for is not lost state. Every message this server
+// sends is either a full restatement (welcome, inventory) or an announcement
+// that is restated on the next join step (spawn, path, item_spawn), so a
+// connection that arrives later is told everything it missed by the step that
+// admits it.
 func (w *World) send(p *player, msg mnet.ServerMessage) {
+	if p.conn == nil {
+		return
+	}
 	p.conn.Send(mustEncode(msg))
 }
 
-// broadcast queues one message for every player except the connection in
-// skip, which may be nil to reach everyone.
+// broadcast queues one message for every player except the one in skip, which
+// may be nil to reach everyone.
 //
 // Encoding happens once. Send never blocks, so a client that has stopped
 // draining cannot stall the tick; it is dropped and reappears here as a
 // disconnect on a later event, which is why this loop can safely ignore the
 // result. Nothing outside this goroutine can mutate w.order, so a connection
 // dying mid-broadcast cannot disturb the iteration either.
-func (w *World) broadcast(msg mnet.ServerMessage, skip *mnet.Conn) {
+func (w *World) broadcast(msg mnet.ServerMessage, skip *player) {
 	payload := mustEncode(msg)
-	for _, conn := range w.order {
-		if conn == skip {
+	for _, p := range w.order {
+		if p == skip || p.conn == nil {
 			continue
 		}
-		conn.Send(payload)
+		p.conn.Send(payload)
 	}
 }
 

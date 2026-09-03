@@ -101,12 +101,18 @@ type ServerMessage interface{ isServerMessage() }
 // inventory is not here: it is private to one player rather than part of the
 // world, and it arrives as a separate Inventory inside the same atomic step.
 //
+// Session is the receiving player's durable identity: 32 hex characters, the
+// same across every resume of that player, and the thing a reconnecting client
+// presents to be handed its own body back. It sits beside You because those two
+// are what this message says about the receiver; everything else is the world.
+//
 // Neither array carries omitempty, so an empty world encodes as "players":[]
 // and "items":[] rather than dropping the key. Both must be handed to Encode
 // non-nil: encoding/json writes a nil slice as null, and a client should not
 // have to distinguish three spellings of "nothing there".
 type Welcome struct {
 	You     PlayerID      `json:"you"`
+	Session string        `json:"session"`
 	TickMS  int           `json:"tick_ms"`
 	Tick    int64         `json:"tick"`
 	Players []PlayerState `json:"players"`

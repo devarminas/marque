@@ -27,3 +27,8 @@ export_presets.cfg
 
 # Agent worktrees
 .claude/worktrees/
+
+# Recipe output. Recipes G, H and W all redirect into the repo root, never pipe,
+# so every worker's `git status` grew two or three untracked files it must not
+# commit and must not delete either, because the ledger quotes their tail lines.
+out-*.txt
