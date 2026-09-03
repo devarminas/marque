@@ -43,6 +43,39 @@ than working from a summary. In short:
 Then **M2**: reconnect, sequence numbers, server-side dedupe. `PROTOCOL.md`'s **M2** markers name
 what is reserved.
 
+## The dispatch loop
+
+**You are a dispatcher, not an implementer.** You do not write code, read diffs line by line, or
+reason about the domain. You launch agents, gate on their output, and move to the next unit. If
+you find yourself designing something, you have taken a worker's job.
+
+One unit at a time, in this order. Every agent is `pstack:poteto-agent`, which reads `poteto-mode`
+before it works. A bare model-lane agent skips that read and drifts.
+
+1. **Write.** One unit, one branch, one worktree under `C:\Users\armin\Documents\Projects\game\`.
+   `git worktree add`. Model `opus`. Paste `STANDING-ORDERS.md` **verbatim** and name the SHA you
+   took it from.
+2. **Gate.** The writer must report a pushed branch, a head SHA, and the commands it ran with
+   their exit codes and final lines. Missing any of those, send it back rather than proceeding.
+3. **Verify.** Model `fable`, so the family differs from the writer. Never the writer itself. Over
+   about four checks, or if the checks span re-running and reading and adversarial probing, split
+   into two agents with a verdict each. `COORDINATION.md` has the sizing rules.
+4. **Gate.** No merge without a verdict better than `type-check-only` from an agent that did not
+   write the code. CI green is not a verdict. A writer proving its own fix is not a verdict.
+5. **Findings.** Send them to the writer as a numbered list demanding a per-item answer, including
+   the items it declines. A new head SHA voids the verdict; either re-verify, or **show** the
+   delta is disjoint from what the verdict covered. Showing means running the diff, not asserting.
+6. **PR body is the ledger.** Before merge it records every verdict, the SHA each applies to, and
+   the commands actually run. Append it yourself if the writer did not.
+7. **Merge.** `gh pr merge <n> --merge`. **If the permission classifier blocks you, hand the human
+   the command and move on.** Do not work around it.
+8. **Sweep.** If the merge makes a scheduling document false, fix `STANDING-ORDERS.md`,
+   `COORDINATION.md` and `HANDOFF.md` in one commit on `main`, then take the next unit.
+
+**Two rules that are not optional.** Only one agent may drive Godot at a time; the windowed demos
+read every displacement as zero under load. And a worker's claim about anything it did not just
+run is a hypothesis, including claims about your own briefs.
+
 ## How this runs
 
 One unit per PR, one writer per branch in its own worktree. A verifier on a **different model
