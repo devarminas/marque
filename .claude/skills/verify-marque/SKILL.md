@@ -261,14 +261,16 @@ than 2 players after 20000ms` in a 50-byte `client-a.stderr.log`, while
 `client-a.stdout.log` simply stopped after `session: connecting`. An agent reading only
 stdout sees a client that trailed off and has to guess.
 
-**That timeout was machine load, not the frozen-server sabotage this paragraph used to
-blame.** The sabotage cannot produce it. `world.go` takes connections and tick steps in
+**That timeout cannot be the frozen-server sabotage this paragraph used to blame, and
+nothing has established what it was.** `world.go` takes connections and tick steps in
 two separate arms of one `select`, so a server that has stopped stepping still admits
 players and still broadcasts their spawns; both clients reach two known ids and the join
-wait in `main.gd` returns long before its 20-second deadline. What a frozen server
-actually does is pass every client-layer assertion and lose on the event log, which is
-the reason the GAMELOG layer exists. `COORDINATION.md`, under "The coordinator's fleet
-is part of the environment", carries the load story and the idle re-run that settled it.
+wait in `main.gd` returns long before its 20-second deadline. Two independent runs of the
+sabotage agree with the mechanism, the original writer's and M1j's verifier's, the latter
+failing cleanly on `0 arrived event(s)` with both client stderr files empty and no
+timeout at all. What a frozen server actually does is pass every client-layer assertion
+and lose on the event log, which is the reason the GAMELOG layer exists. Load is the
+remaining explanation and nobody has reproduced the timeout under it.
 
 **GAMELOG vocabulary (M0):** `server_started`, `server_stopping`, `client_connected`,
 `client_disconnected`, `move_to`, `move_to_rejected`, `intent_ignored`, `path_assigned`,

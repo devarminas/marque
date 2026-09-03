@@ -759,12 +759,19 @@ try {
             $resolved[0].t, $lost[0].t, $gap)
         # This gap does not back up the start_tick check above, and it is worth
         # saying so where someone would otherwise assume it. resolvePickup tests
-        # liveness before range, so a loser is condemned on the tick the winner
-        # takes the item whatever distance it is still standing at. The gap is 0
-        # whenever both intents arrived before the item changed hands, which they
-        # do here twenty ticks ahead of it. Measured at M1j: 0 on all 21 idle
-        # runs, including all 8 whose paths started a tick apart. It catches a
-        # condemnation deferred to a later tick, and nothing about the skew.
+        # liveness before range, so a loser is condemned at whatever distance it
+        # is standing at, on the tick the winner takes the item. That is gap 0,
+        # and it holds only because the loser is later in join order than the
+        # winner: step() resolves over w.order, so the later joiner is visited
+        # second, in the same pass the item changes hands. An earlier-joining
+        # loser would be visited first, see the item still live and itself out
+        # of range, and return unresolved; it is condemned on the next tick
+        # instead, at gap 1. The loser is always the later joiner here, because
+        # both players enter PickupRange on the same tick and whichever of them
+        # w.order reaches first is by construction the winner. Measured at M1j:
+        # 0 on all 21 idle runs, including all 8 whose paths started a tick
+        # apart. It catches a condemnation deferred to a later tick, and nothing
+        # about the skew.
         if ($gap -ne 0) {
             Add-Failure ("the item was taken on tick $($resolved[0].t) and lost on tick $($lost[0].t), " +
                 "$gap tick(s) apart. A same-tick contest is decided inside one pass of the tick loop; " +
@@ -783,10 +790,15 @@ try {
     # where the loser was: a path of one point, at the position it stopped at.
     #
     # The loser is not standing on the item. resolvePickup tests liveness before
-    # range, so the loser is condemned wherever it happens to be on the tick the
-    # winner closes the last fraction of a unit -- within PickupRange, one tick
-    # short of arriving. Asserting it reached the item's coordinates would fail
-    # every healthy run.
+    # range, so the loser is condemned wherever it happens to be, and here that
+    # is within PickupRange and one tick short of arriving. It reads that way
+    # only because the loser is later in join order than the winner: step()
+    # resolves over w.order, so the later joiner is visited in the same pass the
+    # winner closes the last fraction of a unit. An earlier-joining loser would
+    # be visited while the item was still live, return unresolved, and be
+    # condemned a tick later, one step further along its own walk. Either way,
+    # asserting the loser reached the item's coordinates would fail every
+    # healthy run.
     # ------------------------------------------------------------------
     if ($loser -ge 1 -and $lost.Count -eq 1 -and $seedItem -ge 1) {
         $lossTick = [int]$lost[0].t
