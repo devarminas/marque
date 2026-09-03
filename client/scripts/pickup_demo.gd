@@ -19,13 +19,30 @@ const REQUIRED_ITEMS := 1
 
 const JOIN_TIMEOUT_MSEC := 20000
 
-## Server ticks from the moment both clients can see the whole scenario to the
-## moment they click. That sum is the whole synchronisation mechanism: a server
-## tick rather than wall-clock, so two processes that never speak to each other
-## agree on one moment in the tick loop's own units.
+const USEC_PER_MSEC := 1000
+
+## How long after the shared moment the two clients click, in server ticks.
+##
+## [b]The moment is shared. A tick number naming it is not.[/b] Both clients
+## learn the roster reached two players out of one [code]addPlayer[/code] on the
+## server. The later joiner learns it from its own [code]welcome[/code] and the
+## earlier one from the [code]spawn[/code] enqueued in the same step, so
+## counting microseconds from there has the two of them click at one instant.
+##
+## Waiting for a tick number instead throws that instant away. The server
+## composes [code]welcome[/code] on its event arm and not inside
+## [code]step[/code], so each client anchors somewhere inside a tick and its own
+## tick boundaries sit that far late, by an amount it cannot observe and that
+## differs per client ([code]tick_clock.gd[/code], [code]estimated_tick[/code]).
+## Two clients waiting for tick N clicked up to a whole tick apart, and the
+## server assigned their two walks on different ticks on 8 of M1j's 21 idle
+## runs, which [code]scripts/contested_pickup_demo.ps1[/code] rightly refuses as
+## a sequence rather than a contest.
 const CLICK_LEAD_TICKS := 20
 
-## Offsets from the click tick. They must stay in this order.
+## Offsets around the click. They must stay in this order. The lead-in counts
+## back from the click moment; the rest run on from the tick the click landed
+## on, where a tick either way costs nothing.
 const SHOT_BEFORE_LEAD_TICKS := 6
 const SHOT_RESOLVED_OFFSET_TICKS := 26
 const WALK_AWAY_OFFSET_TICKS := 30
@@ -61,7 +78,8 @@ func run(
 	_prefix = prefix
 	_drop_click = drop_click
 
-	if not await _wait_for_scenario():
+	var scenario_usec := await _wait_for_scenario()
+	if scenario_usec < 0:
 		return _fail(
 			"fewer than %d player(s) or %d item(s) after %dms"
 			% [REQUIRED_PLAYERS, REQUIRED_ITEMS, JOIN_TIMEOUT_MSEC]
@@ -75,17 +93,19 @@ func run(
 	var clock := _session.tick_clock()
 	if not clock.is_anchored():
 		return _fail("the tick clock is not anchored; there is no shared moment to click on")
-	var sync_tick := clock.estimated_tick()
-	var click_tick := sync_tick + CLICK_LEAD_TICKS
+	var tick_usec := clock.tick_ms() * USEC_PER_MSEC
+	var click_usec := scenario_usec + CLICK_LEAD_TICKS * tick_usec
+	var sync_tick := clock.estimated_tick_at(scenario_usec)
+	var click_tick := clock.estimated_tick_at(click_usec)
 	print("DEMO sync %d %d" % [sync_tick, click_tick])
 
-	if not await _await_tick(click_tick - SHOT_BEFORE_LEAD_TICKS):
-		return _fail("the clock stalled before the first capture")
+	if not await _await_usec(click_usec - SHOT_BEFORE_LEAD_TICKS * tick_usec):
+		return _fail("frames stopped before the first capture")
 	if not await _capture(1):
 		return _fail("capture 1 failed")
 
-	if not await _await_tick(click_tick):
-		return _fail("the clock stalled before the click")
+	if not await _await_usec(click_usec):
+		return _fail("frames stopped before the click")
 	var picked: Variant = _screen_position_of(item)
 	if picked == null:
 		return 1
@@ -154,14 +174,30 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 
 
 ## Waits until the world holds the whole scenario: both players and the item.
-func _wait_for_scenario() -> bool:
+##
+## Returns the monotonic microsecond at which this client saw it, or -1 if it
+## never did. That instant is the two clients' one shared moment, and everything
+## up to the click is measured from it; see [constant CLICK_LEAD_TICKS].
+func _wait_for_scenario() -> int:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
 		if (_session.known_ids().size() >= REQUIRED_PLAYERS
 				and _session.known_item_ids().size() >= REQUIRED_ITEMS):
-			return true
+			return Time.get_ticks_usec()
 		await _tree.process_frame
-	return false
+	return -1
+
+
+## Waits until the monotonic clock reaches [param deadline_usec]. False means
+## frames stopped arriving, which is the only way this can fail, because
+## monotonic time itself cannot stall.
+func _await_usec(deadline_usec: int) -> bool:
+	var backstop := Time.get_ticks_msec() + TICK_WAIT_BACKSTOP_MSEC
+	while Time.get_ticks_usec() < deadline_usec:
+		if Time.get_ticks_msec() > backstop:
+			return false
+		await _tree.process_frame
+	return true
 
 
 ## Waits until the estimated server tick reaches [param target]. False means the
