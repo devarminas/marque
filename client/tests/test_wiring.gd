@@ -4,47 +4,19 @@ extends Node3D
 ## paths, and a ground click moves the player who clicked.
 ##
 ## The thing under test is [code]main.tscn[/code] itself, instanced once per
-## client, so every assertion here is about the scene the game ships rather than
-## about a rig assembled for the occasion. Instancing it more than once is what a
-## multi-client test costs: the count is genuine runtime information, which is
-## the case CLAUDE.md's scene-authoring rule allows a script to build.
+## client. The clients therefore share one [World3D]: harmless here, since all
+## four grounds are coincident planes, but unhandled input reaches every
+## client's picker, so all pickers but the clicking one are switched off.
 ##
-## The clients share one [World3D], because they are children of one tree. That
-## is harmless for everything asserted here — all four grounds are coincident
-## planes, so a ray through any of them meets the same point — and it costs one
-## piece of bookkeeping: unhandled input reaches every client's picker, so all
-## pickers but the clicking one are switched off before a click is pushed.
-##
-## Two halves, like [code]test_interop.gd[/code].
-##
-## The [b]offline[/b] half needs no server and always runs. Frames are handed to
-## the client by hand, which is the only way to reach the shapes a conforming
-## server will not produce on demand: a `spawn` for an id already known, a
-## `despawn` and a `path` for an id that was never announced, a one-element halt
-## path.
-##
-## The [b]live[/b] half needs a real `marqued` named by [constant URL_ENV] and
-## skips loudly without one. It is where the milestone sentence is actually
-## proven: two clients connected to one server, one clicks, and the other watches
-## the avatar move.
-##
-## [b]It must run after [code]test_interop.gd[/code].[/b] That suite asserts on
-## sequentially assigned player ids and on a world containing only its own
-## clients, so anything that connects first breaks it. This suite makes the
-## opposite assumption on purpose: it learns every id from a `welcome` and never
-## assumes the world is empty, so leftovers from the suite before it cost it
-## nothing.
+## [b]It must run after [code]test_interop.gd[/code][/b], which asserts on
+## sequentially assigned ids and on a world holding only its own clients.
 
-## Names the environment variable carrying the websocket URL, as
-## [code]test_interop.gd[/code] does. `scripts/interop_test.ps1` sets it.
 const URL_ENV := "MARQUE_WS_URL"
 
-## Frame cap held for the duration of the live half. Headless Godot runs
-## uncapped, so without this a fast machine burns the runner's frame budget
-## waiting on one handshake (NOTES.md, "Godot authoring traps").
+## Frame cap for the live half (NOTES.md, "Godot authoring traps": headless
+## Godot runs uncapped).
 const MAX_FPS := 60
 
-## Upper bound on any single wait. About four seconds at [constant MAX_FPS].
 const WAIT_FRAMES := 240
 
 const MainScene := preload("res://scenes/main.tscn")
@@ -55,76 +27,30 @@ const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
-## Tolerance for a position that should be exact: a walker holding at the final
-## point of its polyline, or a body teleported to a stated coordinate. Absorbs
-## the float32 round trip and nothing else.
 const EXACT_EPSILON := 0.002
-
-## How far a body may sit off the straight line it is walking. It is a lerp
-## between two points, so this is float noise, not slack.
 const SEGMENT_EPSILON := 0.01
 
-## How far two clients' opinions of one walker may differ, in world units.
-##
-## Each client anchors its own clock from its own `welcome` and evaluates the
-## walker at an integer tick, so two clients one tick apart place the same
-## walker exactly one tick of travel apart: 150ms at 3.0 units per second is
-## 0.45. This allows two ticks and no more, which is still a twentieth of the
-## walk being asserted.
+## How far two clients' opinions of one walker may differ, in world units. Two
+## ticks of travel: 150ms at 3.0 units per second, twice.
 const CLOCK_SKEW_TOLERANCE := 0.95
 
-## Where on the screen the scripted click lands, in fractions of the viewport.
-##
-## Off centre in both axes so the resulting walk is long enough to sample twice
-## while it is still under way. With the authored camera framing this resolves
-## to roughly seven world units from the spawn point; the walk is asserted to be
-## at least [constant MIN_WALK_DISTANCE] so that a change to the framing fails
-## here loudly instead of quietly making the walk too short to measure.
-##
-## [b]It must also miss the inventory panel, which is opaque (M1k).[/b] The
-## headless viewport is 64x64 (NOTES.md) and the panel measures 240x432 anchored
-## 16px off the bottom-right corner, so it covers (0, 0) to (48, 48) and leaves
-## only a 16px strip along the right and bottom edges. This lands at (19.2,
-## 56.32), in the bottom strip, 8px clear of the panel and 7px clear of the
-## viewport edge. At the shipped 1280x720 it is (384, 633.6) against a panel
-## occupying (1024, 272) to (1264, 704), which misses by a wider margin still.
-##
-## [b]Of those two margins only the panel's is load-bearing.[/b] Probed against
-## 4.7.2 on the 64x64 viewport: [method Viewport.push_input] delivers a press
-## whatever its position, and the picker fires exactly when the point is off the
-## panel and the ray meets ground — the viewport rect never enters into it.
-## (19.2, 70), (70, 30) and (19.2, 500) all sit outside the viewport and all
-## reached the picker; (-50, 40) sits outside it too and was swallowed by the
-## panel, whose rect extends 190px past the viewport edge. So a point outside
-## the viewport would still walk the player, and would still satisfy a test that
-## only counted intents. Staying inside is about clicking where a player's
-## mouse could actually be, not about the click surviving the trip.
-##
-## The old value, (0.30, 0.72), landed at (19.2, 46.08) — inside the panel, and
-## it reached the world only because the chrome was click-through. That is the
-## coupling M1k inherited: making the panel opaque and moving this constant are
-## one change. [method _test_the_scripted_click_misses_the_opaque_panel] is what
-## stops the two drifting apart again.
+## Where the scripted click lands, in fractions of the viewport. It must miss
+## the opaque inventory panel;
+## [method _test_the_scripted_click_misses_the_opaque_panel] is the only guard
+## on that (NOTES.md, "Godot authoring traps").
 const CLICK_AT := Vector2(0.30, 0.88)
 const MIN_WALK_DISTANCE := 3.0
 
-## Milliseconds between the two samples of a walk in progress. At 3.0 units per
-## second this is about 1.8 units of travel, which is far outside any tolerance
-## here.
 const SAMPLE_GAP_MSEC := 600
-## Milliseconds to let the walk get under way before the first sample.
 const FIRST_SAMPLE_MSEC := 400
 
-## Speed used by the offline half's hand-written paths, in world units per
-## second. It matches the server's only so that the arithmetic at the call site
-## reads the same as the live half's; nothing offline talks to a server.
 const PATH_SPEED := 3.0
 
 
 ## One client: an instance of `main.tscn` and everything it has heard.
 ##
-## An inner class is its own scope and cannot see the outer script's constants,
-## so the preloads it needs are repeated here.
+## An inner class cannot see the outer script's constants, so its preloads are
+## repeated rather than shared.
 class Client:
 	extends RefCounted
 
@@ -178,7 +104,6 @@ class Client:
 	) -> void:
 		paths.append({"id": id, "start_tick": start_tick, "points": points, "speed": speed})
 
-	## Every path this client heard about one player, oldest first.
 	func paths_for(id: int) -> Array[Dictionary]:
 		var out: Array[Dictionary] = []
 		for path in paths:
@@ -186,8 +111,7 @@ class Client:
 				out.append(path)
 		return out
 
-	## Where this client currently draws player [param id], ground-plane, or
-	## null when it has no body for them.
+	## Ground-plane position, or null when this client has no body for them.
 	func ground_of(id: int) -> Variant:
 		var avatar: PlayerAvatarScript = session.avatar_for(id)
 		if avatar == null:
@@ -195,7 +119,7 @@ class Client:
 		return Vector2(avatar.position.x, avatar.position.z)
 
 	## Hands one frame to this client's decoder as if it had arrived on the
-	## socket. The offline half's only input.
+	## socket.
 	func feed(text: String) -> void:
 		net.ingest_text_frame(text)
 
@@ -209,7 +133,6 @@ var _frames := 0
 var _live_clients: Array[Client] = []
 
 
-## Suite contract, polled by `run_tests.gd`. Reports; never quits.
 func is_finished() -> bool:
 	return _finished
 
@@ -227,8 +150,8 @@ func _process(_delta: float) -> void:
 
 
 func _ready() -> void:
-	# A ray query before the physics space has stepped finds nothing, and the
-	# failure looks exactly like a broken raycast (NOTES.md).
+	# NOTES.md, "Godot authoring traps": a raycast needs the physics space to
+	# have stepped at least once.
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 
@@ -276,9 +199,7 @@ func _test_appliers_without_a_server() -> void:
 	_test_unknown_ids_are_ignored(client)
 	_test_paths_reach_the_right_body(client)
 	await _test_a_halted_player_is_placed_and_never_waited_for(client)
-	# Leaves the panel drawn, on purpose: the click test below then proves the
-	# world is reachable in the configuration that ships, rather than in one
-	# where the panel happens to be hidden.
+	# Leaves the panel drawn, which the click test below depends on.
 	await _test_the_scripted_click_misses_the_opaque_panel(client)
 	await _test_a_click_becomes_an_intent(client)
 
@@ -289,8 +210,6 @@ func _test_appliers_without_a_server() -> void:
 	await get_tree().process_frame
 
 
-## The scene has to hand the session everything it needs, and the camera has to
-## follow the body the session will drive.
 func _test_scene_wiring(client: Client) -> void:
 	_check(client.session != null, "main.tscn authors a Session node")
 	_check(client.net != null, "the Session owns a net_client.gd node in the scene")
@@ -311,7 +230,6 @@ func _test_scene_wiring(client: Client) -> void:
 	)
 
 
-## `welcome` is the whole world. Everyone listed gets a body, including us.
 func _test_welcome_builds_the_world(client: Client) -> void:
 	client.feed(
 		'{"welcome":{"you":1,"tick_ms":150,"tick":142,'
@@ -349,8 +267,7 @@ func _test_welcome_builds_the_world(client: Client) -> void:
 	)
 
 
-## PROTOCOL.md, "Ordering and the join race": a spawn for an id already known
-## replaces rather than adding a second avatar.
+## PROTOCOL.md, "Ordering and the join race".
 func _test_spawn_is_idempotent(client: Client) -> void:
 	client.feed('{"spawn":{"id":3,"x":1.0,"z":2.0}}')
 	_check(client.session.known_ids() == [1, 2, 3], "a spawn adds a body")
@@ -370,8 +287,6 @@ func _test_spawn_is_idempotent(client: Client) -> void:
 	_check_ground(client, 3, Vector2(-4.0, 8.0), "the replacement is at the new position")
 
 
-## An id nobody announced is logged and ignored, never an error and never a
-## reason to stop.
 func _test_unknown_ids_are_ignored(client: Client) -> void:
 	var before := client.session.known_ids()
 	client.feed('{"despawn":{"id":99}}')
@@ -393,7 +308,6 @@ func _test_unknown_ids_are_ignored(client: Client) -> void:
 	_check(client.session.avatar_for(3) == null, "and the session forgets it")
 
 
-## A path lands on the body it names and nowhere else.
 func _test_paths_reach_the_right_body(client: Client) -> void:
 	var start_tick := 200
 	client.feed(
@@ -404,8 +318,7 @@ func _test_paths_reach_the_right_body(client: Client) -> void:
 	_check(walker != null, "the named body exists")
 	if walker == null:
 		return
-	# 6.0 units at 3.0 u/s is 2.0s, which is 13.33 ticks of 150ms. So the walk
-	# is unfinished at tick 13 and finished at tick 14.
+	# 6.0 units at 3.0 u/s is 13.33 ticks of 150ms.
 	_check(
 		not walker.is_idle_at_tick(start_tick),
 		"the body has a path to walk at the tick it starts",
@@ -423,12 +336,7 @@ func _test_paths_reach_the_right_body(client: Client) -> void:
 	)
 
 
-## PROTOCOL.md, `path`: a halted player gets no path replay on a join. They are
-## a position in `welcome.players` and nothing else, ever.
-##
-## The hang this rules out is a client that expects one `path` per listed player.
-## Here the second listed player is never given one, and the assertion is that
-## the body is placed and stays placed regardless.
+## PROTOCOL.md, `path`: a halted player gets no path replay on a join.
 func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> void:
 	client.feed(
 		'{"welcome":{"you":1,"tick_ms":150,"tick":300,'
@@ -454,8 +362,6 @@ func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> voi
 		"a body with no path is idle at every tick",
 	)
 
-	# Several frames of the clock actually running. A body driven by a walker it
-	# does not have would drift or snap to the origin here.
 	for _frame in 10:
 		await get_tree().process_frame
 	_check_ground(
@@ -463,26 +369,13 @@ func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> voi
 	)
 	_check_ground(client, 1, Vector2(2.0, 2.0), "and so is ours")
 
-	# One point means halt here, and the walker holds that point at every tick.
 	client.feed('{"path":{"id":5,"start_tick":301,"points":[[3.5,-1.25]],"speed":3.0}}')
 	await get_tree().process_frame
 	_check_ground(client, 5, Vector2(3.5, -1.25), "a one-element halt path holds at its point")
 
 
-## The inventory panel is opaque (M1k), and [constant CLICK_AT] is the constant
-## that has to miss it.
-##
-## [b]Both halves are needed and neither is enough.[/b] "A click on the panel
-## produced no `move_to`" also holds on a build where the click landed outside
-## the viewport and reached nothing at all, which is why the rect is measured
-## and printed, the scripted click is asserted to be on screen, and the chrome
-## point is asserted to be on screen and inside the panel before it is clicked.
-## A test that only counts intents cannot tell an opaque panel from a click that
-## went nowhere.
+## The inventory panel is opaque, and [constant CLICK_AT] has to miss it.
 func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
-	# Twenty-eight empty slots: the inventory every player joins holding, which
-	# is the state the panel spends most of its life in and the one a build that
-	# turned opaque only while carrying something would get wrong.
 	client.feed('{"inventory":{"size":28,"slots":[]}}')
 	# A rebuilt grid has not sorted its children yet, and a widget with no rect
 	# is a rect that every point misses.
@@ -526,12 +419,6 @@ func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
 
 ## A point inside the panel's drawn rect, inside the viewport, and on no slot
 ## widget, or null when the panel draws no such point.
-##
-## Derived rather than written down, because the panel's size comes from the
-## theme and the slot metrics, so a literal would go stale the first time either
-## moved — and it would go stale [i]silently[/i]: a point that had drifted onto a
-## slot still produces no `move_to`, so the assertion above it would still pass
-## while testing something else.
 static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> Variant:
 	var slots: Array[Rect2] = []
 	for index in client.panel.slot_count():
@@ -553,8 +440,6 @@ static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> V
 	return null
 
 
-## The click seam, without a socket: a left click on the ground becomes a
-## `move_to` intent carrying the coordinate the picker resolved.
 func _test_a_click_becomes_an_intent(client: Client) -> void:
 	var viewport := client.camera.get_viewport()
 	var screen_position := viewport.get_visible_rect().size * CLICK_AT
@@ -691,16 +576,12 @@ func _run_live(url: String) -> void:
 		)
 
 	print("== A arrives where A clicked ==")
-	# Every client, not just one: three independently anchored clocks can be a
-	# tick apart, and asserting on one of them the moment it says "arrived"
-	# would race the other two by up to 150ms.
 	var arrived: bool = await _wait_until(
 		func() -> bool: return _is_idle(a, a_id) and _is_idle(b, a_id) and _is_idle(c, a_id),
 		"every client to see A finish walking",
 	)
 	if not arrived:
 		return
-	# One more frame so every client has drawn the final tick.
 	await get_tree().process_frame
 	_check_live_ground(b, a_id, destination, EXACT_EPSILON, "B draws A at the clicked point")
 	_check_live_ground(
@@ -712,9 +593,7 @@ func _run_live(url: String) -> void:
 	var d := await _join(url, "D")
 	if d == null:
 		return
-	# Asserted the instant the welcome has been applied, with no waiting in
-	# between: a client that expected one path per listed player would still be
-	# waiting here, and would wait forever (PROTOCOL.md, `path`).
+	# Asserted with no waiting in between, on purpose (PROTOCOL.md, `path`).
 	_check(
 		d.session.avatar_for(a_id) != null,
 		"a body for the halted player exists as soon as welcome is applied",
@@ -748,10 +627,8 @@ func _run_live(url: String) -> void:
 		)
 
 
-## Samples one walker on two clients at the same instant and checks that both
-## agree, that both put it on the polyline, and that it is between the ends.
-##
-## Returns the watching client's opinion, or null when it has none.
+## Samples one walker on two clients at the same instant. Returns the watching
+## client's opinion, or null when it has none.
 func _sample(
 	mover: Client,
 	watcher: Client,
@@ -780,7 +657,6 @@ func _sample(
 	return watched_here
 
 
-## Connects one client and waits for its `welcome` to be applied.
 func _join(url: String, label: String) -> Client:
 	var client := Client.new(label)
 	_live_clients.append(client)
@@ -801,8 +677,7 @@ func _join(url: String, label: String) -> Client:
 	return client
 
 
-## Pushes a real left click through [param client]'s viewport and returns the
-## ground point the picker resolved, or null.
+## Returns the ground point the picker resolved, or null.
 func _click_ground(client: Client) -> Variant:
 	var viewport := client.camera.get_viewport()
 	var screen_position := viewport.get_visible_rect().size * CLICK_AT
@@ -840,16 +715,8 @@ func _is_idle(client: Client, id: int) -> bool:
 	return avatar.is_idle_at_tick(client.session.tick_clock().estimated_tick())
 
 
-## Presses and releases the left button at a viewport position.
-##
-## [b]The release is not decoration.[/b] The picker acts on the press alone, so
-## a press-only helper looks sufficient and is not: a press over a [Control]
-## leaves that Control holding the viewport's mouse focus, and where the next
-## press goes then depends on an engine re-resolution rule nobody here has
-## probed. Since M1k one of the clicks below deliberately lands on the opaque
-## panel and the next one deliberately does not, so the sequence would rest on
-## that rule. Releasing ends the interaction instead of relying on it.
-## `test_interaction.gd`'s `_click_slot` and `pickup_demo.gd` already send both.
+## Presses and releases the left button at a viewport position. Both, so that a
+## press landing on the panel cannot leave it holding mouse focus for the next.
 static func _push_left_click(viewport: Viewport, screen_position: Vector2) -> void:
 	for pressed: bool in [true, false]:
 		var event := InputEventMouseButton.new()
@@ -875,8 +742,6 @@ func _wait_until(predicate: Callable, what: String) -> bool:
 	return false
 
 
-## Burns frames for a wall-clock interval. Test sequencing, not game logic:
-## nothing here derives a position from it.
 func _wait_msec(duration: int) -> void:
 	var deadline := Time.get_ticks_msec() + duration
 	while Time.get_ticks_msec() < deadline:
@@ -909,7 +774,6 @@ func _check_live_ground(
 	)
 
 
-## Where `point` falls along the segment from `from` to `to`, as a fraction.
 func _progress_along(from: Vector2, to: Vector2, point: Vector2) -> float:
 	var span := to - from
 	var length_squared := span.length_squared()
