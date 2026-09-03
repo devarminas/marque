@@ -28,6 +28,13 @@ which is why `contested_pickup_demo.ps1` legitimately failed about 38% of idle-m
 Alongside it, two doc-only comment-cull PRs merged (`server/internal/net` and `client/`), each
 verified as token-identical / harness-identical to its pre-cull baseline.
 
+**M2 is in progress.** M2a merged as PR #20, merge `496ef5b`, head `53470da`, two `fable`
+verdicts in the PR body. A player now outlives its socket. An abrupt socket death suspends it for
+400 ticks with no `despawn`, and `welcome.session` presented as `?session=` on dial resumes it.
+Both windowed demos now end with `player_suspended` and no `despawn`. M2c is open as PR #21 at
+`0c0fd96`, awaiting verdicts. M2b is in flight on `m2b-seq-dedupe`, worktree `wt-m2b`, from
+`496ef5b`. The cut is in `COORDINATION.md` under `## M2`.
+
 **One unit is written, pushed, and unverified: tick-anchor alignment.** Branch
 `tick-anchor-align` at `9974695`, worktree `wt-tick-align`, no PR opened. Client-only fix for the
 skew M1j found and correctly left out of scope. `COORDINATION.md`'s M1 section carries M1j's full
@@ -40,7 +47,8 @@ runs skewed before against 0 of 15 after in the hot band. That is still a writer
 fix, which this program does not accept.
 
 **It is blocked on model availability, and the blocker is structural.** Three verifier spawns died
-on API 529s, all on `fable`. The writer was `opus`, and `sonnet` and `haiku` are the same family,
+on API 529s, all on `fable`. Fable was available throughout the 2026-09-03 session; every M2a
+verifier ran on it. The writer was `opus`, and `sonnet` and `haiku` are the same family,
 so `fable` is the only model that satisfies the different-model-family rule. While it is
 unavailable that rule cannot be satisfied at all. Three honest ways forward, and the choice is the
 human's:
@@ -56,8 +64,8 @@ that is not one, which is worse than an honest gap.
 Its constraints, for whoever picks it up: no `server/` change, no `PROTOCOL.md` change, no
 heartbeat or `seq` field, since those are M2 and stay reserved. Tick rate stays 150ms.
 
-Then **M2**: reconnect, sequence numbers, server-side dedupe. `PROTOCOL.md`'s **M2** markers name
-what is reserved.
+M2 does not wait on that decision. Its remaining units run in the order `COORDINATION.md`
+`## M2` gives. `PROTOCOL.md`'s **M2** markers name what is still reserved.
 
 ## The dispatch loop
 

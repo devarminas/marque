@@ -503,6 +503,17 @@ with the same inventory, and an intent it sends twice is applied once. Cut on 20
 depends on the unmerged `tick-anchor-align` branch (`9974695`) and nothing folds its work in;
 M2d says where the two meet.
 
+**Progress, 2026-09-03.** M2a is merged. Abrupt socket deaths (`peer_gone`, `slow_client`) now
+suspend the player for `ResumeGraceTicks = 400` with no `despawn`; clean closes retire at once.
+Both windowed demos end with `player_suspended` and no `despawn`. M2c is in verification. M2b is
+in flight on `m2b-seq-dedupe`, worktree `wt-m2b`, from `496ef5b`.
+
+| Unit | PR | Head | Verdicts | State |
+|---|---|---|---|---|
+| M2a | #20 | `53470da` | `genuine-verified` at `27c602d` and `conformance-with-findings` at `27c602d`, both `fable`. Five findings fixed at `53470da`; the delta was shown by diff to contain no non-test Go file. | Merged, `496ef5b` |
+| M2b | none | none | none | In flight |
+| M2c | #21 | `0c0fd96` | none yet | In verification |
+
 **Dispatch order.** M2a, M2b, M2c, M2d, M2e, M2f. M2c is client-side and independent of M2a and
 M2b, so it may run alongside them (headless suites tolerate load). Every other unit waits for the
 one it names. Only one Godot-driving agent at a time when a windowed demo is in the recipe.

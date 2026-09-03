@@ -110,8 +110,10 @@ worker needs to know about where the program is.
   which is why `contested_pickup_demo.ps1` legitimately failed about 38% of idle-machine runs.
   No `server/` change, no `PROTOCOL.md` change, no heartbeat or `seq` field. Tick rate stays
   150ms.
-- **M2, next.** Reconnect. Sequence numbers and server-side dedupe. `PROTOCOL.md`'s **M2**
-  markers name what is reserved.
+- **M2, in progress.** Reconnect, sequence numbers, server-side dedupe. M2a is merged, so a
+  player now outlives its socket. An abrupt socket death suspends the player for 400 ticks with no
+  `despawn`, and presenting `welcome.session` as `?session=` on dial resumes it. The rest of the
+  cut is in `COORDINATION.md` under `## M2`.
 
 **This section used to carry a paragraph of history per unit, seventy-eight lines of it, for
 units that are all now merged.** Every line here is paid for on every worker spawn, which is the
