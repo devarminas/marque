@@ -140,6 +140,7 @@ func run(assertions: RefCounted) -> void:
 	_test_unknown_keys_are_still_ignored()
 	_test_integers_arrive_as_integers()
 	_test_intent_frames()
+	_test_seq_stamping()
 
 	assertions.finish()
 
@@ -609,6 +610,47 @@ func _test_intent_frames() -> void:
 		and (NetClientScript.drop_frame(1)["drop"] as Dictionary).has("slot"),
 		"pickup names an item id and drop names a slot index",
 	)
+
+
+## Three consecutive stamped frames are 1, 2, 3. A welcome with last_seq 7
+## restarts at 8. A welcome without last_seq restarts at 1.
+func _test_seq_stamping() -> void:
+	var net: NetClientScript = NetClientScript.new()
+	_check(net.next_seq() == 1, "before any welcome the next seq is 1")
+	var first: Dictionary = NetClientScript.move_to_frame(42.3, 17.8, net.take_seq())
+	_check(
+		typeof((first["move_to"] as Dictionary)["seq"]) == TYPE_INT
+		and (first["move_to"] as Dictionary)["seq"] == 1,
+		"the first stamped move_to carries seq 1, got %s" % JSON.stringify(first),
+	)
+	var second: Dictionary = NetClientScript.pickup_frame(7, net.take_seq())
+	_check(
+		(second["pickup"] as Dictionary)["seq"] == 2,
+		"the second stamped frame carries seq 2, got %s" % JSON.stringify(second),
+	)
+	var third: Dictionary = NetClientScript.drop_frame(3, net.take_seq())
+	_check(
+		(third["drop"] as Dictionary)["seq"] == 3,
+		"the third stamped frame carries seq 3, got %s" % JSON.stringify(third),
+	)
+
+	net.ingest_text_frame(
+		'{"welcome":{"you":1,"tick_ms":150,"tick":0,"last_seq":7,'
+		+ '"players":[{"id":1,"x":0.0,"z":0.0}]}}'
+	)
+	_check(net.next_seq() == 8, "after welcome.last_seq 7 the next seq is 8")
+	_check(
+		(NetClientScript.move_to_frame(1.0, 2.0, net.take_seq())["move_to"] as Dictionary)["seq"]
+		== 8,
+		"the first intent after last_seq 7 is 8",
+	)
+
+	net.ingest_text_frame(
+		'{"welcome":{"you":1,"tick_ms":150,"tick":0,'
+		+ '"players":[{"id":1,"x":0.0,"z":0.0}]}}'
+	)
+	_check(net.next_seq() == 1, "after a welcome without last_seq the next seq is 1")
+	net.free()
 
 
 func _check(condition: bool, message: String) -> bool:
