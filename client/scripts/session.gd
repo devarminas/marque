@@ -167,6 +167,11 @@ var _heartbeat_ticks := 0
 ## non-negative and the window is strictly positive, so an armed deadline is
 ## always at least one.
 var _liveness_deadline_msec := 0
+## True once this session's socket has ended, however it ended. **M2c.** Latched
+## rather than derived from the peer's state, because a session that never
+## opened a socket and one whose socket died read the same from outside; only
+## having been told the difference distinguishes them.
+var _connection_over := false
 ## Player id to [code]player_avatar.gd[/code]. The local player is in here too,
 ## under its own id, pointing at the authored node.
 var _avatars := {}
@@ -439,6 +444,12 @@ func _on_tick_received(t: int) -> void:
 		# re-anchor with anyway. Defence against a broken peer, not a flow.
 		push_error("session: tick %d before welcome; ignoring" % t)
 		return
+	if t < 0:
+		# Ticks start at 0 and only ever increase (PROTOCOL.md, "Clock"), so a
+		# negative one is not a clock reading. `TickClock.anchor` refuses it, so
+		# passing it on would print and emit a correction the clock never made.
+		push_error("session: tick %d is negative; dropping the heartbeat" % t)
+		return
 
 	var estimate := _clock.estimated_tick()
 	_rearm_liveness()
@@ -478,8 +489,16 @@ func is_liveness_armed() -> bool:
 ## rather than merely declining to arm, so that a second `welcome` from a server
 ## that has stopped promising heartbeats turns the timer off instead of leaving
 ## the previous one running against a rule nobody restated.
+##
+## [b]A dead connection never re-arms.[/b] Once [signal Node.disconnected] has
+## been heard there is nothing left that could send the next heartbeat, so a
+## timer waiting for one would report a second death for the first one. No
+## conforming server can deliver a frame after the socket is gone, so this
+## guards a broken peer and a caller feeding frames by hand rather than a flow;
+## it is explicit because the alternative is that the invariant holds only for
+## as long as nobody exercises it.
 func _rearm_liveness() -> void:
-	if _heartbeat_ticks <= 0 or _tick_ms <= 0:
+	if _connection_over or _heartbeat_ticks <= 0 or _tick_ms <= 0:
 		_liveness_deadline_msec = 0
 		return
 	_liveness_deadline_msec = Time.get_ticks_msec() + _liveness_window_msec()
@@ -614,8 +633,9 @@ func _on_server_error(re: String, message: String) -> void:
 func _on_disconnected(code: int, reason: String) -> void:
 	# M2c. Whatever ended the socket — a server close, a peer that vanished, or
 	# this session abandoning it — there is no longer anything that could send a
-	# `tick`, so a timer waiting for one would fire on a connection that is
-	# already gone.
+	# `tick`. The latch, not just the disarm: a frame arriving afterwards must
+	# not reopen a window on a connection that is already gone.
+	_connection_over = true
 	_liveness_deadline_msec = 0
 	push_warning('session: disconnected, code %d "%s"; nothing reconnects yet' % [code, reason])
 

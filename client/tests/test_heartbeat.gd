@@ -81,6 +81,10 @@ class Client:
 	## the window it reported.
 	var silences: Array[Dictionary] = []
 	var disconnects := 0
+	## Frames fed to this client whose top-level key was `tick`. Counted so that
+	## "this window was opened by a welcome and nothing else" is an assertion
+	## rather than a claim about the order the tests happen to run in.
+	var ticks_fed := 0
 
 	func _init(client_label: String) -> void:
 		label = client_label
@@ -95,6 +99,8 @@ class Client:
 	## Hands one frame to this client's decoder as if it had arrived on the
 	## socket.
 	func feed(text: String) -> void:
+		if text.begins_with('{"tick"'):
+			ticks_fed += 1
 		net.ingest_text_frame(text)
 
 	func clear() -> void:
@@ -134,7 +140,8 @@ func _ready() -> void:
 	_restore_max_fps = Engine.max_fps
 	Engine.max_fps = MAX_FPS
 
-	var armed := _build("Armed")
+	var corrected := _build("Corrected")
+	var silent := _build("Silent")
 	var unarmed := _build("Unarmed")
 
 	# main.tscn's Session resolves its exported node paths in _ready, and a
@@ -143,12 +150,16 @@ func _ready() -> void:
 	await get_tree().process_frame
 
 	print("== heartbeat: the clock it corrects and the socket it abandons ==")
-	_test_a_tick_before_welcome_is_ignored(armed)
-	_test_a_heartbeat_re_anchors_the_clock(armed)
-	_test_an_agreeing_heartbeat_changes_nothing(armed)
-	_test_a_malformed_tick_is_dropped_and_the_next_frame_applies(armed)
-	_test_a_heartbeat_reopens_the_liveness_window(armed)
-	await _test_a_silent_server_is_abandoned_and_an_unarmed_one_is_not(armed, unarmed)
+	_test_a_tick_before_welcome_is_ignored(corrected)
+	_test_a_heartbeat_re_anchors_the_clock(corrected)
+	_test_an_agreeing_heartbeat_changes_nothing(corrected)
+	_test_a_negative_tick_is_dropped_rather_than_reported_as_a_correction(corrected)
+	_test_a_malformed_tick_is_dropped_and_the_next_frame_applies(corrected)
+	_test_a_heartbeat_reopens_the_liveness_window(corrected)
+	await _test_a_welcome_alone_arms_the_window_and_an_unarmed_client_is_untouched(
+		silent, unarmed
+	)
+	await _test_a_tick_after_the_socket_died_does_not_reopen_the_window(silent)
 
 	Engine.max_fps = _restore_max_fps
 	print(
@@ -247,6 +258,32 @@ func _test_an_agreeing_heartbeat_changes_nothing(client: Client) -> void:
 	)
 
 
+## A negative `t` is dropped rather than reported. **The failure it guards is a
+## log that lies.**
+##
+## `TickClock.anchor` refuses a negative tick, so a session that reported the
+## correction anyway would print `clock corrected by -606 tick(s)` next to a
+## clock that had not moved at all — the one thing a correction log exists to be
+## trusted about. Found by a verifier before any server could send one.
+func _test_a_negative_tick_is_dropped_rather_than_reported_as_a_correction(
+	client: Client
+) -> void:
+	client.clear()
+	var before := client.session.tick_clock().estimated_tick()
+	client.feed('{"tick":{"t":-1}}')
+	client.feed('{"tick":{"t":-606}}')
+	_check(
+		client.corrections.is_empty(),
+		"a negative tick reports no correction, got %s" % [client.corrections],
+	)
+	_check(
+		client.session.tick_clock().estimated_tick() == before,
+		"and leaves the estimate where it was (%d, now %d)"
+		% [before, client.session.tick_clock().estimated_tick()],
+	)
+	_check(client.disconnects == 0, "and does not end the session")
+
+
 ## A heartbeat whose `t` cannot be read is dropped, and the connection is kept.
 ## The proof that it was kept is the frame after it.
 func _test_a_malformed_tick_is_dropped_and_the_next_frame_applies(client: Client) -> void:
@@ -295,65 +332,91 @@ func _test_a_heartbeat_reopens_the_liveness_window(client: Client) -> void:
 		"and leaves the window armed rather than cancelling it",
 	)
 
+	# Disarmed again before this client is left alone. The tests that follow
+	# spend seconds waiting, and a timer still running here would abandon a
+	# client nothing is asserting on and put an unexplained error in the log.
+	client.feed(_welcome_frame(WELCOME_TICK, -1))
+	_check(
+		not client.session.is_liveness_armed(),
+		"and a later welcome that stops promising heartbeats disarms it",
+	)
 
-## The acceptance pair, waited out under one clock. **The unarmed client is the
-## half that protects every session against a pre-M2d server.**
-func _test_a_silent_server_is_abandoned_and_an_unarmed_one_is_not(
-	armed: Client, unarmed: Client
+
+## The acceptance pair, waited out under one clock.
+##
+## [b]The armed client's window is opened by its `welcome` and by nothing
+## else.[/b] That is what a server which promises heartbeats and then sends none
+## produces, and it is the only path on which liveness has to fire without a
+## single `tick` ever having been decoded. Measuring from a `tick` instead would
+## leave the case this rule exists for asserted nowhere; `silent` is a client of
+## its own so that "no tick was ever fed" is a property of the client rather
+## than of the order the tests happen to run in.
+##
+## **The unarmed half is what protects every session against a pre-M2d server.**
+func _test_a_welcome_alone_arms_the_window_and_an_unarmed_client_is_untouched(
+	silent: Client, unarmed: Client
 ) -> void:
+	var window := SessionScript.LIVENESS_HEARTBEATS * HEARTBEAT_TICKS * TICK_MS
+	_check(window == 900, "the armed window is 3 heartbeats of 2 ticks at 150 ms, got %d" % window)
+
+	# Both welcomes are fed here rather than earlier, so the elapsed time below
+	# is measured from the frame that opened the window. Reading the clock a few
+	# lines later would let a millisecond of drift make a correct 900 ms window
+	# look like 899.
+	var opened_at := Time.get_ticks_msec()
+	silent.feed(_welcome_frame(WELCOME_TICK, HEARTBEAT_TICKS))
 	# The unarmed client's welcome names no heartbeat_ticks, which is every
 	# server before M2d.
 	unarmed.feed(_welcome_frame(WELCOME_TICK, -1))
 	_check(
+		silent.session.is_liveness_armed(),
+		"a welcome alone arms the window, with no tick behind it",
+	)
+	_check(
 		not unarmed.session.is_liveness_armed(),
-		"the unarmed client runs no liveness timer",
+		"and a welcome with no heartbeat_ticks arms nothing",
 	)
 
-	var window := SessionScript.LIVENESS_HEARTBEATS * HEARTBEAT_TICKS * TICK_MS
-	_check(window == 900, "the armed window is 3 heartbeats of 2 ticks at 150 ms, got %d" % window)
-
-	# The window is reopened here rather than in the test above, so that the
-	# elapsed time below is measured from the frame that opened it. Reading the
-	# clock a few lines later would let a millisecond of drift make a correct
-	# 900 ms window look like 899.
-	var opened_at := Time.get_ticks_msec()
-	armed.feed('{"tick":{"t":%d}}' % armed.session.tick_clock().estimated_tick())
 	await _wait_msec(WATCH_MSEC)
 
 	if _check(
-		armed.silences.size() == 1,
-		"the armed client abandons its socket exactly once, got %d" % armed.silences.size(),
+		silent.silences.size() == 1,
+		"the silent server's client abandons its socket exactly once, got %d"
+		% silent.silences.size(),
 	):
-		var silence: Dictionary = armed.silences[0]
+		var silence: Dictionary = silent.silences[0]
 		var elapsed: int = int(silence["at_msec"]) - opened_at
+		_check(
+			silent.ticks_fed == 0,
+			"having been fed no tick at all, got %d" % silent.ticks_fed,
+		)
 		_check(
 			int(silence["window"]) == window,
 			"reporting the %d ms window it waited, got %d" % [window, int(silence["window"])],
 		)
 		_check(
 			elapsed >= window,
-			"never before the window is up (%d ms elapsed, window %d)" % [elapsed, window],
+			"never before the window is up (%d ms after its welcome, window %d)"
+			% [elapsed, window],
 		)
 		_check(
 			elapsed <= window + LATE_SLACK_MSEC,
-			"and within a frame or so of it (%d ms elapsed, window %d)" % [elapsed, window],
+			"and within a frame or so of it (%d ms after its welcome, window %d)"
+			% [elapsed, window],
 		)
 	_check(
-		not armed.session.is_liveness_armed(),
+		not silent.session.is_liveness_armed(),
 		"the timer disarms itself rather than firing again every frame",
 	)
+	# `is_open()` is not asserted here. It is false on a client that never
+	# connected, so it would pass whether or not the session abandoned anything.
+	# The disconnection count is the claim that cannot be made vacuously, and
+	# whether the transport really went without a close frame is a question only
+	# a server can answer — `test_interop.gd`'s live half is where it is asked.
 	_check(
-		not armed.net.is_open(),
-		"and the socket is not open afterwards",
-	)
-	# The observable proof that the session called `abandon()`. Whether the
-	# transport really went without a close frame is a claim about
-	# [WebSocketPeer] that only a server can settle, and the live half of
-	# `test_interop.gd` is where it is settled.
-	_check(
-		armed.disconnects == 1,
+		silent.disconnects == 1,
 		"the abandonment is reported as a disconnection, exactly once, got %d"
-		% armed.disconnects,
+		% silent.disconnects,
 	)
 
 	_check(
@@ -363,6 +426,30 @@ func _test_a_silent_server_is_abandoned_and_an_unarmed_one_is_not(
 	_check(
 		unarmed.disconnects == 0,
 		"and its session was never ended, got %d disconnection(s)" % unarmed.disconnects,
+	)
+
+
+## A dead connection never re-arms. Nothing on the wire can deliver a frame
+## after the socket has gone, so this is defence against a broken peer and
+## against a caller feeding frames by hand — but an unguarded re-arm would
+## report a second death for the first one, on a timer, forever.
+func _test_a_tick_after_the_socket_died_does_not_reopen_the_window(silent: Client) -> void:
+	_check(not silent.session.is_liveness_armed(), "the abandoned client is disarmed")
+	silent.feed('{"tick":{"t":%d}}' % (silent.session.tick_clock().estimated_tick() + 1))
+	_check(
+		not silent.session.is_liveness_armed(),
+		"and a tick arriving afterwards does not arm a timer on a dead connection",
+	)
+
+	await _wait_msec(SessionScript.LIVENESS_HEARTBEATS * HEARTBEAT_TICKS * TICK_MS
+		+ LATE_SLACK_MSEC)
+	_check(
+		silent.silences.size() == 1,
+		"so no second abandonment is reported, got %d" % silent.silences.size(),
+	)
+	_check(
+		silent.disconnects == 1,
+		"and the session still ended exactly once, got %d" % silent.disconnects,
 	)
 
 

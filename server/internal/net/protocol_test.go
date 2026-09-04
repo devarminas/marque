@@ -18,30 +18,34 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 		{
 			name: "welcome",
 			msg: mnet.Welcome{
-				You:    1,
-				TickMS: 150,
-				Tick:   142,
+				You:     1,
+				Session: "9f2c1ab7d0e4485fa6c3b81d27e05934",
+				TickMS:  150,
+				Tick:    142,
 				Players: []mnet.PlayerState{
 					{ID: 1, X: 0, Z: 0},
 					{ID: 2, X: 5, Z: 5},
 				},
 				Items: []mnet.ItemState{{ID: 7, Kind: "acorn", X: 3, Z: -2}},
 			},
-			want: `{"welcome":{"you":1,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0},{"id":2,"x":5,"z":5}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}]}}`,
+			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0},{"id":2,"x":5,"z":5}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}]}}`,
 		},
 		{
 			// An empty world is [] on both arrays, never null and never an
 			// absent key. A client should not have to tell three spellings of
-			// "nothing there" apart.
+			// "nothing there" apart. session is a string and is always present,
+			// because every welcome names the identity of the player receiving
+			// it; there is no such thing as a welcome without one.
 			name: "welcome with an empty world",
 			msg: mnet.Welcome{
 				You:     1,
+				Session: "0123456789abcdef0123456789abcdef",
 				TickMS:  150,
 				Tick:    0,
 				Players: []mnet.PlayerState{},
 				Items:   []mnet.ItemState{},
 			},
-			want: `{"welcome":{"you":1,"tick_ms":150,"tick":0,"players":[],"items":[]}}`,
+			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","tick_ms":150,"tick":0,"players":[],"items":[]}}`,
 		},
 		{
 			name: "item_spawn",

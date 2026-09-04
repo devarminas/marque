@@ -97,7 +97,7 @@ func run() error {
 
 	log := gamelog.New(os.Stdout, *enableLog)
 	hub := mnet.NewHub()
-	world := game.NewWorld(hub, log, game.NewMemoryStore())
+	world := game.NewWorld(hub, log, game.NewMemoryStore(), game.ResumeGraceTicks)
 
 	// Bind before announcing anything, so a port clash fails immediately and
 	// visibly instead of after a log line claiming the server started.
@@ -119,6 +119,7 @@ func run() error {
 		"walk_speed":        game.WalkSpeed,
 		"world_half_extent": game.WorldHalfExtent,
 		"inventory_size":    game.InventorySize,
+		"resume_grace":      game.ResumeGraceTicks,
 		"seeded_items":      len(seeds),
 	})
 

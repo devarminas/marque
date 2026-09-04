@@ -52,6 +52,11 @@ const TREE_FREE_SUITES: Array = [
 	# yet, so fed frames are the only way to hold the client to the spec. The
 	# server's half is M2d.
 	{"name": "tick protocol", "script": preload("res://tests/test_tick_protocol.gd")},
+	# The same decoder at its edges, written by M2c's verifier and adopted. A
+	# second suite rather than more cases in the one above, because the two ask
+	# different questions: that one holds the decoder to the contract, this one
+	# to the shapes the contract does not name.
+	{"name": "tick edges", "script": preload("res://tests/test_tick_edges.gd")},
 ]
 
 ## Suites that need a scene tree, run one at a time in this order.
@@ -82,6 +87,10 @@ const SCENE_SUITES: Array = [
 	# caps Engine.max_fps for its own duration so that costs frames rather than
 	# a proportion of the runner's watchdog (NOTES.md, "Godot authoring traps").
 	{"name": "heartbeat", "scene": "res://tests/test_heartbeat.tscn"},
+	# The same session at its edges, written by M2c's verifier and adopted. It
+	# is where a correction's cost is measured — a re-anchor moves every walking
+	# body — and where the rules a verifier found missing are pinned.
+	{"name": "heartbeat edges", "scene": "res://tests/test_heartbeat_edges.tscn"},
 	# The two suites that talk to another process come last. Each has a half
 	# that runs with no server and a half that needs MARQUE_WS_URL, which is
 	# what scripts/interop_test.ps1 exists to provide.
