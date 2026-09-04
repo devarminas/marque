@@ -76,6 +76,7 @@ const SCENE_SUITES: Array = [
 	# M3b's equipment panel. Same shape again: it instances main.tscn, pushes
 	# real input at it, and connects to nothing.
 	{"name": "equipment", "scene": "res://tests/test_equipment.tscn"},
+	{"name": "equipment wiring", "scene": "res://tests/test_equipment_wiring.tscn"},
 	# The two heartbeat suites feed main.tscn scripted frames like the two above,
 	# so they connect to nothing. They are the only suites that spend real
 	# seconds waiting on a deadline, and each caps Engine.max_fps for its own

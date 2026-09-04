@@ -26,6 +26,9 @@ extends Button
 
 const ItemKinds := preload("res://scripts/item_kinds.gd")
 
+## Emitted on right-click of an occupied slot. The panel forwards it as `equip`.
+signal equip_requested(slot: int)
+
 ## The slot's index in the inventory, or -1 before [method configure]. This is
 ## what a `drop` names (`PROTOCOL.md`, `drop`), so it is the slot's identity and
 ## not a display detail.
@@ -109,6 +112,27 @@ func display_color() -> Color:
 	if fill == null:
 		return Color(0, 0, 0, 0)
 	return fill.color
+
+
+func _gui_input(event: InputEvent) -> void:
+	if not is_occupied():
+		return
+	if (
+		event is InputEventMouseButton
+		and event.pressed
+		and event.button_index == MOUSE_BUTTON_RIGHT
+	):
+		equip_requested.emit(slot_index)
+		accept_event()
+
+
+func _get_drag_data(_at_position: Vector2) -> Variant:
+	if not is_occupied():
+		return null
+	var preview := Label.new()
+	preview.text = kind
+	set_drag_preview(preview)
+	return {"bag_slot": slot_index}
 
 
 func _paint(color: Color, text: String) -> void:

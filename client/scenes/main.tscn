@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3 uid="uid://bbk0w4hee5gof"]
+[gd_scene load_steps=17 format=3 uid="uid://bbk0w4hee5gof"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="2_checker"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/net_client.gd" id="7_net_client"]
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
+[ext_resource type="PackedScene" path="res://scenes/worn_slot.tscn" id="10_worn_slot"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.38, 0.5, 0.68, 1)
@@ -138,7 +139,7 @@ theme_override_constants/h_separation = 4
 theme_override_constants/v_separation = 4
 columns = 4
 
-[node name="EquipmentPanel" type="PanelContainer" parent="UI"]
+[node name="EquipmentPanel" type="PanelContainer" parent="UI" node_paths=PackedStringArray("slot_rows", "weapon_slot")]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
@@ -151,6 +152,8 @@ grow_vertical = 0
 visible = false
 mouse_filter = 0
 script = ExtResource("9_equipment_panel")
+slot_rows = NodePath("Margin/Rows")
+weapon_slot = NodePath("Margin/Rows/WeaponSlot")
 
 [node name="Margin" type="MarginContainer" parent="UI/EquipmentPanel"]
 layout_mode = 2
@@ -172,28 +175,10 @@ theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
 theme_override_font_sizes/font_size = 14
 text = "Equipment"
 
-[node name="WeaponSlot" type="ColorRect" parent="UI/EquipmentPanel/Margin/Rows"]
-custom_minimum_size = Vector2(52, 52)
+[node name="WeaponSlot" parent="UI/EquipmentPanel/Margin/Rows" instance=ExtResource("10_worn_slot")]
 layout_mode = 2
-mouse_filter = 2
-color = Color(0.2, 0.2, 0.22, 1)
 
-[node name="Label" type="Label" parent="UI/EquipmentPanel/Margin/Rows/WeaponSlot"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
-theme_override_font_sizes/font_size = 11
-text = "weapon"
-horizontal_alignment = 1
-vertical_alignment = 1
-clip_text = true
-
-[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "ground_picker", "inventory_panel")]
+[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "ground_picker", "inventory_panel", "equipment_panel")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
@@ -201,6 +186,7 @@ remote_players = NodePath("../RemotePlayers")
 ground_items = NodePath("../GroundItems")
 ground_picker = NodePath("../GroundPicker")
 inventory_panel = NodePath("../UI/InventoryPanel")
+equipment_panel = NodePath("../UI/EquipmentPanel")
 
 [node name="Net" type="Node" parent="Session"]
 script = ExtResource("7_net_client")

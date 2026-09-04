@@ -136,6 +136,15 @@ signal inventory_changed(
 	size: int, slot_indices: PackedInt32Array, slot_kinds: PackedStringArray
 )
 
+## `equipment`: this client's own worn equipment, restated in full. **M3c.**
+##
+## [b]`slot_names` and `slot_kinds` are sparse and index aligned.[/b] They list
+## only occupied worn slots, each carrying its own name. An empty worn slot is
+## absent rather than null (`PROTOCOL.md`, `equipment`).
+signal equipment_changed(
+	worn_names: PackedStringArray, slot_names: PackedStringArray, slot_kinds: PackedStringArray
+)
+
 ## `error`: the server refused something this client sent. `re` names the
 ## rejected message and is [code]""[/code] when the frame could not be
 ## attributed to one. `message` is for a log, not for display and not for
@@ -275,6 +284,16 @@ func send_drop(slot: int, seq: int = 0) -> Error:
 	return _send(drop_frame(slot, _intent_seq(seq)))
 
 
+## Sends `equip`: a request to wear whatever is in a bag slot. **M3c.**
+func send_equip(slot: int, seq: int = 0) -> Error:
+	return _send(equip_frame(slot, _intent_seq(seq)))
+
+
+## Sends `unequip`: a request to take off a worn slot. **M3c.**
+func send_unequip(worn: String, seq: int = 0) -> Error:
+	return _send(unequip_frame(worn, _intent_seq(seq)))
+
+
 ## The next `seq` this client will stamp, after the last welcome.
 func next_seq() -> int:
 	return _next_seq
@@ -308,6 +327,14 @@ static func pickup_frame(item_id: int, seq: int = 0) -> Dictionary:
 
 static func drop_frame(slot: int, seq: int = 0) -> Dictionary:
 	return {"drop": _intent_body({"slot": slot}, seq)}
+
+
+static func equip_frame(slot: int, seq: int = 0) -> Dictionary:
+	return {"equip": _intent_body({"slot": slot}, seq)}
+
+
+static func unequip_frame(worn: String, seq: int = 0) -> Dictionary:
+	return {"unequip": _intent_body({"worn": worn}, seq)}
 
 
 static func _intent_body(body: Dictionary, seq: int) -> Dictionary:
@@ -427,6 +454,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_item_despawn(body, text)
 		"inventory":
 			_on_inventory(body, text)
+		"equipment":
+			_on_equipment(body, text)
 		"tick":
 			_on_tick(body, text)
 		"error":
@@ -663,6 +692,55 @@ func _on_inventory(body: Dictionary, text: String) -> void:
 		kinds.append(occupied["kind"])
 
 	inventory_changed.emit(size, indices, kinds)
+
+
+## `equipment`. **M3c.** A full restatement, never a patch.
+func _on_equipment(body: Dictionary, text: String) -> void:
+	var raw_worn: Variant = body.get("worn")
+	if body.has("worn") and _is_null_list(raw_worn, "equipment.worn", text):
+		raw_worn = []
+	if typeof(raw_worn) != TYPE_ARRAY:
+		push_error("net_client: equipment.worn is missing or not an array: %s" % text)
+		return
+
+	var worn_names := PackedStringArray()
+	for entry: Variant in raw_worn as Array:
+		if typeof(entry) != TYPE_STRING:
+			push_error("net_client: equipment.worn entry is not a string: %s" % text)
+			return
+		worn_names.append(entry)
+
+	var raw_slots: Variant = body.get("slots")
+	if body.has("slots") and _is_null_list(raw_slots, "equipment.slots", text):
+		raw_slots = []
+	if typeof(raw_slots) != TYPE_ARRAY:
+		push_error("net_client: equipment.slots is missing or not an array: %s" % text)
+		return
+
+	var slot_names := PackedStringArray()
+	var slot_kinds := PackedStringArray()
+	for entry: Variant in raw_slots as Array:
+		if typeof(entry) != TYPE_DICTIONARY:
+			push_error("net_client: equipment.slots entry is not an object: %s" % text)
+			return
+		var occupied: Dictionary = entry
+		if typeof(occupied.get("slot")) != TYPE_STRING:
+			push_error("net_client: equipment.slots entry has no slot string: %s" % text)
+			return
+		if typeof(occupied.get("kind")) != TYPE_STRING:
+			push_error("net_client: equipment.slots entry has no kind string: %s" % text)
+			return
+		var name: String = occupied["slot"]
+		if not worn_names.has(name):
+			push_error('net_client: equipment names unknown worn slot "%s": %s' % [name, text])
+			return
+		if slot_names.has(name):
+			push_error('net_client: equipment names worn slot "%s" twice: %s' % [name, text])
+			return
+		slot_names.append(name)
+		slot_kinds.append(occupied["kind"])
+
+	equipment_changed.emit(worn_names, slot_names, slot_kinds)
 
 
 ## One `{"id":..,"kind":..,"x":..,"z":..}` object, decoded.

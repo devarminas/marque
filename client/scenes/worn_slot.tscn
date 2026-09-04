@@ -1,0 +1,46 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/worn_slot.gd" id="1_worn_slot"]
+
+[node name="WornSlot" type="Button" node_paths=PackedStringArray("fill", "label")]
+custom_minimum_size = Vector2(52, 52)
+focus_mode = 0
+mouse_filter = 0
+script = ExtResource("1_worn_slot")
+fill = NodePath("Fill")
+label = NodePath("Label")
+empty_color = Color(0.2, 0.2, 0.22, 1)
+known_color = Color(0.18, 0.72, 0.26, 1)
+unknown_color = Color(0.95, 0.08, 0.85, 1)
+
+[node name="Fill" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 3.0
+offset_top = 3.0
+offset_right = -3.0
+offset_bottom = -3.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.2, 0.2, 0.22, 1)
+
+[node name="Label" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 11
+horizontal_alignment = 1
+vertical_alignment = 1
+clip_text = true

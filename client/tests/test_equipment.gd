@@ -24,6 +24,7 @@ const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const InventorySlotScene := preload("res://scenes/inventory_slot.tscn")
 const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
+const WornSlotScript := preload("res://scripts/worn_slot.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
 ## The action `project.godot` authors, and the physical key it is bound to.
@@ -53,7 +54,6 @@ const CHROME_PATHS := [
 	"Margin",
 	"Margin/Rows",
 	"Margin/Rows/Heading",
-	"Margin/Rows/WeaponSlot",
 ]
 
 @onready var _world: Node3D = $World
@@ -242,7 +242,7 @@ func _test_the_worn_weapon_slot_is_drawn_empty() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	var slot := _panel.get_node_or_null("Margin/Rows/WeaponSlot") as ColorRect
+	var slot := _panel.get_node_or_null("Margin/Rows/WeaponSlot") as WornSlotScript
 	_check(slot != null, "the panel draws a worn weapon slot")
 	if slot == null:
 		return
@@ -253,14 +253,13 @@ func _test_the_worn_weapon_slot_is_drawn_empty() -> void:
 
 	var reference := InventorySlotScene.instantiate() as InventorySlotScript
 	_check(
-		slot.color == reference.empty_color,
+		slot.display_color() == reference.empty_color,
 		"and drawn the very shade inventory_slot.tscn authors for an empty slot, %s, got %s"
-		% [reference.empty_color, slot.color],
+		% [reference.empty_color, slot.display_color()],
 	)
 	reference.queue_free()
 
-	var label := slot.get_node_or_null("Label") as Label
-	_check(label != null and label.text == "weapon", "and named for the slot it is")
+	_check(slot.worn_name == "weapon", "and named for the slot it is")
 	_panel.visible = false
 
 
