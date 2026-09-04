@@ -32,8 +32,7 @@ extends Node
 ## arrive from [method JSON.parse_string] as floats. They are converted to
 ## [int] here so nothing downstream compares a float to an int.
 ##
-## [b]No reconnect, no heartbeat, no sequence numbers.[/b] Those are M2 and
-## `PROTOCOL.md` says so.
+## [b]No reconnect and no sequence numbers.[/b] `PROTOCOL.md` says so.
 
 ## Emitted once, when the socket reaches [constant WebSocketPeer.STATE_OPEN].
 ## No frame has been received yet; `welcome` follows.
@@ -51,13 +50,21 @@ signal disconnected(code: int, reason: String)
 ## `you` is this client's own id. `player_ids` and `player_positions` are index
 ## aligned and describe every player in the world [i]including this one[/i], at
 ## its position as of `tick`.
+##
+## `heartbeat_ticks` is the interval, in ticks, at which the server intends to
+## send `tick`. It is [code]0[/code] when the field was absent, and 0 means the
+## receiver runs no liveness timer (`PROTOCOL.md`, "Clock").
 signal welcomed(
 	you: int,
 	tick_ms: int,
 	tick: int,
+	heartbeat_ticks: int,
 	player_ids: PackedInt64Array,
 	player_positions: PackedVector2Array,
 )
+
+## `tick`: the server's heartbeat, carrying the tick it was current at.
+signal tick_received(t: int)
 
 ## The ground items `welcome` listed, emitted immediately after [signal welcomed]
 ## and out of the same frame. **M1.**
@@ -136,9 +143,7 @@ signal server_error(re: String, message: String)
 ## ignoring is observable rather than invisible.
 ##
 ## This is compatibility rule 1 in `PROTOCOL.md`, the one place the project's
-## fail-fast doctrine is deliberately relaxed. M2 adds `{"tick":{"t":N}}` to a
-## server talking to clients built today; treating that as an error would break
-## every one of them.
+## fail-fast doctrine is deliberately relaxed.
 signal unknown_message(key: String)
 
 var _peer: WebSocketPeer = null
@@ -173,6 +178,23 @@ func close(code: int = 1000, reason: String = "") -> void:
 	if _peer == null:
 		return
 	_peer.close(code, reason)
+
+
+## Drops the transport without sending a close frame, so the server sees a read
+## error and records `peer_gone` rather than `closed` (`PROTOCOL.md`, "Clock").
+##
+## Safe on a client that never connected, and idempotent with [method close]:
+## [signal disconnected] is emitted here, synchronously, and only once.
+##
+## The mechanism is [method WebSocketPeer.close] with a [b]negative[/b] code,
+## which closes the transport immediately without notifying the peer. Verified
+## against 4.7.2: a peer in [constant WebSocketPeer.STATE_CONNECTING] reads back
+## [constant WebSocketPeer.STATE_CLOSED] on the next line, with no polling and
+## no closing handshake in between.
+func abandon() -> void:
+	if _peer != null:
+		_peer.close(-1)
+	_announce_disconnected(0, "")
 
 
 ## True between [signal connected] and [signal disconnected].
@@ -244,8 +266,15 @@ func _process(_delta: float) -> void:
 	# Checked after draining: frames that arrived in the same poll as the close
 	# are still delivered, in order, before the disconnect is announced.
 	if not _closed and _peer.get_ready_state() == WebSocketPeer.STATE_CLOSED:
-		_closed = true
-		disconnected.emit(_peer.get_close_code(), _peer.get_close_reason())
+		_announce_disconnected(_peer.get_close_code(), _peer.get_close_reason())
+
+
+## Emits [signal disconnected] exactly once per client, whoever noticed first.
+func _announce_disconnected(code: int, reason: String) -> void:
+	if _closed:
+		return
+	_closed = true
+	disconnected.emit(code, reason)
 
 
 func _drain() -> void:
@@ -309,6 +338,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_item_despawn(body, text)
 		"inventory":
 			_on_inventory(body, text)
+		"tick":
+			_on_tick(body, text)
 		"error":
 			_on_error(body, text)
 		_:
@@ -364,11 +395,41 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 			item_kinds.append(item["kind"])
 			item_positions.append(item["position"])
 
-	welcomed.emit(int(body["you"]), int(body["tick_ms"]), int(body["tick"]), ids, positions)
+	var heartbeat_ticks := _heartbeat_ticks_of(body, text)
+
+	welcomed.emit(
+		int(body["you"]),
+		int(body["tick_ms"]),
+		int(body["tick"]),
+		heartbeat_ticks,
+		ids,
+		positions,
+	)
 	# After `welcomed`, always: a listener rebuilds its world on that signal, so
 	# items announced before it would be freed by the very frame that announced
 	# them.
 	welcome_items.emit(item_ids, item_kinds, item_positions)
+
+
+## `welcome.heartbeat_ticks`, or 0 when it was absent, unreadable, or negative.
+## Zero means liveness off, and a present-but-wrong field costs a log line
+## rather than the whole `welcome` (`PROTOCOL.md`, "Clock").
+static func _heartbeat_ticks_of(body: Dictionary, text: String) -> int:
+	if not body.has("heartbeat_ticks"):
+		return 0
+	var raw: Variant = body["heartbeat_ticks"]
+	if not _is_number(raw):
+		push_error(
+			"net_client: welcome.heartbeat_ticks is not a number; read as 0: %s" % text
+		)
+		return 0
+	var ticks := int(raw)
+	if ticks < 0:
+		push_error(
+			"net_client: welcome.heartbeat_ticks is negative (%d); read as 0: %s" % [ticks, text]
+		)
+		return 0
+	return ticks
 
 
 func _on_spawn(body: Dictionary, text: String) -> void:
@@ -502,6 +563,13 @@ func _item_state(entry: Variant, where: String, text: String) -> Dictionary:
 		"kind": state["kind"],
 		"position": Vector2(state["x"], state["z"]),
 	}
+
+
+## `tick`. The server's heartbeat, decoded into a plain integer.
+func _on_tick(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["t"], text):
+		return
+	tick_received.emit(int(body["t"]))
 
 
 func _on_error(body: Dictionary, text: String) -> void:

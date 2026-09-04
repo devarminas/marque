@@ -74,6 +74,7 @@ class Recorder:
 		you: int,
 		tick_ms: int,
 		tick: int,
+		heartbeat_ticks: int,
 		player_ids: PackedInt64Array,
 		player_positions: PackedVector2Array,
 	) -> void:
@@ -82,6 +83,7 @@ class Recorder:
 			"you": you,
 			"tick_ms": tick_ms,
 			"tick": tick,
+			"heartbeat_ticks": heartbeat_ticks,
 			"player_ids": player_ids,
 			"player_positions": player_positions,
 		})
