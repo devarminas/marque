@@ -234,8 +234,6 @@ func _test_two_avatars_do_not_share_state() -> void:
 	second.queue_free()
 
 
-## A freshly spawned avatar has no path yet, and the tick still says what it
-## is doing: standing. Idle_A must be playing, not bind pose.
 func _test_a_pathless_avatar_idles() -> void:
 	var avatar := _spawn(51)
 	var animation := avatar.get_node_or_null("AnimationPlayer") as AnimationPlayer
