@@ -422,11 +422,14 @@ loser condemned on the winning tick (gap 0) has to be the later joiner. An earli
 sees the item still live, finds itself out of range, and is condemned a tick later (gap 1). The
 demo's loser is always the later joiner, which is why it measures gap 0 every run.
 
-**Known flake, recorded so nobody debugs it twice.** `two_client_demo.ps1`'s still-camera control
-asserts byte-exactness over the top quarter of a GPU-rendered frame. One flip was observed on a
-fully static frame across eighteen measured windows, explicable only by render nondeterminism. It
-fails in the safe direction, never a false pass. If the demo fails on only "the background is not
-a control" with a still fraction near zero, rerun before investigating.
+**Known flake, recorded so nobody debugs it twice.** `two_client_demo.ps1`'s still-camera
+control is the sky-band check. It asserts byte-exactness over the top quarter of a
+GPU-rendered frame. Failures cluster under GPU load right after heavy suites.
+`DEMO pos` and path geometry can match a green merge-base while the sky band flips.
+The control fails in the safe direction, never a false pass. Two consecutive
+sky-band failures under load are still this flake. Call a product regression only
+if an idle-machine control also fails the sky band, or if geometry differs.
+Read `.claude/skills/verify-marque/SKILL.md` Known flake for the steps.
 
 ## M2
 
