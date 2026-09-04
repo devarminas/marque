@@ -78,9 +78,9 @@ const ARRIVAL_WAIT_MSEC := 800
 ## that C's replayed path is re-anchored somewhere strictly along the segment
 ## rather than still at its origin.
 const MIDWALK_WAIT_MSEC := 450
-## Wall-clock milliseconds to let the server read an abandoned socket. **M2c.**
-## Several ticks and a loopback round trip, which is all it needs; the assertion
-## that follows is that nothing arrived, so this is how long "nothing" means.
+## Wall-clock milliseconds to let the server read an abandoned socket: several
+## ticks and a loopback round trip. The assertion that follows is that nothing
+## arrived, so this is how long "nothing" means.
 const ABANDON_SETTLE_MSEC := 500
 
 
@@ -109,7 +109,7 @@ class Peer:
 	var spawns: Array[Dictionary] = []
 	var despawns: Array[int] = []
 	var unknown_keys := PackedStringArray()
-	## Every `t` this peer was sent by a `tick` heartbeat, oldest first. **M2c.**
+	## Every `t` this peer was sent by a `tick` heartbeat, oldest first.
 	var ticks: Array[int] = []
 
 	func _init(peer_label: String) -> void:
@@ -198,9 +198,9 @@ const Assertions := preload("res://tests/assertions.gd")
 var _assertions := Assertions.new()
 var _finished := false
 var _peers: Array[Peer] = []
-## The peer that abandoned its socket, if the live half got that far. **M2c.**
-## Excluded from the polite close below: closing it would be the logout this
-## suite just proved it did not send.
+## The peer that abandoned its socket, if the live half got that far. Excluded
+## from the polite close below: closing it would be the logout this suite just
+## proved it did not send.
 var _abandoned: Peer = null
 var _restore_max_fps := 0
 ## Reported at the end so the margin against the runner's watchdog is visible
@@ -357,21 +357,15 @@ func _test_decoding_without_a_server() -> void:
 		)
 
 	# Compatibility rule 1: unknown top-level key, logged loudly and ignored.
-	#
-	# The key is invented, and it has to be. This assertion used `tick` from M0
-	# until M2c decoded it, at which point the canonical unknown key became a
-	# known message and the check silently stopped testing the rule. Rule 1's
-	# whole job is to carry a client past a message that does not exist yet, so
-	# a key that names a real message can never demonstrate it; only one no
-	# server will ever send can.
+	# The key is invented and has to be: rule 1 carries a client past a message
+	# that does not exist yet, so only a key no server will ever send can
+	# demonstrate it.
 	probe.net.ingest_text_frame('{"m2c_no_such_message":{"t":9001}}')
 	_check(
 		Array(probe.unknown_keys) == ["m2c_no_such_message"],
 		'an unknown key is reported as "m2c_no_such_message", got %s' % [probe.unknown_keys],
 	)
 
-	# `tick` is a known message from M2c and must not reach `unknown_message`.
-	# **M2c.**
 	probe.net.ingest_text_frame('{"tick":{"t":9001}}')
 	_check(
 		Array(probe.ticks) == [9001],
@@ -396,9 +390,6 @@ func _test_decoding_without_a_server() -> void:
 	probe.net.ingest_text_frame('{"spawn":42}')
 	probe.net.ingest_text_frame('{"path":{"id":7,"start_tick":1,"points":[],"speed":3.0}}')
 	probe.net.ingest_text_frame('{"spawn":{"id":1,"x":0}}')
-	# M2c. A heartbeat with no readable `t` carries nothing, so it is dropped
-	# like any other unparseable body rather than re-anchoring a clock to a
-	# number the server never sent.
 	probe.net.ingest_text_frame('{"tick":{}}')
 	probe.net.ingest_text_frame('{"tick":{"t":"x"}}')
 	_check(
@@ -522,8 +513,7 @@ func _test_unknown_and_malformed_frames_do_not_kill_the_client(a: Peer) -> void:
 
 	var unknown_before := a.unknown_keys.size()
 	# A message no server will ever send, which is the only kind that can
-	# demonstrate rule 1. This was `tick` until M2c decoded it; see the same
-	# substitution in the decoding half above.
+	# demonstrate rule 1.
 	a.net.ingest_text_frame('{"m2c_no_such_message":{"t":9001}}')
 	_check(
 		(
@@ -535,9 +525,6 @@ func _test_unknown_and_malformed_frames_do_not_kill_the_client(a: Peer) -> void:
 	)
 	_check(a.net.is_open(), "an unknown message leaves the connection open")
 
-	# M2c. `tick` is a known message now, so it decodes rather than accumulating
-	# an unknown key. No server sends one yet (M2d), which is exactly why this
-	# is injected.
 	var ticks_before := a.ticks.size()
 	var unknown_before_tick := a.unknown_keys.size()
 	a.net.ingest_text_frame('{"tick":{"t":9001}}')
@@ -812,25 +799,14 @@ func _test_leaving_client_produces_a_despawn(a: Peer, b: Peer, c: Peer) -> void:
 ## A client that drops its transport without a close frame dies as `peer_gone`,
 ## not as `closed`. **M2c.**
 ##
-## [b]This is the probe M2f depends on.[/b] Reconnect needs a way to stage an
-## abrupt death — a socket that goes away without the player having logged out —
-## and `net_client.abandon()` is the client's half of it. Whether Godot really
-## skips the close frame is a claim about [WebSocketPeer] that cannot be settled
-## from this side of the wire: only the server's own record of why the
-## connection ended can say, and that record is the `client_disconnected` line
-## in the transcript's `marqued event log`. So this function stages the death,
-## prints the id to look it up by, and asserts everything the client can see;
-## the reason itself is read from the log.
+## [b]The reason itself is not asserted here and cannot be.[/b] Only the server's
+## own record says why a connection ended, so this stages the death, prints the
+## id to look it up by, and leaves the verdict to the `client_disconnected` line
+## in the transcript's `marqued event log`. Every other client in this suite
+## closes cleanly, so that id's line is the only one that may say `peer_gone`.
 ##
-## [b]Nothing client-visible happens, and that is the assertion.[/b] Under M2a a
-## `peer_gone` player is suspended rather than removed, so the survivors are
-## told nothing at all: no `despawn` arrives, because the player has not left.
-## This function waited for one until M2a merged, and the wait timed out —
-## correctly. A `despawn` here would mean the abrupt death had been treated as a
-## logout, which is the whole distinction this probe exists to draw.
-##
-## Every other client in this suite closes cleanly, so the line for this id is
-## the only one that may say `peer_gone`.
+## What is asserted is that nothing client-visible happens: a `peer_gone` player
+## is suspended rather than removed, so no `despawn` reaches the survivors.
 func _test_an_abandoned_socket_is_not_a_logout(url: String, a: Peer, b: Peer) -> void:
 	print("== an abandoned socket is not a logout ==")
 	var x := await _join(url, "X")
@@ -855,10 +831,8 @@ func _test_an_abandoned_socket_is_not_a_logout(url: String, a: Peer, b: Peer) ->
 		"and reports no close code, because no close frame was sent (got %d)" % x.close_code,
 	)
 
-	# Long enough for a loopback round trip and several server ticks, which is
-	# all the time the server needs to read the dead socket. A bounded wait
-	# rather than a predicate: what is being asserted is that nothing arrives,
-	# and there is no event to wait for.
+	# A bounded wait rather than a predicate: what is asserted is that nothing
+	# arrives, so there is no event to wait for.
 	await _wait_msec(ABANDON_SETTLE_MSEC)
 	_check(
 		a.despawns.size() == a_despawns_before and b.despawns.size() == b_despawns_before,

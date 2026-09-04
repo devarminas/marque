@@ -1,21 +1,8 @@
 extends RefCounted
 
-## The `tick` wire layer at its edges, with no scene tree and no server. **M2c.**
-##
-## Written by the unit's verifier as an adversarial probe and adopted here
-## unchanged in what it asserts. It is the companion to
-## [code]test_tick_protocol.gd[/code], which covers the shapes the contract
-## names; this covers the ones it does not — a fractional `t`, a negative one,
-## `1e18`, a boolean, two thousand in a single call, and frames arriving after
-## the socket was abandoned.
-##
-## [b]The decoder is stateless, and this is where that is pinned.[/b] A `tick`
-## after [method abandon] still decodes, because [code]net_client.gd[/code] has
-## no notion of a session being over. What does have that notion is
-## [code]session.gd[/code], and [code]test_heartbeat_edges.gd[/code] holds it to
-## it.
-##
-## Tree-free on purpose, like every other decoder suite here.
+## The `tick` wire layer at the shapes [code]test_tick_protocol.gd[/code] does
+## not cover: a fractional `t`, a negative one, `1e18`, a boolean, two thousand
+## in one call, and frames arriving after the socket was abandoned. **M2c.**
 
 const NetClientScript := preload("res://scripts/net_client.gd")
 
@@ -70,9 +57,6 @@ func run(assertions: RefCounted) -> void:
 	assertions.finish()
 
 
-## Every numeric shape JSON can put in `t`, and the line between "numeric" and
-## "not". The boolean is the interesting one: it is not a number, so it is
-## dropped, and nothing here quietly converts it to 1.
 func _test_numeric_shapes_of_t() -> void:
 	var r := Recorder.new()
 
@@ -104,8 +88,6 @@ func _test_numeric_shapes_of_t() -> void:
 	r.release()
 
 
-## Ordering under volume. A heartbeat is one frame among many, and the decoder
-## must neither reorder nor coalesce them at any rate.
 func _test_a_storm_decodes_in_order() -> void:
 	var r := Recorder.new()
 	for t in 2000:
@@ -120,10 +102,8 @@ func _test_a_storm_decodes_in_order() -> void:
 	r.release()
 
 
-## The decoder has no notion of a session being over, and it should not: knowing
-## when to stop listening is the session's job. What this pins is that
-## [method abandon] is idempotent and that a `close` behind it adds nothing, so
-## a session ends exactly once however many times it is ended.
+## Knowing when to stop listening is the session's job, not the decoder's:
+## [code]test_heartbeat_edges.gd[/code] holds the session to it.
 func _test_ticks_after_abandon_still_decode_and_the_session_ended_once() -> void:
 	var r := Recorder.new()
 	r.feed(
@@ -145,9 +125,6 @@ func _test_ticks_after_abandon_still_decode_and_the_session_ended_once() -> void
 	r.release()
 
 
-## `heartbeat_ticks` is read fresh from every `welcome`, because a `welcome` is
-## a full restatement rather than a patch. So a server may promise heartbeats,
-## stop promising them, and promise again, and each statement replaces the last.
 func _test_a_second_welcome_re_reads_heartbeat_ticks() -> void:
 	var r := Recorder.new()
 	var players := '"players":[{"id":1,"x":0,"z":0}]}}'

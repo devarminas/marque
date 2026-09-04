@@ -1,28 +1,15 @@
 extends RefCounted
 
-## The M2 heartbeat's wire layer, with no scene tree and no server. **M2c.**
+## The heartbeat's wire layer: frames fed to [code]net_client.gd[/code]'s public
+## [code]ingest_text_frame[/code], no scene tree and no server. **M2c.**
 ##
-## `tick` is decoded here and nothing sends one. The server's half is M2d, so
-## every frame in this file is handed straight to [code]net_client.gd[/code]'s
-## public [code]ingest_text_frame[/code]. That is the shape M1c used and it is
-## the point of running the client half first: the client can be held to
-## `PROTOCOL.md` before anything exists to disagree with it.
-##
-## [b]Tree-free on purpose[/b], like [code]test_item_protocol.gd[/code]. A
-## decoder that needs a viewport to decode has a dependency nobody wrote down.
-##
-## What the heartbeat [i]does[/i] — re-anchoring the clock, and abandoning a
-## socket that has gone quiet — is the other half, and lives in
+## What the heartbeat does to a session is the other half, and lives in
 ## [code]test_heartbeat.gd[/code], which needs a tree because the session does.
 
 const NetClientScript := preload("res://scripts/net_client.gd")
 
 
 ## One client and everything it emitted, in order.
-##
-## Ordering matters to two assertions here — that a malformed `tick` emits
-## nothing, and that the frame after one still decodes — and a set of booleans
-## could express neither.
 class Recorder:
 	extends RefCounted
 
@@ -106,9 +93,6 @@ func run(assertions: RefCounted) -> void:
 	assertions.finish()
 
 
-## `PROTOCOL.md`, "Decoding notes": every JSON number reaches GDScript as a
-## float, so `t` has to be converted or nothing downstream can compare it with
-## the int the tick clock holds.
 func _test_tick_decodes_to_an_integer() -> void:
 	var recorder := Recorder.new()
 	recorder.feed('{"tick":{"t":9001}}')
@@ -120,8 +104,6 @@ func _test_tick_decodes_to_an_integer() -> void:
 			"as an int and not the float JSON hands back, got type %d" % typeof(ticks[0]["t"]),
 		)
 
-	# Compatibility rule 2 is not suspended for a new message: a sender may add
-	# fields to `tick` exactly as it may to any other body.
 	recorder.clear()
 	recorder.feed('{"tick":{"t":12,"sent_at":"anything"}}')
 	_check(
@@ -131,12 +113,6 @@ func _test_tick_decodes_to_an_integer() -> void:
 	recorder.release()
 
 
-## The regression this unit exists to avoid on the client side.
-##
-## `tick` was M0's canonical unknown key and was the worked example under
-## compatibility rule 1. Decoding it is the rule paying out, and the thing to
-## check is that it stopped being reported as unknown rather than being reported
-## as both.
 func _test_tick_is_no_longer_an_unknown_key() -> void:
 	var recorder := Recorder.new()
 	recorder.feed('{"tick":{"t":1}}')
@@ -145,7 +121,6 @@ func _test_tick_is_no_longer_an_unknown_key() -> void:
 		"tick emits only tick_received, got %s" % [recorder.names()],
 	)
 
-	# The rule itself still works, demonstrated with a key no server will send.
 	recorder.clear()
 	recorder.feed('{"m2c_no_such_message":{"t":1}}')
 	var unknown := recorder.of("unknown_message")
@@ -161,10 +136,6 @@ func _test_tick_is_no_longer_an_unknown_key() -> void:
 	recorder.release()
 
 
-## A heartbeat whose tick cannot be read carries nothing. It is dropped with a
-## loud log and the connection is kept (`PROTOCOL.md`, "Clock"), because a
-## receiver that guessed at `t` would re-anchor its clock to a number the server
-## never sent.
 func _test_a_tick_with_no_readable_t_is_dropped() -> void:
 	var recorder := Recorder.new()
 	var bad := [
@@ -180,7 +151,6 @@ func _test_a_tick_with_no_readable_t_is_dropped() -> void:
 		recorder.feed(frame)
 		_check(recorder.events.is_empty(), "a malformed tick emits nothing: %s" % frame)
 
-	# The connection survives all of them, proven by the frame after.
 	recorder.clear()
 	recorder.feed('{"spawn":{"id":4,"x":1.0,"z":2.0}}')
 	_check(
@@ -194,9 +164,6 @@ func _test_a_tick_with_no_readable_t_is_dropped() -> void:
 	recorder.release()
 
 
-## `welcome.heartbeat_ticks` is what arms the receiver's liveness timer, and
-## absent means zero, which means off. Every server before M2d is the absent
-## case, so this is the reading that has to be right.
 func _test_welcome_carries_heartbeat_ticks() -> void:
 	var recorder := Recorder.new()
 	recorder.feed(
@@ -214,7 +181,6 @@ func _test_welcome_carries_heartbeat_ticks() -> void:
 			"as an int, got type %d" % typeof(welcomes[0]["heartbeat_ticks"]),
 		)
 
-	# A pre-M2d server. The key is absent, and that is not an error.
 	recorder.clear()
 	recorder.feed(
 		'{"welcome":{"you":1,"tick_ms":150,"tick":100,"players":[{"id":1,"x":0.0,"z":0.0}]}}'
@@ -238,13 +204,6 @@ func _test_welcome_carries_heartbeat_ticks() -> void:
 	recorder.release()
 
 
-## The asymmetry worth pinning: a broken `heartbeat_ticks` costs a log line, not
-## the session.
-##
-## `PROTOCOL.md` makes the same call here it makes for `welcome.items` being
-## `null`, and for the same reason. Refusing a `welcome` means the client never
-## joins and sits frozen forever with nothing visibly wrong on either side,
-## which is a far worse outcome than running with liveness off.
 func _test_an_unusable_heartbeat_ticks_reads_as_zero_without_losing_the_welcome() -> void:
 	var recorder := Recorder.new()
 	var unusable := ['"soon"', "-1", "null", "[2]"]
@@ -270,13 +229,9 @@ func _test_an_unusable_heartbeat_ticks_reads_as_zero_without_losing_the_welcome(
 	recorder.release()
 
 
-## `abandon()` is the client's half of an abrupt death, and M2f depends on it.
-##
-## What can be asserted without a socket is that it reports the disconnection
-## itself rather than waiting for a frame, that it says there was no close
-## frame, and that it does not report twice. **Whether the transport really goes
-## without a close frame is a claim about [WebSocketPeer] that only the server
-## can settle**, and the live half of `test_interop.gd` is where it is settled.
+## Whether the transport really goes without a close frame is a claim about
+## [WebSocketPeer] that only a server can settle; `test_interop.gd`'s live half
+## is where it is settled. What is left to assert here is the reporting.
 func _test_abandon_drops_the_transport_and_reports_it() -> void:
 	var recorder := Recorder.new()
 	_check(not recorder.net.is_open(), "a client with no socket is not open")

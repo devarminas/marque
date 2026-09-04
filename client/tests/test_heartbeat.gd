@@ -1,26 +1,12 @@
 extends Node3D
 
 ## What the heartbeat does to a session: the clock it corrects and the socket it
-## abandons. **M2c.**
-##
-## [b]No server.[/b] Every frame here is handed to [code]main.tscn[/code]'s own
-## decoder through [code]net_client.gd[/code]'s public
-## [code]ingest_text_frame[/code], so this suite is green before anything sends
-## a `tick` and stays green independently of what eventually does. Nothing sends
-## one today; the server's half is M2d.
-##
-## The thing under test is [code]main.tscn[/code] itself, so every assertion is
-## about the scene the game ships rather than a rig assembled for the occasion.
+## abandons. **M2c.** Frames are fed to an instanced [code]main.tscn[/code]
+## through [code]net_client.gd[/code]'s public [code]ingest_text_frame[/code],
+## so nothing here connects to anything.
 ##
 ## The wire layer is the other half and lives in
 ## [code]test_tick_protocol.gd[/code], which needs no tree at all.
-##
-## [b]Two clients, and the second one is the assertion that matters.[/b]
-## Liveness with `heartbeat_ticks` absent has to do nothing, because absent is
-## what every server before M2d says and a client that armed a timer anyway
-## would abandon every session it ever opened. "Nothing happened" is only worth
-## anything if something happened next to it under the same clock, so the two
-## windows are opened together and waited out once.
 
 const MainScene := preload("res://scenes/main.tscn")
 const SessionScript := preload("res://scripts/session.gd")
@@ -33,32 +19,28 @@ const TICK_MS := 150
 const WELCOME_TICK := 100
 ## `welcome.heartbeat_ticks` for the client whose liveness is armed. With
 ## [constant SessionScript.LIVENESS_HEARTBEATS] at 3 and [constant TICK_MS] at
-## 150 this makes the window 900 ms, which is the number the acceptance names.
+## 150 this makes the window 900 ms.
 const HEARTBEAT_TICKS := 2
 
-## Frame cap held for the duration of this suite.
-##
-## Everything below measures silence in wall-clock milliseconds, and headless
-## Godot runs uncapped at around 146 fps on this machine (NOTES.md, "Godot
-## authoring traps"). Uncapped, the waits below would cost several hundred
-## frames of the runner's watchdog budget to prove one thing. Capped at 10 they
-## cost about thirty, and a 100 ms frame still resolves a 900 ms deadline to
-## well inside the slack asserted for it. Restored when the suite ends.
+## Frame cap held for the duration of this suite, and restored at its end.
+## Headless Godot runs uncapped at around 146 fps on this machine (NOTES.md,
+## "Godot authoring traps"), and every wait below is wall-clock, so uncapped
+## they would cost several hundred frames of the runner's watchdog budget.
 const MAX_FPS := 10
 
-## How long the two liveness windows are watched, in milliseconds. Comfortably
-## past the armed client's 900 ms window and long enough that the unarmed one
-## has visibly declined to fire rather than merely not got round to it.
+## How long the two liveness windows are watched, in milliseconds.
 const WATCH_MSEC := 2000
 
-## Slack allowed above the liveness window before the abandonment is late.
-##
-## The session checks its deadline once per frame, so it can never fire early
-## and fires within one frame of it on an idle machine. This is two and a half
-## frames at [constant MAX_FPS], which absorbs a stalled frame without being
-## wide enough to hide a window computed from the wrong numbers: the nearest
+## Slack allowed above the liveness window before the abandonment is late. Two
+## and a half frames at [constant MAX_FPS], which absorbs a stalled frame but is
+## not wide enough to hide a window computed from the wrong numbers: the nearest
 ## wrong answers are 450 ms and 1800 ms.
 const LATE_SLACK_MSEC := 250
+
+## Ticks the free-running clock may advance across one synchronous block. One
+## 150 ms boundary can fall between two reads; two cannot without the block
+## having stalled, and a re-anchor moves the estimate far further than either.
+const FREE_RUN_TICKS := 1
 
 
 ## One instanced client and everything its session reported.
@@ -76,13 +58,11 @@ class Client:
 
 	## One record per correction, as `{"delta": int, "at_tick": int}`.
 	var corrections: Array[Dictionary] = []
-	## Monotonic milliseconds at which each `server_unresponsive` arrived, with
-	## the window it reported.
+	## One record per `server_unresponsive`, as
+	## `{"at_msec": <monotonic>, "window": int}`.
 	var silences: Array[Dictionary] = []
 	var disconnects := 0
-	## Frames fed to this client whose top-level key was `tick`. Counted so that
-	## "this window was opened by a welcome and nothing else" is an assertion
-	## rather than a claim about the order the tests happen to run in.
+	## Frames fed to this client whose top-level key was `tick`.
 	var ticks_fed := 0
 
 	func _init(client_label: String) -> void:
@@ -95,8 +75,6 @@ class Client:
 		session.server_unresponsive.connect(_on_server_unresponsive)
 		net.disconnected.connect(_on_disconnected)
 
-	## Hands one frame to this client's decoder as if it had arrived on the
-	## socket.
 	func feed(text: String) -> void:
 		if text.begins_with('{"tick"'):
 			ticks_fed += 1
@@ -168,10 +146,6 @@ func _ready() -> void:
 	_finished = true
 
 
-## Nothing reaches a connection before its `welcome` (`PROTOCOL.md`, "Ordering
-## and the join race"), and there would be no `tick_ms` to re-anchor with if it
-## did. So a `tick` here is defence against a broken peer: logged, ignored, and
-## it must not leave the clock anchored to a tick nobody welcomed us at.
 func _test_a_tick_before_welcome_is_ignored(client: Client) -> void:
 	_check(
 		not client.session.tick_clock().is_anchored(),
@@ -189,8 +163,6 @@ func _test_a_tick_before_welcome_is_ignored(client: Client) -> void:
 	_check(not client.session.has_joined(), "and does not join the session")
 
 
-## The acceptance case: a server one tick ahead of the client's estimate.
-##
 ## The `welcome` and the `tick` are fed in the same synchronous block, so no
 ## wall time passes between them and the estimate at receipt is exactly
 ## `WELCOME_TICK`. That is what makes `+1` the expected delta rather than a
@@ -224,9 +196,6 @@ func _test_a_heartbeat_re_anchors_the_clock(client: Client) -> void:
 		"named at the heartbeat's own tick %d, got %d"
 		% [WELCOME_TICK + 1, correction["at_tick"]],
 	)
-	# The rendered line, not just the numbers. `%+d` is the part that can be
-	# silently lost: without the sign every correction reads as if the client
-	# were behind, and the sign is the whole diagnosis (`PROTOCOL.md`, "Clock").
 	_check(
 		SessionScript.correction_line(1, WELCOME_TICK + 1)
 		== "session: clock corrected by +1 tick(s) at heartbeat 101",
@@ -239,9 +208,6 @@ func _test_a_heartbeat_re_anchors_the_clock(client: Client) -> void:
 	)
 
 
-## A heartbeat that agrees with the estimate does nothing and says nothing.
-## Agreement is the ordinary case once the clock is right, so a line per
-## heartbeat would bury the corrections the log exists for.
 func _test_an_agreeing_heartbeat_changes_nothing(client: Client) -> void:
 	client.clear()
 	var before := client.session.tick_clock().estimated_tick()
@@ -251,19 +217,11 @@ func _test_an_agreeing_heartbeat_changes_nothing(client: Client) -> void:
 		"a heartbeat matching the estimate reports no correction, got %s"
 		% [client.corrections],
 	)
-	_check(
-		client.session.tick_clock().estimated_tick() == before,
-		"and leaves the estimate where it was (%d)" % before,
-	)
+	_check_clock_free_ran(client, before, "an agreeing heartbeat")
 
 
-## A negative `t` is dropped rather than reported. **The failure it guards is a
-## log that lies.**
-##
 ## `TickClock.anchor` refuses a negative tick, so a session that reported the
-## correction anyway would print `clock corrected by -606 tick(s)` next to a
-## clock that had not moved at all — the one thing a correction log exists to be
-## trusted about. Found by a verifier before any server could send one.
+## correction anyway would log a delta next to a clock that had not moved.
 func _test_a_negative_tick_is_dropped_rather_than_reported_as_a_correction(
 	client: Client
 ) -> void:
@@ -275,16 +233,10 @@ func _test_a_negative_tick_is_dropped_rather_than_reported_as_a_correction(
 		client.corrections.is_empty(),
 		"a negative tick reports no correction, got %s" % [client.corrections],
 	)
-	_check(
-		client.session.tick_clock().estimated_tick() == before,
-		"and leaves the estimate where it was (%d, now %d)"
-		% [before, client.session.tick_clock().estimated_tick()],
-	)
+	_check_clock_free_ran(client, before, "a negative tick")
 	_check(client.disconnects == 0, "and does not end the session")
 
 
-## A heartbeat whose `t` cannot be read is dropped, and the connection is kept.
-## The proof that it was kept is the frame after it.
 func _test_a_malformed_tick_is_dropped_and_the_next_frame_applies(client: Client) -> void:
 	client.clear()
 	client.feed('{"tick":{}}')
@@ -305,9 +257,6 @@ func _test_a_malformed_tick_is_dropped_and_the_next_frame_applies(client: Client
 		)
 
 
-## The window is measured from the last tick-bearing frame, so every heartbeat
-## that decodes reopens it — including one that agrees with the estimate. The
-## frame is proof the server is alive whatever it says about the clock.
 func _test_a_heartbeat_reopens_the_liveness_window(client: Client) -> void:
 	_check(
 		not client.session.is_liveness_armed(),
@@ -319,10 +268,6 @@ func _test_a_heartbeat_reopens_the_liveness_window(client: Client) -> void:
 		"a welcome naming heartbeat_ticks arms one",
 	)
 
-	# An agreeing heartbeat, which corrects nothing. It still has to reopen the
-	# window: the frame is proof the server is alive whatever it says about the
-	# clock, and a client that only reset its timer on corrections would abandon
-	# a server whose clock it agrees with.
 	client.clear()
 	client.feed('{"tick":{"t":%d}}' % client.session.tick_clock().estimated_tick())
 	_check(client.corrections.is_empty(), "an agreeing heartbeat still corrects nothing")
@@ -331,9 +276,8 @@ func _test_a_heartbeat_reopens_the_liveness_window(client: Client) -> void:
 		"and leaves the window armed rather than cancelling it",
 	)
 
-	# Disarmed again before this client is left alone. The tests that follow
-	# spend seconds waiting, and a timer still running here would abandon a
-	# client nothing is asserting on and put an unexplained error in the log.
+	# Disarmed again before this client is left alone: the tests that follow
+	# spend seconds waiting, and a timer still running here would fire in them.
 	client.feed(_welcome_frame(WELCOME_TICK, -1))
 	_check(
 		not client.session.is_liveness_armed(),
@@ -341,31 +285,21 @@ func _test_a_heartbeat_reopens_the_liveness_window(client: Client) -> void:
 	)
 
 
-## The acceptance pair, waited out under one clock.
+## Two windows waited out under one clock: "nothing happened" to the unarmed
+## client is only worth anything next to something that did happen.
 ##
-## [b]The armed client's window is opened by its `welcome` and by nothing
-## else.[/b] That is what a server which promises heartbeats and then sends none
-## produces, and it is the only path on which liveness has to fire without a
-## single `tick` ever having been decoded. Measuring from a `tick` instead would
-## leave the case this rule exists for asserted nowhere; `silent` is a client of
-## its own so that "no tick was ever fed" is a property of the client rather
-## than of the order the tests happen to run in.
-##
-## **The unarmed half is what protects every session against a pre-M2d server.**
+## `silent` is a client of its own so that "no tick was ever fed" is a property
+## of the client rather than of the order the tests happen to run in.
 func _test_a_welcome_alone_arms_the_window_and_an_unarmed_client_is_untouched(
 	silent: Client, unarmed: Client
 ) -> void:
 	var window := SessionScript.LIVENESS_HEARTBEATS * HEARTBEAT_TICKS * TICK_MS
 	_check(window == 900, "the armed window is 3 heartbeats of 2 ticks at 150 ms, got %d" % window)
 
-	# Both welcomes are fed here rather than earlier, so the elapsed time below
-	# is measured from the frame that opened the window. Reading the clock a few
-	# lines later would let a millisecond of drift make a correct 900 ms window
-	# look like 899.
+	# Read immediately before the welcome that opens the window: a few lines of
+	# drift would make a correct 900 ms window look like 899.
 	var opened_at := Time.get_ticks_msec()
 	silent.feed(_welcome_frame(WELCOME_TICK, HEARTBEAT_TICKS))
-	# The unarmed client's welcome names no heartbeat_ticks, which is every
-	# server before M2d.
 	unarmed.feed(_welcome_frame(WELCOME_TICK, -1))
 	_check(
 		silent.session.is_liveness_armed(),
@@ -407,11 +341,8 @@ func _test_a_welcome_alone_arms_the_window_and_an_unarmed_client_is_untouched(
 		not silent.session.is_liveness_armed(),
 		"the timer disarms itself rather than firing again every frame",
 	)
-	# `is_open()` is not asserted here. It is false on a client that never
-	# connected, so it would pass whether or not the session abandoned anything.
-	# The disconnection count is the claim that cannot be made vacuously, and
-	# whether the transport really went without a close frame is a question only
-	# a server can answer — `test_interop.gd`'s live half is where it is asked.
+	# `is_open()` is not asserted: it is false on a client that never connected,
+	# so it would pass whether or not the session abandoned anything.
 	_check(
 		silent.disconnects == 1,
 		"the abandonment is reported as a disconnection, exactly once, got %d"
@@ -428,10 +359,6 @@ func _test_a_welcome_alone_arms_the_window_and_an_unarmed_client_is_untouched(
 	)
 
 
-## A dead connection never re-arms. Nothing on the wire can deliver a frame
-## after the socket has gone, so this is defence against a broken peer and
-## against a caller feeding frames by hand — but an unguarded re-arm would
-## report a second death for the first one, on a timer, forever.
 func _test_a_tick_after_the_socket_died_does_not_reopen_the_window(silent: Client) -> void:
 	_check(not silent.session.is_liveness_armed(), "the abandoned client is disarmed")
 	silent.feed('{"tick":{"t":%d}}' % (silent.session.tick_clock().estimated_tick() + 1))
@@ -470,12 +397,26 @@ func _build(label: String) -> Client:
 	return client
 
 
-## Burns frames for a wall-clock interval. Wall-clock is legitimate here: this
-## is test sequencing, and the thing under test is itself a wall-clock deadline.
 func _wait_msec(duration: int) -> void:
 	var deadline := Time.get_ticks_msec() + duration
 	while Time.get_ticks_msec() < deadline:
 		await get_tree().process_frame
+
+
+## Asserts the clock free-ran rather than being re-anchored.
+##
+## The estimate is a function of wall time, so two reads either side of a
+## `feed()` legitimately differ by a tick when a 150 ms boundary falls between
+## them. Asserting equality made both callers flaky under load, and the
+## verifier's run caught it. A re-anchor is still caught: it moves the estimate
+## to `t`, which for every `t` these callers send is hundreds of ticks away.
+func _check_clock_free_ran(client: Client, before: int, what: String) -> void:
+	var now := client.session.tick_clock().estimated_tick()
+	_check(
+		now >= before and now <= before + FREE_RUN_TICKS,
+		"%s leaves the clock free-running, not re-anchored (%d -> %d, at most +%d)"
+		% [what, before, now, FREE_RUN_TICKS],
+	)
 
 
 func _check(condition: bool, message: String) -> bool:
