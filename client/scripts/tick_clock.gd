@@ -88,10 +88,6 @@ func is_anchored() -> bool:
 ## The tick the server is estimated to be on right now.
 ##
 ## Returns [constant UNANCHORED_TICK] until [method anchor] is called.
-##
-## A [code]welcome[/code] anchor lags by one-way latency plus the phase of
-## that frame inside the tick. A heartbeat re-anchor drops the phase term
-## (PROTOCOL.md, "Clock").
 func estimated_tick() -> int:
 	return estimated_tick_at(_now_usec.call())
 
@@ -106,6 +102,35 @@ func estimated_tick_at(at_usec: int) -> int:
 	if not is_anchored():
 		return UNANCHORED_TICK
 	return _anchor_tick + floori(float(at_usec - _anchor_usec) / float(_tick_usec))
+
+
+## Microseconds into the estimated tick that contains [param at_usec].
+##
+## Zero when unanchored.
+func phase_usec_at(at_usec: int) -> int:
+	if not is_anchored() or _tick_usec <= 0:
+		return 0
+	return posmod(at_usec - _anchor_usec, _tick_usec)
+
+
+## Earliest [param T >= from_usec] whose phase equals [param guard_usec].
+##
+## Never clicks from inside the tick. A client already past the guard waits
+## until the next one, so one-way latency plus the send cannot still sit on
+## the server's late edge (ARM-67 run 18).
+func next_guard_usec(from_usec: int, guard_usec: int) -> int:
+	if not is_anchored() or _tick_usec <= 0:
+		return from_usec
+	if guard_usec <= 0 or guard_usec >= _tick_usec:
+		push_error(
+			"TickClock.next_guard_usec: guard_usec must be in (0, tick_usec), got %d of %d"
+			% [guard_usec, _tick_usec]
+		)
+		return from_usec
+	var phase := phase_usec_at(from_usec)
+	if phase < guard_usec:
+		return from_usec + (guard_usec - phase)
+	return from_usec + (_tick_usec - phase) + guard_usec
 
 
 ## Milliseconds per tick as reported by the server, or 0 before anchoring.
