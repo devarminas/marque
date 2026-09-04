@@ -42,7 +42,7 @@ const MaxCatchUpTicks = 5
 // broadcast in every path message so the client never guesses.
 //
 // Placeholder: chosen to be usable, not good. Tuning it is feel, and feel is
-// parked in FOLLOW-UPS.md.
+// parked as Linear ARM-13.
 const WalkSpeed = 3.0
 
 // WorldHalfExtent bounds the playable square, centred on the origin: legal
@@ -76,7 +76,7 @@ const MinPathLength = 1e-3
 //
 // A placeholder chosen to be long enough to survive restarting a client and
 // short enough that an abandoned body is not furniture. Parked in
-// FOLLOW-UPS.md.
+// Linear as ARM-58.
 const ResumeGraceTicks = 400
 
 // Spawn point. Everyone enters the world at the origin; M0 has no collision, so
@@ -738,7 +738,7 @@ func (w *World) expireSuspended() {
 // Whatever they were carrying leaves with them. M1 has no persistence and no
 // drop-on-logout, so this is deletion rather than a transfer to the ground;
 // making it a transfer is a design decision, not a bug fix, and it is parked in
-// FOLLOW-UPS.md.
+// Linear as ARM-34.
 func (w *World) retire(p *player) {
 	delete(w.players, p.id)
 	delete(w.bySession, p.session)

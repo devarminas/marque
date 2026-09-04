@@ -153,6 +153,17 @@ adding a headless test.
   And `Control.mouse_filter` defaults are not what you would guess. `ColorRect` and `Panel`
   default to `STOP` (`0`); only `Label` defaults to `IGNORE` (`2`). A `ColorRect` background
   swallows its own children's clicks.
+- **A `MOUSE_FILTER_IGNORE` panel is a workaround that reads as a design choice, and a test that
+  checks `mouse_filter` at one instant does not guard it.** M1d shipped the inventory chrome as
+  `IGNORE` so headless suites could still click the world through it at 64x64; a click on the
+  drawn panel then walked the player 12.6 units, and a disabled slot `Button` still stopped the
+  click while an occupied slot dropped, three behaviours where one was designed. M1k made the
+  `PanelContainer` `STOP` and moved `test_wiring.gd`'s `CLICK_AT` to the uncovered strip. The
+  suite that guards it asserts the filter a frame or two after an `inventory` feed and never in
+  the steady state. A verifier re-armed the filter on every inventory frame and dropped it to
+  `IGNORE` seven frames later, and the whole suite stayed green while the panel was click-through
+  again. Author `mouse_filter` in the `.tscn`, never at runtime, and if a second panel ever ships,
+  add the check that no script assigns it.
 - **`%v` in a GDScript format string accepts only vector types, and a `Color` fails it at
   runtime while leaving the assertion green.** Reproduced against 4.7.2, verbatim:
 
@@ -238,7 +249,7 @@ follows the player's position; it never drives it.
 - Point-and-click needs a ground raycast from the cursor. That raycast is the one place the
   camera touches gameplay input, and it produces an `(x, z)` intent, not a movement.
 - Exact orbit speed, zoom limits, pitch clamp, and follow damping are feel, not architecture.
-  They live in `FOLLOW-UPS.md` until a human can sit down and tune them.
+  They are Linear issues labelled `Follow-up` until a human can sit down and tune them.
 
 ## Color as semantics, not decoration
 
@@ -277,8 +288,9 @@ The game is a database with a game attached; Go has the ecosystem for that (pgx)
 | DB | Postgres | Durable state, written transactionally |
 | Transport | WebSocket | Godot `WebSocketPeer` ↔ Go |
 
-- Client sends **intents**, never facts. `{"use":{"slot":3,"on":7}}`, never `{"inventory":[...]}`.
-- Client inventory is a cache of what the server last said.
+- `CLAUDE.md` owns the invariants (intents not facts, client state is a cache, one goroutine
+  owns the state). The reason is the dupe section below. Every rule there assumes the server is
+  the only writer.
 - Shared data (items, recipes, XP tables, map) = JSON in one folder, read by both. One source of truth, two languages.
 
 ## Movement — client sends click, server returns polyline
@@ -296,7 +308,8 @@ reason a 2D A* is sufficient. RuneScape does the same thing, a plane with per-ti
 Revisitable if verticality ever becomes a game rule rather than scenery, which would mean
 bridges you can walk under. It does not today.
 
-- Pathfinding lives **only on the server**. No client pathfinder, no duplication, no divergence.
+- Pathfinding lives only on the server (`CLAUDE.md`), because a client pathfinder is a second
+  copy that diverges.
 - Client walks the polyline and interpolates → smooth movement regardless of tick rate.
 - Cost is one round trip before the character moves. Reads as normal for click-to-move.
 - Send waypoints, not per-tick positions.
@@ -319,8 +332,9 @@ Bake in the Godot editor → export vertices/polygons as JSON → Go loads at bo
 
 ## Tick rate
 
-**Decided: 150ms.** One named constant on the server, revisitable exactly once, when there is
-enough gameplay to feel it. Nothing else in the codebase may hardcode a tick duration.
+The rule is settled item 4 in `STANDING-ORDERS.md`: 150 ms, one named constant on the server,
+nothing else hardcodes a tick duration, revisitable once when there is gameplay to feel. The
+reasoning:
 
 - Tick rate and movement smoothness are independent. Client interpolation handles smoothness.
 - Fast ticks are only needed when sub-tick position changes a game rule (PvP collision, hitboxes). Not this game.
@@ -344,50 +358,34 @@ the fact — you can patch the hole but not un-print the items.
 
 ## Milestones
 
-Ordering principle: retire the riskiest assumption first. The risk is multiplayer + persistence
-colliding, not gameplay content.
+The program is tracked in Linear, project *Project Marque*
+(`https://linear.app/arminas/project/project-marque-525be456de70`). The ordering principle is
+to retire the riskiest assumption first. The risk is multiplayer and persistence colliding, not
+gameplay content.
 
-### M0 — movement, no inventory
+- **M0, complete.** Two clients connect, click to move, and each sees the other walk. Proved the
+  transport, the tick loop, the polyline protocol, and the event log, with pathfinding stubbed to
+  a straight line.
+- **M1, complete.** Two clients click one item on the ground and exactly one gets it. Proved
+  server authority, contested resolution, and a transactional inventory write in both directions
+  (pickup and drop), behind an in-memory `Store`.
+- **M2, in progress.** A client whose socket dies mid-action comes back as the same player with
+  the same inventory, and an intent it sends twice is applied once.
 
-Two clients connect, click to move, see each other walk.
+Later: real navmesh, auth and accounts, skills and XP, multiple recipes, map content, interest
+management, Postgres behind `Store`.
 
-- WebSocket transport, Go tick loop, position broadcast, client interpolation.
-- **Stub the pathfinding.** Flat plane, no obstacles, `path = [current_pos, click_pos]`.
-  The polyline protocol doesn't care where the points came from — real navmesh swaps in later
-  with zero protocol change.
-- No DB, no items, hardcoded player IDs.
+### Decisions the early cuts fixed
 
-Navmesh + A* + funnel is 1-2 weeks that produces nothing playable. Don't let it block a first build.
-
-### M1 — MVP: contested pickup
-
-**Two clients, one item on the ground, both click it. Exactly one gets it.**
-
-That one scenario exercises transport, tick loop, server authority, broadcast, race handling, and a
-transactional inventory write at once. Survives a server restart = architecture proven.
-
-- Postgres wired. One item type. Pickup + drop.
-- Drop, not crafting — it's the reverse transaction, tests atomicity both directions, zero content work.
-- Crafting shape (if wanted): one recipe, two inputs, one output. Easy CRUD, not where risk lives.
-- Automate the contested-pickup test. Two scripted clients, same tick, assert one gained and one didn't.
-  Not a thing to check by hand with two windows.
-
-### M2 — reconnect
-
-Disconnect mid-action is where dupes breed. Sequence numbers + server-side dedupe.
-
-### Later
-
-Real navmesh, auth/accounts, skills/XP, multiple recipes, map content, interest management.
-
-### Cut from M0/M1
-
-- Auth — hardcode two player IDs. Known work, zero risk, pure time.
-- Art — magenta/blue capsules, one **green** box for the ground item. This line said yellow and
-  contradicted the palette above, where yellow is Interactable and green is Pickup. A ground
-  item in M1 is a pickup and nothing else, so it is green. An item kind the client does not
-  recognise is magenta, which is the palette's whole point.
-- Skills, XP, recipes, map content. All content, no architecture.
-
-Build the JSON event log into the Go server from tick zero. Retrofitting after inventory exists
-means touching every mutation twice.
+- Auth is hardcoded player ids. Known work, zero risk, pure time.
+- Art is magenta and blue capsules and one green box for the ground item. A ground item in M1
+  is a pickup and nothing else, so it is green per the palette above. An item kind the client
+  does not recognise is magenta.
+- Drop before crafting. Drop is pickup's reverse transaction, so it tests atomicity in both
+  directions with zero content work. Crafting is CRUD and not where the risk lives.
+- The contested-pickup test is automated, two scripted clients on the same tick. It is not a
+  thing to check by hand with two windows.
+- The JSON event log was built into the Go server from tick zero. Retrofitting after inventory
+  exists would mean touching every mutation twice.
+- Navmesh, A*, and funnel are one to two weeks that produce nothing playable, so a straight-line
+  stub shipped first. The polyline protocol does not care where the points came from.

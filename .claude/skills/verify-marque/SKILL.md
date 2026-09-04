@@ -9,7 +9,9 @@ Project Marque is a Go WebSocket server (`server/`, binary `marqued`) and a Godo
 Forward+ desktop client (`client/`) speaking one-key JSON messages (`PROTOCOL.md`).
 This skill is how an agent launches the real stack, drives it like a player, and reads
 back what actually happened. It was written against M0 (connect, click to move, see
-each other walk); `features/README.md` is the maintained map of what is verifiable.
+each other walk) and now covers M1 (items, pickup, drop, the contested-pickup demo,
+disconnect classification) and M2c (the client's `tick` handling and heartbeat
+liveness); `features/README.md` is the maintained map of what is verifiable.
 
 ## The standard of proof
 
@@ -325,8 +327,10 @@ must sit below the `--quit-after` it runs under** — `--quit-after` exits 0, so
 watchdog above it can never fire and is decorative. The server-backed suites skip
 themselves when `MARQUE_WS_URL` is unset, so a green run with no `INTEROP RAN:` line
 tested far less than it appears to. `scripts/interop_test.ps1` enforces all of this
-and is the canonical full-stack pass: on `main` after M1c it reports 443 assertions
-across 8 suites, of which `INTEROP RAN:` is 90 and `WIRING RAN:` is 89.
+and is the canonical full-stack pass. The suite count is the length of
+`TREE_FREE_SUITES` plus `SCENE_SUITES` in `client/tests/run_tests.gd`, 13 at
+`cf8d862`; the assertion count grows with every unit, so run the suite for the current
+number and report what you got rather than comparing against a figure written here.
 
 ## Cleanup
 
@@ -348,9 +352,10 @@ across 8 suites, of which `INTEROP RAN:` is 90 and `WIRING RAN:` is 89.
   display-less CI, only `interop_test.ps1`-style headless runs and Go tests exist.
 - **A captured PNG is the whole visual story.** No video, no motion capture, no human
   aesthetic judgment — only assertions computable from the files.
-- **`go test -race` is unavailable.** No C compiler on this machine, so cgo cannot
-  build. Do not emit a recipe containing `-race` and do not install a toolchain; this
-  is a recorded program-level gap (`STANDING-ORDERS.md`, Verified tooling).
+- **`go test -race` needs the PATH export first.** The LLVM-MinGW toolchain is
+  installed but not on PATH by default; `STANDING-ORDERS.md`, *Verified tooling*, has
+  the export line and the recipe (`CGO_ENABLED=1 go test -race ./...` from `server/`).
+  This entry used to say no C compiler existed. That was true until 2026-09-02.
 - **No desktop automation.** The game drives and screenshots itself; nothing moves
   the real mouse. What the flag path cannot reach, a raw protocol probe must.
 - **One shared `user://`.** Anything two clients both write must go to absolute

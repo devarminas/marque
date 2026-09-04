@@ -52,7 +52,7 @@ var clock: TickClock = null
 ## Turning it off changes nothing about where the avatar is.
 @export var face_travel_direction := true
 
-## How fast the body swings toward its heading. Feel, parked in FOLLOW-UPS.md.
+## How fast the body swings toward its heading. Feel, parked as Linear ARM-51.
 @export var turn_degrees_per_second := 540.0
 
 var _walker: PolylineWalker = null

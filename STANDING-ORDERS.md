@@ -28,6 +28,9 @@ Repo: `github.com/devarminas/marque` (private). Local: `C:\Users\armin\Documents
 9. Client sends intents, never facts. Client state is a cache with zero authority.
 10. Game logic never reaches into the visual tree.
 
+Items 7 to 10 restate the architecture invariants `CLAUDE.md` owns. They stay here only because
+this file is pasted verbatim into worker prompts.
+
 ## Deciding without the human
 
 **RuneScape is the tiebreaker.** Any gameplay question RS already answers, take RS's answer and
@@ -37,16 +40,19 @@ skill gating. Do not ask.
 For a genuine fork with no RS precedent, decide it yourself and log it. Spawning an LLM to argue
 both sides is encouraged and cheaper than a human turn. Record the call and mark it revisitable.
 
-Park anything that is real fine-tuning (numbers, pacing, feel, art direction) in a running
-`FOLLOW-UPS.md` list for when the human is available. Do not block on it.
+Park anything that is real fine-tuning (numbers, pacing, feel, art direction) as a Linear issue
+labelled `Follow-up` in project *Project Marque*, for when the human is available. A worker that
+cannot reach Linear names the item in its report and the coordinator files it. Do not block on
+it.
 
 Escalate only for irreversible actions, a standing order contradicting observed reality, or a
 program-level dead end that survived a replan.
 
 ## Scene authoring
 
-Enforced in `CLAUDE.md`. Static content is authored in `.tscn`, never built by script. Level
-geometry, static props, UI layout, lighting, cameras go in the scene file.
+`CLAUDE.md` owns this rule. It is repeated here only because this file is pasted verbatim into
+worker prompts. Static content is authored in `.tscn`, never built by script. Level geometry,
+static props, UI layout, lighting, cameras go in the scene file.
 
 Scripts create nodes only when existence is genuine runtime behavior. Spawned remote players,
 dropped items, and projectiles qualify. An `add_child()` in `_ready()` that always adds the same
@@ -59,8 +65,8 @@ node does not.
 - No merge to `main` without a verdict better than `type-check-only` for behavioral work.
 - `interrogate` is adversarial multi-model review of a diff. It is not a channel for asking the
   human questions.
-- `create-verification-skill` runs once M0 produces a runnable client and server, not before.
-  Against an empty repo it would describe an app that does not exist.
+- `.claude/skills/verify-marque/SKILL.md` is the project's verification skill. Any behavioural
+  claim about the client or the server is proven the way it describes, before any generic driver.
 
 ## Verified tooling
 
@@ -94,31 +100,14 @@ version will otherwise believe it and negotiate its acceptance list downward.
 
 ## Milestones
 
-Full detail in `NOTES.md`. Program state, verdicts, and the per-unit history live in
-`COORDINATION.md`, which is coordinator-facing and never pasted. This section is only what a
-worker needs to know about where the program is.
+M0 and M1 are complete. M2, reconnect without duplicates, is in progress. The open units and
+their briefs are Linear issues in project *Project Marque*; the coordinator pastes the brief
+into the worker's prompt, so a worker never needs to look the program state up.
 
-- **M0, closed.** Two clients connect, click to move, and each sees the other walk. Seven
-  units, seven PRs, verified in both directions by observation rather than inference.
-- **M1, closed, M1j included.** One item on the ground, two clients click it, exactly one gets
-  it. Pickup and drop, in-memory store behind a `Store` interface. Eleven units, eleven PRs.
-  **The wire contract for all of it is in `PROTOCOL.md` under the M1 markers. Read it; do not
-  re-derive it and do not negotiate with it.** M1j hardened both demos, corrected two documents,
-  and reported (but did not fix) that two clients agree on a tick number rather than a moment.
-- **Tick-anchor alignment, the one open unit.** Client-only. Fixes the skew M1j found: two
-  clients' independently-anchored tick clocks can read the same tick number up to 150ms apart,
-  which is why `contested_pickup_demo.ps1` legitimately failed about 38% of idle-machine runs.
-  No `server/` change, no `PROTOCOL.md` change, no heartbeat or `seq` field. Tick rate stays
-  150ms.
-- **M2, in progress.** Reconnect, sequence numbers, server-side dedupe. M2a is merged, so a
-  player now outlives its socket. An abrupt socket death suspends the player for 400 ticks with no
-  `despawn`, and presenting `welcome.session` as `?session=` on dial resumes it. The rest of the
-  cut is in `COORDINATION.md` under `## M2`.
-
-**This section used to carry a paragraph of history per unit, seventy-eight lines of it, for
-units that are all now merged.** Every line here is paid for on every worker spawn, which is the
-whole reason this file states that it is kept short. The history was not deleted; it is in
-`COORDINATION.md` where a coordinator can read it and a worker does not have to skim past it.
+The wire contract for everything shipped is `PROTOCOL.md`, under its M1 and M2 markers. Read it.
+Do not re-derive it and do not negotiate with it. A unit that changes it copies the coordinator's
+rule into the file first, then codes against the file. The M1j finding that two clients agree on
+a tick number rather than a moment is recorded in `COORDINATION.md`, *Lessons from M1*.
 
 ## Pasting these orders
 
@@ -140,23 +129,15 @@ decides, and `origin/main` settles it.
 
 ## Picking this up in a new session
 
-Everything a coordinator needs is in this repo. Nothing lives only in a chat transcript.
+1. Open the Linear project, `https://linear.app/arminas/project/project-marque-525be456de70`.
+   Find the milestone that is In Progress and the issues under it that are Todo. Their
+   descriptions are the briefs. Issues labelled `Follow-up` are parked and block nothing.
+2. Read this file, then [COORDINATION.md](COORDINATION.md) for the dispatch loop and every
+   lesson about writing briefs and sizing verifications, then `PROTOCOL.md` and `NOTES.md`.
+3. Prove the stack is alive before dispatching anything. Recipe H and Recipe W in
+   `COORDINATION.md` are the commands. Redirect them to a file; do not pipe them.
+4. Run the dispatch loop from `COORDINATION.md` on the first Todo issue.
 
-**Read this file, then [COORDINATION.md](COORDINATION.md), then `PROTOCOL.md`, `NOTES.md`, and
-`FOLLOW-UPS.md`.** `COORDINATION.md` carries the program state: which units are merged, what
-verdict each PR body records, what the two liveness commands actually prove, and every lesson
-about writing briefs and sizing verifications. Each merged PR body is that unit's ledger row.
-
-**This file is the worker contract and nothing else.** It used to also carry the program's
-running state, and it grew by half in one session until it was mostly history a worker must skim
-past to reach the rules it has to obey. The paragraph above about pasting it verbatim is why
-that matters: every line here is paid for on every spawn. Program state moved to
-`COORDINATION.md`, which is coordinator-facing and never pasted.
-
-**Two protocol decisions were due before M1's first message and both are settled**, with their
-reasoning, in `PROTOCOL.md`. The cause is authoritative when a slow client dies, never the
-detector, and the first condemnation latches. Every entity family gets its own message names and
-its own id space.
-
-**Do not re-derive settled decisions from scratch.** They are written down, with the reasoning
-and the evidence, in the files above.
+This file is the worker contract and nothing else. Nothing about which unit is in flight lives
+here or in any other repo doc; Linear holds it. Settled decisions are written down with their
+reasoning in `PROTOCOL.md` and `NOTES.md`. Do not re-derive them.

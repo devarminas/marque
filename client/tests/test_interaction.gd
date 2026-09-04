@@ -684,7 +684,7 @@ func _test_clicking_an_empty_slot_drops_nothing() -> void:
 ##
 ## [b]Both inventory states, and the empty one is the load-bearing case.[/b]
 ## Every player joins holding nothing, so an inventory of 28 empty slots is what
-## the panel spends most of its life drawing, and `FOLLOW-UPS.md` names that
+## the panel spends most of its life drawing, and Linear ARM-40 names that
 ## state as the exposure. An earlier version of this test fed one occupied slot
 ## and nothing else, which left the join state untested: a panel that turned
 ## opaque only while the player carried something passed the whole suite and

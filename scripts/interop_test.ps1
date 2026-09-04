@@ -148,9 +148,9 @@ try {
     $transcript = ""
     if (Test-Path $godotOut) { $transcript = Get-Content -Path $godotOut -Raw }
 
-    # The runner's own verdict. STANDING-ORDERS.md requires this line rather
-    # than the exit code, because the exit code is what the false passes look
-    # like.
+    # The runner's own verdict. .claude/skills/verify-marque/SKILL.md requires
+    # this line as well as the exit code, because the exit code is what the
+    # false passes look like.
     if ($transcript -match "PASS: (\d+) assertion\(s\) held across (\d+) suite\(s\)") {
         Write-Host ""
         Write-Host "==> runner: PASS, $($Matches[1]) assertions across $($Matches[2]) suites"

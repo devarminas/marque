@@ -43,7 +43,7 @@ import (
 //
 // Placeholder, chosen to be small enough to read as "standing on it" and large
 // enough to swallow the arithmetic of arrival. Revisitable, and parked in
-// FOLLOW-UPS.md along with every other number that is about feel.
+// Linear as ARM-26 along with every other number that is about feel.
 const PickupRange = 0.5
 
 // SeedGroundItem puts one item into the world before it opens.

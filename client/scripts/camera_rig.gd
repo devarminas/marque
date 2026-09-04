@@ -20,7 +20,7 @@ extends Node3D
 ##
 ## The rig is authored in [code]main.tscn[/code], including its default framing.
 ## Every number below is a placeholder chosen to be usable, not good; they are
-## exported so a human can tune them in the inspector (FOLLOW-UPS.md).
+## exported so a human can tune them in the inspector (Linear ARM-12).
 
 ## The node the rig follows. Read-only to this script.
 @export var target: Node3D
