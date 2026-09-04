@@ -378,6 +378,8 @@ never a false pass.
 
 If the demo fails on **only** "the background is not a control" with a still
 fraction near zero, use the steps below before you call a product regression.
+`two_client_demo.ps1` prints `SKY-BAND FLAKE CANDIDATE` on that shape and names
+the idle rerun and the geometry comparison.
 
 1. Compare `DEMO pos` and path geometry to a green merge-base or a prior idle pass.
    Matching geometry is not a walk regression.
