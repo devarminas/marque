@@ -484,7 +484,10 @@ numbers you got. The transcript also prints the server's whole event log under
 Pass: exit 0 and last lines `TWO CLIENT DEMO OK` and `CONTESTED PICKUP DEMO OK`. The contested
 demo has a known legitimate failure rate near 38% on `:541` and `:718` (the M1j table above). A
 run that fails on only those lines is the baseline, not a regression; rerun up to three times.
-Any other failing line is a finding.
+If `two_client_demo.ps1` fails only on the sky-band still-camera control, that run is the
+Known flake above, not a finding. The idle-machine control and the geometry comparison in
+the Known flake paragraph decide whether the sky-band failure is a product regression. Any
+other failing line is a finding.
 
 ### Forks decided while cutting M2, all revisitable
 
