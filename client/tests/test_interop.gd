@@ -491,9 +491,10 @@ func _run(url: String) -> void:
 func _test_welcome_is_first_and_complete(a: Peer) -> void:
 	print("== welcome ==")
 	_check(int(a.welcome["you"]) == 1, "welcome.you is 1 for the first connection")
+	var session_len := str(a.welcome["session"]).length()
 	_check(
-		str(a.welcome["session"]).length() == 32,
-		"welcome.session is 32 hex characters, got %s" % [a.welcome["session"]],
+		session_len == 32,
+		"welcome.session is 32 hex characters, got length %d" % session_len,
 	)
 	_check(
 		int(a.welcome["tick_ms"]) == EXPECTED_TICK_MS,
