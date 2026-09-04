@@ -32,9 +32,11 @@ extends Node
 ## arrive from [method JSON.parse_string] as floats. They are converted to
 ## [int] here so nothing downstream compares a float to an int.
 ##
-## [b]No reconnect.[/b] Sequence numbers restart from `welcome.last_seq` on every
+## [b]Reconnect.[/b] After the socket is closed or abandoned, [method connect_to_server]
+## may be called again. Sequence numbers restart from `welcome.last_seq` on every
 ## welcome. A click in flight when the socket dies is lost (`PROTOCOL.md`,
-## "Sequence numbers").
+## "Sequence numbers"). The token from the last `welcome.session` is kept here so
+## a caller can present it on the next URL.
 
 ## Emitted once, when the socket reaches [constant WebSocketPeer.STATE_OPEN].
 ## No frame has been received yet; `welcome` follows.
@@ -154,27 +156,61 @@ var _closed := false
 ## Next `seq` to stamp on an outbound intent. Restarts from
 ## `welcome.last_seq + 1` on every applied welcome, and is 1 before the first.
 var _next_seq := 1
+## `welcome.session` from the last applied welcome, or "" when none named one.
+var _session := ""
 
 
 ## Opens a connection. Returns [constant OK] when the socket started
 ## connecting, which is not the same as connected: wait for [signal connected].
 ##
 ## Calling this while a connection is already open or in flight is a caller bug
-## and is refused; this object handles one connection in its lifetime, because
-## reconnect is M2.
+## and is refused. After [signal disconnected], this may be called again.
 func connect_to_server(url: String) -> Error:
-	if _peer != null:
-		push_error("net_client: already connected to a server; use one client per connection")
-		return ERR_ALREADY_IN_USE
+	if _peer != null and not _closed:
+		var state := _peer.get_ready_state()
+		if state == WebSocketPeer.STATE_OPEN or state == WebSocketPeer.STATE_CONNECTING:
+			push_error("net_client: already connected to a server; wait for disconnected")
+			return ERR_ALREADY_IN_USE
+
+	_peer = null
+	_opened = false
+	_closed = false
 
 	var peer := WebSocketPeer.new()
 	var status := peer.connect_to_url(url)
 	if status != OK:
-		push_error("net_client: connect_to_url(%s) failed: %d" % [url, status])
+		push_error("net_client: connect_to_url failed: %d" % status)
 		return status
 
 	_peer = peer
 	return OK
+
+
+## `welcome.session` from the last applied welcome, or "" when none named one.
+func session_token() -> String:
+	return _session
+
+
+## The same URL with `session` set to [param token], or stripped when [param token]
+## is empty. Other query parameters are kept. The token is never logged.
+static func url_with_session(url: String, token: String) -> String:
+	var base := url
+	var query := ""
+	var mark := url.find("?")
+	if mark != -1:
+		base = url.substr(0, mark)
+		query = url.substr(mark + 1)
+	var parts: PackedStringArray = []
+	if not query.is_empty():
+		for part: String in query.split("&"):
+			if part.begins_with("session=") or part.is_empty():
+				continue
+			parts.append(part)
+	if not token.is_empty():
+		parts.append("session=" + token)
+	if parts.is_empty():
+		return base
+	return base + "?" + "&".join(parts)
 
 
 ## Closes the connection. [signal disconnected] follows on a later frame, once
@@ -433,6 +469,7 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 			item_positions.append(item["position"])
 
 	var heartbeat_ticks := _heartbeat_ticks_of(body, text)
+	_session = _session_of(body, text)
 	# Every applied welcome, including a second one. A click that was on the
 	# wire when the last socket died is not replayed (`PROTOCOL.md`,
 	# "Sequence numbers").
@@ -471,6 +508,17 @@ static func _heartbeat_ticks_of(body: Dictionary, text: String) -> int:
 		)
 		return 0
 	return ticks
+
+
+## `welcome.session`, or "" when it was absent or not a string.
+static func _session_of(body: Dictionary, text: String) -> String:
+	if not body.has("session"):
+		return ""
+	var raw: Variant = body["session"]
+	if typeof(raw) != TYPE_STRING:
+		push_error("net_client: welcome.session is not a string; ignored: %s" % text)
+		return ""
+	return raw
 
 
 ## `welcome.last_seq`, or 0 when it was absent, unreadable, or negative.

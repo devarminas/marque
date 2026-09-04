@@ -14,8 +14,9 @@ extends Node3D
 const URL_ENV := "MARQUE_WS_URL"
 
 ## Frame cap for the live half (NOTES.md, "Godot authoring traps": headless
-## Godot runs uncapped).
-const MAX_FPS := 60
+## Godot runs uncapped). 30 keeps the walk samples on wall-clock time while
+## leaving the runner's 850-frame watchdog room for reconnect waits.
+const MAX_FPS := 30
 
 const WAIT_FRAMES := 240
 
@@ -76,6 +77,10 @@ class Client:
 	var paths: Array[Dictionary] = []
 	var clicks: Array[Vector2] = []
 	var joins := 0
+	var inventories := 0
+	var reconnect_delays: Array[int] = []
+	var identity_losses: Array[Dictionary] = []
+	var resumes := 0
 
 	func _init(client_label: String) -> void:
 		label = client_label
@@ -91,10 +96,28 @@ class Client:
 		root.name = "Client" + label
 		session.joined.connect(_on_joined)
 		session.move_to_requested.connect(_on_move_to_requested)
+		session.reconnect_scheduled.connect(_on_reconnect_scheduled)
+		session.resumed.connect(_on_resumed)
+		session.identity_lost.connect(_on_identity_lost)
 		net.path_assigned.connect(_on_path_assigned)
+		net.inventory_changed.connect(_on_inventory_changed)
 
 	func _on_joined(_you: int) -> void:
 		joins += 1
+
+	func _on_reconnect_scheduled(delay_msec: int) -> void:
+		reconnect_delays.append(delay_msec)
+
+	func _on_resumed(_you: int) -> void:
+		resumes += 1
+
+	func _on_identity_lost(was: int, now: int) -> void:
+		identity_losses.append({"was": was, "now": now})
+
+	func _on_inventory_changed(
+		_size: int, _slot_indices: PackedInt32Array, _slot_kinds: PackedStringArray
+	) -> void:
+		inventories += 1
 
 	func _on_move_to_requested(x: float, z: float) -> void:
 		clicks.append(Vector2(x, z))
@@ -174,7 +197,7 @@ func _ready() -> void:
 
 	Engine.max_fps = _restore_max_fps
 	for client in _live_clients:
-		client.net.close()
+		client.session.close()
 	print(
 		"WIRING RAN: %d assertions, %d failed, %d frames"
 		% [_assertions.assertion_count, _assertions.failures.size(), _frames]
@@ -202,6 +225,7 @@ func _test_appliers_without_a_server() -> void:
 	# Leaves the panel drawn, which the click test below depends on.
 	await _test_the_scripted_click_misses_the_opaque_panel(client)
 	await _test_a_click_becomes_an_intent(client)
+	await _test_a_dead_url_backs_off_without_freeing_bodies(client)
 
 	# Freed before the live half exists, so its picker cannot see the live
 	# half's clicks and its socket cannot join the live half's world.
@@ -470,6 +494,63 @@ func _test_a_click_becomes_an_intent(client: Client) -> void:
 	)
 
 
+## Dead URL: backoff 0.5, 1, 2, 4, 5, 5 s, and the bodies stay drawn.
+func _test_a_dead_url_backs_off_without_freeing_bodies(client: Client) -> void:
+	print("== dead URL backs off without freeing bodies ==")
+	_check(
+		SessionScript.reconnect_backoff_msec(0) == 500
+		and SessionScript.reconnect_backoff_msec(1) == 1000
+		and SessionScript.reconnect_backoff_msec(2) == 2000
+		and SessionScript.reconnect_backoff_msec(3) == 4000
+		and SessionScript.reconnect_backoff_msec(4) == 5000
+		and SessionScript.reconnect_backoff_msec(5) == 5000,
+		"backoff is 0.5, 1, 2, 4, 5, 5 s",
+	)
+	var bodies_before := client.session.known_ids()
+	var remotes_before := client.remote_players.get_child_count()
+	_check(
+		bodies_before == [1, 5] and remotes_before == 1,
+		"the second welcome's bodies are still here before the dead URL, got %s / %d"
+		% [bodies_before, remotes_before],
+	)
+
+	var restore_fps := Engine.max_fps
+	Engine.max_fps = 3
+	client.reconnect_delays.clear()
+	client.session.connect_to_server("ws://")
+
+	var deadline := Time.get_ticks_msec() + 25000
+	var seen := 0
+	while client.reconnect_delays.size() < 5 and Time.get_ticks_msec() < deadline:
+		if client.reconnect_delays.size() > seen:
+			seen = client.reconnect_delays.size()
+			_check(
+				client.session.known_ids() == bodies_before,
+				"bodies stay drawn after reconnect wait %d, got %s"
+				% [seen, client.session.known_ids()],
+			)
+			_check(
+				client.remote_players.get_child_count() == remotes_before,
+				"remote bodies are not freed after reconnect wait %d, got %d"
+				% [seen, client.remote_players.get_child_count()],
+			)
+		await get_tree().process_frame
+
+	Engine.max_fps = restore_fps
+	client.session.close()
+
+	_check(
+		client.reconnect_delays == [500, 1000, 2000, 4000, 5000],
+		"dead URL delays are 0.5, 1, 2, 4, 5 s then the 5 s cap, got %s"
+		% [client.reconnect_delays],
+	)
+	_check(
+		client.session.known_ids() == bodies_before,
+		"and the bodies are still here after the last attempt, got %s"
+		% [client.session.known_ids()],
+	)
+
+
 # --------------------------------------------------------------------------
 # Live half: real server, real sockets, real walking.
 # --------------------------------------------------------------------------
@@ -616,7 +697,7 @@ func _run_live(url: String) -> void:
 
 	print("== leaving ==")
 	var d_id := d.session.own_id()
-	d.net.close()
+	d.session.close()
 	if await _wait_until(
 		func() -> bool: return a.session.avatar_for(d_id) == null, "A to drop D's body"
 	):
@@ -625,6 +706,79 @@ func _run_live(url: String) -> void:
 			a.session.avatar_for(a.session.own_id()) != null,
 			"and leaves every other body standing",
 		)
+
+	await _test_abandoned_session_resumes_itself(url, a, b)
+	await _test_stale_token_joins_as_someone_else(url)
+
+
+func _test_abandoned_session_resumes_itself(url: String, a: Client, b: Client) -> void:
+	print("== abandoned session resumes itself ==")
+	var a_id := a.session.own_id()
+	var b_id := b.session.own_id()
+	var joins_before := a.joins
+	var inventories_before := a.inventories
+	_check(a.session.session_token() != "", "A holds a session token")
+	_check(a.session.avatar_for(b_id) != null, "A already has a body for B")
+
+	a.net.abandon()
+	_check(not a.net.is_open(), "A's socket is not open after abandon")
+	_check(
+		a.session.avatar_for(b_id) != null
+		and a.remote_players.get_child_count() >= 1,
+		"B's body stays under RemotePlayers while A is frozen",
+	)
+
+	if not await _wait_until_msec(
+		func() -> bool: return a.resumes >= 1 and a.joins > joins_before,
+		"A to resume",
+		2000,
+	):
+		return
+	_check(a.session.own_id() == a_id, "A came back as itself (%d)" % a_id)
+	_check(
+		a.session.avatar_for(b_id) != null and a.remote_players.get_child_count() >= 1,
+		"B is still under RemotePlayers after resume",
+	)
+	if await _wait_until(
+		func() -> bool: return a.inventories > inventories_before, "A's inventory to follow"
+	):
+		_check(
+			a.inventories > inventories_before and a.panel.slot_count() > 0,
+			"inventory was cleared and refilled, now %d slot(s)" % a.panel.slot_count(),
+		)
+	_check(b.session.avatar_for(a_id) != null, "B kept A's body; a resume is not a spawn")
+
+
+func _test_stale_token_joins_as_someone_else(url: String) -> void:
+	print("== clean close then stale token ==")
+	var g := await _join(url, "G")
+	if g == null:
+		return
+	var old_id := g.session.own_id()
+	var token := g.session.session_token()
+	_check(old_id != 0 and token != "", "G joined with a token")
+	g.session.close()
+	if not await _wait_until(
+		func() -> bool: return not g.net.is_open(), "G's close frame to finish"
+	):
+		return
+
+	var status := g.session.connect_to_server(NetClientScript.url_with_session(url, token))
+	_check(status == OK, "G starts reconnecting with the stale token (status %d)" % status)
+	if not await _wait_until(
+		func() -> bool: return not g.identity_losses.is_empty(), "identity lost"
+	):
+		return
+	_check(g.session.own_id() != old_id, "stale token is a new own_id(), got %d" % g.session.own_id())
+	_check(
+		int(g.identity_losses[0]["was"]) == old_id
+		and int(g.identity_losses[0]["now"]) == g.session.own_id(),
+		"and the session logged identity lost (%s)" % [g.identity_losses[0]],
+	)
+	print(
+		"WIRING IDENTITY LOST: was %d now %d"
+		% [old_id, g.session.own_id()]
+	)
 
 
 ## Samples one walker on two clients at the same instant. Returns the watching
@@ -746,6 +900,18 @@ func _wait_msec(duration: int) -> void:
 	var deadline := Time.get_ticks_msec() + duration
 	while Time.get_ticks_msec() < deadline:
 		await get_tree().process_frame
+
+
+func _wait_until_msec(predicate: Callable, what: String, budget_msec: int) -> bool:
+	var deadline := Time.get_ticks_msec() + budget_msec
+	while Time.get_ticks_msec() < deadline:
+		if predicate.call():
+			return true
+		await get_tree().process_frame
+	if predicate.call():
+		return true
+	_check(false, "timed out after %d ms waiting for %s" % [budget_msec, what])
+	return false
 
 
 func _check_ground(client: Client, id: int, expected: Vector2, message: String) -> void:

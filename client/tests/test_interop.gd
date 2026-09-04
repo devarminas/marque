@@ -32,6 +32,7 @@ extends Node
 
 ## Names the environment variable carrying the websocket URL.
 const URL_ENV := "MARQUE_WS_URL"
+const NetClientScript := preload("res://scripts/net_client.gd")
 
 ## Upper bound on any single wait for an expected frame. At the frame cap below
 ## this is about four seconds, which is three orders of magnitude more than a
@@ -44,7 +45,7 @@ const WAIT_FRAMES := 240
 ## the two are only commensurable if a frame has a known minimum duration.
 ## Uncapped, a fast machine burns the whole frame budget waiting on one
 ## handshake. Restored when the suite ends.
-const MAX_FPS := 60
+const MAX_FPS := 30
 
 ## Position tolerance in world units. Coordinates cross the wire as JSON decimal
 ## through float64 on both ends and land in a float32 [Vector2]; this absorbs
@@ -81,7 +82,7 @@ const MIDWALK_WAIT_MSEC := 450
 ## Wall-clock milliseconds to let the server read an abandoned socket: several
 ## ticks and a loopback round trip. The assertion that follows is that nothing
 ## arrived, so this is how long "nothing" means.
-const ABANDON_SETTLE_MSEC := 500
+const ABANDON_SETTLE_MSEC := 1000
 
 
 ## One connected client and everything it has heard.
@@ -102,12 +103,14 @@ class Peer:
 	var close_code := 0
 
 	## Empty until `welcome` arrives. Keys: you, tick_ms, tick, heartbeat_ticks,
-	## ids, positions, at_msec.
+	## ids, positions, session, at_msec.
 	var welcome := {}
+	var welcomes: Array[Dictionary] = []
 	var paths: Array[Dictionary] = []
 	var errors: Array[Dictionary] = []
 	var spawns: Array[Dictionary] = []
 	var despawns: Array[int] = []
+	var inventories: Array[int] = []
 	var unknown_keys := PackedStringArray()
 	## Every `t` this peer was sent by a `tick` heartbeat, oldest first.
 	var ticks: Array[int] = []
@@ -122,6 +125,7 @@ class Peer:
 		net.spawned.connect(_on_spawned)
 		net.despawned.connect(_on_despawned)
 		net.path_assigned.connect(_on_path_assigned)
+		net.inventory_changed.connect(_on_inventory_changed)
 		net.server_error.connect(_on_server_error)
 		net.unknown_message.connect(_on_unknown_message)
 		net.tick_received.connect(_on_tick_received)
@@ -148,10 +152,22 @@ class Peer:
 			"heartbeat_ticks": heartbeat_ticks,
 			"ids": player_ids,
 			"positions": player_positions,
+			"session": net.session_token(),
 			# The clock anchor from PROTOCOL.md, "Clock": monotonic, never a
 			# frame-delta accumulation.
 			"at_msec": Time.get_ticks_msec(),
 		}
+		welcomes.append(welcome)
+
+	func _on_inventory_changed(
+		size: int, _slot_indices: PackedInt32Array, _slot_kinds: PackedStringArray
+	) -> void:
+		inventories.append(size)
+
+	func reset_for_reconnect() -> void:
+		opened = false
+		closed = false
+		welcome = {}
 
 	func _on_spawned(id: int, position: Vector2) -> void:
 		spawns.append({"id": id, "position": position})
@@ -299,6 +315,26 @@ func _test_decoding_without_a_server() -> void:
 			is_equal_approx(positions[0].y, -2.5),
 			"Vector2.y carries world Z, not world Y (got %f)" % positions[0].y,
 		)
+	_check(probe.net.session_token() == "", "a welcome without session stores no token")
+	probe.net.ingest_text_frame(
+		'{"welcome":{"you":7,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934",'
+		+ '"tick_ms":150,"tick":142,'
+		+ '"players":[{"id":7,"x":1.5,"z":-2.5}]}}'
+	)
+	_check(
+		probe.net.session_token() == "9f2c1ab7d0e4485fa6c3b81d27e05934",
+		"welcome.session is kept for the next URL",
+	)
+	_check(
+		NetClientScript.url_with_session("ws://127.0.0.1:8080/ws", "abc")
+		== "ws://127.0.0.1:8080/ws?session=abc",
+		"url_with_session writes the query parameter",
+	)
+	_check(
+		NetClientScript.url_with_session("ws://127.0.0.1:8080/ws?session=old", "")
+		== "ws://127.0.0.1:8080/ws",
+		"and strips it when the token is empty",
+	)
 
 	# Compatibility rule 2: a sender may add fields, including M2's seq.
 	probe.net.ingest_text_frame('{"spawn":{"id":9,"x":3.0,"z":4.0,"seq":5,"colour":"red"}}')
@@ -449,6 +485,7 @@ func _run(url: String) -> void:
 	await _test_leaving_client_produces_a_despawn(a, b, c)
 
 	await _test_an_abandoned_socket_is_not_a_logout(url, a, b)
+	await _test_stale_token_is_a_fresh_join(url)
 
 
 ## `welcome` is the first frame on every connection, and describes a world
@@ -456,6 +493,10 @@ func _run(url: String) -> void:
 func _test_welcome_is_first_and_complete(a: Peer) -> void:
 	print("== welcome ==")
 	_check(int(a.welcome["you"]) == 1, "welcome.you is 1 for the first connection")
+	_check(
+		str(a.welcome["session"]).length() == 32,
+		"welcome.session is 32 hex characters, got %s" % [a.welcome["session"]],
+	)
 	_check(
 		int(a.welcome["tick_ms"]) == EXPECTED_TICK_MS,
 		"welcome.tick_ms is %d, got %d" % [EXPECTED_TICK_MS, int(a.welcome["tick_ms"])],
@@ -905,6 +946,79 @@ func _test_an_abandoned_socket_is_not_a_logout(url: String, a: Peer, b: Peer) ->
 	_check(
 		a.net.is_open() and b.net.is_open(),
 		"and the survivors' own connections are untouched",
+	)
+
+	var token := x.net.session_token()
+	_check(token != "", "the abandoned client holds a session token")
+	var inventories_before := x.inventories.size()
+	var b_spawns_for_x := 0
+	for spawn in b.spawns:
+		if int(spawn["id"]) == x_id:
+			b_spawns_for_x += 1
+
+	x.reset_for_reconnect()
+	var status := x.net.connect_to_server(NetClientScript.url_with_session(url, token))
+	_check(status == OK, "X starts reconnecting with its token (status %d)" % status)
+	if not await _wait_until(
+		func() -> bool: return not x.welcome.is_empty(), "X's second welcome"
+	):
+		return
+	_check(
+		int(x.welcome["you"]) == x_id,
+		"X's second welcome.you equals the first (%d)" % x_id,
+	)
+	var resumed_ids: PackedInt64Array = x.welcome["ids"]
+	_check(
+		Array(resumed_ids).has(int(a.welcome["you"]))
+		and Array(resumed_ids).has(int(b.welcome["you"])),
+		"X's second welcome lists A and B, got %s" % [resumed_ids],
+	)
+	var b_spawns_after := 0
+	for spawn in b.spawns:
+		if int(spawn["id"]) == x_id:
+			b_spawns_after += 1
+	_check(
+		b_spawns_after == b_spawns_for_x,
+		"B never gets a spawn for X's resume (still %d)" % b_spawns_after,
+	)
+	if await _wait_until(
+		func() -> bool: return x.inventories.size() > inventories_before,
+		"X's inventory to follow the second welcome",
+	):
+		_check(
+			x.inventories.size() > inventories_before,
+			"inventory followed the resume, %d restatement(s)" % x.inventories.size(),
+		)
+	_abandoned = null
+	print("INTEROP RESUMED: player %d came back as itself" % x_id)
+
+
+func _test_stale_token_is_a_fresh_join(url: String) -> void:
+	print("== clean close then stale token ==")
+	var s := await _join(url, "S")
+	if s == null:
+		return
+	var old_you := int(s.welcome["you"])
+	var token := s.net.session_token()
+	_check(token != "", "S holds a session token")
+	s.net.close()
+	if not await _wait_until(func() -> bool: return s.closed, "S to close"):
+		return
+
+	s.reset_for_reconnect()
+	var status := s.net.connect_to_server(NetClientScript.url_with_session(url, token))
+	_check(status == OK, "S starts reconnecting with the stale token (status %d)" % status)
+	if not await _wait_until(
+		func() -> bool: return not s.welcome.is_empty(), "S's fresh welcome"
+	):
+		return
+	_check(
+		int(s.welcome["you"]) != old_you,
+		"stale token is a new own_id() (%d -> %d)" % [old_you, int(s.welcome["you"])],
+	)
+	print(
+		"INTEROP IDENTITY LOST: was %d now %d"
+		% [old_you, int(s.welcome["you"])]
 	)
 
 

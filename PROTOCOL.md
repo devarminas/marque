@@ -13,7 +13,8 @@ names the unit that discharges it. A marker reading plain **M2** is still reserv
 writing it. A marker naming a unit and marked *shipped* is implemented and on the wire, exactly
 as an **M1** marker is. A marker naming a unit without that mark is somebody's live contract.
 
-**M2a**, **M2b**, **M2c** and **M2d** are shipped. The named-and-shipped form replaces a sentence
+**M2a**, **M2b**, **M2c**, **M2d** and **M2e** are shipped. **M2f** is the client half of
+reconnect and is shipped with this file. The named-and-shipped form replaces a sentence
 that listed the live units by name, which put every later unit in the position of editing a
 status line that was about somebody else.
 
@@ -48,9 +49,10 @@ that was written before those messages existed.
 
 **Rules 1 to 3 are written from the server's side. The client's side is not symmetric.** The
 server may close on a bad frame because a misbehaving client is one of many and costs nothing.
-A client cannot close on a bad frame from the server, because the server is its only peer,
-`error` is server-to-client only so it has nothing to reply with, and M0 has no reconnect, so
-one malformed frame would cost the player the whole session.
+A client cannot close on a bad frame from the server, because the server is its only peer and
+`error` is server-to-client only so it has nothing to reply with. One malformed frame that tore
+the socket down would cost the player a freeze-and-resume even though the server is still
+there.
 
 **A client logs loudly and drops the single offending frame, keeping the connection.** That
 applies to a frame that is not valid JSON, is not an object, carries zero or several top-level
@@ -58,8 +60,9 @@ keys, or is a known message whose body will not parse. Unknown top-level keys st
 rule 1 and are ordinary forward compatibility, not errors.
 
 This is deliberately a different rule from the server's, and it is the one place in this file
-where the two ends of the socket are told to do opposite things. Revisit it when M2 adds
-reconnect, because a client that can cheaply recover has the option of being stricter.
+where the two ends of the socket are told to do opposite things. **M2f shipped reconnect and
+kept the client lenient.** A client that can recover has the option of being stricter.
+Revisitable.
 
 ## Clock
 
@@ -167,7 +170,12 @@ silent is not a logout: the server must see a read error and record `peer_gone`,
 suspending case, rather than `closed`. A client that closed politely here would tell the server
 its player had quit, which is precisely the state it is trying not to lose.
 
-The client does not reconnect afterwards. That is M2f.
+**M2f, shipped.** After abandoning, the client reconnects. It presents `welcome.session` as
+the `session` query parameter of the next URL. It does not replay intents. A click that was
+on the wire when the socket died is lost; `welcome.last_seq` is the restatement, not an ack.
+Backoff starts at 0.5 s and doubles to a cap of 5 s, then stays there, unbounded. The world
+stays drawn between attempts. Freeze ends on the second `welcome`. The client logs whether
+`you` and `session` match what it held. A close frame is still logout and does not reconnect.
 
 ## Coordinates
 
@@ -948,26 +956,35 @@ None of the five carries the token, per *Identity*. `resume_refused` and `resume
 `remote` and no player id because there is no player to name: one refers to a connection the
 world declined to admit, and the other to a token that names nothing.
 
-### Client.
+### Client. **M2f**, shipped.
 
 **A client freezes the world it has and logs loudly. It does not clear it.**
 
 The compatibility rules above govern frames. This governs the socket itself, which they never
-did. M0 has no reconnect, so a dead socket is terminal for that session.
+did.
 
 Clearing the world on disconnect asserts something the server never said, namely that everyone
 logged out. Frozen state is stale, but there is no UI to explain either condition, and
 stale-and-announced beats false-and-silent.
 
-**Freezing is still the rule, and M2a changed what it costs rather than what it is.** The
-sentence above about a dead socket being terminal is now true only of the client, and only for
-the two deaths that suspend. After a `peer_gone` or a `slow_client` death the server holds the
-body and the inventory for the grace, so a frozen world is stale about something that is waiting
-rather than about something that is gone. After a `closed` or a `protocol_error` death it holds
-nothing at all, the player is retired at once, and the frozen world is stale in the old sense:
-those bodies are gone and are not coming back. Reconnecting is what
-cashes that in, and no shipped client does it yet — the client half of reconnect is a later M2
-unit, and M2a is server-only.
+**The client never sends a close frame when it believes the server is gone.** A close frame is
+logout (M2a). The client abandons the transport, then reconnects. The world stays drawn
+between attempts. Freeze ends on a successful resume, which is an ordinary second `welcome`.
+
+**A close frame is logout and does not reconnect.** The player is retired at once on the
+server, the token dies with it, and presenting that token later is a fresh join. The client
+can tell, because `you` and `session` both differ from what it held, and it logs that the
+identity was lost.
+
+**No intent replay.** M2e. A click in flight when the socket died is lost. The second
+`welcome` restarts outbound `seq` from `last_seq + 1`.
+
+**Backoff is 0.5 s, doubling to a cap of 5 s, then 5 s forever.** A number, parked in
+`FOLLOW-UPS.md`. The first attempt after a death waits 0.5 s; a dead URL walks
+0.5, 1, 2, 4, 5, 5, … until something answers.
+
+**Client strictness stays lenient** after reconnect exists. A malformed frame is still logged
+and dropped, and the connection is kept. Revisitable. See *Compatibility*.
 
 ## Decoding notes for the Godot side
 
