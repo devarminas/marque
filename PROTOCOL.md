@@ -18,6 +18,11 @@ reconnect and is shipped with this file. The named-and-shipped form replaces a s
 that listed the live units by name, which put every later unit in the position of editing a
 status line that was about somebody else.
 
+**M3 is in progress**, and the marker convention above governs it unchanged. **M3a** is the
+server half of equipment and is shipped with this file: worn slots, `equip`, `unequip`, the
+`equipment` restatement, and the kind `axe`. A marker reading plain **M3** is reserved. The
+client panel is M3b onward and nothing under an **M3a** marker describes it.
+
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
 stale is the only way it can fail.
@@ -281,6 +286,30 @@ not an item id: the client names a position in its own cached inventory and the 
 what is actually there. That is the intents-never-facts rule at its most load-bearing, because
 a client that could name the item id could name one it does not own.
 
+### `equip`. **M3a**
+
+    {"equip":{"slot":3}}
+
+A request to wear whatever is in that inventory slot. `slot` is a bag index, the same space
+`drop.slot` is in and for the same reason: the client names a position in its own cached
+inventory and the server looks up what is there and decides which worn slot it belongs in.
+**The intent never names a worn slot.** A kind belongs in exactly one of them, so a client that
+could name the destination could name the wrong one, and the server would have to refuse an
+intent it could have resolved. Semantics are in *Equipment*.
+
+### `unequip`. **M3a**
+
+    {"unequip":{"worn":"weapon"}}
+
+A request to take off whatever is in that worn slot and put it back in the bag. The field is
+`worn` and **not** `slot`, deliberately: `slot` already means a bag index in `drop` and `equip`,
+and a worn slot is named rather than indexed, so the two are different spaces. *Entity naming*
+calls an id that means one thing in one message and another in the next the cheapest possible
+bug to write, and one field name over two spaces is that bug with the id space left implicit.
+
+`worn` is a slot name, and the names this server has are the ones it puts in `equipment.worn`.
+A name it does not have is refused, and so is one it has but that holds nothing.
+
 ## Messages, server to client
 
 ### `welcome`
@@ -498,6 +527,39 @@ The first `inventory` is sent inside the atomic `welcome` step, after `welcome` 
 path replays. Thereafter one is sent to a player whenever that player's inventory changes, and
 never otherwise.
 
+### `equipment`. **M3a**
+
+    {"equipment":{"worn":["weapon"],"slots":[{"slot":"weapon","kind":"axe"}]}}
+
+Sent to **one player only**, never broadcast. A full restatement of that player's worn
+equipment, on `inventory`'s doctrine and for its reason: a restatement cannot drift, and a
+handful of named slots is nothing on the wire.
+
+It is a **new top-level key rather than fields on `inventory`**, because the two are different
+containers with different addressing. Folding worn slots into `inventory` would make one
+message's `slots` list carry two id spaces, which is *Entity naming*'s rule again, and it would
+mean a bag change and a worn change could not be told apart by a client that only counts frames.
+Both restatements go out on an `equip` or an `unequip`, because both containers changed.
+
+`worn` is the **closed, ordered list of worn slot names this server has**. It is
+`inventory.size`'s analogue and it is on the wire for `size`'s reason exactly: the client draws
+the panel it is told to draw rather than hardcoding a second copy of the server's slot list. The
+order is the order to draw them in. M3a ships one name, `weapon`.
+
+`slots` lists **only occupied slots**, each carrying its own slot name, exactly as
+`inventory.slots` carries its own index. An empty worn slot is absent from the list rather than
+present with a null or empty `kind`, so a fresh player's `equipment` is
+`{"worn":["weapon"],"slots":[]}`. Every name in `slots` is one of the names in `worn`; nothing
+else can appear there.
+
+**Both lists are `[]` when empty and never `null`**, which is the rule the `inventory` section
+above states at length. A fresh player's `equipment` is the ordinary case of an empty `slots`,
+so this is the frame where that rule is exercised on every single join.
+
+The first `equipment` is sent inside the atomic `welcome` step, **after** the first `inventory`,
+which makes it the last frame of the join. Thereafter one is sent to a player whenever that
+player's worn equipment changes, and never otherwise.
+
 ### `error`
 
     {"error":{"re":"move_to","msg":"out of bounds"}}
@@ -655,6 +717,139 @@ end of the path. An empty slot, or an index outside `0` to `size - 1`, is answer
 Drop exists in M1 because it is pickup's reverse transaction. It tests atomicity in the other
 direction for no content work at all (`NOTES.md`, M1).
 
+## Equipment. **M3a**
+
+### Worn slots
+
+**Worn equipment is a fixed set of named slots, and it is not a second bag.** The bag is
+twenty-eight indexed slots that hold anything; worn is a handful of named slots where each name
+accepts one kind of thing. They are addressed differently, they are restated in different
+messages, and nothing on the wire treats one as the other.
+
+That is RuneScape's shape and it is taken without further argument. The alternative considered
+and rejected was a second indexed container, which would have made "which container is slot 3
+in" a question every intent had to answer.
+
+**M3a ships exactly one slot name, `weapon`.** The names this server has ride on the wire in
+`equipment.worn`, so a client never holds a second copy of the list. Adding a name later is
+additive: a client that draws the panel from `equipment.worn` grows a slot without a release,
+and one that hardcoded the list is the thing this field exists to prevent.
+
+**A kind belongs to at most one worn slot, and the server owns that mapping.** `axe` belongs to
+`weapon`. A kind that belongs to no slot cannot be worn, which is how `acorn` is refused: it is
+a lookup that misses, not a special case naming the kinds that are not weapons. The client is
+never told the mapping and never needs it, because `equip` names a bag slot and the server
+resolves the destination.
+
+### `kind axe`. **M3a**
+
+One new kind, `axe`, joining M1's `acorn`. It is the only equippable kind in M3a and it exists so
+that equipment has something to carry before gathering exists to earn one. **A client that does
+not know it renders it magenta and keeps going**, which is the *item_spawn* rule and not a new
+one.
+
+### The join kit
+
+**A joining player is given one `axe` in the lowest free bag slot**, and it arrives in the first
+`inventory` of the join step like anything else the player is holding. It is not a ground item:
+nothing is placed in the world, no id is minted, and **no `item_spawn` is broadcast**, because
+nothing entered the world for anyone else to see. An inventory holds kinds rather than ids
+(*Drop*), so an item that was never on the ground has nothing an id could name.
+
+This exists so a client can reach `equip` without gathering content, and it is revisitable the
+moment gathering can produce an axe.
+
+### `equip`
+
+`equip` is immediate. No walk, no pending action, exactly as `drop` is.
+
+**It is one transaction across both containers.** The kind leaves the bag slot and lands in its
+worn slot in the same step on the state-owning goroutine, which is the transaction boundary
+(`CLAUDE.md`). There is no point at which the item is in both places, and none at which it is in
+neither. The player is then sent one `inventory` and one `equipment`, both full restatements,
+because both containers changed.
+
+**Equipping onto an occupied worn slot swaps.** Whatever was worn lands in the bag slot the new
+item just left. RuneScape is the tiebreaker and it swaps, and the swap is also the simpler rule:
+it makes `equip` total over "a bag slot holding an equippable kind", so there is no room question
+to answer and no refusal to specify. A rule with one fewer case is a rule with one fewer place to
+be wrong, which is *Pickup*'s lesson applied here.
+
+**`equip` never spawns a ground item.** Not on the happy path, not on a swap, and not on a
+refusal. Nothing about an equip is visible to any other client, so nothing is broadcast.
+
+Refused, each with one `error` naming `equip` and nothing else:
+
+- **An index outside `0` to `size - 1`.** No such slot. A broken client rather than a stale one.
+- **A legal index holding nothing.** An empty slot, which is a stale client's picture of its own
+  bag.
+- **A legal index holding a kind that belongs to no worn slot.** Not equippable. This is
+  `acorn`, and it is the ordinary refusal rather than the exotic one.
+
+In every case the bag and the worn slots are exactly as they were.
+
+### `unequip`
+
+`unequip` is `equip`'s reverse transaction and it is immediate for the same reason. The kind
+leaves its worn slot and lands in the **lowest free bag slot**, which is RuneScape's rule and
+the same one `pickup` fills a slot by. Both restatements go out again.
+
+**A full bag refuses the unequip, and the worn slot keeps the item.** This is the one refusal
+worth arguing about, because the alternative is dropping the item at the player's feet, and that
+would be the server destroying value the player did not ask it to risk: a ground item in this
+protocol has no owner, no drop timer and no per-player visibility (*Deliberately absent*), so
+anybody standing there takes it. **Nothing is ever silently dropped and nothing is ever lost.**
+The player is told `inventory is full` and keeps wearing the item, which is what RuneScape does.
+
+Refused, each with one `error` naming `unequip`:
+
+- **A `worn` naming a slot this server does not have.** No such worn slot.
+- **A slot it has, holding nothing.** An empty worn slot.
+- **A full bag.** Inventory full, per the paragraph above.
+
+In every case the bag and the worn slots are exactly as they were.
+
+### Worn equipment survives suspension
+
+**A suspended player keeps what it is wearing, exactly as it keeps its bag.** Worn equipment
+belongs to the player and the player outlives its socket (*When the connection dies*), so
+nothing about a suspension touches it. A resume is the ordinary welcome step, so the resumed
+client is sent its `inventory` and then its `equipment` and reads both as the restatements they
+are.
+
+It dies with the player, as the bag does: a clean logout, a protocol error, or an expired grace
+retires the player and everything it was holding or wearing.
+
+### Log vocabulary. **M3a**
+
+Five events. `equip` and `unequip` are logged **after** the move, carrying what it did, which is
+what `drop` does and for its reason: an event logged on receipt says what was asked for, and the
+thing worth reading back is what happened.
+
+| Event | Fields | When |
+|---|---|---|
+| `join_seeded` | `player`, `kind`, `slot` | a joining player was given one item of the join kit |
+| `equip` | `player`, `slot`, `kind`, `worn`, `displaced`, `seq` | one completed equip |
+| `equip_rejected` | `player`, `reason`, `detail`, `re` | an `equip` refused |
+| `unequip` | `player`, `worn`, `kind`, `slot`, `seq` | one completed unequip |
+| `unequip_rejected` | `player`, `reason`, `detail`, `re` | an `unequip` refused |
+
+`equip.slot` is the bag index the item came from, and `unequip.slot` is the bag index it went
+to. `displaced` is the kind a swap put back into that bag slot and is **omitted when the worn
+slot was free**, so its presence is the whole record that a swap happened. `seq` rides on the
+two completions when the frame carried one and is omitted when it did not, which is *Sequence
+numbers*' rule for `move_to`, `pickup` and `drop` extended to these two.
+
+The two `_rejected` events carry `refuse`'s ordinary field set, exactly as `pickup_rejected` and
+`drop_rejected` do. `reason` is one of `no_such_slot`, `empty_slot`, `not_equippable`,
+`no_such_worn_slot`, `empty_worn_slot` or `inventory_full`.
+
+`inventory_full` is new here and it is the first refusal reason for a condition M1 already had.
+A pickup that arrives at a full bag logs `pickup_no_room` and sends an `error` **without** going
+through the refusal path, because a pickup fails on arrival rather than on receipt and there was
+no intent left to reject. An `unequip` fails on receipt like any other refused intent, so it
+takes the ordinary path and gets a reason rather than an event of its own.
+
 ## Ordering and the join race
 
 Getting this wrong produces a duplicated avatar or a client that never learns about a player,
@@ -668,7 +863,8 @@ and both look like client bugs.
 2. Nothing is sent to a connection before its `welcome`.
 3. `welcome` and its path replays are composed and enqueued as **one atomic step** inside the
    state-owning goroutine. Any broadcast enqueued after that step includes the new client.
-   **M1** puts the joining player's first `inventory` inside that same step, last. Nothing about
+   **M1** puts the joining player's first `inventory` inside that same step, and **M3a** puts its
+   first `equipment` after that, so `equipment` is now the last frame of the step. Nothing about
    the world may be observable to the newcomer before it has been told everything the step
    describes.
 4. A connection whose send queue is full is closed. It is never waited on. The tick loop must
@@ -830,6 +1026,11 @@ prevent.
 - `item_spawn` for an item id already known **replaces** rather than adding a second body.
 - `item_despawn` for an unknown item id logs and ignores.
 - `inventory` always replaces wholesale. There is no partial-inventory message to reconcile.
+
+**M3a** adds one line and no new shape:
+
+- `equipment` always replaces wholesale, `worn` included. There is no partial-equipment message
+  to reconcile, and a slot absent from `slots` is empty rather than unchanged.
 
 **A second `welcome` frees every item body as well as every player body**, for the reason the
 `welcome` section already gives: a restatement makes everything the client believed beforehand
@@ -1019,6 +1220,14 @@ a GDScript client will get it subtly wrong.
   `re` key at all.
 - **`x` and `z` are ground-plane world coordinates.** When they land in a `Vector2`, the
   `Vector2.y` component holds world **Z**. This has caught people already.
+- **M3a's two intents address different spaces with different types.** `equip.slot` is a bag
+  index and must be written as a JSON integer literal, per the `seq` rule above.
+  `unequip.worn` is a slot **name**, a string, and `"weapon"` is the only one M3a has. A client
+  that sends `{"unequip":{"slot":0}}` has confused the two and gets a `missing_field` refusal
+  naming `unequip`.
+- **`equipment.slots[].slot` is a string, not a number**, for the same reason. It is the only
+  `slot` field on the wire that is not an index, which is why the intent that names one is
+  spelled `worn` instead.
 
 ## Deliberately absent
 
@@ -1035,8 +1244,10 @@ Named so nobody adds them thinking they were forgotten.
   anyone who can read the wire can resume as you. That is the same standard as the ids above,
   which are sequential and unverified, and it is stated here so nobody mistakes the token for a
   login.
-- No banking, trading, crafting, or item stacking. M1 has one item type, one item per slot, and
-  the ground as the only container outside a player's own inventory.
+- No banking, trading, crafting, or item stacking. One item per slot, and, until **M3a**, the
+  ground as the only container outside a player's own inventory. M3a adds worn slots as a second
+  one and changes nothing else on this line: still no stacking, still no trading, and no
+  container anybody but its owner can address.
 - No item ownership, drop timers, or per-player visibility. RuneScape hides a drop from everyone
   but the dropper for a minute; Marque does not, because M1 has no combat and no loot to
   protect, and a hidden item cannot be contested by two clients. **Revisitable**, and the first

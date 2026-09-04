@@ -57,6 +57,12 @@ func TestWelcomeCarriesTheWorldAndThenTheInventory(t *testing.T) {
 		t.Fatalf("a fresh player starts holding %+v, want nothing", inv.Slots)
 	}
 
+	// M3a's equipment ends the step. Nothing after it, which is what makes the
+	// step's shape an assertion rather than a description.
+	if worn := alice.equipment(); len(worn.Slots) != 0 {
+		t.Fatalf("a fresh player starts wearing %+v, want nothing", worn.Slots)
+	}
+
 	alice.expectSilence()
 }
 

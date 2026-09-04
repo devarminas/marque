@@ -35,7 +35,7 @@ func newProbeWorld(t *testing.T) *probeWorld {
 	t.Helper()
 	logs := &bytes.Buffer{}
 	hub := mnet.NewHub()
-	w := NewWorld(hub, gamelog.New(logs, true), NewMemoryStore(), probeGrace)
+	w := NewWorld(hub, gamelog.New(logs, true), NewMemoryStore(), probeGrace, nil)
 	srv := httptest.NewServer(hub)
 	t.Cleanup(func() {
 		hub.Close()

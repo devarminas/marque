@@ -81,7 +81,7 @@ func run() error {
 
 	log := gamelog.New(os.Stdout, *enableLog)
 	hub := mnet.NewHub()
-	world := game.NewWorld(hub, log, game.NewMemoryStore(), game.ResumeGraceTicks)
+	world := game.NewWorld(hub, log, game.NewMemoryStore(), game.ResumeGraceTicks, game.DefaultJoinKit)
 
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
@@ -101,6 +101,8 @@ func run() error {
 		"inventory_size":    game.InventorySize,
 		"resume_grace":      game.ResumeGraceTicks,
 		"seeded_items":      len(seeds),
+		"join_kit":          game.DefaultJoinKit,
+		"worn_slots":        game.WornSlots,
 	})
 
 	for _, seed := range seeds {

@@ -34,7 +34,7 @@ func dialOneConn(t *testing.T) (*World, *bytes.Buffer, *mnet.Conn) {
 
 	logs := &bytes.Buffer{}
 	hub := mnet.NewHub()
-	w := NewWorld(hub, gamelog.New(logs, true), NewMemoryStore(), ResumeGraceTicks)
+	w := NewWorld(hub, gamelog.New(logs, true), NewMemoryStore(), ResumeGraceTicks, nil)
 
 	srv := httptest.NewServer(hub)
 	t.Cleanup(func() {

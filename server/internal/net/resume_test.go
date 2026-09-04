@@ -43,7 +43,7 @@ const unknownToken = "ffffffffffffffffffffffffffffffff"
 const waitInsideTheGrace = 4 * game.TickDuration
 
 // joinStep is one connection's whole atomic welcome step: the welcome, the path
-// replays, and the inventory that ends it.
+// replays, the inventory, and the equipment that ends it.
 //
 // It exists because a resuming client's step is the one place a path for the
 // receiving player's own id legitimately appears, and because a test cannot
@@ -53,6 +53,7 @@ type joinStep struct {
 	welcome   mnet.Welcome
 	paths     []mnet.Path
 	inventory mnet.Inventory
+	equipment mnet.Equipment
 }
 
 // pathFor returns the replayed path for one player, and whether the step
@@ -67,19 +68,29 @@ func (s joinStep) pathFor(id mnet.PlayerID) (mnet.Path, bool) {
 }
 
 // readJoinStep consumes the step in order, insisting on the shape PROTOCOL.md's
-// "Ordering and the join race" fixes: welcome first, inventory last, and
-// nothing but path replays in between.
+// "Ordering and the join race" fixes: welcome first, then path replays, then the
+// inventory, then the equipment that ends it.
 func readJoinStep(c *client) joinStep {
 	c.t.Helper()
 
 	step := joinStep{welcome: c.welcomeFrame()}
+	var carried bool
 	for {
 		f := c.next()
 		switch {
+		case f.Equipment != nil:
+			if !carried {
+				c.t.Fatalf("client %s: equipment arrived before the inventory, which the join step sends first: %s", c.name, f.raw)
+			}
+			step.equipment = *f.Equipment
+			return step
 		case f.Inventory != nil:
 			step.inventory = *f.Inventory
-			return step
+			carried = true
 		case f.Path != nil:
+			if carried {
+				c.t.Fatalf("client %s: a path replay arrived after the inventory, which the replays precede: %s", c.name, f.raw)
+			}
 			step.paths = append(step.paths, *f.Path)
 		default:
 			c.t.Fatalf("client %s: a %s frame arrived inside the join step, which carries only path replays between welcome and inventory: %s",
