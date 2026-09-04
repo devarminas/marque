@@ -421,7 +421,11 @@ func _run(url: String) -> void:
 
 	if not await _test_move_to_inside_bounds_returns_a_path(a):
 		return
+	if not await _test_duplicate_seq_yields_one_path(a):
+		return
 	if not await _test_move_to_outside_bounds_returns_an_error(a):
+		return
+	if not await _test_pickup_and_drop_are_sequenced(a):
 		return
 
 	# Let A's first walk finish so the next path's origin is a known point
@@ -607,6 +611,63 @@ func _test_move_to_inside_bounds_returns_a_path(a: Peer) -> bool:
 	_check(
 		is_equal_approx(float(path["speed"]), EXPECTED_SPEED),
 		"path.speed is %f, got %f" % [EXPECTED_SPEED, float(path["speed"])],
+	)
+	return true
+
+
+## The same `move_to` under the seq the first walk already spent is a duplicate.
+## The server applies it once and answers the retry with nothing.
+func _test_duplicate_seq_yields_one_path(a: Peer) -> bool:
+	print("== duplicate seq is ignored ==")
+	var you := int(a.welcome["you"])
+	var paths_before := a.paths.size()
+	var errors_before := a.errors.size()
+	_check(
+		a.net.send_move_to(FIRST_DESTINATION.x, FIRST_DESTINATION.y, 1) == OK,
+		"the first walk's seq is sent again",
+	)
+	print("INTEROP DUPLICATE: player %d seq 1" % you)
+	await _wait_msec(ABANDON_SETTLE_MSEC)
+	_check(
+		a.paths.size() == paths_before,
+		"the same seq yields exactly one path, got %d (was %d)" % [a.paths.size(), paths_before],
+	)
+	_check(
+		a.errors.size() == errors_before,
+		"a duplicate is unanswered, not an error (%d before, %d after)"
+		% [errors_before, a.errors.size()],
+	)
+	return true
+
+
+## A pickup and a drop leave the client with the next numbers spent, so the
+## event log can name those intents by seq. This world has no seed item, so both
+## bodies are refused. The numbers are still consumed.
+func _test_pickup_and_drop_are_sequenced(a: Peer) -> bool:
+	print("== sequenced pickup and drop ==")
+	var errors_before := a.errors.size()
+	var paths_before := a.paths.size()
+	_check(a.net.send_pickup(1) == OK, "pickup sent")
+	if not await _wait_until(
+		func() -> bool: return a.errors.size() > errors_before, "a pickup refusal"
+	):
+		return false
+	_check(
+		String(a.errors[a.errors.size() - 1]["re"]) == "pickup",
+		'the pickup refusal names pickup, got "%s"' % String(a.errors[a.errors.size() - 1]["re"]),
+	)
+	_check(a.net.send_drop(0) == OK, "drop sent")
+	if not await _wait_until(
+		func() -> bool: return a.errors.size() > errors_before + 1, "a drop refusal"
+	):
+		return false
+	_check(
+		String(a.errors[a.errors.size() - 1]["re"]) == "drop",
+		'the drop refusal names drop, got "%s"' % String(a.errors[a.errors.size() - 1]["re"]),
+	)
+	_check(
+		a.paths.size() == paths_before,
+		"a refused pickup and drop assign no path",
 	)
 	return true
 

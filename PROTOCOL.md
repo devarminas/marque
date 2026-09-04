@@ -246,6 +246,11 @@ an ack wearing a different hat, and it would teach clients to branch on it. A cl
 truth from the `welcome` and `inventory` restatements it is already sent, never from an answer to
 a retry.
 
+**The Godot client** stamps every outbound intent from `welcome.last_seq + 1` (from 1 when
+`last_seq` is absent), restarts that counter on every welcome, and never replays an intent after
+the socket dies: a click in flight is lost, as in RuneScape, and `welcome` plus `inventory` are
+the truth. Revisitable.
+
 ### `move_to`
 
     {"move_to":{"x":42.3,"z":17.8}}

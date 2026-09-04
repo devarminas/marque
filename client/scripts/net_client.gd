@@ -32,7 +32,9 @@ extends Node
 ## arrive from [method JSON.parse_string] as floats. They are converted to
 ## [int] here so nothing downstream compares a float to an int.
 ##
-## [b]No reconnect and no sequence numbers.[/b] `PROTOCOL.md` says so.
+## [b]No reconnect.[/b] Sequence numbers restart from `welcome.last_seq` on every
+## welcome. A click in flight when the socket dies is lost (`PROTOCOL.md`,
+## "Sequence numbers").
 
 ## Emitted once, when the socket reaches [constant WebSocketPeer.STATE_OPEN].
 ## No frame has been received yet; `welcome` follows.
@@ -149,6 +151,9 @@ signal unknown_message(key: String)
 var _peer: WebSocketPeer = null
 var _opened := false
 var _closed := false
+## Next `seq` to stamp on an outbound intent. Restarts from
+## `welcome.last_seq + 1` on every applied welcome, and is 1 before the first.
+var _next_seq := 1
 
 
 ## Opens a connection. Returns [constant OK] when the socket started
@@ -207,8 +212,8 @@ func is_open() -> bool:
 ## An intent, never a fact. Nothing is validated here on purpose: the server
 ## owns what is legal, and a client-side bounds check would only hide the
 ## `error` reply that proves the server is doing its job.
-func send_move_to(x: float, z: float) -> Error:
-	return _send(move_to_frame(x, z))
+func send_move_to(x: float, z: float, seq: int = 0) -> Error:
+	return _send(move_to_frame(x, z, _intent_seq(seq)))
 
 
 ## Sends `pickup`: a request to take a ground item. **M1.**
@@ -216,8 +221,8 @@ func send_move_to(x: float, z: float) -> Error:
 ## `item` is an item id, never a player id (`PROTOCOL.md`, "Entity naming").
 ## Taking an item is a walk followed by a pending action on the server, so
 ## nothing here happens immediately and the reply is a `path` like any other.
-func send_pickup(item_id: int) -> Error:
-	return _send(pickup_frame(item_id))
+func send_pickup(item_id: int, seq: int = 0) -> Error:
+	return _send(pickup_frame(item_id, _intent_seq(seq)))
 
 
 ## Sends `drop`: a request to drop whatever is in an inventory slot. **M1.**
@@ -226,8 +231,22 @@ func send_pickup(item_id: int) -> Error:
 ## item id. The server looks up what is actually there, which is the
 ## intents-never-facts rule at its most load-bearing: a client that could name
 ## the item id could name one it does not own (`PROTOCOL.md`, `drop`).
-func send_drop(slot: int) -> Error:
-	return _send(drop_frame(slot))
+func send_drop(slot: int, seq: int = 0) -> Error:
+	return _send(drop_frame(slot, _intent_seq(seq)))
+
+
+## The next `seq` this client will stamp, after the last welcome.
+func next_seq() -> int:
+	return _next_seq
+
+
+## Consumes one `seq` and advances the counter. A test that asserts the exact
+## bytes of a stamped frame without an open socket uses this with the static
+## builders below.
+func take_seq() -> int:
+	var n := _next_seq
+	_next_seq += 1
+	return n
 
 
 ## The three client-to-server frames, as the dictionaries [method _send] would
@@ -236,16 +255,34 @@ func send_drop(slot: int) -> Error:
 ## Public and static so that a test can assert on the exact bytes a call would
 ## put on the wire without needing a socket to be open, which is the only way to
 ## check a sender against `PROTOCOL.md` before the server that answers it exists.
-static func move_to_frame(x: float, z: float) -> Dictionary:
-	return {"move_to": {"x": x, "z": z}}
+##
+## [param seq] of 0 (the default) omits the field, which is the unsequenced
+## form. A number of at least 1 is written onto the body.
+static func move_to_frame(x: float, z: float, seq: int = 0) -> Dictionary:
+	return {"move_to": _intent_body({"x": x, "z": z}, seq)}
 
 
-static func pickup_frame(item_id: int) -> Dictionary:
-	return {"pickup": {"item": item_id}}
+static func pickup_frame(item_id: int, seq: int = 0) -> Dictionary:
+	return {"pickup": _intent_body({"item": item_id}, seq)}
 
 
-static func drop_frame(slot: int) -> Dictionary:
-	return {"drop": {"slot": slot}}
+static func drop_frame(slot: int, seq: int = 0) -> Dictionary:
+	return {"drop": _intent_body({"slot": slot}, seq)}
+
+
+static func _intent_body(body: Dictionary, seq: int) -> Dictionary:
+	if seq >= 1:
+		body["seq"] = seq
+	return body
+
+
+## Allocates the next number, or adopts an explicit one and advances past it.
+func _intent_seq(seq: int) -> int:
+	if seq < 1:
+		return take_seq()
+	if seq >= _next_seq:
+		_next_seq = seq + 1
+	return seq
 
 
 func _process(_delta: float) -> void:
@@ -396,6 +433,10 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 			item_positions.append(item["position"])
 
 	var heartbeat_ticks := _heartbeat_ticks_of(body, text)
+	# Every applied welcome, including a second one. A click that was on the
+	# wire when the last socket died is not replayed (`PROTOCOL.md`,
+	# "Sequence numbers").
+	_next_seq = _last_seq_of(body, text) + 1
 
 	welcomed.emit(
 		int(body["you"]),
@@ -430,6 +471,26 @@ static func _heartbeat_ticks_of(body: Dictionary, text: String) -> int:
 		)
 		return 0
 	return ticks
+
+
+## `welcome.last_seq`, or 0 when it was absent, unreadable, or negative.
+## Zero means this player has never spent a sequence number.
+static func _last_seq_of(body: Dictionary, text: String) -> int:
+	if not body.has("last_seq"):
+		return 0
+	var raw: Variant = body["last_seq"]
+	if not _is_number(raw):
+		push_error(
+			"net_client: welcome.last_seq is not a number; read as 0: %s" % text
+		)
+		return 0
+	var last := int(raw)
+	if last < 0:
+		push_error(
+			"net_client: welcome.last_seq is negative (%d); read as 0: %s" % [last, text]
+		)
+		return 0
+	return last
 
 
 func _on_spawn(body: Dictionary, text: String) -> void:
