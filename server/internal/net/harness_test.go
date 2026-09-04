@@ -360,6 +360,7 @@ type frame struct {
 	ItemSpawn   *mnet.ItemSpawn   `json:"item_spawn"`
 	ItemDespawn *mnet.ItemDespawn `json:"item_despawn"`
 	Inventory   *mnet.Inventory   `json:"inventory"`
+	Tick        *mnet.Tick        `json:"tick"`
 
 	raw string
 	// bad is set when the frame broke an envelope rule. The reader goroutine
@@ -386,6 +387,8 @@ func (f frame) kind() string {
 		return "item_despawn"
 	case f.Inventory != nil:
 		return "inventory"
+	case f.Tick != nil:
+		return "tick"
 	default:
 		return "none"
 	}
@@ -486,15 +489,24 @@ func (c *client) drop(slot int) {
 func (c *client) next() frame {
 	c.t.Helper()
 
-	f, ok := c.tryNext(readTimeout)
-	if !ok {
-		c.t.Fatalf("client %s: nothing arrived within %v", c.name, readTimeout)
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(time.Until(deadline))
+		if !ok {
+			break
+		}
+		if f.Tick != nil {
+			continue
+		}
+		return f
 	}
-	return f
+	c.t.Fatalf("client %s: nothing arrived within %v", c.name, readTimeout)
+	return frame{}
 }
 
-// collect returns every frame that arrives within the window. Used where the
-// interesting assertion is about the whole set rather than the next one.
+// collect returns every game frame that arrives within the window. Tick
+// heartbeats are skipped: they are periodic and would otherwise appear inside
+// silence windows that assert leftover game traffic.
 func (c *client) collect(window time.Duration) []frame {
 	c.t.Helper()
 
@@ -503,6 +515,9 @@ func (c *client) collect(window time.Duration) []frame {
 		f, ok := c.tryNext(window)
 		if !ok {
 			return frames
+		}
+		if f.Tick != nil {
+			continue
 		}
 		frames = append(frames, f)
 	}
@@ -774,13 +789,22 @@ func (c *client) awaitHaltPath(id mnet.PlayerID) mnet.Path {
 	return mnet.Path{}
 }
 
-// expectSilence asserts that nothing arrives for the length of the silence
-// window. Proving a broadcast did not happen is the only way to test a
-// rejection, and no positive assertion can show it.
+// expectSilence asserts that no game frame arrives for the length of the
+// silence window. Tick heartbeats are ignored: they are periodic and would
+// otherwise fail every rejection test that happens to land near a multiple
+// of HeartbeatEveryTicks.
 func (c *client) expectSilence() {
 	c.t.Helper()
 
-	if f, ok := c.tryNext(silenceWindow); ok {
+	deadline := time.Now().Add(silenceWindow)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(time.Until(deadline))
+		if !ok {
+			return
+		}
+		if f.Tick != nil {
+			continue
+		}
 		c.t.Fatalf("client %s: expected no frame, got %s", c.name, f.raw)
 	}
 }

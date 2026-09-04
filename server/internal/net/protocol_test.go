@@ -98,6 +98,24 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			msg:  mnet.Error{Msg: "text frames only"},
 			want: `{"error":{"msg":"text frames only"}}`,
 		},
+		{
+			name: "tick",
+			msg:  mnet.Tick{T: 10},
+			want: `{"tick":{"t":10}}`,
+		},
+		{
+			name: "welcome naming the heartbeat period",
+			msg: mnet.Welcome{
+				You:            1,
+				Session:        "0123456789abcdef0123456789abcdef",
+				TickMS:         150,
+				Tick:           0,
+				HeartbeatTicks: 10,
+				Players:        []mnet.PlayerState{},
+				Items:          []mnet.ItemState{},
+			},
+			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":150,"tick":0,"heartbeat_ticks":10,"players":[],"items":[]}}`,
+		},
 	}
 
 	for _, tc := range cases {
