@@ -118,6 +118,8 @@ $MinSeparation = 3.0
 # and 1.41% on a healthy run, so both bounds have several times the headroom.
 $StillCameraMinDiff = 0.002
 $StillCameraMaxDiff = 0.10
+$SkyBandControlFailure = "the background is not a control"
+$SkyBandFlakeMaxStillFraction = $StillCameraMaxDiff
 
 # How many times more of the frame a walking client's own camera has to disturb
 # than a standing one does. Measured at 32x and 37x on a healthy run.
@@ -162,6 +164,7 @@ $MaxLayerDisagreement = 0.05
 
 $server = $null
 $failures = New-Object System.Collections.Generic.List[string]
+$stillFractions = New-Object System.Collections.Generic.List[double]
 
 function Show-File([string] $label, [string] $path) {
     if (-not (Test-Path $path)) { return }
@@ -245,6 +248,24 @@ function Compare-Frames([string] $left, [string] $right) {
         $a.Dispose()
         $b.Dispose()
     }
+}
+
+function Test-SkyBandFlakeCandidate {
+    param(
+        [System.Collections.Generic.List[string]] $FailureList,
+        [System.Collections.Generic.List[double]] $FractionList,
+        [string] $Needle,
+        [double] $MaxStillFraction
+    )
+    if ($FailureList.Count -lt 1) { return $false }
+    if ($FractionList.Count -lt 1) { return $false }
+    foreach ($failure in $FailureList) {
+        if ($failure -notlike "*$Needle*") { return $false }
+    }
+    foreach ($fraction in $FractionList) {
+        if ($fraction -gt $MaxStillFraction) { return $false }
+    }
+    return $true
 }
 
 function Get-JoinedId([string] $path) {
@@ -533,7 +554,8 @@ try {
         # The control proper. A still camera leaves the sky and far ground byte
         # for byte identical; a moving one cannot.
         if (-not $stillPair.BandIdentical) {
-            $failures.Add("client $label stood still but the top quarter of its two frames differs; the background is not a control")
+            $failures.Add("client $label stood still but the top quarter of its two frames differs; $SkyBandControlFailure")
+            $stillFractions.Add($stillPair.Fraction)
         }
         if ($movingPair.BandIdentical) {
             $failures.Add("client $label walked but the top quarter of its two frames is identical; the camera did not follow it")
@@ -715,4 +737,8 @@ if ($failures.Count -eq 0) {
 }
 Write-Host "TWO CLIENT DEMO FAILED"
 foreach ($failure in $failures) { Write-Host "  - $failure" }
+if (Test-SkyBandFlakeCandidate -FailureList $failures -FractionList $stillFractions -Needle $SkyBandControlFailure -MaxStillFraction $SkyBandFlakeMaxStillFraction) {
+    $shown = ($stillFractions | ForEach-Object { "{0:P2}" -f $_ }) -join ", "
+    Write-Host ("SKY-BAND FLAKE CANDIDATE: only the still-camera sky-band control failed (still fraction {0}). Compare DEMO pos and path geometry to a green idle base, then rerun two_client_demo.ps1 on an idle machine before treating this as a product regression." -f $shown)
+}
 exit 1
