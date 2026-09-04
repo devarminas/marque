@@ -35,9 +35,10 @@ const SEGMENT_EPSILON := 0.01
 const CLOCK_SKEW_TOLERANCE := 0.95
 
 ## Where the scripted click lands, in fractions of the viewport. It must miss
-## the opaque inventory panel;
-## [method _test_the_scripted_click_misses_the_opaque_panel] is the only guard
-## on that (NOTES.md, "Godot authoring traps").
+## every opaque panel the UI can have open at once;
+## [method _test_the_scripted_click_misses_the_opaque_panel] and
+## [method _test_the_scripted_click_misses_an_open_equipment_panel] are the only
+## guards on that (NOTES.md, "Godot authoring traps").
 const CLICK_AT := Vector2(0.30, 0.88)
 const MIN_WALK_DISTANCE := 3.0
 
@@ -61,6 +62,7 @@ class Client:
 	const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 	const CameraRigScript := preload("res://scripts/camera_rig.gd")
 	const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
+	const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 
 	var label: String
 	var root: Node3D
@@ -72,6 +74,7 @@ class Client:
 	var local_body: Node3D
 	var remote_players: Node3D
 	var panel: InventoryPanelScript
+	var equipment: EquipmentPanelScript
 
 	var paths: Array[Dictionary] = []
 	var clicks: Array[Vector2] = []
@@ -92,6 +95,7 @@ class Client:
 		local_body = root.get_node("Player") as Node3D
 		remote_players = root.get_node("RemotePlayers") as Node3D
 		panel = root.get_node("UI/InventoryPanel") as InventoryPanelScript
+		equipment = root.get_node("UI/EquipmentPanel") as EquipmentPanelScript
 		root.name = "Client" + label
 		session.joined.connect(_on_joined)
 		session.move_to_requested.connect(_on_move_to_requested)
@@ -221,8 +225,9 @@ func _test_appliers_without_a_server() -> void:
 	_test_unknown_ids_are_ignored(client)
 	_test_paths_reach_the_right_body(client)
 	await _test_a_halted_player_is_placed_and_never_waited_for(client)
-	# Leaves the panel drawn, which the click test below depends on.
+	# Leaves the panel drawn, which the two click tests below depend on.
 	await _test_the_scripted_click_misses_the_opaque_panel(client)
+	await _test_the_scripted_click_misses_an_open_equipment_panel(client)
 	await _test_a_click_becomes_an_intent(client)
 	await _test_a_dead_url_backs_off_without_freeing_bodies(client)
 	await _test_a_refused_url_backs_off_without_freeing_bodies(client)
@@ -462,6 +467,45 @@ static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> V
 		if not on_slot:
 			return candidate
 	return null
+
+
+## [b]M3b's geometry guard.[/b] The player can have the inventory and the
+## equipment panel open at the same time, and [constant CLICK_AT] has to miss
+## both of them at once.
+##
+## Two opaque panels are not one problem twice. At the 64x64 headless viewport
+## each is wider than the whole screen (NOTES.md, "Godot authoring traps"), so
+## the free area is not either panel's leftovers but the intersection of them,
+## and an equipment panel anchored anywhere but the bottom-left closes that
+## intersection completely and leaves this suite with no world to click.
+##
+## Run with the inventory panel already drawn by the test above, so what is
+## measured here is the state a player is actually in with both open.
+func _test_the_scripted_click_misses_an_open_equipment_panel(client: Client) -> void:
+	client.equipment.toggle()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(client.equipment.visible, "the equipment panel opens")
+	_check(client.panel.visible, "with the inventory panel still open beside it")
+
+	var screen := client.camera.get_viewport().get_visible_rect()
+	var equipment_rect := client.equipment.get_global_rect()
+	print("WIRING equipment rect %s in viewport %s" % [equipment_rect, screen.size])
+
+	var scripted := screen.size * CLICK_AT
+	_check(
+		not equipment_rect.has_point(scripted),
+		"the scripted click %v is outside the equipment panel %s"
+		% [scripted, equipment_rect],
+	)
+	_check(
+		not client.panel.get_global_rect().has_point(scripted),
+		"and still outside the inventory panel, so both can be open at once",
+	)
+
+	client.equipment.toggle()
+	await get_tree().process_frame
+	_check(not client.equipment.visible, "and it closes again for the tests below")
 
 
 func _test_a_click_becomes_an_intent(client: Client) -> void:
