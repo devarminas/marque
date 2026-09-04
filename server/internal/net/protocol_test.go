@@ -20,6 +20,7 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			msg: mnet.Welcome{
 				You:     1,
 				Session: "9f2c1ab7d0e4485fa6c3b81d27e05934",
+				LastSeq: 7,
 				TickMS:  150,
 				Tick:    142,
 				Players: []mnet.PlayerState{
@@ -28,7 +29,7 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				},
 				Items: []mnet.ItemState{{ID: 7, Kind: "acorn", X: 3, Z: -2}},
 			},
-			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0},{"id":2,"x":5,"z":5}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}]}}`,
+			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0},{"id":2,"x":5,"z":5}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}]}}`,
 		},
 		{
 			// An empty world is [] on both arrays, never null and never an
@@ -36,6 +37,11 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			// "nothing there" apart. session is a string and is always present,
 			// because every welcome names the identity of the player receiving
 			// it; there is no such thing as a welcome without one.
+			//
+			// last_seq is 0 here and still on the wire. There are no acks, so a
+			// client reads its numbering out of this field alone, and an
+			// omitted key would be indistinguishable from a server that does
+			// not send one.
 			name: "welcome with an empty world",
 			msg: mnet.Welcome{
 				You:     1,
@@ -45,7 +51,7 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				Players: []mnet.PlayerState{},
 				Items:   []mnet.ItemState{},
 			},
-			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","tick_ms":150,"tick":0,"players":[],"items":[]}}`,
+			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":150,"tick":0,"players":[],"items":[]}}`,
 		},
 		{
 			name: "item_spawn",
@@ -129,20 +135,25 @@ func TestDecodeMoveTo(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name  string
-		frame string
+		name    string
+		frame   string
+		wantSeq mnet.Seq
 	}{
-		{"plain", `{"move_to":{"x":42.3,"z":17.8}}`},
-		// Compatibility rule 2: senders may add fields. M2's seq is already
-		// spoken for, and this server must ignore it rather than break.
-		{"with a reserved seq", `{"move_to":{"x":42.3,"z":17.8,"seq":9}}`},
-		{"with a field nobody has invented yet", `{"move_to":{"x":42.3,"z":17.8,"whatever":true}}`},
+		{"plain", `{"move_to":{"x":42.3,"z":17.8}}`, 0},
+		{"with a seq", `{"move_to":{"x":42.3,"z":17.8,"seq":9}}`, 9},
+		// The high-water mark is unbounded, so the largest number the wire type
+		// can carry has to survive the round trip rather than overflow into a
+		// refusal or a negative.
+		{"with the largest seq an int64 holds", `{"move_to":{"x":42.3,"z":17.8,"seq":9223372036854775807}}`, 9223372036854775807},
+		{"with an explicitly null seq", `{"move_to":{"x":42.3,"z":17.8,"seq":null}}`, 0},
+		// Compatibility rule 2: senders may add fields.
+		{"with a field nobody has invented yet", `{"move_to":{"x":42.3,"z":17.8,"whatever":true}}`, 0},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			msg, err := mnet.Decode([]byte(tc.frame))
+			msg, seq, err := mnet.Decode([]byte(tc.frame))
 			if err != nil {
 				t.Fatalf("Decode(%s) failed: %v", tc.frame, err)
 			}
@@ -153,7 +164,62 @@ func TestDecodeMoveTo(t *testing.T) {
 			if got.X != 42.3 || got.Z != 17.8 {
 				t.Fatalf("Decode gave %+v, want {X:42.3 Z:17.8}", got)
 			}
+			if seq != tc.wantSeq {
+				t.Fatalf("Decode(%s) gave seq %d, want %d", tc.frame, seq, tc.wantSeq)
+			}
 		})
+	}
+}
+
+// TestDecodeNamesEveryMessageAfterItsWireKey pins the pairing Event.Name and
+// every "re" field rest on. A message whose Name disagreed with the key it
+// decoded from would file its duplicates under another message's name.
+func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct{ key, frame string }{
+		{mnet.MsgMoveTo, `{"move_to":{"x":1,"z":2}}`},
+		{mnet.MsgPickup, `{"pickup":{"item":7}}`},
+		{mnet.MsgDrop, `{"drop":{"slot":3}}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.key, func(t *testing.T) {
+			t.Parallel()
+			msg, _, err := mnet.Decode([]byte(tc.frame))
+			if err != nil {
+				t.Fatalf("Decode(%s) failed: %v", tc.frame, err)
+			}
+			if got := msg.Name(); got != tc.key {
+				t.Fatalf("Decode(%s) returned a %T naming itself %q, want %q", tc.frame, msg, got, tc.key)
+			}
+		})
+	}
+}
+
+// TestABodyRejectionStillReportsItsSequenceNumber is the one place a seq and an
+// error come back together. A seq the envelope accepted is consumed even when
+// the body is then refused, so dropping it here would make last_seq depend on
+// whether the server liked the body (PROTOCOL.md, "Sequence numbers").
+func TestABodyRejectionStillReportsItsSequenceNumber(t *testing.T) {
+	t.Parallel()
+
+	const frame = `{"move_to":{"x":1,"seq":5}}`
+
+	msg, seq, err := mnet.Decode([]byte(frame))
+	if err == nil {
+		t.Fatalf("Decode(%s) accepted the frame as %#v, want a missing-field rejection", frame, msg)
+	}
+	rejection, ok := mnet.Rejection(err)
+	if !ok {
+		t.Fatalf("Decode(%s) returned %v, which is not a rejection", frame, err)
+	}
+	if rejection.Reason != mnet.ReasonMissingField {
+		t.Fatalf("Decode(%s) rejected with %q, want %q", frame, rejection.Reason, mnet.ReasonMissingField)
+	}
+	if seq != 5 {
+		t.Fatalf("Decode(%s) gave seq %d alongside the refusal, want 5: the envelope accepted that number and the sender has spent it",
+			frame, seq)
 	}
 }
 
@@ -191,12 +257,31 @@ func TestDecodeRejections(t *testing.T) {
 		// before the key is read and there is no message to attribute it to.
 		{"nan literal", `{"move_to":{"x":NaN,"z":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, ""},
 		{"overflowing literal", `{"move_to":{"x":1e400,"z":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
+		// A sequence number of at least 1, or none. Zero is refused rather than
+		// read as absent: a client that computed one and got zero has a bug,
+		// and the server names it rather than quietly downgrading the frame to
+		// unsequenced (PROTOCOL.md, "Sequence numbers").
+		{"zero seq", `{"move_to":{"x":1,"z":1,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
+		{"negative seq", `{"move_to":{"x":1,"z":1,"seq":-1}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
+		{"fractional seq", `{"move_to":{"x":1,"z":1,"seq":1.5}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
+		{"quoted seq", `{"move_to":{"x":1,"z":1,"seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
+		{"seq past what an int64 holds", `{"move_to":{"x":1,"z":1,"seq":9223372036854775808}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
+		// The seq is refused before the body is looked at, so a frame that is
+		// wrong in both ways is answered for the seq. Ordering, not preference:
+		// the envelope is read first.
+		{"a bad seq on a body that is also broken", `{"move_to":{"x":1,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
+		// An unknown message never reaches the seq parse: there is nothing to
+		// spend a sequence number on, and the frame is ignored rather than
+		// answered.
+		{"a bad seq on an unknown message", `{"teleport":{"seq":0}}`, mnet.ReasonUnknownMessage, mnet.Ignore, "teleport"},
+		{"a bad seq on a pickup", `{"pickup":{"item":7,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "pickup"},
+		{"a bad seq on a drop", `{"drop":{"slot":3,"seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "drop"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			msg, err := mnet.Decode([]byte(tc.frame))
+			msg, _, err := mnet.Decode([]byte(tc.frame))
 			if err == nil {
 				t.Fatalf("Decode(%s) accepted the frame as %#v, want rejection %q", tc.frame, msg, tc.wantReason)
 			}
@@ -226,7 +311,7 @@ func TestDecodeRejections(t *testing.T) {
 func TestLargeFiniteCoordinateDecodesCleanly(t *testing.T) {
 	t.Parallel()
 
-	msg, err := mnet.Decode([]byte(`{"move_to":{"x":1e30,"z":0}}`))
+	msg, _, err := mnet.Decode([]byte(`{"move_to":{"x":1e30,"z":0}}`))
 	if err != nil {
 		t.Fatalf("Decode rejected a finite coordinate: %v", err)
 	}

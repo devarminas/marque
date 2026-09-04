@@ -522,7 +522,7 @@ func TestANearerLaterJoinerTakesItFromAnEarlierPlayerOutOfRange(t *testing.T) {
 }
 
 // TestDecodeDrop is the wire body, including the compatibility rule that lets
-// M2 add seq to it later.
+// senders add fields the body does not name.
 func TestDecodeDrop(t *testing.T) {
 	t.Parallel()
 
@@ -539,14 +539,14 @@ func TestDecodeDrop(t *testing.T) {
 		// Out of range is a question about world state, not about the frame.
 		// The decoder hands it on and the game package refuses it.
 		{"outside the inventory", `{"drop":{"slot":-1}}`, -1},
-		{"with a reserved seq", `{"drop":{"slot":3,"seq":9}}`, 3},
+		{"with a seq, which the envelope reads and the body ignores", `{"drop":{"slot":3,"seq":9}}`, 3},
 		{"with a field nobody has invented yet", `{"drop":{"slot":3,"whatever":true}}`, 3},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			msg, err := mnet.Decode([]byte(tc.frame))
+			msg, _, err := mnet.Decode([]byte(tc.frame))
 			if err != nil {
 				t.Fatalf("Decode(%s) failed: %v", tc.frame, err)
 			}
@@ -583,7 +583,7 @@ func TestDecodeDropRejections(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			msg, err := mnet.Decode([]byte(tc.frame))
+			msg, _, err := mnet.Decode([]byte(tc.frame))
 			if err == nil {
 				t.Fatalf("Decode(%s) accepted the frame as %#v, want rejection %q", tc.frame, msg, tc.reason)
 			}

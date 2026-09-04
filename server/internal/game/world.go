@@ -95,9 +95,14 @@ const (
 	EvMoveTo         = "move_to"
 	EvMoveToRejected = "move_to_rejected"
 	EvIntentIgnored  = "intent_ignored"
-	EvPathAssigned   = "path_assigned"
-	EvArrived        = "arrived"
-	EvTicksDropped   = "ticks_dropped"
+	// EvIntentDuplicate is an intent whose sequence number is at or below the
+	// sender's high-water mark. Nothing is sent back: an error naming the
+	// duplicate would be an ack wearing a different hat (PROTOCOL.md,
+	// "Sequence numbers").
+	EvIntentDuplicate = "intent_duplicate"
+	EvPathAssigned    = "path_assigned"
+	EvArrived         = "arrived"
+	EvTicksDropped    = "ticks_dropped"
 
 	// The five events a resume can produce, each with its own field set and no
 	// field added to an existing event. None of them carries a session token:
@@ -282,6 +287,10 @@ type player struct {
 	// item ids start at 1 and are never reused, so no live item can ever be
 	// mistaken for "none".
 	pending mnet.ItemID
+
+	// lastSeq is the highest sequence number accepted from this player: 0 at a
+	// fresh join, and surviving suspension because the player does.
+	lastSeq mnet.Seq
 
 	// expiresTick is the tick at which a suspended player is retired. It is
 	// meaningful only while suspended and is zero the rest of the time; the
@@ -598,6 +607,7 @@ func (w *World) sendJoinStep(p *player) {
 	w.send(p, mnet.Welcome{
 		You:     p.id,
 		Session: p.session,
+		LastSeq: p.lastSeq,
 		TickMS:  int(TickDuration.Milliseconds()),
 		Tick:    w.tick,
 		Players: states,
@@ -761,6 +771,22 @@ func (w *World) handleFrame(ev mnet.Event) {
 		return
 	}
 
+	// Before the refusal branch, because a sequence number the envelope accepted
+	// is consumed whether or not the body behind it survives, and a retry of a
+	// refused intent is still a retry (PROTOCOL.md, "Sequence numbers").
+	if ev.Seq != 0 {
+		if ev.Seq <= p.lastSeq {
+			w.log.Event(w.tick, EvIntentDuplicate, gamelog.Fields{
+				"player":   p.id,
+				"re":       ev.Name(),
+				"seq":      ev.Seq,
+				"last_seq": p.lastSeq,
+			})
+			return
+		}
+		p.lastSeq = ev.Seq
+	}
+
 	if ev.Err != nil {
 		rejection, ok := mnet.Rejection(ev.Err)
 		if !ok {
@@ -772,11 +798,11 @@ func (w *World) handleFrame(ev mnet.Event) {
 
 	switch msg := ev.Msg.(type) {
 	case mnet.MoveTo:
-		w.moveTo(p, msg)
+		w.moveTo(p, msg, ev.Seq)
 	case mnet.Pickup:
-		w.pickup(p, msg)
+		w.pickup(p, msg, ev.Seq)
 	case mnet.Drop:
-		w.drop(p, msg)
+		w.drop(p, msg, ev.Seq)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -832,18 +858,32 @@ func rejectionEvent(re string) string {
 	}
 }
 
+// withSeq tags the log fields of an event with the sequence number of the frame
+// that caused it, and leaves them alone when the frame carried none.
+//
+// The field is absent rather than zero for an unsequenced frame: an absent
+// field and a zero one are different claims, and zero is not a legal sequence
+// number. Only the three events a frame's arrival causes get it; what the
+// server decides later is not the frame arriving.
+func withSeq(f gamelog.Fields, seq mnet.Seq) gamelog.Fields {
+	if seq != 0 {
+		f["seq"] = seq
+	}
+	return f
+}
+
 // moveTo answers a click.
 //
 // A second move_to mid-walk replaces the first: the new path starts at where
 // the player actually is now, not at where the abandoned path began. Two
 // intents inside one tick therefore both take effect in order, and the last one
 // wins, because a player's position does not change between ticks.
-func (w *World) moveTo(p *player, msg mnet.MoveTo) {
-	w.log.Event(w.tick, EvMoveTo, gamelog.Fields{
+func (w *World) moveTo(p *player, msg mnet.MoveTo, seq mnet.Seq) {
+	w.log.Event(w.tick, EvMoveTo, withSeq(gamelog.Fields{
 		"player": p.id,
 		"x":      msg.X,
 		"z":      msg.Z,
-	})
+	}, seq))
 
 	if rejection := w.validate(msg); rejection != nil {
 		w.refuse(p, rejection)

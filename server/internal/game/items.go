@@ -89,8 +89,8 @@ func (w *World) noteItemEntered(item GroundItem) {
 // Nothing is taken here: taking happens in step, on the tick the player is near
 // enough, which is what makes a contested pickup a contest rather than a race
 // between two network arrivals.
-func (w *World) pickup(p *player, msg mnet.Pickup) {
-	w.log.Event(w.tick, EvPickup, playerItemFields(p.id, msg.Item))
+func (w *World) pickup(p *player, msg mnet.Pickup, seq mnet.Seq) {
+	w.log.Event(w.tick, EvPickup, withSeq(playerItemFields(p.id, msg.Item), seq))
 
 	item, live := w.items.GroundItem(msg.Item)
 	if !live {
@@ -139,7 +139,7 @@ func (w *World) pickup(p *player, msg mnet.Pickup) {
 // The whole transaction is one store call, for TakeGroundItem's reason: a
 // caller that read the slot and then wrote the ground would have made a
 // two-phase write that a transactional store cannot make atomic.
-func (w *World) drop(p *player, msg mnet.Drop) {
+func (w *World) drop(p *player, msg mnet.Drop, seq mnet.Seq) {
 	item, err := w.items.DropInventorySlot(p.id, msg.Slot, p.pos.X, p.pos.Z)
 	switch {
 	case errors.Is(err, ErrNoSuchSlot):
@@ -172,7 +172,7 @@ func (w *World) drop(p *player, msg mnet.Drop) {
 	fields := playerItemFields(p.id, item.ID)
 	fields["kind"] = item.Kind
 	fields["slot"] = msg.Slot
-	w.log.Event(w.tick, EvDrop, fields)
+	w.log.Event(w.tick, EvDrop, withSeq(fields, seq))
 
 	// Everyone, and the dropper is not excluded. That is path's broadcast rule
 	// rather than spawn's: spawn leaves out the joining player because welcome
