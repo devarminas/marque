@@ -150,9 +150,12 @@ signal server_error(re: String, message: String)
 ## fail-fast doctrine is deliberately relaxed.
 signal unknown_message(key: String)
 
+const CONNECT_TIMEOUT_MSEC := 5000
+
 var _peer: WebSocketPeer = null
 var _opened := false
 var _closed := false
+var _connect_deadline_msec := 0
 ## Next `seq` to stamp on an outbound intent. Restarts from
 ## `welcome.last_seq + 1` on every applied welcome, and is 1 before the first.
 var _next_seq := 1
@@ -174,6 +177,7 @@ func connect_to_server(url: String) -> Error:
 	_peer = null
 	_opened = false
 	_closed = false
+	_connect_deadline_msec = 0
 
 	var peer := WebSocketPeer.new()
 	var status := peer.connect_to_url(url)
@@ -182,6 +186,7 @@ func connect_to_server(url: String) -> Error:
 		return status
 
 	_peer = peer
+	_connect_deadline_msec = Time.get_ticks_msec() + CONNECT_TIMEOUT_MSEC
 	return OK
 
 
@@ -331,6 +336,7 @@ func _process(_delta: float) -> void:
 
 	if not _opened and _peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		_opened = true
+		_connect_deadline_msec = 0
 		connected.emit()
 
 	_drain()
@@ -339,6 +345,16 @@ func _process(_delta: float) -> void:
 	# are still delivered, in order, before the disconnect is announced.
 	if not _closed and _peer.get_ready_state() == WebSocketPeer.STATE_CLOSED:
 		_announce_disconnected(_peer.get_close_code(), _peer.get_close_reason())
+		return
+
+	if (
+		not _closed
+		and not _opened
+		and _connect_deadline_msec != 0
+		and Time.get_ticks_msec() >= _connect_deadline_msec
+		and _peer.get_ready_state() == WebSocketPeer.STATE_CONNECTING
+	):
+		abandon()
 
 
 ## Emits [signal disconnected] exactly once per client, whoever noticed first.
@@ -346,6 +362,7 @@ func _announce_disconnected(code: int, reason: String) -> void:
 	if _closed:
 		return
 	_closed = true
+	_connect_deadline_msec = 0
 	disconnected.emit(code, reason)
 
 

@@ -566,7 +566,13 @@ func _test_a_refused_url_backs_off_without_freeing_bodies(client: Client) -> voi
 	var status := client.session.connect_to_server("ws://127.0.0.1:1/ws")
 	_check(status == OK, "a well-formed refused URL starts connecting (status %d)" % status)
 
-	var deadline := Time.get_ticks_msec() + 22000
+	var deadline := (
+		Time.get_ticks_msec()
+		+ NetClientScript.CONNECT_TIMEOUT_MSEC * 3
+		+ SessionScript.reconnect_backoff_msec(0)
+		+ SessionScript.reconnect_backoff_msec(1)
+		+ 4000
+	)
 	var seen := 0
 	while client.reconnect_delays.size() < 3 and Time.get_ticks_msec() < deadline:
 		if client.reconnect_delays.size() > seen:
