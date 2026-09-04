@@ -27,6 +27,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/interop_test.ps1` | `INTEROP OK`, plus the `INTEROP RAN:` and `WIRING RAN:` lines |
 | `scripts/two_client_demo.ps1` | `TWO CLIENT DEMO OK` |
 | `scripts/contested_pickup_demo.ps1` | `CONTESTED PICKUP DEMO OK` |
+| `scripts/equip_demo.ps1` | `EQUIP DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
 | each scripted client | `DEMO done` on its stdout |
@@ -132,6 +133,7 @@ anything looks off.
 | `--phase 1\|2` | Which of the two phases this client clicks in. Absent or 0: it never walks, only watches and captures. |
 | `--pickup-shots <abs-prefix>` | Enter the contested-pickup demo mode (`pickup_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M1e.** Both clients run this with identical arguments; neither is told who wins. Absolute host path required, for `--shots`' reason. |
 | `--drop-click fx,fy` | Where the winner of that contest clicks the ground before dropping, as viewport fractions. Required alongside `--pickup-shots`, and refused rather than defaulted if it will not parse. |
+| `--equip-shots <abs-prefix>` | Enter the equip milestone demo mode (`equip_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M3d.** Single client; join kit seeds the axe. Absolute host path required. |
 | `--screenshot` | No server needed: render `main.tscn`, save one frame to `user://shot.png`, print its absolute path, quit. The single-client visual baseline. |
 
 Scripted demo mode waits for **two** players (`DEMO_MIN_PLAYERS` in `main.gd`), so a
