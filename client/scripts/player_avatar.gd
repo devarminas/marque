@@ -27,6 +27,16 @@ extends Node3D
 const PolylineWalker := preload("res://scripts/polyline_walker.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 
+## Probed stride match: Running_A's cycle moves the feet 0.7391 units in 0.8s,
+## so at 3.25x playback the stride paces the server's 3.0 units per second.
+## Walking_A would need roughly 8x and slides at that rate.
+const WALK_ANIM := "kaykit/Running_A"
+## KayKit Idle_A: the pack's breathing idle, probed at an 8.4-degree peak leg
+## swing, the subtle stance standing in place wants. Jump_Idle is a hover pose
+## and Idle_B a 45-degree look-around fidget.
+const IDLE_ANIM := "kaykit/Idle_A"
+const WALK_SPEED_SCALE := 3.25
+
 ## Server player id, or 0 before [method configure]. Ids are assigned from 1
 ## (PROTOCOL.md, "Identity"), so 0 means unconfigured.
 var player_id := 0
@@ -60,6 +70,9 @@ var _walker: PolylineWalker = null
 ## from [member Node3D.rotation] so the turn can be damped over frames while the
 ## position stays exactly where the walker says it is.
 var _desired_yaw := 0.0
+
+## The scene's animation mixer, driving the Knight instanced below it.
+@onready var _animation: AnimationPlayer = $AnimationPlayer
 
 
 ## Binds this avatar to a player id and to the connection's tick length.
@@ -101,10 +114,12 @@ func follow_path(points: PackedVector2Array, start_tick: int, speed: float) -> v
 ## entirely both land in the right place.
 func update_to_tick(tick: int) -> void:
 	if _walker == null or not _walker.has_path():
+		_set_walking(false)
 		return
 
 	var ground := _walker.position_at_tick(tick)
 	position = Vector3(ground.x, ground_y, ground.y)
+	_set_walking(not _walker.is_finished_at_tick(tick))
 
 	if not face_travel_direction:
 		return
@@ -128,6 +143,22 @@ func _process(delta: float) -> void:
 		update_to_tick(clock.estimated_tick())
 	if face_travel_direction:
 		_turn_toward_desired_yaw(delta)
+
+
+## The walk/idle pair is derived from the walker, never stored: the tick is the
+## statement of whether this player is moving, and re-deriving it keeps a
+## stale "walking" flag from outliving the tick it came from. Playing the
+## current animation again does not restart it (probed: position continued), so
+## re-calling every update is safe and keeps the stride scale pinned.
+func _set_walking(walking: bool) -> void:
+	if walking:
+		if _animation.current_animation != WALK_ANIM:
+			_animation.play(WALK_ANIM)
+		_animation.speed_scale = WALK_SPEED_SCALE
+		return
+	if _animation.current_animation != IDLE_ANIM:
+		_animation.play(IDLE_ANIM)
+	_animation.speed_scale = 1.0
 
 
 func _turn_toward_desired_yaw(delta: float) -> void:

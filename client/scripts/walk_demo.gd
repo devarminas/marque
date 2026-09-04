@@ -52,10 +52,21 @@ const SHADOW_SAMPLE_DISTANCES: Array = [0.55, 0.75, 0.95, 1.15, 1.35]
 ## the lit luminance. A real cast shadow is far past this; ambient-only lighting
 ## with no shadow is far under it.
 const SHADOW_DARKENING := 0.2
-## Radius in pixels to hunt for the avatar's blue around its projected centre.
-const AVATAR_SEARCH_RADIUS := 60
-## How much more blue than red a pixel needs to count as the avatar's material.
-const AVATAR_BLUE_MARGIN := 0.15
+## Radius in pixels to hunt for the avatar's armour around its projected
+## centre.
+const AVATAR_SEARCH_RADIUS := 70
+## Sample height on the avatar. The Knight stands ~2.28 units to the helmet's
+## top, so 1.2 is inside the plate torso rather than the old capsule's head.
+const SAMPLE_HEIGHT := 1.2
+
+## The armour is steel-blue rather than the capsule's bright blue, so the hunt
+## takes either a clear blue cast or a dark tone with blue pulling away from
+## green. The gap is what keeps the checker's own grey squares (b only 0.01
+## above green) from counting as armour.
+static func is_armour_pixel(colour: Color) -> bool:
+	if colour.b - colour.r > 0.10 and colour.b > colour.g:
+		return true
+	return colour.b > 0.25 and colour.r < 0.5 and colour.b - colour.g > 0.05
 
 var _failures: Array[String] = []
 
@@ -122,7 +133,7 @@ func _check_the_avatar_left_its_origin(avatar: PlayerAvatar) -> void:
 func _check_the_avatar_is_on_screen_where_the_walker_says(
 	image: Image, camera: Camera3D, avatar: PlayerAvatar
 ) -> void:
-	var head := avatar.global_position + Vector3(0.0, 0.9, 0.0)
+	var head := avatar.global_position + Vector3(0.0, SAMPLE_HEIGHT, 0.0)
 	_check(not camera.is_position_behind(head), "the avatar is in front of the camera")
 	var centre := camera.unproject_position(head)
 
@@ -130,12 +141,12 @@ func _check_the_avatar_is_on_screen_where_the_walker_says(
 	for dy in range(-AVATAR_SEARCH_RADIUS, AVATAR_SEARCH_RADIUS + 1, 3):
 		for dx in range(-AVATAR_SEARCH_RADIUS, AVATAR_SEARCH_RADIUS + 1, 3):
 			var colour := _pixel(image, centre + Vector2(dx, dy))
-			if colour.b - colour.r > AVATAR_BLUE_MARGIN and colour.b > colour.g:
+			if is_armour_pixel(colour):
 				blue_pixels += 1
 	_check(
 		blue_pixels > 20,
 		(
-			"the avatar's blue is on screen at its projected position (%d blue samples near %v)"
+			"the avatar's armour is on screen at its projected position (%d armour samples near %v)"
 			% [blue_pixels, centre]
 		),
 	)

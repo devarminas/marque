@@ -42,6 +42,13 @@ extends StaticBody3D
 ## Typed by [code]preload[/code] rather than by global [code]class_name[/code],
 ## per NOTES.md, "Godot authoring traps".
 
+## A kind's real art, when it exists, as a scene whose [code]Model[/code] child
+## replaces the box. Authored, not built in script (CLAUDE.md, "Scene authoring").
+## A kind absent here draws the box with the materials below.
+const KIND_SCENES := {
+	"axe": preload("res://scenes/ground_item_axe.tscn"),
+}
+
 ## The kinds this client has art for. **M1d** moved the list to its own file
 ## because the inventory panel draws the same kinds this body does, and two
 ## copies could disagree about one of them.
@@ -73,6 +80,29 @@ var kind := ""
 
 ## Drawn for anything else. Magenta is missing-asset (NOTES.md).
 @export var unknown_material: StandardMaterial3D
+
+## The kind's real art, instanced in [method _ready] when [constant KIND_SCENES]
+## has an entry for [member kind]; null when the box is the drawing.
+var _model: Node3D = null
+
+
+## Swaps the authored box out for the kind's art, after [method configure].
+##
+## Runs here rather than in [method configure] because a body is configured
+## before it is parented (`session.gd` does both in that order), and _ready is
+## the one hook that always runs after that sequence, once per body.
+func _ready() -> void:
+	if kind == "" or not KIND_SCENES.has(kind):
+		return
+	var scene: PackedScene = KIND_SCENES[kind]
+	var model := scene.instantiate() as Node3D
+	if model == null:
+		push_error("GroundItem: the art scene for kind \"%s\" did not instantiate" % kind)
+		return
+	model.name = "Model"
+	add_child(model)
+	mesh.visible = false
+	_model = model
 
 
 ## Binds this body to an item id and a kind, and picks which material it draws.
@@ -129,12 +159,41 @@ func display_color() -> Color:
 	return material.albedo_color
 
 
+## True when this body draws the kind's real art rather than the box.
+##
+## The colour question is meaningless for textured art, so [method
+## display_color] is only meaningful for box kinds; callers ask this first.
+func has_model() -> bool:
+	return _model != null
+
+
 ## The body's extent in its own space.
 ##
 ## Exists so that "an item is not shaped like a player" is a checkable claim and
 ## not only a thing a screenshot shows. A player capsule is 1.8 units tall; this
 ## is a fraction of that.
+##
+## For a modelled kind this is the art's own AABB, including the scene lift
+## that puts it on the ground; the box path reads the mesh as before.
 func local_bounds() -> AABB:
+	if _model != null:
+		var bounds := AABB()
+		var found := false
+		for node in _model.find_children("*", "MeshInstance3D", true, true):
+			var mesh_instance := node as MeshInstance3D
+			if mesh_instance.mesh == null:
+				continue
+			var local := mesh_instance.transform
+			var up := mesh_instance.get_parent()
+			while up != _model and up is Node3D:
+				local = (up as Node3D).transform * local
+				up = up.get_parent()
+			var mesh_bounds := local * mesh_instance.mesh.get_aabb()
+			bounds = mesh_bounds if not found else bounds.merge(mesh_bounds)
+			found = true
+		if found:
+			return _model.transform * bounds
+		push_error('GroundItem: kind "%s" has a model with no meshes; falling back to the box' % kind)
 	if mesh == null:
 		return AABB()
 	return mesh.transform * mesh.get_aabb()
