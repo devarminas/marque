@@ -63,3 +63,5 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
 - [Two clients race for one item](./contested-pickup.md) — the M1 milestone: one item,
   two clicks on the same server tick, exactly one winner; plus the drop and the
   `item_spawned` coordinates nothing else in this repo asserts.
+- [Equip the join-kit axe](./equip-axe.md) — the M3 milestone: open equipment on
+  the left, equip the seeded axe, see it in the weapon slot, unequip back to the bag.

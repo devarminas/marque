@@ -37,7 +37,9 @@ const SessionScript := preload("res://scripts/session.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const NetClientScript := preload("res://scripts/net_client.gd")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
+const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const PickupDemoScript := preload("res://scripts/pickup_demo.gd")
+const EquipDemoScript := preload("res://scripts/equip_demo.gd")
 
 ## One capture to [constant SCREENSHOT_PATH], then quit. M0c's visual check.
 const SCREENSHOT_FLAG := "--screenshot"
@@ -99,6 +101,10 @@ const PICKUP_SHOTS_FLAG := "--pickup-shots"
 ## somewhere that is neither the origin nor where the item was picked up.
 const DROP_CLICK_FLAG := "--drop-click"
 
+## Three captures around equip and unequip, written to `<prefix>_1.png` through
+## `<prefix>_3.png`. **M3d**, the milestone.
+const EQUIP_SHOTS_FLAG := "--equip-shots"
+
 ## How many phases the demo runs. One per client.
 const DEMO_PHASES := 2
 
@@ -156,6 +162,9 @@ func _ready() -> void:
 	_feed_scripted_frames(args)
 	if PICKUP_SHOTS_FLAG in args:
 		await _run_pickup_demo(args)
+		return
+	if EQUIP_SHOTS_FLAG in args:
+		await _run_equip_demo(args)
 		return
 	if SHOTS_FLAG in args:
 		await _run_demo(args)
@@ -258,6 +267,27 @@ func _run_pickup_demo(args: Array) -> void:
 
 	var demo := PickupDemoScript.new()
 	var code: int = await demo.run(self, session, panel, prefix, _parse_fraction(drop_click))
+	get_tree().quit(code)
+
+
+## The equip milestone, from this client's side. **M3d.**
+func _run_equip_demo(args: Array) -> void:
+	var prefix := _argument_after(args, EQUIP_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % EQUIP_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+
+	var session := get_node_or_null("Session") as SessionScript
+	var inventory := get_node_or_null("UI/InventoryPanel") as InventoryPanelScript
+	var equipment := get_node_or_null("UI/EquipmentPanel") as EquipmentPanelScript
+	if session == null or inventory == null or equipment == null:
+		push_error("main.tscn is missing Session, UI/InventoryPanel, or UI/EquipmentPanel")
+		get_tree().quit(1)
+		return
+
+	var demo := EquipDemoScript.new()
+	var code: int = await demo.run(self, session, inventory, equipment, prefix)
 	get_tree().quit(code)
 
 
