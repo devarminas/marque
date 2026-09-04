@@ -131,7 +131,11 @@ set of the numbers it has seen.
 - **A `seq` that is 0, negative, fractional, or not a number is a `malformed_json` refusal**
   carrying `re`, and the connection is kept. Zero is refused rather than read as absent: a client
   that computed a sequence number and got zero has a bug, and the server should name it rather
-  than quietly downgrade the frame to unsequenced.
+  than quietly downgrade the frame to unsequenced. `5.0` and `1e2` are refused too, for a reason
+  that is about the literal rather than the value; the *Decoding notes* say what a client must do
+  about it.
+- **`"seq":null` reads as absent**, and is the one leniency here. It costs nothing, it is what a
+  serialiser emitting an unset optional produces, and there is no second meaning it could have.
 - **`last_seq` is per player, not per connection.** It is 0 at a fresh join, it survives
   suspension and resume because the player does (see *When the connection dies*), and it dies
   with the player.
@@ -868,6 +872,12 @@ a GDScript client will get it subtly wrong.
   Convert with `int(...)` before comparing it to the number you last sent. A client resuming its
   numbering from `float` arithmetic will be right for far longer than this project runs and wrong
   in the one way that is hard to see coming.
+- **A `seq` you send must be written as a JSON integer literal.** `5`, never `5.0`. Measured
+  against Go's `encoding/json` on 2026-09-04: unmarshalling into an integer field rejects `5.0`,
+  `1e2` and `"7"` outright, so a client that stringifies a whole number as a float sends a frame
+  this server refuses as `malformed_json`. The value being integral is not enough; the literal
+  has to be one. Keep the counter a GDScript `int`, which stringifies correctly, rather than a
+  `float` that happens to hold a whole number.
 - **Coordinates have two encodings, deliberately.** `welcome.players[]` and `spawn` use
   `{"id":..,"x":..,"z":..}` because they carry an id. `path.points` uses `[[x,z],...]` because
   an array is materially smaller for a polyline. So a client writes `Vector2(d.x, d.z)` in one
