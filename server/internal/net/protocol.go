@@ -119,18 +119,24 @@ type ServerMessage interface{ isServerMessage() }
 // numbering got to; it therefore carries no omitempty and rides in every
 // welcome, including as 0.
 //
+// HeartbeatTicks is the interval, in ticks, at which this server will send
+// Tick. It is on the wire so the client uses the number it is told, never a
+// second copy (PROTOCOL.md, "Clock"). Zero is omitted and means liveness is
+// off, which is what every server before M2d said.
+//
 // Neither array carries omitempty, so an empty world encodes as "players":[]
 // and "items":[] rather than dropping the key. Both must be handed to Encode
 // non-nil: encoding/json writes a nil slice as null, and a client should not
 // have to distinguish three spellings of "nothing there".
 type Welcome struct {
-	You     PlayerID      `json:"you"`
-	Session string        `json:"session"`
-	LastSeq Seq           `json:"last_seq"`
-	TickMS  int           `json:"tick_ms"`
-	Tick    int64         `json:"tick"`
-	Players []PlayerState `json:"players"`
-	Items   []ItemState   `json:"items"`
+	You            PlayerID      `json:"you"`
+	Session        string        `json:"session"`
+	LastSeq        Seq           `json:"last_seq"`
+	TickMS         int           `json:"tick_ms"`
+	Tick           int64         `json:"tick"`
+	HeartbeatTicks int           `json:"heartbeat_ticks,omitempty"`
+	Players        []PlayerState `json:"players"`
+	Items          []ItemState   `json:"items"`
 }
 
 // Spawn announces a player who just joined. Broadcast to everyone except the
@@ -204,6 +210,16 @@ type Inventory struct {
 	Slots []InventorySlot `json:"slots"`
 }
 
+// Tick is the server's clock heartbeat. Broadcast to every connected player
+// at the top of a tick that is a multiple of the period welcome named as
+// heartbeat_ticks.
+//
+// T is the tick being stepped. A reader aligns it against arrived.t and
+// start_tick by arithmetic. There is no log line for this message.
+type Tick struct {
+	T int64 `json:"t"`
+}
+
 func (Welcome) isServerMessage()     {}
 func (Spawn) isServerMessage()       {}
 func (Despawn) isServerMessage()     {}
@@ -212,6 +228,7 @@ func (Error) isServerMessage()       {}
 func (ItemSpawn) isServerMessage()   {}
 func (ItemDespawn) isServerMessage() {}
 func (Inventory) isServerMessage()   {}
+func (Tick) isServerMessage()        {}
 
 // ClientMessage is one message a client can send. Clients send intents, never
 // facts (CLAUDE.md, "Architecture invariants").
@@ -278,6 +295,7 @@ type serverEnvelope struct {
 	ItemSpawn   *ItemSpawn   `json:"item_spawn,omitempty"`
 	ItemDespawn *ItemDespawn `json:"item_despawn,omitempty"`
 	Inventory   *Inventory   `json:"inventory,omitempty"`
+	Tick        *Tick        `json:"tick,omitempty"`
 }
 
 // Encode renders one server message as a single WebSocket text frame payload.
@@ -304,6 +322,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.ItemDespawn = &v
 	case Inventory:
 		env.Inventory = &v
+	case Tick:
+		env.Tick = &v
 	default:
 		return nil, fmt.Errorf("net: encode: unhandled server message %T", m)
 	}

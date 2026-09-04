@@ -13,9 +13,9 @@ names the unit that discharges it. A marker reading plain **M2** is still reserv
 writing it. A marker naming a unit and marked *shipped* is implemented and on the wire, exactly
 as an **M1** marker is. A marker naming a unit without that mark is somebody's live contract.
 
-**M2a**, **M2b** and **M2c** are shipped. The three-way form above replaces a sentence that listed
-the live units by name, which put every later unit in the position of editing a status line that
-was about somebody else.
+**M2a**, **M2b**, **M2c** and **M2d** are shipped. The named-and-shipped form replaces a sentence
+that listed the live units by name, which put every later unit in the position of editing a
+status line that was about somebody else.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -79,17 +79,26 @@ now>`. Thereafter:
 stalled window stops producing frames, and a frame-delta clock would then fall permanently
 behind with nothing to correct it. Anchoring to a monotonic clock survives the pause.
 
-The client's estimate necessarily lags the server by roughly one-way latency, so a freshly
-arrived `path` can carry a `start_tick` in the client's perceived future. **Elapsed time since
-`start_tick` is clamped at zero**; a negative elapsed means "has not started yet", not
-"rewind".
+A `welcome`-anchored estimate lags the server by one-way latency plus a per-client phase term
+uniform in `[0, tick_ms)`, because `welcome` is composed on the event arm of `Run`, anywhere
+inside a tick. A heartbeat-anchored estimate has no phase term, because that frame is composed
+at the top of `step`. What remains is one-way latency plus the client's poll quantisation.
 
-**M2d.** A periodic `{"tick":{"t":N}}` heartbeat for drift correction and liveness. Reserved,
-not sent in M0 or M1. Rule 1 above is what makes adding it free.
+The first heartbeat after `welcome` therefore corrects a client by `+1` in almost every
+session. Two clients reading the same tick number are not reading it at the same instant until
+a heartbeat has anchored both.
 
-**The client's half of it is specified below and is implemented (M2c).** Until M2d lands no
-server emits `tick` at all, which is why every rule below has to keep working against a server
-that never sends one.
+A freshly arrived `path` can still carry a `start_tick` in the client's perceived future.
+**Elapsed time since `start_tick` is clamped at zero**; a negative elapsed means "has not
+started yet", not "rewind".
+
+**M2d, shipped.** The server broadcasts `{"tick":{"t":N}}` at the top of every tick for which
+`t % heartbeat_ticks == 0`. `t` is the tick being stepped, so a reader can align heartbeats
+against `arrived.t` and `start_tick` by arithmetic. `welcome.heartbeat_ticks` carries the
+period, for `inventory.size`'s reason: the client uses the number it is told, never a second
+copy. There is no log line per heartbeat.
+
+The client's half is specified below and was implemented in **M2c**.
 
 ### Receiving `tick`. **M2c.**
 
@@ -300,6 +309,18 @@ says about the receiving client, and everything else in it is the world. A pre-M
 it under compatibility rule 2 and is exactly as correct as it was before, because a client that
 never sends a `seq` is never deduped.
 
+**M2d** adds `heartbeat_ticks`, the interval in ticks at which this server will send `tick`:
+
+    {"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":0,
+                "tick_ms":150,"tick":142,"heartbeat_ticks":10,
+                "players":[{"id":1,"x":0.0,"z":0.0}],
+                "items":[]}}
+
+The client uses the number it is told, never a second copy, which is why `inventory.size` is on
+the wire too. **Absent, zero, or unreadable means liveness is off**, which is what every server
+before M2d said. This server always sends `10`. A pre-M2d client ignores the field under
+compatibility rule 2.
+
 **M1** adds a sibling array, `items`, listing every item lying on the ground as of the same
 tick:
 
@@ -394,6 +415,17 @@ need it, after a client walker had already been built assuming paths always run 
 The client walker still treats a zero-length segment as instantly complete, because two
 defenses cost nothing and a divide by zero length produces a NaN position that is painful to
 trace.
+
+### `tick`. **M2d**
+
+    {"tick":{"t":10}}
+
+The server's clock heartbeat. Broadcast to every connected player at the top of a tick that is
+a multiple of the period `welcome` named as `heartbeat_ticks`. `t` is that tick. A suspended
+player is sent nothing.
+
+There is no log line for this message. Alignment against `arrived.t` and `start_tick` is
+arithmetic on `t`.
 
 ### `item_spawn` / `item_despawn`. **M1**
 
@@ -670,9 +702,9 @@ the description had to be corrected once already by a probe against a real stall
 semantics that depends on winning a race we do not control is a semantics that will be wrong
 again. Classifying and latching does not depend on it at all.
 
-Revisitable when **M2d** adds a heartbeat, which changes the traffic rate this section measured and
-therefore changes which detector ordinarily fires. It does not change which reason is reported,
-which is the point.
+**M2d** adds one frame per 1.5 s per client. That is far below the thirteen frames per second at
+which the queue detector was measured to win, so the timeout branch stays the ordinary
+detector. Nothing here re-measures it.
 
 **The vocabulary, complete. M1f, shipped; `refused` added by M2a.** Six reasons and four
 details. A reason is a cause;
@@ -975,8 +1007,6 @@ Named so nobody adds them thinking they were forgotten.
   acknowledgement message. `welcome.last_seq` is a cumulative restatement and stands in for one,
   which is enough for every client that does not replay, and no client replays. **Revisitable**
   the first time one does. See *Sequence numbers*.
-- No heartbeat on the wire. **M2d.** The client's side of `tick` is specified under *Clock* and
-  implemented (M2c); nothing sends one yet.
 - No authentication behind the session token. **M2a** makes a connection able to prove which
   player it was, and nothing more: a token is a bearer credential over a plaintext socket, so
   anyone who can read the wire can resume as you. That is the same standard as the ids above,

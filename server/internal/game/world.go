@@ -79,6 +79,14 @@ const MinPathLength = 1e-3
 // Linear as ARM-58.
 const ResumeGraceTicks = 400
 
+// HeartbeatEveryTicks is how often the server broadcasts {"tick":{"t":N}},
+// in ticks. Ten is 1.5 s at 150 ms. A number, parked in FOLLOW-UPS.md.
+//
+// The period is also sent on every welcome as heartbeat_ticks. The client
+// uses the number it is told and must not keep a second copy (PROTOCOL.md,
+// "Clock").
+const HeartbeatEveryTicks = 10
+
 // Spawn point. Everyone enters the world at the origin; M0 has no collision, so
 // stacking is free. Revisitable once there is a map with a sensible entrance.
 const (
@@ -373,9 +381,9 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		log:         log,
 		items:       store,
 		resumeGrace: resumeGrace,
-		players:   make(map[mnet.PlayerID]*player),
-		byConn:    make(map[*mnet.Conn]*player),
-		bySession: make(map[string]*player),
+		players:     make(map[mnet.PlayerID]*player),
+		byConn:      make(map[*mnet.Conn]*player),
+		bySession:   make(map[string]*player),
 	}
 }
 
@@ -441,6 +449,9 @@ func (w *World) stepAll(owed *time.Duration) {
 // harder reason: it removes players from w.order.
 func (w *World) step() {
 	w.tick++
+	if w.tick%HeartbeatEveryTicks == 0 {
+		w.broadcast(mnet.Tick{T: w.tick}, nil)
+	}
 	distance := WalkSpeed * TickDuration.Seconds()
 
 	for _, p := range w.order {
@@ -605,13 +616,14 @@ func (w *World) sendJoinStep(p *player) {
 		states = append(states, mnet.PlayerState{ID: other.id, X: other.pos.X, Z: other.pos.Z})
 	}
 	w.send(p, mnet.Welcome{
-		You:     p.id,
-		Session: p.session,
-		LastSeq: p.lastSeq,
-		TickMS:  int(TickDuration.Milliseconds()),
-		Tick:    w.tick,
-		Players: states,
-		Items:   w.groundItemStates(),
+		You:            p.id,
+		Session:        p.session,
+		LastSeq:        p.lastSeq,
+		TickMS:         int(TickDuration.Milliseconds()),
+		Tick:           w.tick,
+		HeartbeatTicks: HeartbeatEveryTicks,
+		Players:        states,
+		Items:          w.groundItemStates(),
 	})
 
 	// Everyone already mid-walk is described to the newcomer with an ordinary
