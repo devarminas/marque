@@ -31,7 +31,7 @@ const TICK_MS := 150
 ## [code]test_heartbeat.gd[/code] gives: headless Godot runs uncapped, so a
 ## wall-clock wait costs a machine-dependent number of the runner's watchdog
 ## frames unless one is pinned. Restored when the suite ends.
-const MAX_FPS := 20
+const MAX_FPS := 10
 
 
 class Client:

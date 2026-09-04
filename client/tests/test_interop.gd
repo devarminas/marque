@@ -78,6 +78,10 @@ const ARRIVAL_WAIT_MSEC := 800
 ## that C's replayed path is re-anchored somewhere strictly along the segment
 ## rather than still at its origin.
 const MIDWALK_WAIT_MSEC := 450
+## Wall-clock milliseconds to let the server read an abandoned socket. **M2c.**
+## Several ticks and a loopback round trip, which is all it needs; the assertion
+## that follows is that nothing arrived, so this is how long "nothing" means.
+const ABANDON_SETTLE_MSEC := 500
 
 
 ## One connected client and everything it has heard.
@@ -818,6 +822,13 @@ func _test_leaving_client_produces_a_despawn(a: Peer, b: Peer, c: Peer) -> void:
 ## prints the id to look it up by, and asserts everything the client can see;
 ## the reason itself is read from the log.
 ##
+## [b]Nothing client-visible happens, and that is the assertion.[/b] Under M2a a
+## `peer_gone` player is suspended rather than removed, so the survivors are
+## told nothing at all: no `despawn` arrives, because the player has not left.
+## This function waited for one until M2a merged, and the wait timed out —
+## correctly. A `despawn` here would mean the abrupt death had been treated as a
+## logout, which is the whole distinction this probe exists to draw.
+##
 ## Every other client in this suite closes cleanly, so the line for this id is
 ## the only one that may say `peer_gone`.
 func _test_an_abandoned_socket_is_not_a_logout(url: String, a: Peer, b: Peer) -> void:
@@ -844,19 +855,21 @@ func _test_an_abandoned_socket_is_not_a_logout(url: String, a: Peer, b: Peer) ->
 		"and reports no close code, because no close frame was sent (got %d)" % x.close_code,
 	)
 
-	# The server noticing is the half that matters. Until it does, "abandoned"
-	# is indistinguishable from "still connected and quiet".
-	if not await _wait_until(
-		func() -> bool: return (
-			a.despawns.size() > a_despawns_before and b.despawns.size() > b_despawns_before
-		),
-		"the server to notice the abandoned socket",
-	):
-		return
+	# Long enough for a loopback round trip and several server ticks, which is
+	# all the time the server needs to read the dead socket. A bounded wait
+	# rather than a predicate: what is being asserted is that nothing arrives,
+	# and there is no event to wait for.
+	await _wait_msec(ABANDON_SETTLE_MSEC)
 	_check(
-		a.despawns[-1] == x_id and b.despawns[-1] == x_id,
-		"both survivors are told player %d left, got %s and %s"
-		% [x_id, a.despawns, b.despawns],
+		a.despawns.size() == a_despawns_before and b.despawns.size() == b_despawns_before,
+		(
+			"no despawn for the abandoned player %d: peer_gone suspends, it does not"
+			+ " remove (A %s, B %s)"
+		) % [x_id, a.despawns, b.despawns],
+	)
+	_check(
+		a.net.is_open() and b.net.is_open(),
+		"and the survivors' own connections are untouched",
 	)
 
 

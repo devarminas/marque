@@ -40,12 +40,11 @@ const HEARTBEAT_TICKS := 2
 ##
 ## Everything below measures silence in wall-clock milliseconds, and headless
 ## Godot runs uncapped at around 146 fps on this machine (NOTES.md, "Godot
-## authoring traps"). Uncapped, the two-second wait below would cost close to
-## three hundred frames of the runner's watchdog budget to prove one thing.
-## Capped at 20 it costs forty, and a 50 ms frame still resolves a 900 ms
-## deadline to well inside the slack asserted for it. Restored when the suite
-## ends.
-const MAX_FPS := 20
+## authoring traps"). Uncapped, the waits below would cost several hundred
+## frames of the runner's watchdog budget to prove one thing. Capped at 10 they
+## cost about thirty, and a 100 ms frame still resolves a 900 ms deadline to
+## well inside the slack asserted for it. Restored when the suite ends.
+const MAX_FPS := 10
 
 ## How long the two liveness windows are watched, in milliseconds. Comfortably
 ## past the armed client's 900 ms window and long enough that the unarmed one
@@ -55,7 +54,7 @@ const WATCH_MSEC := 2000
 ## Slack allowed above the liveness window before the abandonment is late.
 ##
 ## The session checks its deadline once per frame, so it can never fire early
-## and fires within one frame of the deadline on an idle machine. This is five
+## and fires within one frame of it on an idle machine. This is two and a half
 ## frames at [constant MAX_FPS], which absorbs a stalled frame without being
 ## wide enough to hide a window computed from the wrong numbers: the nearest
 ## wrong answers are 450 ms and 1800 ms.
