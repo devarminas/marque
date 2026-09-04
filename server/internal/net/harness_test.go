@@ -104,9 +104,14 @@ func acornAt(x, z float64) seed { return seed{kind: game.KindAcorn, x: x, z: z} 
 // newHarness boots hub, world, and HTTP server exactly the way cmd/marqued
 // does, seeds any items it was given, and tears everything down in the same
 // order marqued does.
+//
+// Its joining players carry nothing, which is what every test written before
+// M3a assumes and what keeps a bag index in one of them meaning what its author
+// meant. The equipment tests use newHarnessWithKit and pass game.DefaultJoinKit,
+// which is the shipped configuration.
 func newHarness(t *testing.T, seeds ...seed) *harness {
 	t.Helper()
-	return newHarnessWithGrace(t, game.ResumeGraceTicks, seeds...)
+	return newHarnessWith(t, game.ResumeGraceTicks, nil, seeds...)
 }
 
 // newHarnessWithGrace is newHarness with the resume grace shortened, for the
@@ -117,10 +122,22 @@ func newHarness(t *testing.T, seeds ...seed) *harness {
 // resumes well inside it or never suspends at all.
 func newHarnessWithGrace(t *testing.T, grace int64, seeds ...seed) *harness {
 	t.Helper()
+	return newHarnessWith(t, grace, nil, seeds...)
+}
+
+// newHarnessWithKit is newHarness with a join kit, for the tests about what a
+// player is wearing and carrying.
+func newHarnessWithKit(t *testing.T, kit []string, seeds ...seed) *harness {
+	t.Helper()
+	return newHarnessWith(t, game.ResumeGraceTicks, kit, seeds...)
+}
+
+func newHarnessWith(t *testing.T, grace int64, kit []string, seeds ...seed) *harness {
+	t.Helper()
 
 	logs := &syncBuffer{}
 	hub := mnet.NewHub()
-	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore(), grace)
+	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore(), grace, kit)
 
 	// Before Run, which is the only time seeding is safe: after it, the world
 	// goroutine owns the store.
@@ -360,6 +377,7 @@ type frame struct {
 	ItemSpawn   *mnet.ItemSpawn   `json:"item_spawn"`
 	ItemDespawn *mnet.ItemDespawn `json:"item_despawn"`
 	Inventory   *mnet.Inventory   `json:"inventory"`
+	Equipment   *mnet.Equipment   `json:"equipment"`
 	Tick        *mnet.Tick        `json:"tick"`
 
 	raw string
@@ -387,6 +405,8 @@ func (f frame) kind() string {
 		return "item_despawn"
 	case f.Inventory != nil:
 		return "inventory"
+	case f.Equipment != nil:
+		return "equipment"
 	case f.Tick != nil:
 		return "tick"
 	default:
@@ -486,6 +506,16 @@ func (c *client) drop(slot int) {
 	c.sendRaw(fmt.Sprintf(`{"drop":{"slot":%d}}`, slot))
 }
 
+func (c *client) equip(slot int) {
+	c.t.Helper()
+	c.sendRaw(fmt.Sprintf(`{"equip":{"slot":%d}}`, slot))
+}
+
+func (c *client) unequip(worn mnet.EquipSlot) {
+	c.t.Helper()
+	c.sendRaw(fmt.Sprintf(`{"unequip":{"worn":%q}}`, worn))
+}
+
 func (c *client) next() frame {
 	c.t.Helper()
 
@@ -548,11 +578,12 @@ func (c *client) tryNext(within time.Duration) (frame, bool) {
 func (c *client) welcome() mnet.Welcome {
 	c.t.Helper()
 	got := c.welcomeFrame()
-	// The joining player's own inventory is the last frame of the atomic
-	// welcome step. A test that expects a path replay in between must read the
-	// step a frame at a time with welcomeFrame; everything else joins a world
-	// with nobody walking, where welcome and inventory are adjacent.
+	// The joining player's own inventory and then its equipment are the last two
+	// frames of the atomic welcome step. A test that expects a path replay in
+	// between must read the step a frame at a time with welcomeFrame; everything
+	// else joins a world with nobody walking, where the three are adjacent.
 	c.inventory()
+	c.equipment()
 	return got
 }
 
@@ -635,6 +666,22 @@ func (c *client) inventory() mnet.Inventory {
 func (c *client) awaitInventory() mnet.Inventory {
 	c.t.Helper()
 	return *c.awaitInventoryFrame().Inventory
+}
+
+func (c *client) equipment() mnet.Equipment {
+	c.t.Helper()
+	return *c.equipmentFrame().Equipment
+}
+
+// equipmentFrame is equipment keeping the raw JSON, for the assertions that are
+// about the encoding rather than the values.
+func (c *client) equipmentFrame() frame {
+	c.t.Helper()
+	f := c.next()
+	if f.Equipment == nil {
+		c.t.Fatalf("client %s: got a %s frame, want equipment: %s", c.name, f.kind(), f.raw)
+	}
+	return f
 }
 
 // awaitInventoryFrame is awaitInventory keeping the raw JSON, for the

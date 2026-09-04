@@ -102,6 +102,22 @@ const (
 	EvDrop = "drop"
 
 	EvDropRejected = "drop_rejected"
+
+	// EvJoinSeeded is one item of the join kit placed in a joining player's bag.
+	// It is not an EvItemSpawned: nothing entered the world and no id was minted
+	// (PROTOCOL.md, "The join kit").
+	EvJoinSeeded = "join_seeded"
+
+	// EvEquip is one completed equip, logged after the move. "displaced" is
+	// present only when a swap put something back in the bag.
+	EvEquip = "equip"
+
+	EvEquipRejected = "equip_rejected"
+
+	// EvUnequip is one completed unequip, logged after the move.
+	EvUnequip = "unequip"
+
+	EvUnequipRejected = "unequip_rejected"
 )
 
 // Transport is the world's view of the network: a stream of connection events.
@@ -154,6 +170,8 @@ type World struct {
 
 	resumeGrace int64
 
+	joinKit []string
+
 	players map[mnet.PlayerID]*player
 
 	byConn map[*mnet.Conn]*player
@@ -164,9 +182,14 @@ type World struct {
 }
 
 // NewWorld returns an empty world reading intents from transport and keeping
-// items in store, holding a suspended player for resumeGrace ticks. resumeGrace
-// must be at least 1, and the store must be used by nobody else.
-func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace int64) *World {
+// items in store, holding a suspended player for resumeGrace ticks and giving
+// every joining player one item per kind in joinKit. resumeGrace must be at
+// least 1, joinKit may be empty, and the store must be used by nobody else.
+//
+// The kit is a parameter rather than a constant for resumeGrace's reason: it is
+// a tunable, and a test that wants a world whose joining players carry nothing
+// is asking about the rest of the game rather than about the kit.
+func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace int64, joinKit []string) *World {
 	if transport == nil {
 		panic("game: nil transport")
 	}
@@ -181,6 +204,7 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		log:         log,
 		items:       store,
 		resumeGrace: resumeGrace,
+		joinKit:     joinKit,
 		players:     make(map[mnet.PlayerID]*player),
 		byConn:      make(map[*mnet.Conn]*player),
 		bySession:   make(map[string]*player),
@@ -336,6 +360,7 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		"remote": conn.Remote(),
 	})
 
+	w.seedJoinKit(p)
 	w.sendJoinStep(p)
 	w.broadcast(mnet.Spawn{ID: p.id, X: p.pos.X, Z: p.pos.Z}, p)
 }
@@ -368,6 +393,7 @@ func (w *World) sendJoinStep(p *player) {
 	}
 
 	w.sendInventory(p)
+	w.sendEquipment(p)
 }
 
 func suspends(reason string) bool {
@@ -476,6 +502,10 @@ func (w *World) handleFrame(ev mnet.Event) {
 		w.pickup(p, msg, ev.Seq)
 	case mnet.Drop:
 		w.drop(p, msg, ev.Seq)
+	case mnet.Equip:
+		w.equip(p, msg, ev.Seq)
+	case mnet.Unequip:
+		w.unequip(p, msg, ev.Seq)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -511,6 +541,10 @@ func rejectionEvent(re string) string {
 		return EvPickupRejected
 	case mnet.MsgDrop:
 		return EvDropRejected
+	case mnet.MsgEquip:
+		return EvEquipRejected
+	case mnet.MsgUnequip:
+		return EvUnequipRejected
 	default:
 		panic(fmt.Sprintf("game: no rejection event for %q", re))
 	}

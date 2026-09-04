@@ -16,9 +16,10 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// TestTheJoinStepSendsEmptyListsAsArrays covers the two frames that matter most,
-// because every single join sends both of them: the welcome of a world with no
-// items, and the first inventory of a player holding nothing.
+// TestTheJoinStepSendsEmptyListsAsArrays covers the three frames that matter
+// most, because every single join sends all of them: the welcome of a world with
+// no items, the first inventory of a player holding nothing, and the first
+// equipment of a player wearing nothing.
 //
 // A Go nil slice marshals as null, silently. A strict client reading
 // "items":null as "not an array" drops the whole frame, and for welcome that
@@ -43,6 +44,17 @@ func TestTheJoinStepSendsEmptyListsAsArrays(t *testing.T) {
 		t.Errorf("a fresh player's inventory encodes as %s, want it to carry \"slots\":[]", inv.raw)
 	}
 	assertNoNulls(t, "inventory", inv.raw)
+
+	// M3a's frame, and the one where an empty list is the ordinary case rather
+	// than the edge: a joining player is wearing nothing, every time.
+	worn := alice.equipmentFrame()
+	if !strings.Contains(worn.raw, `"slots":[]`) {
+		t.Errorf("a fresh player's equipment encodes as %s, want it to carry \"slots\":[]", worn.raw)
+	}
+	if !strings.Contains(worn.raw, `"worn":["`) {
+		t.Errorf("equipment encodes as %s, want \"worn\" to be an array of slot names", worn.raw)
+	}
+	assertNoNulls(t, "equipment", worn.raw)
 }
 
 // TestNoFrameOfASessionCarriesANull is the same rule applied to every list the

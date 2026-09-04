@@ -24,7 +24,7 @@ type heartbeatPeer struct {
 func newHeartbeatWorld(t *testing.T) (*World, *httptest.Server, *mnet.Hub) {
 	t.Helper()
 	hub := mnet.NewHub()
-	w := NewWorld(hub, gamelog.New(&strings.Builder{}, true), NewMemoryStore(), ResumeGraceTicks)
+	w := NewWorld(hub, gamelog.New(&strings.Builder{}, true), NewMemoryStore(), ResumeGraceTicks, nil)
 	srv := httptest.NewServer(hub)
 	t.Cleanup(func() {
 		hub.Close()
