@@ -35,6 +35,9 @@ const CHANNEL_EPSILON := 0.25
 ## player has to be well under that, and this is the number the screenshot
 ## criterion is really asserting.
 const MAX_ITEM_HEIGHT := 1.0
+## The axe model stands ~1.24 units tall on its rest lift. Still far under a
+## player, but taller than the box, so it gets its own bound.
+const MAX_MODEL_HEIGHT := 1.3
 
 @onready var _world: Node3D = $World
 
@@ -79,6 +82,7 @@ func _ready() -> void:
 	_test_item_spawn_is_idempotent()
 	_test_item_despawn()
 	await _test_an_unknown_kind_is_magenta()
+	_test_an_axe_draws_its_model()
 	_test_a_malformed_item_frame_changes_nothing()
 	_test_a_second_welcome_frees_items_as_well_as_players()
 	_test_welcome_without_items()
@@ -283,6 +287,47 @@ func _test_an_unknown_kind_is_magenta() -> void:
 		)
 
 	_feed('{"item_despawn":{"id":21}}')
+
+
+## The one kind with real art: the box is hidden and the GLTF model stands in
+## its place, resting on the ground. The click target is not touched, so the
+## picker still resolves a click to the 0.5-unit box the scene authors.
+func _test_an_axe_draws_its_model() -> void:
+	_feed('{"item_spawn":{"id":61,"kind":"axe","x":-3.0,"z":1.0}}')
+	var axe: GroundItemScript = _session.item_for(61)
+	if not _check(axe != null, "an axe kind gets a body"):
+		return
+	_check(axe.has_model(), "which draws the axe model, not the box")
+	_check(
+		axe.get_node_or_null("Model") != null,
+		"as a Model child, instanced from an authored scene",
+	)
+	var box := axe.get_node_or_null("Mesh") as MeshInstance3D
+	_check(box != null and not box.visible, "and hides the box while the model stands in")
+	_check(
+		axe.get_node_or_null("CollisionShape3D") != null,
+		"while the collision shape is untouched",
+	)
+
+	var bounds := axe.local_bounds()
+	_check(
+		bounds.size.y < MAX_MODEL_HEIGHT,
+		"the axe is far shorter than a 1.8-unit player, got %f" % bounds.size.y,
+	)
+	_check(
+		bounds.position.y >= -EXACT_EPSILON,
+		"and rests on the ground rather than sinking into it, got %f" % bounds.position.y,
+	)
+
+	# The axe is a KNOWN kind, so its box path would have drawn green. With the
+	# model standing in, display_color reads the hidden box and means nothing;
+	# the colour story stays honest only if callers are told to ask has_model().
+	_check(
+		axe.is_kind_known(),
+		"the axe is a known kind, so its colour question must be asked through has_model()",
+	)
+
+	_feed('{"item_despawn":{"id":61}}')
 
 
 ## PROTOCOL.md, "Compatibility": the client drops the single offending frame and
