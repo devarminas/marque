@@ -4,8 +4,9 @@ When a client's connection ends the server logs `client_disconnected` with one `
 whichever the hub reported. **Whether everyone else sees that player vanish now depends on
 that reason.** A clean close removes the body at once. A socket that simply died leaves the
 body standing for sixty seconds first, so that the same player can come back to it. A client
-whose own socket died freezes the world it has and logs loudly: the shipped client has no
-reconnect, so it neither clears the world nor pretends.
+whose own socket died freezes the world it has, logs loudly, and reconnects: it presents
+the last `welcome.session` on the next URL and rebuilds from the second `welcome`. It does
+not clear the world between attempts.
 
 **Since M2a the timing is the trap in this whole feature.** The shipped Godot client dies
 abruptly rather than closing, so the despawn a human is waiting for is a minute away, and an
@@ -22,8 +23,9 @@ before driving any of this.
   the body keeps walking, keeps its inventory, and finishes a pending pickup.
 - `leave-expire` — the grace runs out, `player_expired` is logged, and the despawn goes out
   then.
-- `leave-freeze` — a client that lost the server keeps its last world, frozen, and
-  logs loudly rather than clearing.
+- `leave-freeze` — a client that lost the server keeps its last world, frozen, logs
+  loudly, and reconnects. Freeze ends on a successful resume. A close frame is
+  logout and does not reconnect.
 
 ## How to get to it (user POV)
 
@@ -61,9 +63,11 @@ Preconditions:
 
   **The 400-tick grace is not a constant to trust from here.** `marqued` reports it as
   `resume_grace` on its `server_started` line; read it from the run.
-- **Freeze, not clear.** Stop the *server* by PID while a client is connected.
-  Assert the client logs the dead socket loudly and its world stays drawn (the
-  other capsule remains on screen), rather than emptying.
+- **Freeze, then reconnect.** Stop the *server* by PID while a client is connected.
+  Assert the client logs the dead socket loudly, its world stays drawn (the
+  other capsule remains on screen), and it begins reconnect attempts with backoff
+  rather than emptying. Start the server again on the same URL and assert the
+  client comes back as itself. A clean close still does not reconnect.
 
 ## Gotchas
 

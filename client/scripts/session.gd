@@ -68,6 +68,11 @@ const SERVER_ARG := "--server"
 ## (`PROTOCOL.md`, "Clock").
 const LIVENESS_HEARTBEATS := 3
 
+## First reconnect wait after the socket dies (`PROTOCOL.md`, "Clock").
+const RECONNECT_BACKOFF_START_MSEC := 500
+## Cap of the doubling backoff (`PROTOCOL.md`, "Clock").
+const RECONNECT_BACKOFF_CAP_MSEC := 5000
+
 ## Emitted once `welcome` has been applied: the clock is anchored, this client
 ## knows its own id, and every player the server listed has a body.
 signal joined(you: int)
@@ -83,6 +88,16 @@ signal clock_corrected(delta: int, at_tick: int)
 ##
 ## [param silent_msec] is the configured window, not a measured elapsed time.
 signal server_unresponsive(silent_msec: int)
+
+## Emitted when a reconnect attempt is scheduled. [param delay_msec] is the wait
+## before the next [method connect_to_server], not a measured elapsed time.
+signal reconnect_scheduled(delay_msec: int)
+
+## Emitted when a second `welcome` names the same player this session already was.
+signal resumed(you: int)
+
+## Emitted when a `welcome` names a different player than this session held.
+signal identity_lost(was: int, now: int)
 
 ## Emitted whenever a ground click is forwarded as a `move_to`, whether or not
 ## the socket was open to carry it.
@@ -144,6 +159,11 @@ var _heartbeat_ticks := 0
 ## liveness timer is armed.
 var _liveness_deadline_msec := 0
 var _connection_over := false
+var _base_url := ""
+var _token := ""
+var _backoff_steps := 0
+var _reconnect_at_msec := 0
+var _logout_requested := false
 ## Player id to [code]player_avatar.gd[/code]. The local player is in here too,
 ## under its own id, pointing at the authored node.
 var _avatars := {}
@@ -198,13 +218,43 @@ func _ready() -> void:
 		connect_to_server(url)
 
 
-## Opens the connection. One connection per session, because reconnect is M2.
+## Opens the connection. After the socket dies this is called again with the
+## last `welcome.session` on the URL (`PROTOCOL.md`, "When the connection dies").
 func connect_to_server(url: String) -> Error:
 	if _net == null:
 		push_error("Session.connect_to_server: no net client")
 		return ERR_UNCONFIGURED
-	print("session: connecting to ", url)
-	return _net.connect_to_server(url)
+	_base_url = NetClientScript.url_with_session(url, "")
+	_logout_requested = false
+	_connection_over = false
+	_reconnect_at_msec = 0
+	_backoff_steps = 0
+	print("session: connecting to ", _base_url)
+	var status := _net.connect_to_server(url)
+	if status != OK:
+		_schedule_reconnect()
+	return status
+
+
+## Stops reconnecting and sends a close frame. Logout, not a dropped socket.
+func close() -> void:
+	_logout_requested = true
+	_reconnect_at_msec = 0
+	if _net != null:
+		_net.close()
+
+
+## `welcome.session` last applied, or "".
+func session_token() -> String:
+	return _token
+
+
+## The wait before reconnect attempt [param step], 0-based.
+static func reconnect_backoff_msec(step: int) -> int:
+	var n := maxi(step, 0)
+	if n > 30:
+		return RECONNECT_BACKOFF_CAP_MSEC
+	return mini(RECONNECT_BACKOFF_START_MSEC * (1 << n), RECONNECT_BACKOFF_CAP_MSEC)
 
 
 ## This client's own player id, or 0 before `welcome`.
@@ -335,6 +385,11 @@ func _on_welcomed(
 		push_error("session: welcome ids and positions disagree in length; ignoring the frame")
 		return
 
+	var previous_you := _you
+	var token := ""
+	if _net != null:
+		token = _net.session_token()
+
 	_forget_everyone()
 	# The inventory is not part of `welcome` — it is private to one player and
 	# arrives as its own message inside the same atomic step (PROTOCOL.md,
@@ -344,11 +399,15 @@ func _on_welcomed(
 	if _panel != null:
 		_panel.clear()
 	_you = you
+	_token = token
 	_tick_ms = tick_ms
 	_clock.anchor(tick, tick_ms)
 	# `welcome` is a tick-bearing frame, so it opens the liveness window rather
 	# than only configuring it (PROTOCOL.md, "Clock").
 	_heartbeat_ticks = heartbeat_ticks
+	_connection_over = false
+	_reconnect_at_msec = 0
+	_backoff_steps = 0
 	_rearm_liveness()
 
 	for index in player_ids.size():
@@ -367,7 +426,14 @@ func _on_welcomed(
 		if self_avatar != null:
 			self_avatar.teleport_to(_local.position.x, _local.position.z)
 
-	print("session: joined as %d at tick %d, %d player(s)" % [_you, tick, _avatars.size()])
+	if previous_you != 0 and previous_you == _you:
+		print("session: resumed as %d at tick %d, %d player(s)" % [_you, tick, _avatars.size()])
+		resumed.emit(_you)
+	elif previous_you != 0:
+		print("session: identity lost; was %d, now %d" % [previous_you, _you])
+		identity_lost.emit(previous_you, _you)
+	if previous_you != _you:
+		print("session: joined as %d at tick %d, %d player(s)" % [_you, tick, _avatars.size()])
 	joined.emit(_you)
 
 
@@ -447,8 +513,8 @@ func _claim_expired_window() -> int:
 	return _liveness_window_msec()
 
 
-## The liveness timer (`PROTOCOL.md`, "Clock").
 func _process(_delta: float) -> void:
+	_maybe_reconnect()
 	var window := _claim_expired_window()
 	if window == 0:
 		return
@@ -545,12 +611,36 @@ func _on_server_error(re: String, message: String) -> void:
 	push_warning('session: server refused "%s": %s' % [re, message])
 
 
-## Nothing reconnects yet (PROTOCOL.md, "Deliberately absent"), and the world is
-## deliberately left standing rather than cleared.
 func _on_disconnected(code: int, reason: String) -> void:
 	_connection_over = true
 	_liveness_deadline_msec = 0
-	push_warning('session: disconnected, code %d "%s"; nothing reconnects yet' % [code, reason])
+	var resume := not _logout_requested and not _base_url.is_empty()
+	if resume:
+		push_warning(
+			'session: disconnected, code %d "%s"; freezing, will reconnect' % [code, reason]
+		)
+		_schedule_reconnect()
+		return
+	push_warning('session: disconnected, code %d "%s"; freezing' % [code, reason])
+
+
+func _schedule_reconnect() -> void:
+	var delay := reconnect_backoff_msec(_backoff_steps)
+	_backoff_steps += 1
+	_reconnect_at_msec = Time.get_ticks_msec() + delay
+	print("session: reconnecting in %.1fs" % (delay / 1000.0))
+	reconnect_scheduled.emit(delay)
+
+
+func _maybe_reconnect() -> void:
+	if _reconnect_at_msec == 0 or Time.get_ticks_msec() < _reconnect_at_msec:
+		return
+	_reconnect_at_msec = 0
+	var url := NetClientScript.url_with_session(_base_url, _token)
+	print("session: connecting to ", _base_url)
+	var status := _net.connect_to_server(url)
+	if status != OK:
+		_schedule_reconnect()
 
 
 func _on_ground_clicked(x: float, z: float) -> void:
