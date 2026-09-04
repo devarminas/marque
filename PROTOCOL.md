@@ -13,9 +13,9 @@ names the unit that discharges it. A marker reading plain **M2** is still reserv
 writing it. A marker naming a unit and marked *shipped* is implemented and on the wire, exactly
 as an **M1** marker is. A marker naming a unit without that mark is somebody's live contract.
 
-**M2a** and **M2b** are shipped. The three-way form above replaces a sentence that listed the
-live units by name, which put every later unit in the position of editing a status line that was
-about somebody else.
+**M2a**, **M2b** and **M2c** are shipped. The three-way form above replaces a sentence that listed
+the live units by name, which put every later unit in the position of editing a status line that
+was about somebody else.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -86,6 +86,79 @@ arrived `path` can carry a `start_tick` in the client's perceived future. **Elap
 
 **M2d.** A periodic `{"tick":{"t":N}}` heartbeat for drift correction and liveness. Reserved,
 not sent in M0 or M1. Rule 1 above is what makes adding it free.
+
+**The client's half of it is specified below and is implemented (M2c).** Until M2d lands no
+server emits `tick` at all, which is why every rule below has to keep working against a server
+that never sends one.
+
+### Receiving `tick`. **M2c.**
+
+The client compares `t` against its own `estimated_tick()` **at receipt**, and:
+
+- **`t` differs from the estimate.** Re-anchor the clock at `t` — the same `anchor(t, tick_ms)`
+  call `welcome` makes, so a heartbeat, a reconnect and a join correct the clock through one
+  code path — and log the signed delta on one line:
+
+      session: clock corrected by %+d tick(s) at heartbeat %d
+
+  The delta is signed because its sign is the diagnosis: a client running ahead of the server
+  and one running behind it are different faults, and an unsigned magnitude names neither.
+- **`t` equals the estimate.** Do nothing, and log nothing. Agreement is the ordinary case once
+  the clock is right, so a line per heartbeat would bury the corrections this log exists for.
+- **`tick` before `welcome`.** Logged and ignored. There is no `tick_ms` to anchor with, and
+  nothing reaches a connection before its `welcome` (*Ordering and the join race*), so this is
+  defence against a broken peer rather than a flow.
+- **`tick` with no numeric `t`, or a negative `t`.** Dropped with a loud log, connection kept,
+  exactly as any other unparseable body is (*Compatibility*). Ticks start at 0 and only ever
+  increase, so a negative one is not a clock reading and must not reach the anchor: the client's
+  clock refuses it, and a receiver that passed it on anyway would log a correction it did not
+  make.
+
+**A correction is felt, not merely logged.** Every mid-walk body derives its position from the
+clock, so re-anchoring forward by N ticks advances every walker by `N * tick_ms * speed` along
+its polyline in the frame the heartbeat lands. Measured on the Godot client: a `+10` re-anchor
+at 150 ms and 1.0 u/s jumped a walking body 1.5 units. Re-anchoring *behind* a path's
+`start_tick` puts the body back at `points[0]` rather than rewinding past it, which is the
+clamp-at-zero rule above holding. This is the cost of a correction and the reason a heartbeat
+interval is a tuning decision rather than a free one.
+
+### Liveness. **M2c.**
+
+`welcome` may carry an integer `heartbeat_ticks`: the interval, in ticks, at which the server
+intends to send `tick`. **Absent, zero, or unreadable means liveness is off.**
+
+Off has to be the default, because it is what every server before M2d says. A client that
+defaulted the field to anything else would abandon every session it opened against one, on a
+timer, which looks exactly like a network fault. A `heartbeat_ticks` that is present but
+negative or not a number is logged and read as zero rather than dropping the whole `welcome`:
+that is the same call this file already makes for `welcome.items` being `null`, and for the same
+reason — the cost of strictness there is that the client never joins and sits frozen forever.
+
+With `heartbeat_ticks > 0`, the client abandons the socket once no `tick` has arrived for
+
+    3 * heartbeat_ticks * tick_ms
+
+milliseconds, measured from the **last tick-bearing frame**. `welcome` counts as one, so the
+window opens at the join rather than at the first heartbeat, and a server that promises
+heartbeats and then sends none is caught. Three intervals rather than one, so that a single
+lost or late heartbeat is not a disconnect. The client logs loudly first.
+
+**The window is a lower bound.** A client tests its deadline at whatever rate it polls, so it
+abandons at some point at or after the window and never before it. Three intervals is chosen to
+be wide enough that this granularity — and a heartbeat that arrives in the same breath as the
+deadline expiring — cannot decide the outcome.
+
+**The window closes with the connection and does not reopen.** A `tick` arriving after the
+socket has gone re-arms nothing: there is no longer anything that could send the next one, and a
+timer waiting on a dead connection would report a second death for the first one.
+
+**Abandoning is not closing, and the difference is the whole point.** The client drops the
+transport without sending a close frame. A close frame is a logout, and a socket that went
+silent is not a logout: the server must see a read error and record `peer_gone`, which is the
+suspending case, rather than `closed`. A client that closed politely here would tell the server
+its player had quit, which is precisely the state it is trying not to lose.
+
+The client does not reconnect afterwards. That is M2f.
 
 ## Coordinates
 
@@ -902,7 +975,8 @@ Named so nobody adds them thinking they were forgotten.
   acknowledgement message. `welcome.last_seq` is a cumulative restatement and stands in for one,
   which is enough for every client that does not replay, and no client replays. **Revisitable**
   the first time one does. See *Sequence numbers*.
-- No heartbeat. **M2d.**
+- No heartbeat on the wire. **M2d.** The client's side of `tick` is specified under *Clock* and
+  implemented (M2c); nothing sends one yet.
 - No authentication behind the session token. **M2a** makes a connection able to prove which
   player it was, and nothing more: a token is a bearer credential over a plaintext socket, so
   anyone who can read the wire can resume as you. That is the same standard as the ids above,

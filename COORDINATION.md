@@ -523,16 +523,18 @@ with the same inventory, and an intent it sends twice is applied once. Cut on 20
 depends on the unmerged `tick-anchor-align` branch (`9974695`) and nothing folds its work in;
 M2d says where the two meet.
 
-**Progress, 2026-09-03.** M2a is merged. Abrupt socket deaths (`peer_gone`, `slow_client`) now
+**Progress, 2026-09-04.** M2a is merged. Abrupt socket deaths (`peer_gone`, `slow_client`) now
 suspend the player for `ResumeGraceTicks = 400` with no `despawn`; clean closes retire at once.
-Both windowed demos end with `player_suspended` and no `despawn`. M2c is in verification. M2b is
-in flight on `m2b-seq-dedupe`, worktree `wt-m2b`, from `496ef5b`.
+Both windowed demos end with `player_suspended` and no `despawn`. M2b and M2c are written and
+pushed with no verdict on their heads; the session ended before verifiers ran. Each PR body
+states what is owed. Two findings against `main` and a pending M2a comment cull are in
+`FOLLOW-UPS.md`, *Found while dispatching M2*.
 
 | Unit | PR | Head | Verdicts | State |
 |---|---|---|---|---|
 | M2a | #20 | `53470da` | `genuine-verified` at `27c602d` and `conformance-with-findings` at `27c602d`, both `fable`. Five findings fixed at `53470da`; the delta was shown by diff to contain no non-test Go file. | Merged, `496ef5b` |
-| M2b | none | none | none | In flight |
-| M2c | #21 | `0c0fd96` | none yet | In verification |
+| M2b | #22 | `a6fc9fb` | none. Writer's Recipe G and H green, one sabotage red. | Awaiting both verifiers |
+| M2c | #21 | `2e198e4` | `genuine-verified` and `conformance-with-findings` at `0c0fd96`, both `fable`, void for the head: findings fixes, a `main` merge, and a comment cull changed non-test GDScript after them. | Awaiting delta verification |
 
 **Dispatch order.** M2a, M2b, M2c, M2d, M2e, M2f. M2c is client-side and independent of M2a and
 M2b, so it may run alongside them (headless suites tolerate load). Every other unit waits for the

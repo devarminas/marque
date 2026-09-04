@@ -48,6 +48,8 @@ const TREE_FREE_SUITES: Array = [
 	# M1's wire layer decodes frames into plain values. It needs no viewport to
 	# do that, and running it here is what proves it.
 	{"name": "item protocol", "script": preload("res://tests/test_item_protocol.gd")},
+	{"name": "tick protocol", "script": preload("res://tests/test_tick_protocol.gd")},
+	{"name": "tick edges", "script": preload("res://tests/test_tick_edges.gd")},
 ]
 
 ## Suites that need a scene tree, run one at a time in this order.
@@ -71,6 +73,13 @@ const SCENE_SUITES: Array = [
 	# draws. Same shape as the suite above — it instances main.tscn and feeds it
 	# scripted frames — so it never connects to anything either.
 	{"name": "interaction", "scene": "res://tests/test_interaction.tscn"},
+	# The two heartbeat suites feed main.tscn scripted frames like the two above,
+	# so they connect to nothing. They are the only suites that spend real
+	# seconds waiting on a deadline, and each caps Engine.max_fps for its own
+	# duration so that costs frames rather than a proportion of the runner's
+	# watchdog (NOTES.md, "Godot authoring traps").
+	{"name": "heartbeat", "scene": "res://tests/test_heartbeat.tscn"},
+	{"name": "heartbeat edges", "scene": "res://tests/test_heartbeat_edges.tscn"},
 	# The two suites that talk to another process come last. Each has a half
 	# that runs with no server and a half that needs MARQUE_WS_URL, which is
 	# what scripts/interop_test.ps1 exists to provide.

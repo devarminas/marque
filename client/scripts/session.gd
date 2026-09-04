@@ -64,9 +64,25 @@ const TickClock := preload("res://scripts/tick_clock.gd")
 ## engine's own `--` separator.
 const SERVER_ARG := "--server"
 
+## Heartbeats of silence tolerated before the socket is abandoned
+## (`PROTOCOL.md`, "Clock").
+const LIVENESS_HEARTBEATS := 3
+
 ## Emitted once `welcome` has been applied: the clock is anchored, this client
 ## knows its own id, and every player the server listed has a body.
 signal joined(you: int)
+
+## Emitted whenever a heartbeat moved the clock.
+##
+## [param delta] is `t` minus this client's own estimate at receipt, so it is
+## positive when the client was running behind the server.
+signal clock_corrected(delta: int, at_tick: int)
+
+## Emitted when the server went silent past the liveness window and the socket
+## was abandoned.
+##
+## [param silent_msec] is the configured window, not a measured elapsed time.
+signal server_unresponsive(silent_msec: int)
 
 ## Emitted whenever a ground click is forwarded as a `move_to`, whether or not
 ## the socket was open to carry it.
@@ -122,6 +138,12 @@ var _clock := TickClock.new()
 var _you := 0
 ## `welcome.tick_ms`, or 0 before `welcome`. Every walker is built from it.
 var _tick_ms := 0
+## `welcome.heartbeat_ticks`, or 0 when the server named none.
+var _heartbeat_ticks := 0
+## Monotonic milliseconds by which a `tick` must have arrived, or 0 when no
+## liveness timer is armed.
+var _liveness_deadline_msec := 0
+var _connection_over := false
 ## Player id to [code]player_avatar.gd[/code]. The local player is in here too,
 ## under its own id, pointing at the authored node.
 var _avatars := {}
@@ -148,6 +170,7 @@ func _ready() -> void:
 
 	_net.welcomed.connect(_on_welcomed)
 	_net.welcome_items.connect(_on_welcome_items)
+	_net.tick_received.connect(_on_tick_received)
 	_net.spawned.connect(_on_spawned)
 	_net.despawned.connect(_on_despawned)
 	_net.path_assigned.connect(_on_path_assigned)
@@ -304,6 +327,7 @@ func _on_welcomed(
 	you: int,
 	tick_ms: int,
 	tick: int,
+	heartbeat_ticks: int,
 	player_ids: PackedInt64Array,
 	player_positions: PackedVector2Array,
 ) -> void:
@@ -321,9 +345,11 @@ func _on_welcomed(
 		_panel.clear()
 	_you = you
 	_tick_ms = tick_ms
-	# PROTOCOL.md, "Clock": anchored from welcome against a monotonic source,
-	# never accumulated from frame deltas.
 	_clock.anchor(tick, tick_ms)
+	# `welcome` is a tick-bearing frame, so it opens the liveness window rather
+	# than only configuring it (PROTOCOL.md, "Clock").
+	_heartbeat_ticks = heartbeat_ticks
+	_rearm_liveness()
 
 	for index in player_ids.size():
 		var id := int(player_ids[index])
@@ -368,6 +394,72 @@ func _on_welcome_items(
 
 	if not _items.is_empty():
 		print("session: %d ground item(s) in the world" % _items.size())
+
+
+## `tick`, the server's heartbeat (`PROTOCOL.md`, "Clock").
+func _on_tick_received(t: int) -> void:
+	if not _clock.is_anchored():
+		push_error("session: tick %d before welcome; ignoring" % t)
+		return
+	if t < 0:
+		push_error("session: tick %d is negative; dropping the heartbeat" % t)
+		return
+
+	var estimate_at_receipt := _clock.estimated_tick()
+	_rearm_liveness()
+	if t == estimate_at_receipt:
+		return
+
+	var delta := t - estimate_at_receipt
+	_clock.anchor(t, _tick_ms)
+	print(correction_line(delta, t))
+	clock_corrected.emit(delta, t)
+
+
+## The correction line, whose format is `PROTOCOL.md`'s, "Clock", verbatim.
+static func correction_line(delta: int, at_tick: int) -> String:
+	return "session: clock corrected by %+d tick(s) at heartbeat %d" % [delta, at_tick]
+
+
+func is_liveness_armed() -> bool:
+	return _liveness_deadline_msec != 0
+
+
+## Reopens the liveness window from now, or leaves it shut (`PROTOCOL.md`,
+## "Clock").
+func _rearm_liveness() -> void:
+	if _connection_over or _heartbeat_ticks <= 0 or _tick_ms <= 0:
+		_liveness_deadline_msec = 0
+		return
+	_liveness_deadline_msec = Time.get_ticks_msec() + _liveness_window_msec()
+
+
+func _liveness_window_msec() -> int:
+	return LIVENESS_HEARTBEATS * _heartbeat_ticks * _tick_ms
+
+
+## The window that has just run out, or 0 while one is still open. Disarms as it
+## returns, so an expiry is claimed exactly once and cannot be fired on twice.
+func _claim_expired_window() -> int:
+	if _liveness_deadline_msec == 0 or Time.get_ticks_msec() < _liveness_deadline_msec:
+		return 0
+	_liveness_deadline_msec = 0
+	return _liveness_window_msec()
+
+
+## The liveness timer (`PROTOCOL.md`, "Clock").
+func _process(_delta: float) -> void:
+	var window := _claim_expired_window()
+	if window == 0:
+		return
+	push_error(
+		(
+			"session: no tick for %d ms (%d heartbeat(s) of %d tick(s) at %d ms);"
+			+ " abandoning the socket"
+		) % [window, LIVENESS_HEARTBEATS, _heartbeat_ticks, _tick_ms]
+	)
+	server_unresponsive.emit(window)
+	_net.abandon()
 
 
 ## `item_spawn`. **M1.** Idempotent: an item id already known is replaced, never
@@ -453,15 +545,12 @@ func _on_server_error(re: String, message: String) -> void:
 	push_warning('session: server refused "%s": %s' % [re, message])
 
 
-## M0 has no reconnect (PROTOCOL.md, "Deliberately absent"), so there is nothing
-## to do but say so loudly.
-##
-## The world is deliberately left standing rather than cleared. A frozen last
-## known state is a worse lie than an empty one only if nobody is told, and this
-## is the telling; an empty field would look like everyone logged out. There is
-## no UI in M0 to say it better. Revisitable when M2 adds reconnect.
+## Nothing reconnects yet (PROTOCOL.md, "Deliberately absent"), and the world is
+## deliberately left standing rather than cleared.
 func _on_disconnected(code: int, reason: String) -> void:
-	push_warning('session: disconnected, code %d "%s"; M0 does not reconnect' % [code, reason])
+	_connection_over = true
+	_liveness_deadline_msec = 0
+	push_warning('session: disconnected, code %d "%s"; nothing reconnects yet' % [code, reason])
 
 
 func _on_ground_clicked(x: float, z: float) -> void:

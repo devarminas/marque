@@ -28,12 +28,23 @@ which is why `contested_pickup_demo.ps1` legitimately failed about 38% of idle-m
 Alongside it, two doc-only comment-cull PRs merged (`server/internal/net` and `client/`), each
 verified as token-identical / harness-identical to its pre-cull baseline.
 
-**M2 is in progress.** M2a merged as PR #20, merge `496ef5b`, head `53470da`, two `fable`
-verdicts in the PR body. A player now outlives its socket. An abrupt socket death suspends it for
-400 ticks with no `despawn`, and `welcome.session` presented as `?session=` on dial resumes it.
-Both windowed demos now end with `player_suspended` and no `despawn`. M2c is open as PR #21 at
-`0c0fd96`, awaiting verdicts. M2b is in flight on `m2b-seq-dedupe`, worktree `wt-m2b`, from
-`496ef5b`. The cut is in `COORDINATION.md` under `## M2`.
+**M2 is in progress, and two units are written, pushed, and unverified.** M2a merged as PR #20,
+merge `496ef5b`, head `53470da`, two `fable` verdicts in the PR body. A player now outlives its
+socket. An abrupt socket death suspends it for 400 ticks with no `despawn`, and `welcome.session`
+presented as `?session=` on dial resumes it. Both windowed demos now end with `player_suspended`
+and no `despawn`. **M2c is PR #21 at `2e198e4`**: both verdicts were given at `0c0fd96`, the head
+then moved through findings fixes, a merge of `main`, and a comment cull that also changed
+non-comment code, so no verdict covers the head; the PR body says exactly what is owed. **M2b is
+PR #22 at `a6fc9fb`**, writer evidence only, no verifier ever ran; the PR body says what is owed.
+The session ended on the human's instruction to spawn no further agents. Worktrees `wt-m2b` and
+`wt-m2c` still exist. The cut is in `COORDINATION.md` under `## M2`.
+
+**Resume here.** Verify PR #22 (M2b, Go) and PR #21 (M2c, Godot) per their PR bodies, on a
+model family other than `opus`, one Godot driver at a time. Then merge in that order, sweep the
+docs, and take M2d. Two findings against `main` are parked in `FOLLOW-UPS.md` under *Found while
+dispatching M2* and each is a small unit: the flaky `-race` test and the transcript grep in
+`interop_test.ps1`. A comment cull on M2a's `server/` code is also parked there, awaiting the
+human's go.
 
 **One unit is written, pushed, and unverified: tick-anchor alignment.** Branch
 `tick-anchor-align` at `9974695`, worktree `wt-tick-align`, no PR opened. Client-only fix for the
@@ -126,9 +137,9 @@ suites tolerate the load. Only the windowed demos do not.
 **`gh pr merge` may be blocked by the permission classifier.** If it is, hand the human the
 command rather than working around it.
 
-**One decision is outstanding for the human**, and it is the `tick-anchor-align` verifier choice
-above. Nothing else is, and nothing is blocked behind it: `main` is green and M2 can start
-without it.
+**Two decisions are outstanding for the human.** The `tick-anchor-align` verifier choice above,
+and whether to dispatch the M2a comment cull parked in `FOLLOW-UPS.md`. Nothing is blocked behind
+either: `main` is green and M2b and M2c wait only on verifiers.
 
 **The first thing M2 needs is already parked.** `PROTOCOL.md`'s Clock section says the client's
 tick estimate "necessarily lags the server by roughly one-way latency". It lags by that **plus a

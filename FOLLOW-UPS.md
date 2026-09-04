@@ -324,3 +324,25 @@ produced them is gone.
   it wasn't one — the finding the whole tick-anchor-alignment unit exists to fix. The unit is
   client-only and forbidden from touching `PROTOCOL.md`, so the correction never reached the
   contract file itself. Whoever next has standing to edit `PROTOCOL.md` should fold this in.
+
+## Found while dispatching M2
+
+Parked on 2026-09-04 when the session ended by instruction. Each is a small unit of its own.
+
+- **`TestConcurrentTrafficStaysConsistent` fails about 3 in 10 under `-race` on `main` at
+  `a922327`**, in a clean worktree, reproduced by the M2b writer and not by anyone else yet.
+  `STANDING-ORDERS.md` still says the baseline is clean, measured at `06e542e`; both can be true
+  if the flake arrived between. Reproduce it independently before editing that sentence, then
+  fix the test or the race, whichever it is.
+- **`scripts/interop_test.ps1:154` greps the whole transcript for the `PASS:` line rather than
+  reading the tail.** The M2c verifier A made a failing suite print a forged `PASS: 999 ...` and
+  the parser believed it; only the separate exit-code check turned the run red. Same hole M1c
+  documented in `COORDINATION.md`. One-line fix, verify by repeating the forgery.
+- **M2a's `server/` code merged with 206 comment lines in 361 added production lines**, `world.go`
+  179 of 325, because `no-comments` never ran. A doc-only cull in the shape of PR #18 and #19,
+  verified token-identical to the pre-cull build plus Recipe G. Risk: rationale that lives only
+  in a comment gets deleted; check each deletion against `PROTOCOL.md` and park anything unique
+  here. Awaiting the human's go.
+- **The `PROTOCOL.md` Clock correction above is now partly folded in.** M2c wrote *Receiving
+  `tick`* and *Liveness* under Clock. The lag sentence itself still needs the per-client
+  `[0, tick_ms)` phase term; M2d, the server heartbeat, is the unit with standing to write it.
