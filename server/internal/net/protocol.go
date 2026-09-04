@@ -35,12 +35,19 @@ type ItemID int64
 // means the frame carried none.
 type Seq int64
 
+// EquipSlot names one worn equipment slot. Worn slots are named rather than
+// indexed, which is the whole reason `unequip` says "worn" where `drop` and
+// `equip` say "slot" (PROTOCOL.md, "Worn slots").
+type EquipSlot string
+
 // Client-to-server message names. Each is the key in the envelope and the value
 // of an error's "re" field.
 const (
-	MsgMoveTo = "move_to"
-	MsgPickup = "pickup"
-	MsgDrop   = "drop"
+	MsgMoveTo  = "move_to"
+	MsgPickup  = "pickup"
+	MsgDrop    = "drop"
+	MsgEquip   = "equip"
+	MsgUnequip = "unequip"
 )
 
 // PlayerState is one player's position, as it appears inside welcome.
@@ -63,6 +70,13 @@ type ItemState struct {
 type InventorySlot struct {
 	Slot int    `json:"slot"`
 	Kind string `json:"kind"`
+}
+
+// EquipmentSlot is one occupied worn slot of one player's equipment; empty slots
+// are absent from the list (PROTOCOL.md, "equipment").
+type EquipmentSlot struct {
+	Slot EquipSlot `json:"slot"`
+	Kind string    `json:"kind"`
 }
 
 // ServerMessage is one message the server can send. Every frame is a JSON
@@ -126,6 +140,14 @@ type Inventory struct {
 	Slots []InventorySlot `json:"slots"`
 }
 
+// Equipment is one player's whole worn equipment, sent to that player only.
+// Worn is the closed, ordered list of slot names this server has, which is
+// Inventory.Size's analogue; Slots lists the occupied ones.
+type Equipment struct {
+	Worn  []EquipSlot     `json:"worn"`
+	Slots []EquipmentSlot `json:"slots"`
+}
+
 // Tick is the server's clock heartbeat, broadcast every heartbeat_ticks ticks.
 // T is the tick being stepped.
 type Tick struct {
@@ -140,6 +162,7 @@ func (Error) isServerMessage()       {}
 func (ItemSpawn) isServerMessage()   {}
 func (ItemDespawn) isServerMessage() {}
 func (Inventory) isServerMessage()   {}
+func (Equipment) isServerMessage()   {}
 func (Tick) isServerMessage()        {}
 
 // ClientMessage is one message a client can send: an intent, never a fact.
@@ -166,13 +189,30 @@ type Drop struct {
 	Slot int `json:"slot"`
 }
 
-func (MoveTo) isClientMessage() {}
-func (Pickup) isClientMessage() {}
-func (Drop) isClientMessage()   {}
+// Equip is a request to wear whatever is in the sender's inventory slot Slot.
+// The intent names a bag index and never a worn slot: the server resolves the
+// destination from the kind (PROTOCOL.md, "equip").
+type Equip struct {
+	Slot int `json:"slot"`
+}
 
-func (MoveTo) Name() string { return MsgMoveTo }
-func (Pickup) Name() string { return MsgPickup }
-func (Drop) Name() string   { return MsgDrop }
+// Unequip is a request to take off whatever is in worn slot Worn and put it
+// back in the bag (PROTOCOL.md, "unequip").
+type Unequip struct {
+	Worn EquipSlot `json:"worn"`
+}
+
+func (MoveTo) isClientMessage()  {}
+func (Pickup) isClientMessage()  {}
+func (Drop) isClientMessage()    {}
+func (Equip) isClientMessage()   {}
+func (Unequip) isClientMessage() {}
+
+func (MoveTo) Name() string  { return MsgMoveTo }
+func (Pickup) Name() string  { return MsgPickup }
+func (Drop) Name() string    { return MsgDrop }
+func (Equip) Name() string   { return MsgEquip }
+func (Unequip) Name() string { return MsgUnequip }
 
 type serverEnvelope struct {
 	Welcome     *Welcome     `json:"welcome,omitempty"`
@@ -183,6 +223,7 @@ type serverEnvelope struct {
 	ItemSpawn   *ItemSpawn   `json:"item_spawn,omitempty"`
 	ItemDespawn *ItemDespawn `json:"item_despawn,omitempty"`
 	Inventory   *Inventory   `json:"inventory,omitempty"`
+	Equipment   *Equipment   `json:"equipment,omitempty"`
 	Tick        *Tick        `json:"tick,omitempty"`
 }
 
@@ -208,6 +249,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.ItemDespawn = &v
 	case Inventory:
 		env.Inventory = &v
+	case Equipment:
+		env.Equipment = &v
 	case Tick:
 		env.Tick = &v
 	default:
@@ -248,6 +291,19 @@ const (
 	ReasonNoSuchSlot RejectReason = "no_such_slot"
 	// ReasonEmptySlot: a drop naming a legal index that holds nothing.
 	ReasonEmptySlot RejectReason = "empty_slot"
+	// ReasonNotEquippable: an equip naming a slot whose kind belongs to no worn
+	// slot (PROTOCOL.md, "equip").
+	ReasonNotEquippable RejectReason = "not_equippable"
+	// ReasonNoSuchWornSlot: an unequip naming a worn slot this server does not
+	// have.
+	ReasonNoSuchWornSlot RejectReason = "no_such_worn_slot"
+	// ReasonEmptyWornSlot: an unequip naming a worn slot that holds nothing.
+	ReasonEmptyWornSlot RejectReason = "empty_worn_slot"
+	// ReasonInventoryFull: an unequip with no free bag slot to put the item in.
+	// A pickup that arrives at a full bag is not this: it fails on arrival
+	// rather than on receipt, so it logs pickup_no_room and never reaches the
+	// refusal path (PROTOCOL.md, "Log vocabulary", M3a).
+	ReasonInventoryFull RejectReason = "inventory_full"
 	// ReasonUnknownSender: a frame from a connection with no player.
 	ReasonUnknownSender RejectReason = "unknown_sender"
 	// ReasonBinaryFrame: a WebSocket binary frame.
@@ -317,6 +373,14 @@ type dropWire struct {
 	Slot *int `json:"slot"`
 }
 
+type equipWire struct {
+	Slot *int `json:"slot"`
+}
+
+type unequipWire struct {
+	Worn *EquipSlot `json:"worn"`
+}
+
 type seqWire struct {
 	Seq *int64 `json:"seq"`
 }
@@ -350,6 +414,10 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 			decodeBody = decodePickup
 		case MsgDrop:
 			decodeBody = decodeDrop
+		case MsgEquip:
+			decodeBody = decodeEquip
+		case MsgUnequip:
+			decodeBody = decodeUnequip
 		default:
 			return nil, 0, &RejectError{
 				Reason:      ReasonUnknownMessage,
@@ -426,6 +494,32 @@ func decodeDrop(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonMissingField, MsgDrop, "drop needs a slot index")
 	}
 	return Drop{Slot: *wire.Slot}, nil
+}
+
+func decodeEquip(payload []byte) (ClientMessage, error) {
+	var wire equipWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgEquip, "equip: %v", err)
+	}
+	if wire.Slot == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgEquip, "equip needs a slot index")
+	}
+	return Equip{Slot: *wire.Slot}, nil
+}
+
+// decodeUnequip guards the shape and not the membership: whether a name is one
+// of this server's worn slots is the game's question, and it answers it with
+// no_such_worn_slot. An empty string is a name nothing has, so it needs no case
+// of its own here.
+func decodeUnequip(payload []byte) (ClientMessage, error) {
+	var wire unequipWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgUnequip, "unequip: %v", err)
+	}
+	if wire.Worn == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgUnequip, "unequip needs a worn slot name")
+	}
+	return Unequip{Worn: *wire.Worn}, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
