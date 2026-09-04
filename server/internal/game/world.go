@@ -38,7 +38,7 @@ const MinPathLength = 1e-3
 
 // ResumeGraceTicks is how long a player's body stays in the world after its
 // socket died abruptly, in ticks. Tuning: ARM-58.
-const ResumeGraceTicks = 400
+const ResumeGraceTicks = int64(60 * time.Second / TickDuration)
 
 // HeartbeatEveryTicks is how often the server broadcasts tick, in ticks; sent
 // on every welcome as heartbeat_ticks (PROTOCOL.md, "Clock").
@@ -505,12 +505,14 @@ func (w *World) refuse(p *player, rejection *mnet.RejectError) {
 
 func rejectionEvent(re string) string {
 	switch re {
+	case mnet.MsgMoveTo, "":
+		return EvMoveToRejected
 	case mnet.MsgPickup:
 		return EvPickupRejected
 	case mnet.MsgDrop:
 		return EvDropRejected
 	default:
-		return EvMoveToRejected
+		panic(fmt.Sprintf("game: no rejection event for %q", re))
 	}
 }
 

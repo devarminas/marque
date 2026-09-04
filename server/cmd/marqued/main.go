@@ -138,6 +138,7 @@ func run() error {
 	stopSignals()
 	stopWorld()
 
+	// srv.Shutdown ignores hijacked connections, so hub.Close is what ends them.
 	hub.Close()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
