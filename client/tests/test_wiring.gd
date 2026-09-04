@@ -225,6 +225,7 @@ func _test_appliers_without_a_server() -> void:
 	await _test_the_scripted_click_misses_the_opaque_panel(client)
 	await _test_a_click_becomes_an_intent(client)
 	await _test_a_dead_url_backs_off_without_freeing_bodies(client)
+	await _test_a_refused_url_backs_off_without_freeing_bodies(client)
 
 	# Freed before the live half exists, so its picker cannot see the live
 	# half's clicks and its socket cannot join the live half's world.
@@ -545,6 +546,53 @@ func _test_a_dead_url_backs_off_without_freeing_bodies(client: Client) -> void:
 	_check(
 		client.session.known_ids() == bodies_before,
 		"and the bodies are still here after the last attempt, got %s"
+		% [client.session.known_ids()],
+	)
+
+
+func _test_a_refused_url_backs_off_without_freeing_bodies(client: Client) -> void:
+	print("== refused well-formed URL backs off without freeing bodies ==")
+	var bodies_before := client.session.known_ids()
+	var remotes_before := client.remote_players.get_child_count()
+	_check(
+		bodies_before == [1, 5] and remotes_before == 1,
+		"the second welcome's bodies are still here before the refused URL, got %s / %d"
+		% [bodies_before, remotes_before],
+	)
+
+	var restore_fps := Engine.max_fps
+	Engine.max_fps = 3
+	client.reconnect_delays.clear()
+	var status := client.session.connect_to_server("ws://127.0.0.1:1/ws")
+	_check(status == OK, "a well-formed refused URL starts connecting (status %d)" % status)
+
+	var deadline := Time.get_ticks_msec() + 22000
+	var seen := 0
+	while client.reconnect_delays.size() < 3 and Time.get_ticks_msec() < deadline:
+		if client.reconnect_delays.size() > seen:
+			seen = client.reconnect_delays.size()
+			_check(
+				client.session.known_ids() == bodies_before,
+				"bodies stay drawn after refused-URL wait %d, got %s"
+				% [seen, client.session.known_ids()],
+			)
+			_check(
+				client.remote_players.get_child_count() == remotes_before,
+				"remote bodies are not freed after refused-URL wait %d, got %d"
+				% [seen, client.remote_players.get_child_count()],
+			)
+		await get_tree().process_frame
+
+	Engine.max_fps = restore_fps
+	client.session.close()
+
+	_check(
+		client.reconnect_delays == [500, 1000, 2000],
+		"refused URL delays continue 0.5, 1, 2 s, got %s" % [client.reconnect_delays],
+	)
+	_check(
+		client.session.known_ids() == bodies_before,
+		"and the bodies are still here after the refused-URL attempts, got %s"
 		% [client.session.known_ids()],
 	)
 
