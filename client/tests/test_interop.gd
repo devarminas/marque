@@ -681,8 +681,9 @@ func _test_duplicate_seq_yields_one_path(a: Peer) -> bool:
 
 
 ## A pickup and a drop leave the client with the next numbers spent, so the
-## event log can name those intents by seq. This world has no seed item, so both
-## bodies are refused. The numbers are still consumed.
+## event log can name those intents by seq. Pickup is refused because this
+## world has no item 1. Drop is refused on an empty bag slot: not slot 0, which
+## the join kit fills with an axe (ARM-81).
 func _test_pickup_and_drop_are_sequenced(a: Peer) -> bool:
 	print("== sequenced pickup and drop ==")
 	var errors_before := a.errors.size()
@@ -696,7 +697,8 @@ func _test_pickup_and_drop_are_sequenced(a: Peer) -> bool:
 		String(a.errors[a.errors.size() - 1]["re"]) == "pickup",
 		'the pickup refusal names pickup, got "%s"' % String(a.errors[a.errors.size() - 1]["re"]),
 	)
-	_check(a.net.send_drop(0) == OK, "drop sent")
+	const empty_slot := 1
+	_check(a.net.send_drop(empty_slot) == OK, "drop sent")
 	if not await _wait_until(
 		func() -> bool: return a.errors.size() > errors_before + 1, "a drop refusal"
 	):

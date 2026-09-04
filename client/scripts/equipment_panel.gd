@@ -1,40 +1,133 @@
 extends PanelContainer
 
 ## What the player is wearing. Authored in `main.tscn`, opened and closed by the
-## player. **M3b.**
-##
-## [b]Open or closed is [member CanvasItem.visible] and nothing else.[/b] A
-## second boolean tracking the same fact would drift the first time anything
-## assigned `visible` directly, which is not hypothetical: `inventory_panel.gd`
-## does exactly that from its rebuild. So this script models no state. It owns
-## one transition and the scene owns the starting value, which is closed.
-##
-## [b]Opaque while open.[/b] [constant Control.MOUSE_FILTER_STOP] is authored on
-## this node in `main.tscn` and nothing here assigns it, which is M1k's lesson
-## kept rather than relearnt: a filter re-armed from a script is a filter that
-## is wrong for every frame before `_ready` and invisible to anyone reading the
-## scene. A hidden [Control] is not hit-tested at all, so a closed panel costs
-## the world behind it nothing.
-##
-## [b]The worn slot is drawn and never filled.[/b] What is actually equipped
-## arrives on the wire in a later unit; a client that guessed would be a client
-## with authority (CLAUDE.md). So the slot is authored chrome, not a control,
-## and this script has no idea what a weapon is.
+## player. **M3b** panel chrome; **M3c** worn restatement and unequip/drag targets.
 
-## The action that opens and closes it. Authored in `project.godot` so the bind
-## is remappable configuration rather than a keycode buried in this file.
+const WornSlotScene := preload("res://scenes/worn_slot.tscn")
+const WornSlotScript := preload("res://scripts/worn_slot.gd")
+const InventorySlotScene := preload("res://scenes/inventory_slot.tscn")
+const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
+
 const TOGGLE_ACTION := "toggle_equipment"
+
+## Emitted when the player activates an occupied worn slot (`unequip`).
+signal worn_activated(worn: String)
+
+## Emitted when a bag slot is dropped onto a worn slot (`equip`).
+signal equip_from_bag(bag_slot: int)
+
+@export var slot_rows: VBoxContainer
+@export var weapon_slot: WornSlotScript
+
+var _slots := {}
+
+
+func _ready() -> void:
+	if weapon_slot != null:
+		weapon_slot.configure("weapon")
+		_bind_slot(weapon_slot)
 
 
 func toggle() -> void:
 	visible = not visible
 
 
-## A hidden node still receives this, verified against 4.7.2, which is what lets
-## a panel that starts closed open itself.
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event.is_action_pressed(TOGGLE_ACTION):
 		return
 	toggle()
-	# Consumed, so one keypress cannot also mean something to anything else.
 	get_viewport().set_input_as_handled()
+
+
+## Applies one `equipment` frame, wholesale.
+func apply(
+	worn_names: PackedStringArray,
+	slot_names: PackedStringArray,
+	slot_kinds: PackedStringArray,
+) -> void:
+	if slot_names.size() != slot_kinds.size():
+		push_error(
+			"EquipmentPanel.apply: %d slot name(s) against %d kind(s)"
+			% [slot_names.size(), slot_kinds.size()]
+		)
+		return
+
+	_sync_worn_slots(worn_names)
+
+	for slot: WornSlotScript in _slots.values():
+		slot.show_empty()
+
+	for entry in slot_names.size():
+		var name: String = slot_names[entry]
+		var widget: WornSlotScript = _slots.get(name)
+		if widget == null:
+			push_error('EquipmentPanel.apply: unknown worn slot "%s"' % name)
+			continue
+		widget.show_item(slot_kinds[entry])
+
+
+## The widget for [param worn], or null when the panel is not drawing one.
+func slot_at(worn: String) -> WornSlotScript:
+	var slot: WornSlotScript = _slots.get(worn)
+	return slot
+
+
+## What is in [param worn], or "" when it is empty or not drawn.
+func kind_in_slot(worn: String) -> String:
+	var slot := slot_at(worn)
+	return "" if slot == null else slot.kind
+
+
+func _sync_worn_slots(worn_names: PackedStringArray) -> void:
+	if slot_rows == null:
+		push_error("EquipmentPanel: the scene did not assign slot rows")
+		return
+
+	for name: String in worn_names:
+		if _slots.has(name):
+			continue
+		var slot := _make_slot(name)
+		if slot == null:
+			return
+		slot_rows.add_child(slot)
+		_bind_slot(slot)
+
+
+func _make_slot(name: String) -> WornSlotScript:
+	if name == "weapon" and weapon_slot != null:
+		return weapon_slot
+
+	var slot := WornSlotScene.instantiate() as WornSlotScript
+	if slot == null:
+		push_error("EquipmentPanel: worn_slot.tscn did not instantiate as a WornSlot")
+		return null
+	slot.name = "%sSlot" % name.capitalize()
+	slot.configure(name)
+	return slot
+
+
+func _bind_slot(slot: WornSlotScript) -> void:
+	if slot.worn_name.is_empty():
+		return
+	if _slots.has(slot.worn_name):
+		return
+	_slots[slot.worn_name] = slot
+	if not slot.activated.is_connected(_on_worn_activated):
+		slot.activated.connect(_on_worn_activated)
+	if not slot.equip_from_bag.is_connected(_on_equip_from_bag):
+		slot.equip_from_bag.connect(_on_equip_from_bag)
+
+
+func _on_worn_activated(worn: String) -> void:
+	var slot: WornSlotScript = _slots.get(worn)
+	if slot == null or not slot.is_occupied():
+		push_warning('EquipmentPanel: activate on empty worn slot "%s"' % worn)
+		return
+	worn_activated.emit(worn)
+
+
+func _on_equip_from_bag(bag_slot: int) -> void:
+	if bag_slot < 0:
+		push_error("EquipmentPanel: bag slot indices start at 0, got %d" % bag_slot)
+		return
+	equip_from_bag.emit(bag_slot)

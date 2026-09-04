@@ -40,6 +40,7 @@ class Recorder:
 		net.item_spawned.connect(_on_item_spawned)
 		net.item_despawned.connect(_on_item_despawned)
 		net.inventory_changed.connect(_on_inventory_changed)
+		net.equipment_changed.connect(_on_equipment_changed)
 		net.unknown_message.connect(_on_unknown_message)
 		net.disconnected.connect(_on_disconnected)
 
@@ -118,6 +119,18 @@ class Recorder:
 			"kinds": slot_kinds,
 		})
 
+	func _on_equipment_changed(
+		worn_names: PackedStringArray,
+		slot_names: PackedStringArray,
+		slot_kinds: PackedStringArray,
+	) -> void:
+		events.append({
+			"signal": "equipment_changed",
+			"worn": worn_names,
+			"slots": slot_names,
+			"kinds": slot_kinds,
+		})
+
 	func _on_unknown_message(key: String) -> void:
 		events.append({"signal": "unknown_message", "key": key})
 
@@ -135,6 +148,7 @@ func run(assertions: RefCounted) -> void:
 	_test_welcome_without_items()
 	_test_item_spawn_and_despawn()
 	_test_inventory()
+	_test_equipment()
 	_test_a_null_list_means_empty()
 	_test_malformed_frames_are_dropped_and_the_connection_survives()
 	_test_unknown_keys_are_still_ignored()
@@ -297,6 +311,31 @@ func _test_inventory() -> void:
 			(packed[0]["kinds"] as PackedStringArray).size() == 28,
 			"and 28 kinds index aligned with them",
 		)
+	recorder.release()
+
+
+## `equipment.slots` is sparse like `inventory.slots`: occupied worn slots only.
+func _test_equipment() -> void:
+	var recorder := Recorder.new()
+
+	recorder.feed('{"equipment":{"worn":["weapon"],"slots":[]}}')
+	var empty := recorder.of("equipment_changed")
+	if _check(empty.size() == 1, "an empty equipment frame is a message, not a silence"):
+		_check(Array(empty[0]["worn"]) == ["weapon"], "worn survives, got %s" % [Array(empty[0]["worn"])])
+		_check(
+			(empty[0]["slots"] as PackedStringArray).is_empty(),
+			"with nothing worn, got %s" % [Array(empty[0]["slots"])],
+		)
+
+	recorder.clear()
+	recorder.feed('{"equipment":{"worn":["weapon"],"slots":[{"slot":"weapon","kind":"axe"}]}}')
+	var one := recorder.of("equipment_changed")
+	if _check(one.size() == 1, "one occupied worn slot decodes"):
+		_check(
+			Array(one[0]["slots"]) == ["weapon"],
+			"as the slot name the server gave it, got %s" % [Array(one[0]["slots"])],
+		)
+		_check(Array(one[0]["kinds"]) == ["axe"], "with its kind, got %s" % [Array(one[0]["kinds"])])
 	recorder.release()
 
 
@@ -602,6 +641,16 @@ func _test_intent_frames() -> void:
 		"move_to is unchanged by M1, got %s"
 		% JSON.stringify(NetClientScript.move_to_frame(42.3, 17.8)),
 	)
+	_check(
+		JSON.stringify(NetClientScript.equip_frame(3)) == '{"equip":{"slot":3}}',
+		'equip frames as {"equip":{"slot":3}}, got %s'
+		% JSON.stringify(NetClientScript.equip_frame(3)),
+	)
+	_check(
+		JSON.stringify(NetClientScript.unequip_frame("weapon")) == '{"unequip":{"worn":"weapon"}}',
+		'unequip frames as {"unequip":{"worn":"weapon"}}, got %s'
+		% JSON.stringify(NetClientScript.unequip_frame("weapon")),
+	)
 	# `drop` names a slot and `pickup` names an item id, and the two are
 	# different spaces. A sender that swapped them would still frame as valid
 	# JSON, so the field names are asserted rather than assumed.
@@ -609,6 +658,11 @@ func _test_intent_frames() -> void:
 		(NetClientScript.pickup_frame(1)["pickup"] as Dictionary).has("item")
 		and (NetClientScript.drop_frame(1)["drop"] as Dictionary).has("slot"),
 		"pickup names an item id and drop names a slot index",
+	)
+	_check(
+		(NetClientScript.equip_frame(1)["equip"] as Dictionary).has("slot")
+		and (NetClientScript.unequip_frame("weapon")["unequip"] as Dictionary).has("worn"),
+		"equip names a bag slot and unequip names a worn slot",
 	)
 
 

@@ -58,6 +58,7 @@ const PlayerAvatarScene := preload("res://scenes/player_avatar.tscn")
 const GroundItemScript := preload("res://scripts/ground_item.gd")
 const GroundItemScene := preload("res://scenes/ground_item.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
+const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 
 ## Command-line flag naming the websocket URL, as `--server <url>` after the
@@ -122,6 +123,12 @@ signal pickup_requested(item_id: int)
 ## [param slot] is a slot index, never an item id (`PROTOCOL.md`, `drop`).
 signal drop_requested(slot: int)
 
+## Emitted whenever a bag slot is forwarded as `equip`. **M3c.**
+signal equip_requested(slot: int)
+
+## Emitted whenever an occupied worn slot is forwarded as `unequip`. **M3c.**
+signal unequip_requested(worn: String)
+
 ## The [code]net_client.gd[/code] node. Authored as this node's child in
 ## [code]main.tscn[/code]; it needs to be in the tree because it polls its
 ## socket from [method Node._process].
@@ -143,10 +150,13 @@ signal drop_requested(slot: int)
 ## there is exactly one inventory panel per world (CLAUDE.md). Only its slots
 ## are runtime, and the panel builds those itself.
 @export var inventory_panel: Node
+## The [code]equipment_panel.gd[/code] node the `equipment` message drives.
+@export var equipment_panel: Node
 
 var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
 var _panel: InventoryPanelScript = null
+var _equipment: EquipmentPanelScript = null
 var _local: PlayerAvatarScript = null
 var _clock := TickClock.new()
 ## This client's own player id, or 0 before `welcome`.
@@ -197,6 +207,7 @@ func _ready() -> void:
 	_net.item_spawned.connect(_on_item_spawned)
 	_net.item_despawned.connect(_on_item_despawned)
 	_net.inventory_changed.connect(_on_inventory_changed)
+	_net.equipment_changed.connect(_on_equipment_changed)
 	_net.server_error.connect(_on_server_error)
 	_net.disconnected.connect(_on_disconnected)
 
@@ -212,6 +223,14 @@ func _ready() -> void:
 		push_error("Session.inventory_panel must point at a node running inventory_panel.gd")
 	else:
 		_panel.slot_activated.connect(_on_slot_activated)
+		_panel.equip_requested.connect(_on_equip_requested)
+
+	_equipment = equipment_panel as EquipmentPanelScript
+	if _equipment == null:
+		push_error("Session.equipment_panel must point at a node running equipment_panel.gd")
+	else:
+		_equipment.worn_activated.connect(_on_worn_activated)
+		_equipment.equip_from_bag.connect(_on_equip_from_bag)
 
 	var url := _server_from_command_line()
 	if not url.is_empty():
@@ -359,6 +378,30 @@ func request_drop(slot: int) -> void:
 		push_warning("session: drop of slot %d dropped, the socket is not open" % slot)
 		return
 	_net.send_drop(slot)
+
+
+## Sends `equip` for a bag slot, as a right-click or drag would. **M3c.**
+func request_equip(slot: int) -> void:
+	if slot < 0:
+		push_error("session: equip for slot %d; slot indices start at 0" % slot)
+		return
+	equip_requested.emit(slot)
+	if _net == null or not _net.is_open():
+		push_warning("session: equip of slot %d dropped, the socket is not open" % slot)
+		return
+	_net.send_equip(slot)
+
+
+## Sends `unequip` for a worn slot, as activating it would. **M3c.**
+func request_unequip(worn: String) -> void:
+	if worn.is_empty():
+		push_error("session: unequip needs a worn slot name")
+		return
+	unequip_requested.emit(worn)
+	if _net == null or not _net.is_open():
+		push_warning('session: unequip of "%s" dropped, the socket is not open' % worn)
+		return
+	_net.send_unequip(worn)
 
 
 ## `welcome`. The whole world, restated.
@@ -677,6 +720,18 @@ func _on_slot_activated(slot: int) -> void:
 	request_drop(slot)
 
 
+func _on_equip_requested(slot: int) -> void:
+	request_equip(slot)
+
+
+func _on_equip_from_bag(slot: int) -> void:
+	request_equip(slot)
+
+
+func _on_worn_activated(worn: String) -> void:
+	request_unequip(worn)
+
+
 ## `inventory`. **M1.** This client's own inventory, restated in full.
 ##
 ## Handed straight to the panel. Nothing is cached here: a second copy of the
@@ -689,6 +744,16 @@ func _on_inventory_changed(
 		push_error("session: inventory arrived with no panel to draw it")
 		return
 	_panel.apply(size, slot_indices, slot_kinds)
+
+
+## `equipment`. **M3c.** This client's own worn equipment, restated in full.
+func _on_equipment_changed(
+	worn_names: PackedStringArray, slot_names: PackedStringArray, slot_kinds: PackedStringArray
+) -> void:
+	if _equipment == null:
+		push_error("session: equipment arrived with no panel to draw it")
+		return
+	_equipment.apply(worn_names, slot_names, slot_kinds)
 
 
 ## The body for [param id], creating it if this session has not seen it before.

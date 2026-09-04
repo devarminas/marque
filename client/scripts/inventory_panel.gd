@@ -6,9 +6,13 @@ extends PanelContainer
 const InventorySlotScene := preload("res://scenes/inventory_slot.tscn")
 const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 
-## Emitted when the player clicks an occupied slot. [param slot] is a slot
+## Emitted when the player left-clicks an occupied slot. [param slot] is a slot
 ## index, never an item id (`PROTOCOL.md`, `drop`).
 signal slot_activated(slot: int)
+
+## Emitted when the player right-clicks an occupied slot or drags it onto a
+## worn slot. [param slot] is a bag index (`PROTOCOL.md`, `equip`).
+signal equip_requested(slot: int)
 
 @export var slot_grid: GridContainer
 @export var heading: Label
@@ -104,6 +108,7 @@ func _rebuild(size: int) -> void:
 		slot.name = "Slot%d" % index
 		slot.configure(index)
 		slot.pressed.connect(_on_slot_pressed.bind(index))
+		slot.equip_requested.connect(_on_slot_equip_requested)
 		slot_grid.add_child(slot)
 		_slots[index] = slot
 
@@ -117,6 +122,13 @@ func _on_slot_pressed(index: int) -> void:
 		push_warning("InventoryPanel: slot %d is empty; not dropping anything" % index)
 		return
 	slot_activated.emit(index)
+
+
+func _on_slot_equip_requested(slot: int) -> void:
+	if slot < 0:
+		push_error("InventoryPanel: bag slot indices start at 0, got %d" % slot)
+		return
+	equip_requested.emit(slot)
 
 
 func _update_heading(occupied: int) -> void:

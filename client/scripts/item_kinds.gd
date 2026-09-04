@@ -25,7 +25,7 @@ extends RefCounted
 ## [/codeblock]
 
 ## Every kind this client can draw.
-const KNOWN: PackedStringArray = ["acorn"]
+const KNOWN: PackedStringArray = ["acorn", "axe"]
 
 
 ## True when this client has art for [param kind]. An unknown kind is not an
