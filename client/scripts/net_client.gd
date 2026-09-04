@@ -156,7 +156,6 @@ var _closed := false
 ## Next `seq` to stamp on an outbound intent. Restarts from
 ## `welcome.last_seq + 1` on every applied welcome, and is 1 before the first.
 var _next_seq := 1
-## `welcome.session` from the last applied welcome, or "" when none named one.
 var _session := ""
 
 
@@ -510,7 +509,6 @@ static func _heartbeat_ticks_of(body: Dictionary, text: String) -> int:
 	return ticks
 
 
-## `welcome.session`, or "" when it was absent or not a string.
 static func _session_of(body: Dictionary, text: String) -> String:
 	if not body.has("session"):
 		return ""

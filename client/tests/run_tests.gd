@@ -107,7 +107,7 @@ const STARTUP_GRACE_FRAMES := 10
 ## what a healthy run costs.
 ##
 ## Raised from 600 for the wiring suite, whose live half walks a real avatar
-## across real seconds behind a 60 fps cap: a healthy full run against a live
+## across real seconds behind a 30 fps cap: a healthy full run against a live
 ## server measures around 550 frames, which left no room to tell a slow machine
 ## from a hung one.
 const WATCHDOG_FRAMES := 850

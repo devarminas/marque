@@ -14,8 +14,7 @@ extends Node3D
 const URL_ENV := "MARQUE_WS_URL"
 
 ## Frame cap for the live half (NOTES.md, "Godot authoring traps": headless
-## Godot runs uncapped). 30 keeps the walk samples on wall-clock time while
-## leaving the runner's 850-frame watchdog room for reconnect waits.
+## Godot runs uncapped).
 const MAX_FPS := 30
 
 const WAIT_FRAMES := 240
@@ -494,7 +493,6 @@ func _test_a_click_becomes_an_intent(client: Client) -> void:
 	)
 
 
-## Dead URL: backoff 0.5, 1, 2, 4, 5, 5 s, and the bodies stay drawn.
 func _test_a_dead_url_backs_off_without_freeing_bodies(client: Client) -> void:
 	print("== dead URL backs off without freeing bodies ==")
 	_check(

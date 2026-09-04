@@ -102,8 +102,6 @@ class Peer:
 	var closed := false
 	var close_code := 0
 
-	## Empty until `welcome` arrives. Keys: you, tick_ms, tick, heartbeat_ticks,
-	## ids, positions, session, at_msec.
 	var welcome := {}
 	var welcomes: Array[Dictionary] = []
 	var paths: Array[Dictionary] = []

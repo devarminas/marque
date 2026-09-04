@@ -159,15 +159,10 @@ var _heartbeat_ticks := 0
 ## liveness timer is armed.
 var _liveness_deadline_msec := 0
 var _connection_over := false
-## Base websocket URL, with any `session` query stripped.
-var _server_url := ""
-## `welcome.session` last applied, or "".
+var _base_url := ""
 var _token := ""
-## How many failed reconnect waits have already been scheduled.
 var _backoff_steps := 0
-## Monotonic milliseconds at which the next reconnect fires, or 0 when none.
 var _reconnect_at_msec := 0
-## True when this session sent a close frame. A close frame is logout.
 var _logout_requested := false
 ## Player id to [code]player_avatar.gd[/code]. The local player is in here too,
 ## under its own id, pointing at the authored node.
@@ -229,12 +224,12 @@ func connect_to_server(url: String) -> Error:
 	if _net == null:
 		push_error("Session.connect_to_server: no net client")
 		return ERR_UNCONFIGURED
-	_server_url = NetClientScript.url_with_session(url, "")
+	_base_url = NetClientScript.url_with_session(url, "")
 	_logout_requested = false
 	_connection_over = false
 	_reconnect_at_msec = 0
 	_backoff_steps = 0
-	print("session: connecting to ", _server_url)
+	print("session: connecting to ", _base_url)
 	var status := _net.connect_to_server(url)
 	if status != OK:
 		_schedule_reconnect()
@@ -518,7 +513,6 @@ func _claim_expired_window() -> int:
 	return _liveness_window_msec()
 
 
-## The liveness timer and the reconnect backoff (`PROTOCOL.md`, "Clock").
 func _process(_delta: float) -> void:
 	_maybe_reconnect()
 	var window := _claim_expired_window()
@@ -617,11 +611,10 @@ func _on_server_error(re: String, message: String) -> void:
 	push_warning('session: server refused "%s": %s' % [re, message])
 
 
-## Freeze the world. Reconnect when the socket died without a close frame.
 func _on_disconnected(code: int, reason: String) -> void:
 	_connection_over = true
 	_liveness_deadline_msec = 0
-	var resume := not _logout_requested and not _server_url.is_empty()
+	var resume := not _logout_requested and not _base_url.is_empty()
 	if resume:
 		push_warning(
 			'session: disconnected, code %d "%s"; freezing, will reconnect' % [code, reason]
@@ -643,8 +636,8 @@ func _maybe_reconnect() -> void:
 	if _reconnect_at_msec == 0 or Time.get_ticks_msec() < _reconnect_at_msec:
 		return
 	_reconnect_at_msec = 0
-	var url := NetClientScript.url_with_session(_server_url, _token)
-	print("session: connecting to ", _server_url)
+	var url := NetClientScript.url_with_session(_base_url, _token)
+	print("session: connecting to ", _base_url)
 	var status := _net.connect_to_server(url)
 	if status != OK:
 		_schedule_reconnect()
