@@ -105,3 +105,9 @@ func TestSeedingRefusesAnItemWithNoKind(t *testing.T) {
 		t.Fatal("an item with no kind was accepted")
 	}
 }
+
+func TestPickupRangeCoversTheSpotUnderfoot(t *testing.T) {
+	if PickupRange < MinPathLength {
+		t.Fatalf("PickupRange %v is below MinPathLength %v: a pickup underfoot assigns no path and never closes the gap", PickupRange, MinPathLength)
+	}
+}
