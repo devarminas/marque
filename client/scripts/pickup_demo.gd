@@ -8,6 +8,7 @@ extends RefCounted
 ## alongside the server's event log.
 
 const SessionScript := preload("res://scripts/session.gd")
+const TickClock := preload("res://scripts/tick_clock.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const GroundItemScript := preload("res://scripts/ground_item.gd")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
@@ -19,10 +20,8 @@ const REQUIRED_ITEMS := 1
 
 const JOIN_TIMEOUT_MSEC := 20000
 
-## Server ticks from the moment both clients can see the whole scenario to the
-## moment they click. That sum is the whole synchronisation mechanism: a server
-## tick rather than wall-clock, so two processes that never speak to each other
-## agree on one moment in the tick loop's own units.
+const USEC_PER_MSEC := 1000
+
 const CLICK_LEAD_TICKS := 20
 
 ## Offsets from the click tick. They must stay in this order.
@@ -34,6 +33,8 @@ const SHOT_DROPPED_OFFSET_TICKS := 76
 const HOLD_UNTIL_OFFSET_TICKS := 88
 
 const TICK_WAIT_BACKSTOP_MSEC := 60000
+
+const SPIN_USEC := 20000
 
 var _tree: SceneTree
 var _root: Node
@@ -61,7 +62,8 @@ func run(
 	_prefix = prefix
 	_drop_click = drop_click
 
-	if not await _wait_for_scenario():
+	var scenario_usec := await _wait_for_scenario()
+	if scenario_usec < 0:
 		return _fail(
 			"fewer than %d player(s) or %d item(s) after %dms"
 			% [REQUIRED_PLAYERS, REQUIRED_ITEMS, JOIN_TIMEOUT_MSEC]
@@ -75,23 +77,27 @@ func run(
 	var clock := _session.tick_clock()
 	if not clock.is_anchored():
 		return _fail("the tick clock is not anchored; there is no shared moment to click on")
-	var sync_tick := clock.estimated_tick()
-	var click_tick := sync_tick + CLICK_LEAD_TICKS
-	print("DEMO sync %d %d" % [sync_tick, click_tick])
+	var tick_usec := clock.tick_ms() * USEC_PER_MSEC
+	var ready_usec := ready_deadline_usec(scenario_usec, clock)
+	var sync_tick := clock.estimated_tick_at(scenario_usec)
+	print("DEMO sync %d %d" % [sync_tick, clock.estimated_tick_at(ready_usec)])
 
-	if not await _await_tick(click_tick - SHOT_BEFORE_LEAD_TICKS):
-		return _fail("the clock stalled before the first capture")
+	if not await _await_usec(ready_usec - SHOT_BEFORE_LEAD_TICKS * tick_usec):
+		return _fail("frames stopped before the first capture")
 	if not await _capture(1):
 		return _fail("capture 1 failed")
 
-	if not await _await_tick(click_tick):
-		return _fail("the clock stalled before the click")
 	var picked: Variant = _screen_position_of(item)
 	if picked == null:
 		return 1
 	var screen: Vector2 = picked
-	print("DEMO pickupclick %d %d %f %f" % [clock.estimated_tick(), item_id, screen.x, screen.y])
+
+	var click_usec := clock.next_guard_usec(Time.get_ticks_usec(), click_guard_usec(tick_usec))
+	var click_tick := clock.estimated_tick_at(click_usec)
+	if not await _await_usec(click_usec):
+		return _fail("frames stopped before the click")
 	_click_at(screen)
+	print("DEMO pickupclick %d %d %f %f" % [clock.estimated_tick(), item_id, screen.x, screen.y])
 
 	if not await _await_tick(click_tick + SHOT_RESOLVED_OFFSET_TICKS):
 		return _fail("the clock stalled before the second capture")
@@ -112,6 +118,29 @@ func run(
 		return _fail("the clock stalled during the hold")
 	print("DEMO done")
 	return 0
+
+
+static func click_guard_usec(tick_usec: int) -> int:
+	return tick_usec / 3
+
+
+static func click_quantum_usec(tick_usec: int) -> int:
+	return tick_usec * 8
+
+
+static func ready_deadline_usec(scenario_usec: int, clock: TickClock) -> int:
+	var tick_usec := clock.tick_ms() * USEC_PER_MSEC
+	var quantum := click_quantum_usec(tick_usec)
+	var quantized: int = ceili(float(scenario_usec) / float(quantum)) * quantum
+	return quantized + CLICK_LEAD_TICKS * tick_usec
+
+
+static func click_deadline_usec(scenario_usec: int, clock: TickClock) -> int:
+	var tick_usec := clock.tick_ms() * USEC_PER_MSEC
+	return clock.next_guard_usec(
+		ready_deadline_usec(scenario_usec, clock),
+		click_guard_usec(tick_usec),
+	)
 
 
 ## The winner's half: walk somewhere it chose, wait to actually arrive, then
@@ -154,14 +183,24 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 
 
 ## Waits until the world holds the whole scenario: both players and the item.
-func _wait_for_scenario() -> bool:
+func _wait_for_scenario() -> int:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
 		if (_session.known_ids().size() >= REQUIRED_PLAYERS
 				and _session.known_item_ids().size() >= REQUIRED_ITEMS):
-			return true
+			return Time.get_ticks_usec()
 		await _tree.process_frame
-	return false
+	return -1
+
+
+func _await_usec(deadline_usec: int) -> bool:
+	var backstop := Time.get_ticks_msec() + TICK_WAIT_BACKSTOP_MSEC
+	while Time.get_ticks_usec() < deadline_usec:
+		if Time.get_ticks_msec() > backstop:
+			return false
+		if deadline_usec - Time.get_ticks_usec() > SPIN_USEC:
+			await _tree.process_frame
+	return true
 
 
 ## Waits until the estimated server tick reaches [param target]. False means the

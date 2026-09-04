@@ -87,15 +87,50 @@ func is_anchored() -> bool:
 
 ## The tick the server is estimated to be on right now.
 ##
-## Returns [constant UNANCHORED_TICK] until [method anchor] is called. The
-## estimate lags the server by roughly one-way latency, which is why a freshly
-## arrived [code]path[/code] can carry a [code]start_tick[/code] ahead of it;
-## see [code]polyline_walker.gd[/code], which clamps that case rather than
-## rewinding.
+## Returns [constant UNANCHORED_TICK] until [method anchor] is called.
 func estimated_tick() -> int:
+	return estimated_tick_at(_now_usec.call())
+
+
+## The tick the server is estimated to be on at monotonic time [param at_usec].
+##
+## [method @GlobalScope.floori] rather than integer division: truncation and
+## floor disagree on negatives, [param at_usec] may precede the anchor, and a
+## caller may inject a time source this class cannot vouch for. The formula in
+## PROTOCOL.md says floor.
+func estimated_tick_at(at_usec: int) -> int:
 	if not is_anchored():
 		return UNANCHORED_TICK
-	return _anchor_tick + _elapsed_ticks()
+	return _anchor_tick + floori(float(at_usec - _anchor_usec) / float(_tick_usec))
+
+
+## Microseconds into the estimated tick that contains [param at_usec].
+##
+## Zero when unanchored.
+func phase_usec_at(at_usec: int) -> int:
+	if not is_anchored() or _tick_usec <= 0:
+		return 0
+	return posmod(at_usec - _anchor_usec, _tick_usec)
+
+
+## Earliest [param T >= from_usec] whose phase equals [param guard_usec].
+##
+## Never clicks from inside the tick. A client already past the guard waits
+## until the next one, so one-way latency plus the send cannot still sit on
+## the server's late edge (ARM-67 run 18).
+func next_guard_usec(from_usec: int, guard_usec: int) -> int:
+	if not is_anchored() or _tick_usec <= 0:
+		return from_usec
+	if guard_usec <= 0 or guard_usec >= _tick_usec:
+		push_error(
+			"TickClock.next_guard_usec: guard_usec must be in (0, tick_usec), got %d of %d"
+			% [guard_usec, _tick_usec]
+		)
+		return from_usec
+	var phase := phase_usec_at(from_usec)
+	if phase < guard_usec:
+		return from_usec + (guard_usec - phase)
+	return from_usec + (_tick_usec - phase) + guard_usec
 
 
 ## Milliseconds per tick as reported by the server, or 0 before anchoring.
@@ -107,13 +142,3 @@ func tick_ms() -> int:
 	if not is_anchored():
 		return 0
 	return _tick_usec / _USEC_PER_MSEC
-
-
-## Whole ticks elapsed since the anchor.
-##
-## [method @GlobalScope.floori] rather than integer division: truncation and
-## floor disagree on negatives, and a caller may inject a time source this class
-## cannot vouch for. The formula in PROTOCOL.md says floor.
-func _elapsed_ticks() -> int:
-	var elapsed_usec: int = _now_usec.call() - _anchor_usec
-	return floori(float(elapsed_usec) / float(_tick_usec))

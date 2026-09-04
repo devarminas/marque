@@ -9,6 +9,7 @@ extends RefCounted
 ## other assertion here would also pass for a clock that summed frame deltas.
 
 const TickClock := preload("res://scripts/tick_clock.gd")
+const PickupDemo := preload("res://scripts/pickup_demo.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
 const TICK_MS := 150
@@ -40,6 +41,14 @@ func run(assertions: Assertions) -> void:
 	_test_sub_tick_time_floors(assertions)
 	_test_a_stall_does_not_lose_ticks(assertions)
 	_test_real_monotonic_time_advances_without_frames(assertions)
+	_test_estimating_at_a_named_moment(assertions)
+	_test_a_tick_number_is_not_a_moment(assertions)
+	_test_phase_is_the_remainder_into_the_tick(assertions)
+	_test_a_half_tick_lead_still_splits_a_server_edge(assertions)
+	_test_nearby_scenario_observations_share_a_deadline(assertions)
+	_test_a_next_guard_click_keeps_two_receipts_on_one_server_tick(assertions)
+	_test_a_next_guard_click_waits_out_of_a_late_interior(assertions)
+	_test_a_next_guard_click_survives_a_late_edge_and_an_overshoot(assertions)
 	_test_re_anchoring_moves_the_origin(assertions)
 	print("  (the three ERROR lines below are the rejections under test)")
 	_test_invalid_anchors_are_rejected(assertions)
@@ -171,6 +180,273 @@ func _test_real_monotonic_time_advances_without_frames(assertions: Assertions) -
 		advanced <= expected + 4,
 		"the real stall did not overshoot wildly (%d ticks for %dms)" % [advanced, REAL_STALL_MSEC],
 	)
+
+
+func _test_estimating_at_a_named_moment(assertions: Assertions) -> void:
+	var fake := FakeMonotonicClock.new()
+	var clock := TickClock.new(fake.read)
+
+	assertions.check(
+		clock.estimated_tick_at(0) == TickClock.UNANCHORED_TICK,
+		"an un-anchored clock knows nothing about any moment, not just about now",
+	)
+
+	clock.anchor(500, TICK_MS)
+	var anchored_at := fake.now_usec
+	assertions.check(
+		clock.estimated_tick_at(anchored_at) == 500, "the anchor instant estimates the anchor tick"
+	)
+	assertions.check(
+		clock.estimated_tick_at(anchored_at + 20 * TICK_MS * USEC_PER_MSEC) == 520,
+		"twenty ticks past the anchor estimates twenty ticks on",
+	)
+	assertions.check(
+		clock.estimated_tick_at(anchored_at - USEC_PER_MSEC) == 499,
+		"a moment before the anchor floors backwards rather than truncating towards it",
+	)
+
+	fake.advance_msec(37)
+	var moment := fake.now_usec
+	for lead: int in [1, 20, 400]:
+		assertions.check(
+			(clock.estimated_tick_at(moment + lead * TICK_MS * USEC_PER_MSEC)
+				== clock.estimated_tick_at(moment) + lead),
+			"a %d-tick lead from an arbitrary moment names a tick %d on" % [lead, lead],
+		)
+
+	assertions.check(
+		clock.estimated_tick_at(fake.now_usec) == clock.estimated_tick(),
+		"estimating at now is estimating now",
+	)
+
+
+func _test_a_tick_number_is_not_a_moment(assertions: Assertions) -> void:
+	var shared := FakeMonotonicClock.new()
+	var early_clock := TickClock.new(shared.read)
+	var late_clock := TickClock.new(shared.read)
+
+	var offset_msec := 100
+	early_clock.anchor(900, TICK_MS)
+	shared.advance_msec(offset_msec)
+	late_clock.anchor(900, TICK_MS)
+
+	assertions.check(
+		early_clock.estimated_tick() == late_clock.estimated_tick(),
+		"at one instant both clients report tick %d" % early_clock.estimated_tick(),
+	)
+
+	var target := 900 + 20
+	var early_msec := -1
+	var late_msec := -1
+	for step in range(0, 40 * TICK_MS):
+		var now_msec := offset_msec + step
+		if early_msec < 0 and early_clock.estimated_tick() >= target:
+			early_msec = now_msec
+		if late_msec < 0 and late_clock.estimated_tick() >= target:
+			late_msec = now_msec
+		shared.advance_msec(1)
+
+	assertions.check(
+		early_msec >= 0 and late_msec >= 0, "both clocks reached the rendezvous tick"
+	)
+	assertions.check(
+		late_msec - early_msec == offset_msec,
+		(
+			"the two clients act %dms apart on the same tick number, the whole offset between "
+			% (late_msec - early_msec)
+			+ "their anchors; want %d" % offset_msec
+		),
+	)
+
+
+func _test_phase_is_the_remainder_into_the_tick(assertions: Assertions) -> void:
+	var fake := FakeMonotonicClock.new()
+	var clock := TickClock.new(fake.read)
+	assertions.check(clock.phase_usec_at(0) == 0, "an unanchored clock has no phase")
+
+	clock.anchor(40, TICK_MS)
+	var tick_usec := TICK_MS * USEC_PER_MSEC
+	assertions.check(clock.phase_usec_at(fake.now_usec) == 0, "the anchor instant is phase 0")
+	fake.advance_msec(40)
+	assertions.check(
+		clock.phase_usec_at(fake.now_usec) == 40 * USEC_PER_MSEC,
+		"40ms into a tick is phase 40000, got %d" % clock.phase_usec_at(fake.now_usec),
+	)
+	fake.advance_msec(TICK_MS)
+	assertions.check(
+		clock.phase_usec_at(fake.now_usec) == 40 * USEC_PER_MSEC,
+		"one tick later the phase repeats, got %d" % clock.phase_usec_at(fake.now_usec),
+	)
+	assertions.check(
+		clock.next_guard_usec(fake.now_usec - 40 * USEC_PER_MSEC, tick_usec / 3)
+			== fake.now_usec - 40 * USEC_PER_MSEC + tick_usec / 3,
+		"a click at phase 0 waits until the guard",
+	)
+
+
+func _test_a_half_tick_lead_still_splits_a_server_edge(assertions: Assertions) -> void:
+	var pair := _run18_clocks()
+	var tick_usec := TICK_MS * USEC_PER_MSEC
+	var ready: int = pair["ready"]
+	var half_tick_click := ready + tick_usec / 2
+	var recv_a: int = half_tick_click + int(pair["send_a"])
+	var recv_b: int = half_tick_click + int(pair["overshoot"]) + int(pair["send_b"])
+	assertions.check(
+		_server_tick(recv_a, tick_usec) + 1 == _server_tick(recv_b, tick_usec),
+		(
+			"the half-tick deadline still yields adjacent server ticks (%d then %d); "
+			% [_server_tick(recv_a, tick_usec), _server_tick(recv_b, tick_usec)]
+			+ "that is the residual F1 left"
+		),
+	)
+
+
+func _test_nearby_scenario_observations_share_a_deadline(assertions: Assertions) -> void:
+	var fake := FakeMonotonicClock.new()
+	var clock := TickClock.new(fake.read)
+	clock.anchor(0, TICK_MS)
+	var tick_usec := TICK_MS * USEC_PER_MSEC
+	var early := 70 * USEC_PER_MSEC
+	var late := early + 10 * USEC_PER_MSEC
+	assertions.check(
+		PickupDemo.click_deadline_usec(early, clock) == PickupDemo.click_deadline_usec(late, clock),
+		"two roster observations 10ms apart still name one click deadline",
+	)
+	var quantum := PickupDemo.click_quantum_usec(tick_usec)
+	assertions.check(
+		PickupDemo.click_deadline_usec(quantum - USEC_PER_MSEC, clock)
+			!= PickupDemo.click_deadline_usec(quantum + USEC_PER_MSEC, clock),
+		"observations on opposite sides of a quantum still differ by one bucket",
+	)
+	var pair := _run18_clocks()
+	var clock_a: TickClock = pair["clock_a"]
+	var clock_b: TickClock = pair["clock_b"]
+	var scenario_a: int = pair["scenario"]
+	var scenario_b: int = scenario_a + 10 * USEC_PER_MSEC
+	var click_a: int = PickupDemo.click_deadline_usec(scenario_a, clock_a)
+	var click_b: int = PickupDemo.click_deadline_usec(scenario_b, clock_b)
+	var recv_a: int = click_a + int(pair["send_a"])
+	var recv_b: int = click_b + int(pair["overshoot"]) + int(pair["send_b"])
+	assertions.check(
+		_server_tick(recv_a, tick_usec) == _server_tick(recv_b, tick_usec),
+		(
+			"a quantized next-guard deadline keeps 10ms-apart observations on one server tick, got %d and %d"
+			% [_server_tick(recv_a, tick_usec), _server_tick(recv_b, tick_usec)]
+		),
+	)
+
+
+func _test_a_next_guard_click_keeps_two_receipts_on_one_server_tick(
+	assertions: Assertions,
+) -> void:
+	var pair := _run18_clocks()
+	var tick_usec := TICK_MS * USEC_PER_MSEC
+	var clock_a: TickClock = pair["clock_a"]
+	var clock_b: TickClock = pair["clock_b"]
+	var guard := PickupDemo.click_guard_usec(tick_usec)
+	var ready: int = pair["ready"]
+	var click_a: int = clock_a.next_guard_usec(ready, guard)
+	var click_b: int = clock_b.next_guard_usec(ready, guard)
+	var recv_a: int = click_a + int(pair["send_a"])
+	var recv_b: int = click_b + int(pair["overshoot"]) + int(pair["send_b"])
+	assertions.check(
+		_server_tick(recv_a, tick_usec) == _server_tick(recv_b, tick_usec),
+		(
+			"next-guard clicks land on one server tick, got %d and %d"
+			% [_server_tick(recv_a, tick_usec), _server_tick(recv_b, tick_usec)]
+		),
+	)
+	assertions.check(
+		clock_a.phase_usec_at(click_a) == guard,
+		"client A clicks on the guard, got phase %d" % clock_a.phase_usec_at(click_a),
+	)
+	assertions.check(
+		click_a > ready and click_b > ready,
+		"a ready time already past the guard still waits for the next one",
+	)
+
+
+func _test_a_next_guard_click_waits_out_of_a_late_interior(
+	assertions: Assertions,
+) -> void:
+	var fake := FakeMonotonicClock.new()
+	var clock := TickClock.new(fake.read)
+	fake.now_usec = 2 * USEC_PER_MSEC
+	clock.anchor(0, TICK_MS)
+	var tick_usec := TICK_MS * USEC_PER_MSEC
+	var guard := PickupDemo.click_guard_usec(tick_usec)
+	var from := fake.now_usec + guard + 20 * USEC_PER_MSEC
+	assertions.check(
+		clock.phase_usec_at(from) > guard,
+		"the fixture is already past the guard, phase %d" % clock.phase_usec_at(from),
+	)
+	var click := clock.next_guard_usec(from, guard)
+	assertions.check(click > from, "it does not click from inside the tick")
+	assertions.check(
+		clock.phase_usec_at(click) == guard,
+		"the click sits on the next guard, got %d" % clock.phase_usec_at(click),
+	)
+
+
+func _test_a_next_guard_click_survives_a_late_edge_and_an_overshoot(
+	assertions: Assertions,
+) -> void:
+	var pair := _late_edge_clocks()
+	var tick_usec := TICK_MS * USEC_PER_MSEC
+	var clock_a: TickClock = pair["clock_a"]
+	var clock_b: TickClock = pair["clock_b"]
+	var ready: int = pair["ready"]
+	assertions.check(
+		clock_a.phase_usec_at(ready) >= tick_usec - PickupDemo.click_guard_usec(tick_usec),
+		"the fixture starts in the late danger zone, phase %d" % clock_a.phase_usec_at(ready),
+	)
+	var click_a: int = clock_a.next_guard_usec(ready, PickupDemo.click_guard_usec(tick_usec))
+	var click_b: int = clock_b.next_guard_usec(ready, PickupDemo.click_guard_usec(tick_usec))
+	var recv_a: int = click_a + int(pair["send_a"])
+	var recv_b: int = click_b + int(pair["overshoot"]) + int(pair["send_b"])
+	assertions.check(
+		_server_tick(recv_a, tick_usec) == _server_tick(recv_b, tick_usec),
+		(
+			"waiting for the next guard keeps both receipts on one server tick, got %d and %d"
+			% [_server_tick(recv_a, tick_usec), _server_tick(recv_b, tick_usec)]
+		),
+	)
+	assertions.check(
+		click_a > ready and click_b > ready,
+		"both clients wait past the late edge rather than clicking on it",
+	)
+
+
+func _run18_clocks() -> Dictionary:
+	return _two_heartbeat_clocks(70 * USEC_PER_MSEC)
+
+
+func _late_edge_clocks() -> Dictionary:
+	return _two_heartbeat_clocks(148 * USEC_PER_MSEC)
+
+
+func _two_heartbeat_clocks(scenario_usec: int) -> Dictionary:
+	var fake := FakeMonotonicClock.new()
+	var clock_a := TickClock.new(fake.read)
+	var clock_b := TickClock.new(fake.read)
+	fake.now_usec = 2 * USEC_PER_MSEC
+	clock_a.anchor(0, TICK_MS)
+	fake.now_usec = 7 * USEC_PER_MSEC
+	clock_b.anchor(0, TICK_MS)
+	var tick_usec := TICK_MS * USEC_PER_MSEC
+	return {
+		"clock_a": clock_a,
+		"clock_b": clock_b,
+		"scenario": scenario_usec,
+		"ready": scenario_usec + PickupDemo.CLICK_LEAD_TICKS * tick_usec,
+		"send_a": USEC_PER_MSEC,
+		"send_b": 8 * USEC_PER_MSEC,
+		"overshoot": 3 * USEC_PER_MSEC,
+	}
+
+
+func _server_tick(recv_usec: int, tick_usec: int) -> int:
+	return floori(float(recv_usec) / float(tick_usec))
 
 
 ## Re-anchoring is how a reconnect, and later an M2 heartbeat, correct drift.
