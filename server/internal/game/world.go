@@ -858,13 +858,9 @@ func rejectionEvent(re string) string {
 	}
 }
 
-// withSeq tags the log fields of an event with the sequence number of the frame
-// that caused it, and leaves them alone when the frame carried none.
-//
-// The field is absent rather than zero for an unsequenced frame: an absent
-// field and a zero one are different claims, and zero is not a legal sequence
-// number. Only the three events a frame's arrival causes get it; what the
-// server decides later is not the frame arriving.
+// withSeq tags an intent with the sequence number of the frame that caused it.
+// Only the three events a frame's arrival causes get one; what the server
+// decides later is not the frame arriving.
 func withSeq(f gamelog.Fields, seq mnet.Seq) gamelog.Fields {
 	if seq != 0 {
 		f["seq"] = seq

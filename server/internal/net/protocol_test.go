@@ -37,11 +37,6 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			// "nothing there" apart. session is a string and is always present,
 			// because every welcome names the identity of the player receiving
 			// it; there is no such thing as a welcome without one.
-			//
-			// last_seq is 0 here and still on the wire. There are no acks, so a
-			// client reads its numbering out of this field alone, and an
-			// omitted key would be indistinguishable from a server that does
-			// not send one.
 			name: "welcome with an empty world",
 			msg: mnet.Welcome{
 				You:     1,
@@ -257,10 +252,6 @@ func TestDecodeRejections(t *testing.T) {
 		// before the key is read and there is no message to attribute it to.
 		{"nan literal", `{"move_to":{"x":NaN,"z":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, ""},
 		{"overflowing literal", `{"move_to":{"x":1e400,"z":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		// A sequence number of at least 1, or none. Zero is refused rather than
-		// read as absent: a client that computed one and got zero has a bug,
-		// and the server names it rather than quietly downgrading the frame to
-		// unsequenced (PROTOCOL.md, "Sequence numbers").
 		{"zero seq", `{"move_to":{"x":1,"z":1,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
 		{"negative seq", `{"move_to":{"x":1,"z":1,"seq":-1}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
 		{"fractional seq", `{"move_to":{"x":1,"z":1,"seq":1.5}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},

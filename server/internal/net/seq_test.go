@@ -192,10 +192,8 @@ func TestAnUnsequencedIntentAfterASequencedOneIsApplied(t *testing.T) {
 	}
 }
 
-// TestAMalformedSequenceNumberIsRefusedAndTheConnectionSurvives covers the four
-// shapes a client can get wrong. Zero is the one worth staging deliberately: it
-// is refused rather than read as absent, because a client that computed a
-// sequence number and got zero has a bug the server should name.
+// TestAMalformedSequenceNumberIsRefusedAndTheConnectionSurvives stages the four
+// shapes a client can get wrong, zero among them deliberately.
 func TestAMalformedSequenceNumberIsRefusedAndTheConnectionSurvives(t *testing.T) {
 	h := newHarness(t)
 
