@@ -42,6 +42,13 @@ func (p Point) Z() float64 { return p[1] }
 // write and one of the more expensive to find.
 type ItemID int64
 
+// Seq is one intent's sequence number, parsed once at the envelope and used by
+// the game package to drop retries (PROTOCOL.md, "Sequence numbers").
+//
+// Zero means the frame carried none. Decode is the only constructor and it
+// refuses anything below 1, so no legal Seq is ever 0.
+type Seq int64
+
 // Client-to-server message names. Each is the key in the envelope and the value
 // of an error's "re" field.
 const (
@@ -106,6 +113,12 @@ type ServerMessage interface{ isServerMessage() }
 // presents to be handed its own body back. It sits beside You because those two
 // are what this message says about the receiver; everything else is the world.
 //
+// LastSeq is the highest sequence number this server has accepted from that
+// player, 0 for one that has never sent a seq. There are no acks, so a resumed
+// welcome is the only thing that tells a reconnecting client where its
+// numbering got to; it therefore carries no omitempty and rides in every
+// welcome, including as 0.
+//
 // Neither array carries omitempty, so an empty world encodes as "players":[]
 // and "items":[] rather than dropping the key. Both must be handed to Encode
 // non-nil: encoding/json writes a nil slice as null, and a client should not
@@ -113,6 +126,7 @@ type ServerMessage interface{ isServerMessage() }
 type Welcome struct {
 	You     PlayerID      `json:"you"`
 	Session string        `json:"session"`
+	LastSeq Seq           `json:"last_seq"`
 	TickMS  int           `json:"tick_ms"`
 	Tick    int64         `json:"tick"`
 	Players []PlayerState `json:"players"`
@@ -201,7 +215,15 @@ func (Inventory) isServerMessage()   {}
 
 // ClientMessage is one message a client can send. Clients send intents, never
 // facts (CLAUDE.md, "Architecture invariants").
-type ClientMessage interface{ isClientMessage() }
+//
+// Name is the message's wire name, the same string Decode switched on and the
+// same one an error about it carries as "re". It lives on the type so that a
+// message added later cannot compile until it says its own name, which is what
+// keeps the set from needing a second switch somewhere else.
+type ClientMessage interface {
+	isClientMessage()
+	Name() string
+}
 
 // MoveTo is a click on the ground: the player wants to walk to (X, Z).
 //
@@ -240,6 +262,10 @@ type Drop struct {
 func (MoveTo) isClientMessage() {}
 func (Pickup) isClientMessage() {}
 func (Drop) isClientMessage()   {}
+
+func (MoveTo) Name() string { return MsgMoveTo }
+func (Pickup) Name() string { return MsgPickup }
+func (Drop) Name() string   { return MsgDrop }
 
 // serverEnvelope is the key-as-tag wrapper. Exactly one field is ever non-nil;
 // Encode is the only thing that builds it.
@@ -410,7 +436,8 @@ func rejectIntent(reason RejectReason, re, format string, args ...any) error {
 // axis; that is a decision, and this is where it is made: absent is rejected.
 //
 // Unknown fields are not listed and are therefore ignored, which is what lets
-// M2 add seq to any intent body without breaking this server.
+// senders add fields. seq is not listed here for that reason: it ships, but it
+// is parsed at the envelope by seqWire and belongs to no one message.
 type moveToWire struct {
 	X *float64 `json:"x"`
 	Z *float64 `json:"z"`
@@ -433,15 +460,29 @@ type dropWire struct {
 	Slot *int `json:"slot"`
 }
 
-// Decode parses one inbound frame.
+// seqWire pulls seq out of whichever intent body carried it. It is specified
+// once and parsed once, at the envelope, and no message body may give it a
+// different meaning (PROTOCOL.md, "Sequence numbers").
+//
+// The pointer is what distinguishes an unsequenced frame from a seq of 0, which
+// is a refusal rather than a synonym for absent.
+type seqWire struct {
+	Seq *int64 `json:"seq"`
+}
+
+// Decode parses one inbound frame into its message and its sequence number.
 //
 // Every failure is a *RejectError carrying both a machine-readable reason and
 // the disposition the protocol assigns it. Validation that needs world
 // knowledge (bounds, reachability) is not done here.
-func Decode(frame []byte) (ClientMessage, error) {
+//
+// A seq the envelope accepted comes back even when the body is then refused,
+// because it is consumed either way: last_seq must not depend on whether the
+// server liked the body (PROTOCOL.md, "Sequence numbers").
+func Decode(frame []byte) (ClientMessage, Seq, error) {
 	var keys map[string]json.RawMessage
 	if err := json.Unmarshal(frame, &keys); err != nil {
-		return nil, &RejectError{
+		return nil, 0, &RejectError{
 			Reason:      ReasonMalformedJSON,
 			Detail:      fmt.Sprintf("not a JSON object: %v", err),
 			Disposition: ReplyError,
@@ -450,7 +491,7 @@ func Decode(frame []byte) (ClientMessage, error) {
 	if len(keys) != 1 {
 		// Not a compatibility question: a frame that names zero messages or two
 		// cannot be interpreted at all.
-		return nil, &RejectError{
+		return nil, 0, &RejectError{
 			Reason:      ReasonProtocolError,
 			Detail:      fmt.Sprintf("expected exactly one message key, got %d", len(keys)),
 			Disposition: ReplyErrorAndClose,
@@ -458,30 +499,68 @@ func Decode(frame []byte) (ClientMessage, error) {
 	}
 
 	for key, payload := range keys {
+		var decodeBody func([]byte) (ClientMessage, error)
 		switch key {
 		case MsgMoveTo:
-			return decodeMoveTo(payload)
+			decodeBody = decodeMoveTo
 		case MsgPickup:
-			return decodePickup(payload)
+			decodeBody = decodePickup
 		case MsgDrop:
-			return decodeDrop(payload)
+			decodeBody = decodeDrop
 		default:
-			// Logged loudly and ignored. A peer written against a later
-			// protocol version must not be broken by this one.
-			return nil, &RejectError{
+			// Logged loudly and ignored, and refused before the seq is looked
+			// at: a message this server cannot interpret has no sequence number
+			// it may consume. A peer written against a later protocol version
+			// must not be broken by this one.
+			return nil, 0, &RejectError{
 				Reason:      ReasonUnknownMessage,
 				Detail:      fmt.Sprintf("unknown message %q", key),
 				Re:          key,
 				Disposition: Ignore,
 			}
 		}
+
+		seq, err := decodeSeq(payload, key)
+		if err != nil {
+			return nil, 0, err
+		}
+		msg, err := decodeBody(payload)
+		if err != nil {
+			return nil, seq, err
+		}
+		return msg, seq, nil
 	}
 	panic("unreachable: map of length 1 yielded no entries")
 }
 
+// decodeSeq reads the sequence number out of an intent body already attributed
+// to the message named by re.
+//
+// Everything but the range is encoding/json's job: a fractional, quoted,
+// boolean or int64-overflowing seq fails to unmarshal into *int64 and lands
+// here as a malformed frame. Absent stays absent, and 0 is refused rather than
+// read as absent, because a client that computed a sequence number and got zero
+// has a bug the server should name (PROTOCOL.md, "Sequence numbers").
+func decodeSeq(payload []byte, re string) (Seq, error) {
+	var wire seqWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return 0, rejectIntent(ReasonMalformedJSON, re,
+			"%s: seq must be a JSON integer of at least 1: %v", re, err)
+	}
+	if wire.Seq == nil {
+		return 0, nil
+	}
+	if *wire.Seq < 1 {
+		return 0, rejectIntent(ReasonMalformedJSON, re,
+			"%s: seq must be a JSON integer of at least 1, got %d", re, *wire.Seq)
+	}
+	return Seq(*wire.Seq), nil
+}
+
 func decodeMoveTo(payload []byte) (ClientMessage, error) {
-	// Deliberately not DisallowUnknownFields: senders may add fields, and M2's
-	// seq is already spoken for (PROTOCOL.md, "Compatibility" rule 2).
+	// Deliberately not DisallowUnknownFields: senders may add fields, and seq
+	// has already been read off this payload by the envelope (PROTOCOL.md,
+	// "Compatibility" rule 2).
 	var wire moveToWire
 	if err := json.Unmarshal(payload, &wire); err != nil {
 		return nil, rejectIntent(ReasonMalformedJSON, MsgMoveTo, "move_to: %v", err)

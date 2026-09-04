@@ -78,10 +78,28 @@ type Event struct {
 	Msg ClientMessage
 	Err error
 
+	// Seq is set whenever the envelope carried a valid sequence number,
+	// including when Err is a rejection of the body behind it, and is 0 when
+	// the frame carried none.
+	Seq Seq
+
 	// Reason is one of the Disconnect constants; Detail one of the Detail
 	// constants, or empty. Nothing may branch on Detail.
 	Reason string
 	Detail string
+}
+
+// Name is the wire name of the message this event is about: the decoded
+// message's own, or the one a rejection was attributed to, and empty for a
+// frame too malformed to attribute to any.
+func (ev Event) Name() string {
+	if ev.Msg != nil {
+		return ev.Msg.Name()
+	}
+	if rejection, ok := Rejection(ev.Err); ok {
+		return rejection.Re
+	}
+	return ""
 }
 
 // Conn is one client connection. Reads run on the connection's own goroutine;
@@ -288,8 +306,8 @@ func (c *Conn) readPump(h *Hub) (reason, detail string) {
 			})
 			continue
 		}
-		msg, decErr := Decode(data)
-		h.emit(Event{Kind: EventFrame, Conn: c, Msg: msg, Err: decErr})
+		msg, seq, decErr := Decode(data)
+		h.emit(Event{Kind: EventFrame, Conn: c, Msg: msg, Seq: seq, Err: decErr})
 	}
 }
 
