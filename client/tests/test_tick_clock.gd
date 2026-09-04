@@ -9,6 +9,7 @@ extends RefCounted
 ## other assertion here would also pass for a clock that summed frame deltas.
 
 const TickClock := preload("res://scripts/tick_clock.gd")
+const PickupDemo := preload("res://scripts/pickup_demo.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
 const TICK_MS := 150
@@ -42,6 +43,7 @@ func run(assertions: Assertions) -> void:
 	_test_real_monotonic_time_advances_without_frames(assertions)
 	_test_estimating_at_a_named_moment(assertions)
 	_test_a_tick_number_is_not_a_moment(assertions)
+	_test_a_half_tick_lead_survives_an_overshoot_at_a_tick_edge(assertions)
 	_test_re_anchoring_moves_the_origin(assertions)
 	print("  (the three ERROR lines below are the rejections under test)")
 	_test_invalid_anchors_are_rejected(assertions)
@@ -248,6 +250,40 @@ func _test_a_tick_number_is_not_a_moment(assertions: Assertions) -> void:
 			"the two clients act %dms apart on the same tick number, the whole offset between "
 			% (late_msec - early_msec)
 			+ "their anchors; want %d" % offset_msec
+		),
+	)
+
+
+func _test_a_half_tick_lead_survives_an_overshoot_at_a_tick_edge(
+	assertions: Assertions,
+) -> void:
+	var fake := FakeMonotonicClock.new()
+	var clock := TickClock.new(fake.read)
+	clock.anchor(100, TICK_MS)
+	var tick_usec := TICK_MS * USEC_PER_MSEC
+	var overshoot_usec := 3 * USEC_PER_MSEC
+	var scenario := (21 * TICK_MS - 2) * USEC_PER_MSEC - PickupDemo.CLICK_LEAD_TICKS * tick_usec
+	var raw := scenario + PickupDemo.CLICK_LEAD_TICKS * tick_usec
+
+	assertions.check(
+		clock.estimated_tick_at(raw) != clock.estimated_tick_at(raw + overshoot_usec),
+		(
+			"a 3ms overshoot of a raw lead 2ms before a rollover crosses a tick "
+			+ "(%d vs %d)"
+			% [clock.estimated_tick_at(raw), clock.estimated_tick_at(raw + overshoot_usec)]
+		),
+	)
+
+	var click: int = PickupDemo.click_deadline_usec(scenario, tick_usec)
+	assertions.check(
+		click - raw == tick_usec / 2,
+		"the deadline is the raw lead plus the same half tick for every caller",
+	)
+	assertions.check(
+		clock.estimated_tick_at(click) == clock.estimated_tick_at(click + overshoot_usec),
+		(
+			"the same overshoot after a half-tick lead stays on one tick, got %d and %d"
+			% [clock.estimated_tick_at(click), clock.estimated_tick_at(click + overshoot_usec)]
 		),
 	)
 

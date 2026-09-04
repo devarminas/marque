@@ -76,7 +76,7 @@ func run(
 	if not clock.is_anchored():
 		return _fail("the tick clock is not anchored; there is no shared moment to click on")
 	var tick_usec := clock.tick_ms() * USEC_PER_MSEC
-	var click_usec := scenario_usec + CLICK_LEAD_TICKS * tick_usec
+	var click_usec := click_deadline_usec(scenario_usec, tick_usec)
 	var sync_tick := clock.estimated_tick_at(scenario_usec)
 	var click_tick := clock.estimated_tick_at(click_usec)
 	print("DEMO sync %d %d" % [sync_tick, click_tick])
@@ -114,6 +114,12 @@ func run(
 		return _fail("the clock stalled during the hold")
 	print("DEMO done")
 	return 0
+
+
+## Shared wall duration from the roster-complete observation. The extra half
+## tick keeps that deadline off a server tick edge.
+static func click_deadline_usec(scenario_usec: int, tick_usec: int) -> int:
+	return scenario_usec + CLICK_LEAD_TICKS * tick_usec + tick_usec / 2
 
 
 ## The winner's half: walk somewhere it chose, wait to actually arrive, then
