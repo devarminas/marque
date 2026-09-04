@@ -49,6 +49,7 @@ func _ready() -> void:
 	_test_scene_instantiates_and_configures()
 	_test_position_tracks_the_walker_over_simulated_time()
 	_test_two_avatars_do_not_share_state()
+	await _test_walk_animation_follows_the_walker()
 	await _test_a_clock_drives_the_avatar_without_being_told_each_tick()
 	await _test_the_body_turns_to_face_its_direction_of_travel()
 	await _test_facing_can_be_turned_off_without_moving_the_body()
@@ -92,27 +93,56 @@ func _test_scene_instantiates_and_configures() -> void:
 	)
 
 	# A shadow needs a caster. Unlit geometry casts none, and without one a
-	# capsule on a plane has no readable contact point (NOTES.md, "Color as
+	# body on a plane has no readable contact point (NOTES.md, "Color as
 	# semantics"). The windowed screenshot check proves the shadow actually
-	# lands; this proves the mesh is authored to cast it at all.
-	for child in avatar.get_children():
-		var mesh := child as MeshInstance3D
-		if mesh == null:
-			continue
-		_assertions.check(
-			mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON,
-			"%s casts a shadow" % mesh.name,
-		)
-		var primitive := mesh.mesh as PrimitiveMesh
-		var material: StandardMaterial3D = null
-		if primitive != null:
-			material = primitive.material as StandardMaterial3D
-		_assertions.check(material != null, "%s has a StandardMaterial3D" % mesh.name)
-		if material != null:
+	# lands; this proves the meshes are authored to cast it at all.
+	#
+	# The rig is the skinned Knight, so the meshes live under its Skeleton3D.
+	# A body whose meshes were still the retired blue capsule would have zero
+	# of them there.
+	var skeleton := avatar.get_node_or_null("Knight/Rig_Medium/Skeleton3D") as Skeleton3D
+	_assertions.check(skeleton != null, "the rig's Skeleton3D exists under Knight/Rig_Medium")
+	var skinned := 0
+	if skeleton != null:
+		for node in skeleton.get_children():
+			var mesh := node as MeshInstance3D
+			if mesh == null:
+				continue
+			skinned += 1
 			_assertions.check(
-				material.shading_mode == BaseMaterial3D.SHADING_MODE_PER_PIXEL,
-				"%s is lit, not unlit" % mesh.name,
+				mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON,
+				"%s casts a shadow" % mesh.name,
 			)
+			# Imported glTF meshes carry their own materials, which need not be
+			# StandardMaterial3D. Unlit is still checkable on any material that has
+			# the property, and an unlit body would cast no shadow: the claim above
+			# would then be a lie, so a build that went unlit fails here too.
+			var surface_material := mesh.get_active_material(0) if mesh.mesh != null and mesh.mesh.get_surface_count() > 0 else null
+			_assertions.check(
+				surface_material != null, "%s has a material" % mesh.name
+			)
+			if surface_material != null and "shading_mode" in surface_material:
+				_assertions.check(
+					surface_material.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED,
+					"%s is lit, not unlit" % mesh.name,
+				)
+	_assertions.check(skinned > 0, "the skeleton carries skinned meshes (%d)" % skinned)
+
+	_assertions.check(avatar.get_node_or_null("Knight") is Node3D, "the Knight rig is instanced")
+	var animation := avatar.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	_assertions.check(animation != null, "an AnimationPlayer is authored on the avatar")
+	_assertions.check(
+		animation != null and animation.has_animation(PlayerAvatar.WALK_ANIM),
+		"the walk animation %s is in the library" % PlayerAvatar.WALK_ANIM,
+	)
+	_assertions.check(
+		animation != null and animation.has_animation(PlayerAvatar.IDLE_ANIM),
+		"the idle animation %s is in the library" % PlayerAvatar.IDLE_ANIM,
+	)
+	_assertions.check(
+		animation != null and animation.root_node == NodePath("../Knight"),
+		"the AnimationPlayer drives the Knight rig",
+	)
 
 	avatar.queue_free()
 
@@ -201,6 +231,47 @@ func _test_two_avatars_do_not_share_state() -> void:
 
 	first.queue_free()
 	second.queue_free()
+
+
+## The animation is derived from the tick, not a stored flag: mid-path the
+## Knight runs, past the end it settles into the idle cycle, and a rewind
+## re-derives the run because nothing was cached.
+func _test_walk_animation_follows_the_walker() -> void:
+	var avatar := _spawn(2)
+	var animation := avatar.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	_assertions.check(
+		animation != null and animation.current_animation.is_empty(),
+		"an avatar with no path plays nothing",
+	)
+
+	avatar.follow_path(PackedVector2Array([Vector2(0.0, 0.0), Vector2(6.0, 0.0)]), 0, 3.0)
+	avatar.update_to_tick(5)
+	_assertions.check(
+		animation != null and animation.current_animation == PlayerAvatar.WALK_ANIM,
+		"a mid-path tick runs %s, got \"%s\""
+		% [PlayerAvatar.WALK_ANIM, "" if animation == null else animation.current_animation],
+	)
+	_assertions.check(
+		animation != null and is_equal_approx(animation.speed_scale, PlayerAvatar.WALK_SPEED_SCALE),
+		"the walk is scaled to match the server's stride, got %f"
+		% (0.0 if animation == null else animation.speed_scale),
+	)
+
+	avatar.update_to_tick(10_000)
+	_assertions.check(
+		animation != null and animation.current_animation == PlayerAvatar.IDLE_ANIM,
+		"a far-future tick idles on %s, got \"%s\""
+		% [PlayerAvatar.IDLE_ANIM, "" if animation == null else animation.current_animation],
+	)
+
+	avatar.update_to_tick(5)
+	_assertions.check(
+		animation != null and animation.current_animation == PlayerAvatar.WALK_ANIM,
+		"a rewound tick re-derives the walk, got \"%s\""
+		% ("" if animation == null else animation.current_animation),
+	)
+
+	avatar.queue_free()
 
 
 ## With a clock assigned the avatar advances itself, which is how the wiring unit
