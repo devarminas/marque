@@ -1,17 +1,8 @@
-// Package gamelog writes the server's NDJSON event log.
-//
-// One JSON object per line, each line prefixed with "GAMELOG " so that library
-// and runtime noise on the same stream can be filtered out with a single grep:
+// Package gamelog writes the server's NDJSON event log, one object per line:
 //
 //	GAMELOG {"t":142,"ev":"path_assigned","player":1,"speed":3}
 //
-// Every object carries "t", the tick number. Wall-clock never appears in the
-// log, because a replayed run must diff cleanly against the recorded one and
-// wall-clock makes every run differ (NOTES.md, "Determinism").
-//
-// The schema is deliberately flat: "t", "ev", and then whatever fields that
-// event carries. M1's inventory mutations are new "ev" values with new fields,
-// not a new envelope.
+// "t" is the tick number, never wall-clock; "ev" names the event.
 package gamelog
 
 import (
@@ -23,22 +14,14 @@ import (
 	"sync"
 )
 
-// Prefix tags every log line. Callers grep for it at line start.
+// Prefix tags every log line.
 const Prefix = "GAMELOG "
 
-// Fields carries the event-specific payload. Keys "t" and "ev" are reserved and
-// are rejected with a panic, because silently shadowing them would corrupt the
-// log for every downstream reader.
+// Fields carries the event-specific payload. Keys "t" and "ev" are reserved
+// and rejected with a panic.
 type Fields map[string]any
 
-// Logger serializes event lines to a writer.
-//
-// Safe for concurrent use, though in this server essentially all events come
-// from the single goroutine that owns world state. The mutex exists so that
-// boot and shutdown lines from main cannot interleave with it.
-//
-// A disabled Logger is a no-op that still validates nothing and costs one
-// atomic-free branch per call.
+// Logger serializes event lines to a writer. Safe for concurrent use.
 type Logger struct {
 	mu      sync.Mutex
 	w       io.Writer
@@ -46,7 +29,7 @@ type Logger struct {
 }
 
 // New returns a Logger writing to w. When enabled is false every Event call is
-// a no-op and w is never touched.
+// a no-op.
 func New(w io.Writer, enabled bool) *Logger {
 	if w == nil {
 		panic("gamelog: nil writer")
@@ -55,15 +38,7 @@ func New(w io.Writer, enabled bool) *Logger {
 }
 
 // Event writes one line: the prefix, then a JSON object of "t", "ev", and f.
-//
-// t is a tick number, never a timestamp. ev names the event.
-//
-// Encoding failures panic. A value that cannot be marshaled is a programming
-// error, and a log that silently drops lines is worse than a crash: it is the
-// evidence trail for every later milestone. Non-finite floats are the one
-// expected hazard and are converted to their string form ("NaN", "+Inf") rather
-// than failing, because rejected client coordinates are exactly the values the
-// log most needs to record.
+// Encoding failures panic; non-finite floats are written as strings.
 func (l *Logger) Event(t int64, ev string, f Fields) {
 	if l == nil || !l.enabled {
 		return
@@ -94,12 +69,8 @@ func (l *Logger) Event(t int64, ev string, f Fields) {
 	}
 }
 
-// jsonSafe replaces values encoding/json refuses with values it accepts.
-//
-// Only non-finite float64 needs this today. NaN and +/-Inf have no JSON literal
-// form, so they are emitted as strings; a reader that sees a string where it
-// expected a number is reading a rejected value, which is the only way one gets
-// into the log.
+// jsonSafe stringifies non-finite float64s: JSON has no NaN or Inf literal, so
+// encoding/json refuses them.
 func jsonSafe(v any) any {
 	switch x := v.(type) {
 	case float64:

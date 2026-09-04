@@ -17,32 +17,21 @@ const (
 	eventBuffer  = 256
 )
 
-// Disconnect reasons and details, reported on EventDisconnected. The vocabulary
-// and the rules that pick between them are PROTOCOL.md, "Which reason is
-// authoritative".
+// Disconnect reasons reported on EventDisconnected (PROTOCOL.md, "Which reason
+// is authoritative").
 const (
 	DisconnectClosed   = "closed"
 	DisconnectPeerGone = "peer_gone"
 	DisconnectSlow     = "slow_client"
 	DisconnectShutdown = "server_shutdown"
 	DisconnectProtocol = "protocol_error"
-	// DisconnectRefused: the connection presented a session token whose player
-	// is still connected, and was turned away at the door.
-	//
-	// It is the one reason that never reaches a client_disconnected line,
-	// because the world never admitted the connection and so has no player to
-	// log it against (PROTOCOL.md, "Which reason is authoritative"). The hub
-	// does not know that; it latches this like any other reason and the world
-	// decides what to record.
+	// DisconnectRefused: turned away at the door because the token's player is
+	// still connected.
 	DisconnectRefused = "refused"
 )
 
 // SessionParam is the WebSocket URL query parameter carrying a resuming
 // client's session token, as in ws://host/ws?session=<token>.
-//
-// One mechanism and not two: a handshake header would work equally well, and
-// having both means one of them is eventually the wrong one (PROTOCOL.md,
-// "The session token").
 const SessionParam = "session"
 
 const (
@@ -65,10 +54,8 @@ const (
 	EventDisconnected
 )
 
-// Event is one thing that happened on one connection.
-//
-// Events for a given connection arrive in order: EventConnected, then zero or
-// more EventFrame, then exactly one EventDisconnected.
+// Event is one thing that happened on one connection. Per connection they
+// arrive as EventConnected, zero or more EventFrame, then one EventDisconnected.
 type Event struct {
 	Kind EventKind
 	Conn *Conn
@@ -78,9 +65,8 @@ type Event struct {
 	Msg ClientMessage
 	Err error
 
-	// Seq is set whenever the envelope carried a valid sequence number,
-	// including when Err is a rejection of the body behind it, and is 0 when
-	// the frame carried none.
+	// Seq is the envelope's sequence number, set even when Err rejects the
+	// body, and 0 when the frame carried none.
 	Seq Seq
 
 	// Reason is one of the Disconnect constants; Detail one of the Detail
@@ -89,9 +75,8 @@ type Event struct {
 	Detail string
 }
 
-// Name is the wire name of the message this event is about: the decoded
-// message's own, or the one a rejection was attributed to, and empty for a
-// frame too malformed to attribute to any.
+// Name is the wire name of the message this event is about, or empty for a
+// frame too malformed to attribute to one.
 func (ev Event) Name() string {
 	if ev.Msg != nil {
 		return ev.Msg.Name()
@@ -102,9 +87,7 @@ func (ev Event) Name() string {
 	return ""
 }
 
-// Conn is one client connection. Reads run on the connection's own goroutine;
-// writes run on a second one draining send, so the goroutine that owns world
-// state never blocks on a socket.
+// Conn is one client connection.
 type Conn struct {
 	ws           *websocket.Conn
 	remote       string
@@ -121,10 +104,8 @@ type Conn struct {
 // Remote is the peer address, for logging only. It is not an identity.
 func (c *Conn) Remote() string { return c.remote }
 
-// Session is the session token this connection presented at the door, or empty
-// when it presented none. It is a claim, not a fact: this package neither knows
-// which tokens exist nor what one entitles a connection to, and the world is
-// what decides.
+// Session is the session token this connection presented, or empty. It is a
+// claim, not a fact; the world decides what it entitles.
 func (c *Conn) Session() string { return c.session }
 
 // Send queues one encoded frame and reports whether it was accepted. It never
@@ -166,8 +147,7 @@ func (c *Conn) close(reason, detail string) {
 		c.closeReason = reason
 		c.closeDetail = detail
 		close(c.closed)
-		// CloseNow is safe to call concurrently with a blocked Read or Write on
-		// the same connection, and is what unblocks them.
+		// CloseNow is the documented way to unblock a concurrent Read or Write.
 		_ = c.ws.CloseNow()
 	})
 }
@@ -200,10 +180,6 @@ func (h *Hub) Events() <-chan Event { return h.events }
 // ServeHTTP upgrades a request to WebSocket and blocks for the connection's
 // lifetime.
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Read before the upgrade, while the request is unambiguously still a
-	// request. Nothing about the token is checked here: an unparseable or
-	// absurd one is a claim the world will fail to match, which is the same
-	// answer it gives an expired one.
 	session := r.URL.Query().Get(SessionParam)
 
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
@@ -268,8 +244,6 @@ func (h *Hub) Close() {
 	}
 	h.closed = true
 	close(h.done)
-	// Snapshot and release the lock before closing sockets: a connection's
-	// teardown path takes this same lock to unregister itself.
 	open := make([]*Conn, 0, len(h.conns))
 	for c := range h.conns {
 		open = append(open, c)
@@ -281,12 +255,8 @@ func (h *Hub) Close() {
 	}
 }
 
-// readPump reads frames until the connection fails, and returns the latched
-// reason and detail it ended on.
-//
-// Reading c.closeReason unsynchronised is safe exactly here: sync.Once
-// establishes a happens-before edge from the winning Do to every later Do that
-// returns, so any caller of close happens-after the write.
+// readPump reads c.closeReason unsynchronised: sync.Once's winning Do
+// happens-before every later Do that returns.
 func (c *Conn) readPump(h *Hub) (reason, detail string) {
 	for {
 		typ, data, err := c.ws.Read(context.Background())
@@ -311,14 +281,10 @@ func (c *Conn) readPump(h *Hub) (reason, detail string) {
 	}
 }
 
-// readReason classifies why a read stopped, by cause.
-//
-// A context error reaches here despite readPump passing context.Background():
-// coder/websocket derives its own five-second deadline for control frames, so a
-// jammed peer's pong surfaces as a wrapped context.DeadlineExceeded on this
-// goroutine. It is a slow peer, not a clean logout, so it must not fall into
-// DisconnectClosed. TestAJammedPongCondemnsTheClientAsPeerGone stages it;
-// TestAReadContextDeadlineIsNotACleanClose pins the mapping.
+// readReason maps a read error to a reason. coder/websocket's internal 5s
+// control-frame deadline surfaces here as context.DeadlineExceeded, which is a
+// jammed peer, not a clean close (TestAJammedPongCondemnsTheClientAsPeerGone,
+// TestAReadContextDeadlineIsNotACleanClose).
 func readReason(err error) (reason, detail string) {
 	var ce websocket.CloseError
 	if errors.As(err, &ce) {
@@ -327,12 +293,10 @@ func readReason(err error) (reason, detail string) {
 	return DisconnectPeerGone, DetailReadError
 }
 
-// writePump drains the send buffer onto the socket, and is the only writer.
-//
-// It must keep owning the write deadline rather than handing one to
-// coder/websocket, which tears the connection down before returning the error
-// and lets the read pump condemn it first (PROTOCOL.md, "The server owns the
-// write deadline for data frames").
+// writePump owns the write deadline itself: a deadline-bearing context makes
+// coder/websocket tear the connection down before returning the error, and the
+// read pump would then win the reason (PROTOCOL.md, "The server owns the write
+// deadline for data frames").
 func (c *Conn) writePump() {
 	for {
 		select {
