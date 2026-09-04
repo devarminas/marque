@@ -490,13 +490,12 @@ func is_liveness_armed() -> bool:
 ## that has stopped promising heartbeats turns the timer off instead of leaving
 ## the previous one running against a rule nobody restated.
 ##
-## [b]A dead connection never re-arms.[/b] Once [signal Node.disconnected] has
-## been heard there is nothing left that could send the next heartbeat, so a
-## timer waiting for one would report a second death for the first one. No
-## conforming server can deliver a frame after the socket is gone, so this
-## guards a broken peer and a caller feeding frames by hand rather than a flow;
-## it is explicit because the alternative is that the invariant holds only for
-## as long as nobody exercises it.
+## [b]A dead connection never re-arms.[/b] Once the socket has been reported
+## gone there is nothing left that could send the next heartbeat, so a timer
+## waiting for one would report a second death for the first one. No conforming
+## server can deliver a frame after the socket is gone, so this guards a broken
+## peer and a caller feeding frames by hand; it is explicit because the
+## alternative is an invariant that holds only until somebody exercises it.
 func _rearm_liveness() -> void:
 	if _connection_over or _heartbeat_ticks <= 0 or _tick_ms <= 0:
 		_liveness_deadline_msec = 0
@@ -532,11 +531,10 @@ func _process(_delta: float) -> void:
 		) % [window, LIVENESS_HEARTBEATS, _heartbeat_ticks, _tick_ms]
 	)
 	server_unresponsive.emit(window)
-	if _net != null:
-		# Abandoned, never closed. A close frame would tell the server this
-		# player logged out; a dropped transport tells it `peer_gone`, which is
-		# the case that suspends (PROTOCOL.md, "Clock").
-		_net.abandon()
+	# Abandoned, never closed. A close frame would tell the server this player
+	# logged out; a dropped transport tells it `peer_gone`, which is the case
+	# that suspends (PROTOCOL.md, "Clock").
+	_net.abandon()
 
 
 ## `item_spawn`. **M1.** Idempotent: an item id already known is replaced, never

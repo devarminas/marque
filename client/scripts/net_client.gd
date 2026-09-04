@@ -226,8 +226,6 @@ func close(code: int = 1000, reason: String = "") -> void:
 func abandon() -> void:
 	if _peer != null:
 		_peer.close(-1)
-	# No close frame means no close code and no reason, which is the pair this
-	# signal already documents for a connection that died without one.
 	_announce_disconnected(0, "")
 
 
@@ -454,20 +452,17 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 ## `welcome.heartbeat_ticks`, or 0 when it was absent, unreadable, or negative.
 ## **M2c.**
 ##
-## [b]Zero is the answer to every question this cannot answer, and that is not
-## laziness.[/b] Zero means the reader runs no liveness timer, which is the
-## behaviour of every client before this unit and the only safe reading of a
-## server that has not told us it sends heartbeats. Refusing the `welcome`
-## instead would mean the client never joins and sits frozen forever with
-## nothing visibly wrong on either side, which is the failure `PROTOCOL.md`
-## already talks this file out of once, for `welcome.items` being `null`.
-##
-## A field that is present and wrong is still logged. The server that sent it
-## has a bug, and the reason this returns rather than refuses is that the player
-## should not pay for it.
+## [b]Zero is the answer to every question this cannot answer.[/b] Zero means
+## the reader runs no liveness timer, which is the behaviour of every client
+## before this unit and the only safe reading of a server that has not told us
+## it sends heartbeats. Refusing the `welcome` instead would mean the client
+## never joins and sits frozen forever with nothing visibly wrong on either
+## side, which is the failure `PROTOCOL.md` already talks this file out of once,
+## for `welcome.items` being `null`. A present-but-wrong field is still logged;
+## it is the server's bug, and the player should not pay for it.
 static func _heartbeat_ticks_of(body: Dictionary, text: String) -> int:
 	if not body.has("heartbeat_ticks"):
-		# Every server before M2d. Not an error and not remarkable.
+		# Every server before M2d. Not an error.
 		return 0
 	var raw: Variant = body["heartbeat_ticks"]
 	if not _is_number(raw):
