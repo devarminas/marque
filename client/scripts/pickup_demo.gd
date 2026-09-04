@@ -22,27 +22,9 @@ const JOIN_TIMEOUT_MSEC := 20000
 const USEC_PER_MSEC := 1000
 
 ## How long after the shared moment the two clients click, in server ticks.
-##
-## [b]The moment is shared. A tick number naming it is not.[/b] Both clients
-## learn the roster reached two players out of one [code]addPlayer[/code] on the
-## server. The later joiner learns it from its own [code]welcome[/code] and the
-## earlier one from the [code]spawn[/code] enqueued in the same step, so
-## counting microseconds from there has the two of them click at one instant.
-##
-## Waiting for a tick number instead throws that instant away. The server
-## composes [code]welcome[/code] on its event arm and not inside
-## [code]step[/code], so each client anchors somewhere inside a tick and its own
-## tick boundaries sit that far late, by an amount it cannot observe and that
-## differs per client ([code]tick_clock.gd[/code], [code]estimated_tick[/code]).
-## Two clients waiting for tick N clicked up to a whole tick apart, and the
-## server assigned their two walks on different ticks on 8 of M1j's 21 idle
-## runs, which [code]scripts/contested_pickup_demo.ps1[/code] rightly refuses as
-## a sequence rather than a contest.
 const CLICK_LEAD_TICKS := 20
 
-## Offsets around the click. They must stay in this order. The lead-in counts
-## back from the click moment; the rest run on from the tick the click landed
-## on, where a tick either way costs nothing.
+## Offsets from the click tick. They must stay in this order.
 const SHOT_BEFORE_LEAD_TICKS := 6
 const SHOT_RESOLVED_OFFSET_TICKS := 26
 const WALK_AWAY_OFFSET_TICKS := 30
@@ -174,10 +156,6 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 
 
 ## Waits until the world holds the whole scenario: both players and the item.
-##
-## Returns the monotonic microsecond at which this client saw it, or -1 if it
-## never did. That instant is the two clients' one shared moment, and everything
-## up to the click is measured from it; see [constant CLICK_LEAD_TICKS].
 func _wait_for_scenario() -> int:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
@@ -189,8 +167,7 @@ func _wait_for_scenario() -> int:
 
 
 ## Waits until the monotonic clock reaches [param deadline_usec]. False means
-## frames stopped arriving, which is the only way this can fail, because
-## monotonic time itself cannot stall.
+## the frame backstop fired.
 func _await_usec(deadline_usec: int) -> bool:
 	var backstop := Time.get_ticks_msec() + TICK_WAIT_BACKSTOP_MSEC
 	while Time.get_ticks_usec() < deadline_usec:
