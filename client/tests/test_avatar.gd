@@ -49,6 +49,7 @@ func _ready() -> void:
 	_test_scene_instantiates_and_configures()
 	_test_position_tracks_the_walker_over_simulated_time()
 	_test_two_avatars_do_not_share_state()
+	_test_a_pathless_avatar_idles()
 	await _test_walk_animation_follows_the_walker()
 	await _test_a_clock_drives_the_avatar_without_being_told_each_tick()
 	await _test_the_body_turns_to_face_its_direction_of_travel()
@@ -231,6 +232,22 @@ func _test_two_avatars_do_not_share_state() -> void:
 
 	first.queue_free()
 	second.queue_free()
+
+
+## A freshly spawned avatar has no path yet, and the tick still says what it
+## is doing: standing. Idle_A must be playing, not bind pose.
+func _test_a_pathless_avatar_idles() -> void:
+	var avatar := _spawn(51)
+	var animation := avatar.get_node_or_null("AnimationPlayer") as AnimationPlayer
+
+	avatar.update_to_tick(0)
+	_assertions.check(
+		animation != null and animation.current_animation == PlayerAvatar.IDLE_ANIM,
+		"a pathless avatar idles on %s, got \"%s\""
+		% [PlayerAvatar.IDLE_ANIM, "" if animation == null else animation.current_animation],
+	)
+
+	avatar.queue_free()
 
 
 ## The animation is derived from the tick, not a stored flag: mid-path the

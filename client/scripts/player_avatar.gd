@@ -31,8 +31,10 @@ const TickClock := preload("res://scripts/tick_clock.gd")
 ## so at 3.25x playback the stride paces the server's 3.0 units per second.
 ## Walking_A would need roughly 8x and slides at that rate.
 const WALK_ANIM := "kaykit/Running_A"
-## KayKit's only looping breathing cycle; nothing in the library is named Idle.
-const IDLE_ANIM := "kaykit/Jump_Idle"
+## KayKit Idle_A: the pack's breathing idle, probed at an 8.4-degree peak leg
+## swing, the subtle stance standing in place wants. Jump_Idle is a hover pose
+## and Idle_B a 45-degree look-around fidget.
+const IDLE_ANIM := "kaykit/Idle_A"
 const WALK_SPEED_SCALE := 3.25
 
 ## Server player id, or 0 before [method configure]. Ids are assigned from 1
@@ -112,6 +114,7 @@ func follow_path(points: PackedVector2Array, start_tick: int, speed: float) -> v
 ## entirely both land in the right place.
 func update_to_tick(tick: int) -> void:
 	if _walker == null or not _walker.has_path():
+		_set_walking(false)
 		return
 
 	var ground := _walker.position_at_tick(tick)
