@@ -69,11 +69,10 @@ Preconditions:
 
 ## Gotchas
 
-- **Known flake:** the still-camera control asserts byte-exactness over the top
-  quarter of a GPU-rendered frame, and one flip was observed on a fully static frame
-  across eighteen measured windows — render nondeterminism. It fails safe, never a
-  false pass. If the demo fails on **only** "the background is not a control" with a
-  still fraction near zero, rerun before investigating.
+- **Known flake:** the sky-band still-camera control. Failures cluster under GPU
+  load right after heavy suites. Geometry can match a green merge-base while the
+  sky band flips. Before you call a product regression, follow Known flake in
+  `../SKILL.md`. Two consecutive failures under load are still this flake.
 - **A starved desktop fails every client-side assertion at once, and the failure
   looks like a frozen server.** Each capture waits 15 rendered frames. Measured on
   this machine under load, one capture took about 4.4 seconds, which is longer than

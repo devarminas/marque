@@ -370,11 +370,27 @@ number and report what you got rather than comparing against a figure written he
 
 ## Known flake
 
-`two_client_demo.ps1`'s still-camera control asserts byte-exactness over the top
-quarter of a GPU-rendered frame. One flip was observed on a fully static frame across
-eighteen measured windows, explicable only by render nondeterminism. It fails in the
-safe direction, never a false pass. If the demo fails on **only** "the background is
-not a control" with a still fraction near zero, rerun before investigating.
+`two_client_demo.ps1`'s still-camera control is the sky-band check. It asserts
+byte-exactness over the top quarter of a GPU-rendered frame. Failures cluster under
+GPU load right after heavy suites. `DEMO pos` and path geometry can match a green
+merge-base while the sky band still flips. The control fails in the safe direction,
+never a false pass.
+
+If the demo fails on **only** "the background is not a control" with a still
+fraction near zero, use the steps below before you call a product regression.
+`two_client_demo.ps1` prints `SKY-BAND FLAKE CANDIDATE` on that shape and names
+the idle rerun and the geometry comparison.
+
+1. Compare `DEMO pos` and path geometry to a green merge-base or a prior idle pass.
+   Matching geometry is not a walk regression.
+2. Run the next `two_client_demo.ps1` on an idle machine, with no other Godot work
+   in flight.
+3. Two consecutive sky-band failures under load are still this flake. Call a
+   product regression only if the idle control also fails the sky band, or if
+   geometry differs from the green base.
+
+Measured shape of the flake: two consecutive sky-band failures immediately after
+heavy suites, merge-base geometry identical, three later idle passes green.
 
 ## Feature map
 

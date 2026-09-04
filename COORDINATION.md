@@ -422,11 +422,14 @@ loser condemned on the winning tick (gap 0) has to be the later joiner. An earli
 sees the item still live, finds itself out of range, and is condemned a tick later (gap 1). The
 demo's loser is always the later joiner, which is why it measures gap 0 every run.
 
-**Known flake, recorded so nobody debugs it twice.** `two_client_demo.ps1`'s still-camera control
-asserts byte-exactness over the top quarter of a GPU-rendered frame. One flip was observed on a
-fully static frame across eighteen measured windows, explicable only by render nondeterminism. It
-fails in the safe direction, never a false pass. If the demo fails on only "the background is not
-a control" with a still fraction near zero, rerun before investigating.
+**Known flake, recorded so nobody debugs it twice.** `two_client_demo.ps1`'s still-camera
+control is the sky-band check. It asserts byte-exactness over the top quarter of a
+GPU-rendered frame. Failures cluster under GPU load right after heavy suites.
+`DEMO pos` and path geometry can match a green merge-base while the sky band flips.
+The control fails in the safe direction, never a false pass. Two consecutive
+sky-band failures under load are still this flake. Call a product regression only
+if an idle-machine control also fails the sky band, or if geometry differs.
+Read `.claude/skills/verify-marque/SKILL.md` Known flake for the steps.
 
 ## M2
 
@@ -481,7 +484,10 @@ numbers you got. The transcript also prints the server's whole event log under
 Pass: exit 0 and last lines `TWO CLIENT DEMO OK` and `CONTESTED PICKUP DEMO OK`. The contested
 demo has a known legitimate failure rate near 38% on `:541` and `:718` (the M1j table above). A
 run that fails on only those lines is the baseline, not a regression; rerun up to three times.
-Any other failing line is a finding.
+If `two_client_demo.ps1` fails only on the sky-band still-camera control, that run is the
+Known flake above, not a finding. The idle-machine control and the geometry comparison in
+the Known flake paragraph decide whether the sky-band failure is a product regression. Any
+other failing line is a finding.
 
 ### Forks decided while cutting M2, all revisitable
 
