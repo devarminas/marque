@@ -73,13 +73,16 @@ M2 does not wait on that decision. Its remaining units run in the order `COORDIN
 reason about the domain. You launch agents, gate on their output, and move to the next unit. If
 you find yourself designing something, you have taken a worker's job.
 
-One unit at a time, in this order. Every agent is `poteto-agent`. A bare model-lane agent skips that read and drifts.
+One unit at a time, in this order. Every agent is `poteto-agent` and every brief opens with the `SKILL.md` read instruction. The instruction names `C:/Users/armin/.claude/skills/poteto-mode/SKILL.md`, says to read it in full as a file before any work, to copy the matched playbook's steps into the todolist, and to end the report with the playbook block. A bare model-lane agent skips that read and drifts.
 
 1. **Write.** One unit, one branch, one worktree under `C:\Users\armin\Documents\Projects\game\`.
    `git worktree add`. Model `opus`. Paste `STANDING-ORDERS.md` **verbatim** and name the SHA you
    took it from.
 2. **Gate.** The writer must report a pushed branch, a head SHA, and the commands it ran with
    their exit codes and final lines. Missing any of those, send it back rather than proceeding.
+   The report must also carry the playbook block: the matched playbook and every step marked
+   done or `skip: <reason>`. A missing block, or one where every step is a skip, sends the
+   writer back the same way.
 3. **Verify.** Model `fable`, so the family differs from the writer. Never the writer itself. Over
    about four checks, or if the checks span re-running and reading and adversarial probing, split
    into two agents with a verdict each. `COORDINATION.md` has the sizing rules.

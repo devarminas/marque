@@ -93,6 +93,26 @@ worker lost real time to its absence.
    two files it must not modify that did not exist yet at its branch point. That is confusing
    at best, and at worst it is the first hint that `main` has moved, arriving as a puzzle
    rather than as a fact.
+10. **Open every worker brief with the `SKILL.md` read instruction, and gate on the playbook
+    block.** Four M2 worker transcripts, grepped for `SKILL.md`, `playbooks/`, and
+    `principle-*` reads: two of the four never opened a playbook, and one never opened the
+    skill at all. The M2a writer's first call was `Skill poteto-mode`, which the skill
+    refuses by design; it took the refusal as an answer, never read `SKILL.md` or a playbook,
+    and reported in the brief's six "Report back" items, none of which asked what the
+    playbook required. `no-comments` never ran, and PR #20 merged 206 comment lines in 388
+    added production Go lines, 179 of 349 in `world.go`, which a human caught after the merge.
+    The agent definition alone does not load the skill. Neither does a prompt that begins
+    with `/poteto-mode`. A `poteto-agent` probed with that prefix on 2026-09-04 reported the
+    skill text absent from its context and `poteto-mode` absent from its available-skills
+    list, so do not retry it. The skill carries `disable-model-invocation`, which is why a
+    subagent's own `Skill poteto-mode` call is refused and why the slash form does nothing for
+    a subagent. The two compliant transcripts, the M2b writer and M2a verifier A, read
+    `SKILL.md` as a file and then opened the playbook. Every brief must name
+    `C:/Users/armin/.claude/skills/poteto-mode/SKILL.md`, tell the worker to read it in full
+    as a file before any work (the Skill tool will refuse), to copy its matched playbook's
+    steps into its todolist, and to end its report with the playbook block. The gate must ask
+    for that block, every step done or `skip: <reason>`, because a brief's own report format
+    otherwise displaces the checklist entirely.
 
 ## Verifying a verification
 
