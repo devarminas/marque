@@ -65,3 +65,5 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
   `item_spawned` coordinates nothing else in this repo asserts.
 - [Equip the join-kit axe](./equip-axe.md) — the M3 milestone: open equipment on
   the left, equip the seeded axe, see it in the weapon slot, unequip back to the bag.
+- [Server liveness](./heartbeat-liveness.md) — the M2c milestone: heartbeat ticks,
+  the three-interval liveness window, and the loud abandon of a silent server.

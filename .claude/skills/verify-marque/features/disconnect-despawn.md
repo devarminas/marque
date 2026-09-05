@@ -47,27 +47,48 @@ Preconditions:
   changes nothing.
 - **Survivor sees the despawn, on screen.** The scripted demo path cannot kill one
   client mid-run, so drive it manually per SKILL.md's Launch: start the server and
-  two windowed clients, then stop client b by its PID. Assert client a's log gains a
-  loud despawn line for b's id, and a self-`--screenshot`-style capture or the next
-  scripted run's frames show one capsule where two stood. Report this path as
-  manual-only if you skip it; do not claim it via the headless half.
+  two windowed clients, then stop client b by its PID. **The survivor prints
+  nothing when a known player despawns** (`session.gd` logs only unknown-id
+  despawns), so there is no "despawn line" to assert; a scripted survivor also
+  quits seconds after its last capture, long before a 60-second grace can expire.
+  What this path proves live is the grace itself: b's avatar stays drawn on a's
+  screen for the whole grace — a capture taken in the middle showing two avatars
+  is the feature working — while the log sequence
+  `client_disconnected`/`peer_gone` → `player_suspended` (`expires_tick` ≈
+  `resume_grace` ticks ahead) → `player_expired` proves the timing. **The despawn
+  itself is never logged** — `retire` broadcasts the `despawn` frame and writes
+  no GAMELOG event, exactly like `item_despawn` — so `player_expired` is the
+  log's last word, stamped at the tick the frame went out. That the survivor's
+  world drops the body on the `despawn` *frame* is the wiring suite's headless
+  assertion; the on-screen vanish at expiry needs a client still connected past
+  the grace, and no scripted flag path stays connected that long (`--shots`
+  clients quit seconds after their last capture), so drive it with a manually
+  launched idle client or accept the headless half. Report the manual
+  path as manual-only if you skip it; do not claim it via the headless half.
 
   **Budget sixty seconds for it, and check the server log first.** Killing a PID is an
   abrupt death, so the server suspends the player and broadcasts nothing. What you should
   see immediately is `client_disconnected` with `peer_gone` and then
-  `player_suspended` carrying an `expires_tick`; b's capsule stays on screen, standing
-  where it was, for the whole grace. `player_expired` is the line that immediately precedes
-  the despawn. Assert the sequence rather than only the despawn: a capture taken in between
-  showing two capsules is the feature working, and reading it as a failure is the mistake
+  `player_suspended` carrying an `expires_tick`; b's avatar stays on screen, standing
+  where it was, for the whole grace. `player_expired` is the log's final word on that
+  player — the despawn frame it coincides with is wire-only (see above). Assert the sequence rather than only the despawn: a capture taken in between
+  showing two avatars is the feature working, and reading it as a failure is the mistake
   this bullet exists to prevent.
 
   **The 400-tick grace is not a constant to trust from here.** `marqued` reports it as
   `resume_grace` on its `server_started` line; read it from the run.
 - **Freeze, then reconnect.** Stop the *server* by PID while a client is connected.
   Assert the client logs the dead socket loudly, its world stays drawn (the
-  other capsule remains on screen), and it begins reconnect attempts with backoff
-  rather than emptying. Start the server again on the same URL and assert the
-  client comes back as itself. A clean close still does not reconnect.
+  other avatar remains on screen), and it begins reconnect attempts with backoff
+  rather than emptying. Then start the server again on the same URL and assert
+  the client reconnects — but **on a fresh server process it does not come back
+  as itself**: the session store is in memory, the old token is unknown
+  (`resume_unknown` in the GAMELOG), and the client joins as a new player with a
+  new id. The token's promise is the grace window, not a restart. Coming back as
+  the same player is the same-process path — reconnect before the grace expires —
+  which the interop suite's abandon-and-resume test proves headlessly (`INTEROP OK`
+  gains a `peer_gone` disconnect, `player_suspended`, then `player_resumed` for
+  one id). A clean close still does not reconnect.
 
 ## Gotchas
 
@@ -126,7 +147,7 @@ Preconditions:
   ever sent, and the read pump has nothing to tell it the peer meant to leave.
 
   **Since M2a that fact decides the timing of everything on screen.** The shipped client
-  falls in the suspend half of the table above, so quitting it leaves its capsule standing
+  falls in the suspend half of the table above, so quitting it leaves its avatar standing
   in every other client's world for the whole grace. That is correct behaviour and not a
   leak.
 
@@ -144,15 +165,22 @@ Preconditions:
   was written as a prediction by the unit that shipped the change, which ran neither demo,
   and is promoted here to an observation.
 
-  **The interop suite logs `closed` for what looks like the same event, and that is
-  not a contradiction. Read this before filing a defect.** `interop_test.ps1`
-  produces seven `client_disconnected` events and every one says `closed`, because
-  `test_interop.gd` calls `net.close()` explicitly at `:236` and `:731`. Its clients
-  send a close frame; the shipped client does not. **Both results are correct, and
-  they differ because the clients behave differently, not because the server is
-  inconsistent.** An agent who checks only the suite concludes the real client closes
-  cleanly, which is false — that inference was drawn and caught during M1f. To learn
-  what the shipped client does, drive the demo, not the suite.
+  **The interop suite mostly logs `closed` for what looks like the same event, and
+  that is not a contradiction. Read this before filing a defect.** Most of
+  `interop_test.ps1`'s `client_disconnected` events say `closed`, because
+  `test_interop.gd` calls `net.close()` explicitly at `:268`, `:891`, and `:1005`.
+  Its clients send a close frame; the shipped client does not. Both results are
+  correct, and they differ because the clients behave differently, not because the
+  server is inconsistent. An agent who checks only the suite concludes the real
+  client closes cleanly, which is false — that inference was drawn and caught
+  during M1f. To learn what the shipped client does, drive the demo, not the suite.
+
+  **Since M2c the suite also abandons.** Its abandon-and-resume test drops peer X
+  with `net.abandon()` (`:928`) — no close frame, the shipped client's own
+  liveness path — so the suite now also produces a `peer_gone`/`read_error`
+  disconnect with `player_suspended` and `player_resumed` for the same id. "Every
+  disconnect in an `INTEROP OK` transcript says `closed`" was true once and is no
+  longer; do not treat the suite's `peer_gone` as a defect.
 
   **M2a widened that gap rather than closing it.** `closed` retires at once and `peer_gone`
   suspends, so the interop suite's peers still vanish immediately while the shipped client's

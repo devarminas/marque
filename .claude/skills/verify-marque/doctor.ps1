@@ -71,7 +71,9 @@ foreach ($relative in @(
     "client\scripts\main.gd",
     "client\tests\run_tests.gd",
     "scripts\interop_test.ps1",
-    "scripts\two_client_demo.ps1"
+    "scripts\two_client_demo.ps1",
+    "scripts\contested_pickup_demo.ps1",
+    "scripts\equip_demo.ps1"
 )) {
     if (-not (Test-Path (Join-Path $repo $relative))) {
         $failures.Add("missing $relative; this is not the checkout the skill was written against")
