@@ -143,7 +143,6 @@ signal equip_requested(slot: int)
 ## Emitted whenever an occupied worn slot is forwarded as `unequip`. **M3c.**
 signal unequip_requested(worn: String)
 
-## Emitted whenever the death overlay's Respawn control is pressed. **M5c.**
 signal respawn_requested()
 
 ## The [code]net_client.gd[/code] node. Authored as this node's child in
@@ -180,7 +179,6 @@ var _panel: InventoryPanelScript = null
 var _equipment: EquipmentPanelScript = null
 var _hp_hud: HpHudScript = null
 var _death_overlay: DeathOverlayScript = null
-## Public hit points keyed by player id. Value is [code]Vector2i(hp, max_hp)[/code].
 var _hp := {}
 var _local: PlayerAvatarScript = null
 var _clock := TickClock.new()
@@ -520,8 +518,6 @@ func request_use(slot: int, on: int) -> void:
 	_net.send_use(slot, on)
 
 
-## Sends `respawn`. **M5c.** Overlay visibility changes only when an `hp` frame
-## restates local HP above zero.
 func request_respawn() -> void:
 	respawn_requested.emit()
 	if _net == null or not _net.is_open():
@@ -1229,7 +1225,6 @@ func _clear_hit_points() -> void:
 		_death_overlay.visible = false
 
 
-## Current hit points for [param id], or [code]Vector2i(-1, -1)[/code] when unknown.
 func hit_points_for(id: int) -> Vector2i:
 	var pair: Variant = _hp.get(id)
 	if pair == null:

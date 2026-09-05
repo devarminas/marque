@@ -166,11 +166,6 @@ signal equipment_changed(
 	worn_names: PackedStringArray, slot_names: PackedStringArray, slot_kinds: PackedStringArray
 )
 
-## `hp`: one player's public hit points, restated in full. **M5c.**
-##
-## Also emitted once per `welcome.players` entry and once per `spawn` that carried
-## `hp` / `max_hp`, after [signal welcomed] or [signal spawned] so the listener
-## already has a body for that id.
 signal hp_changed(id: int, hp: int, max_hp: int)
 
 ## `error`: the server refused something this client sent. `re` names the
@@ -339,7 +334,6 @@ func send_attack(player_id: int, seq: int = 0) -> Error:
 	return _send(attack_frame(player_id, _intent_seq(seq)))
 
 
-## Sends `respawn`: a request to return from death. **M5c.**
 func send_respawn(seq: int = 0) -> Error:
 	return _send(respawn_frame(_intent_seq(seq)))
 
@@ -889,9 +883,6 @@ func _on_hp(body: Dictionary, text: String) -> void:
 	hp_changed.emit(int(body["id"]), int(body["hp"]), int(body["max_hp"]))
 
 
-## Reads optional `hp` / `max_hp` into [param out] as one [Vector2i].
-## Returns [constant OK] when filled, [constant ERR_DOES_NOT_EXIST] when both
-## fields are absent, or [constant ERR_INVALID_DATA] when the pair is malformed.
 static func _read_hit_points(state: Dictionary, text: String, out: Array) -> Error:
 	out.clear()
 	var has_hp := state.has("hp")
