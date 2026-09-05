@@ -168,6 +168,8 @@ signal equipment_changed(
 
 signal hp_changed(id: int, hp: int, max_hp: int)
 
+signal mana_changed(id: int, mana: int, max_mana: int)
+
 ## `error`: the server refused something this client sent. `re` names the
 ## rejected message and is [code]""[/code] when the frame could not be
 ## attributed to one. `message` is for a log, not for display and not for
@@ -524,6 +526,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_equipment(body, text)
 		"hp":
 			_on_hp(body, text)
+		"mana":
+			_on_mana(body, text)
 		"tick":
 			_on_tick(body, text)
 		"error":
@@ -546,6 +550,9 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 	var hp_ids := PackedInt64Array()
 	var hps := PackedInt32Array()
 	var max_hps := PackedInt32Array()
+	var mana_ids := PackedInt64Array()
+	var manas := PackedInt32Array()
+	var max_manas := PackedInt32Array()
 	for entry: Variant in body["players"] as Array:
 		if typeof(entry) != TYPE_DICTIONARY:
 			push_error("net_client: welcome.players entry is not an object: %s" % text)
@@ -566,6 +573,15 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 			hp_ids.append(int(state["id"]))
 			hps.append(hit.x)
 			max_hps.append(hit.y)
+		var mana_pair: Array = []
+		var mana_status := _read_mana(state, text, mana_pair)
+		if mana_status == ERR_INVALID_DATA:
+			return
+		if mana_status == OK:
+			var mana_hit: Vector2i = mana_pair[0]
+			mana_ids.append(int(state["id"]))
+			manas.append(mana_hit.x)
+			max_manas.append(mana_hit.y)
 
 	# M1. `items` is absent from every pre-M1 server and that is not an error:
 	# no items on the wire and no items in the world are the same statement.
@@ -633,6 +649,8 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 	# them.
 	for index in hp_ids.size():
 		hp_changed.emit(int(hp_ids[index]), hps[index], max_hps[index])
+	for index in mana_ids.size():
+		mana_changed.emit(int(mana_ids[index]), manas[index], max_manas[index])
 	welcome_items.emit(item_ids, item_kinds, item_positions)
 	welcome_nodes.emit(node_ids, node_kinds, node_positions, node_states)
 
@@ -700,6 +718,13 @@ func _on_spawn(body: Dictionary, text: String) -> void:
 	if hp_status == OK:
 		var hit: Vector2i = pair[0]
 		hp_changed.emit(id, hit.x, hit.y)
+	var mana_pair: Array = []
+	var mana_status := _read_mana(body, text, mana_pair)
+	if mana_status == ERR_INVALID_DATA:
+		return
+	if mana_status == OK:
+		var mana_hit: Vector2i = mana_pair[0]
+		mana_changed.emit(id, mana_hit.x, mana_hit.y)
 
 
 func _on_despawn(body: Dictionary, text: String) -> void:
@@ -883,6 +908,12 @@ func _on_hp(body: Dictionary, text: String) -> void:
 	hp_changed.emit(int(body["id"]), int(body["hp"]), int(body["max_hp"]))
 
 
+func _on_mana(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["id", "mana", "max_mana"], text):
+		return
+	mana_changed.emit(int(body["id"]), int(body["mana"]), int(body["max_mana"]))
+
+
 static func _read_hit_points(state: Dictionary, text: String, out: Array) -> Error:
 	out.clear()
 	var has_hp := state.has("hp")
@@ -896,6 +927,22 @@ static func _read_hit_points(state: Dictionary, text: String, out: Array) -> Err
 		push_error("net_client: hp and max_hp must be numbers: %s" % text)
 		return ERR_INVALID_DATA
 	out.append(Vector2i(int(state["hp"]), int(state["max_hp"])))
+	return OK
+
+
+static func _read_mana(state: Dictionary, text: String, out: Array) -> Error:
+	out.clear()
+	var has_mana := state.has("mana")
+	var has_max := state.has("max_mana")
+	if not has_mana and not has_max:
+		return ERR_DOES_NOT_EXIST
+	if not has_mana or not has_max:
+		push_error("net_client: mana and max_mana must both be present: %s" % text)
+		return ERR_INVALID_DATA
+	if not _is_number(state["mana"]) or not _is_number(state["max_mana"]):
+		push_error("net_client: mana and max_mana must be numbers: %s" % text)
+		return ERR_INVALID_DATA
+	out.append(Vector2i(int(state["mana"]), int(state["max_mana"])))
 	return OK
 
 

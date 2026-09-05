@@ -313,7 +313,7 @@ func _capture(index: int) -> bool:
 	if _role == ROLE_VICTIM:
 		print("DEMO deathvisible %d %d" % [index, 1 if _death.visible else 0])
 		if _hp_hud != null and _hp_hud.visible:
-			print("DEMO hphud %d %s" % [index, _hp_hud.text])
+			print("DEMO hphud %d hp=%s mana=%s" % [index, _hp_hud.text, _hp_hud.mana_text])
 	return true
 
 
