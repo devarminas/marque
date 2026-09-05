@@ -93,6 +93,18 @@ signal welcome_items(
 	item_positions: PackedVector2Array,
 )
 
+## Resource nodes `welcome` listed, emitted after [signal welcome_items]. **M4b.**
+##
+## Same split reason as items: [signal welcomed] frees the world first, then
+## this rebuilds. Arrays are index aligned; [code]node_states[/code] holds
+## `full` or `depleted` verbatim.
+signal welcome_nodes(
+	node_ids: PackedInt64Array,
+	node_kinds: PackedStringArray,
+	node_positions: PackedVector2Array,
+	node_states: PackedStringArray,
+)
+
 ## `spawn`: a player joined. Never carries this client's own id, which arrives
 ## in `welcome` instead.
 signal spawned(id: int, position: Vector2)
@@ -120,6 +132,15 @@ signal item_spawned(id: int, kind: String, position: Vector2)
 
 ## `item_despawn`: a ground item left the world. **M1.**
 signal item_despawned(id: int)
+
+## `node_spawn`: a resource node appeared. **M4b.**
+signal node_spawned(id: int, kind: String, position: Vector2, state: String)
+
+## `node_despawn`: a resource node left the world. **M4b.**
+signal node_despawned(id: int)
+
+## `node_state`: a resource node's full record restated. **M4b.**
+signal node_state_changed(id: int, kind: String, position: Vector2, state: String)
 
 ## `inventory`: this client's own inventory, restated in full. **M1.**
 ##
@@ -274,6 +295,11 @@ func send_pickup(item_id: int, seq: int = 0) -> Error:
 	return _send(pickup_frame(item_id, _intent_seq(seq)))
 
 
+## Sends `gather`: a request to harvest a resource node. **M4b.**
+func send_gather(node_id: int, seq: int = 0) -> Error:
+	return _send(gather_frame(node_id, _intent_seq(seq)))
+
+
 ## Sends `drop`: a request to drop whatever is in an inventory slot. **M1.**
 ##
 ## [param slot] is a position in this client's cached inventory, [b]not[/b] an
@@ -323,6 +349,10 @@ static func move_to_frame(x: float, z: float, seq: int = 0) -> Dictionary:
 
 static func pickup_frame(item_id: int, seq: int = 0) -> Dictionary:
 	return {"pickup": _intent_body({"item": item_id}, seq)}
+
+
+static func gather_frame(node_id: int, seq: int = 0) -> Dictionary:
+	return {"gather": _intent_body({"node": node_id}, seq)}
 
 
 static func drop_frame(slot: int, seq: int = 0) -> Dictionary:
@@ -452,6 +482,12 @@ func ingest_text_frame(text: String) -> void:
 			_on_item_spawn(body, text)
 		"item_despawn":
 			_on_item_despawn(body, text)
+		"node_spawn":
+			_on_node_spawn(body, text)
+		"node_despawn":
+			_on_node_despawn(body, text)
+		"node_state":
+			_on_node_state(body, text)
 		"inventory":
 			_on_inventory(body, text)
 		"equipment":
@@ -513,6 +549,26 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 			item_kinds.append(item["kind"])
 			item_positions.append(item["position"])
 
+	var node_ids := PackedInt64Array()
+	var node_kinds := PackedStringArray()
+	var node_positions := PackedVector2Array()
+	var node_states := PackedStringArray()
+	if body.has("nodes"):
+		var raw_nodes: Variant = body["nodes"]
+		if _is_null_list(raw_nodes, "welcome.nodes", text):
+			raw_nodes = []
+		if typeof(raw_nodes) != TYPE_ARRAY:
+			push_error("net_client: welcome.nodes is not an array: %s" % text)
+			return
+		for entry: Variant in raw_nodes as Array:
+			var node := _node_state(entry, "welcome.nodes entry", text)
+			if node.is_empty():
+				return
+			node_ids.append(node["id"])
+			node_kinds.append(node["kind"])
+			node_positions.append(node["position"])
+			node_states.append(node["state"])
+
 	var heartbeat_ticks := _heartbeat_ticks_of(body, text)
 	_session = _session_of(body, text)
 	# Every applied welcome, including a second one. A click that was on the
@@ -532,6 +588,7 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 	# items announced before it would be freed by the very frame that announced
 	# them.
 	welcome_items.emit(item_ids, item_kinds, item_positions)
+	welcome_nodes.emit(node_ids, node_kinds, node_positions, node_states)
 
 
 ## `welcome.heartbeat_ticks`, or 0 when it was absent, unreadable, or negative.
@@ -640,6 +697,29 @@ func _on_item_despawn(body: Dictionary, text: String) -> void:
 	if not _has_numbers(body, ["id"], text):
 		return
 	item_despawned.emit(int(body["id"]))
+
+
+## `node_spawn`. **M4b.**
+func _on_node_spawn(body: Dictionary, text: String) -> void:
+	var node := _node_state(body, "node_spawn", text)
+	if node.is_empty():
+		return
+	node_spawned.emit(node["id"], node["kind"], node["position"], node["state"])
+
+
+## `node_despawn`. **M4b.**
+func _on_node_despawn(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["id"], text):
+		return
+	node_despawned.emit(int(body["id"]))
+
+
+## `node_state`. **M4b.** Full record, not a patch field.
+func _on_node_state(body: Dictionary, text: String) -> void:
+	var node := _node_state(body, "node_state", text)
+	if node.is_empty():
+		return
+	node_state_changed.emit(node["id"], node["kind"], node["position"], node["state"])
 
 
 ## `inventory`. **M1.** A full restatement, never a patch.
@@ -764,6 +844,35 @@ func _item_state(entry: Variant, where: String, text: String) -> Dictionary:
 		"id": int(state["id"]),
 		"kind": state["kind"],
 		"position": Vector2(state["x"], state["z"]),
+	}
+
+
+## One `{"id":..,"kind":..,"x":..,"z":..,"state":..}` object, decoded. **M4b.**
+func _node_state(entry: Variant, where: String, text: String) -> Dictionary:
+	if typeof(entry) != TYPE_DICTIONARY:
+		push_error("net_client: %s is not a JSON object: %s" % [where, text])
+		return {}
+	var state: Dictionary = entry
+	if not _has_numbers(state, ["id", "x", "z"], text):
+		return {}
+	if typeof(state.get("kind")) != TYPE_STRING:
+		push_error("net_client: %s has no kind string: %s" % [where, text])
+		return {}
+	if typeof(state.get("state")) != TYPE_STRING:
+		push_error("net_client: %s has no state string: %s" % [where, text])
+		return {}
+	var node_state: String = state["state"]
+	if node_state != "full" and node_state != "depleted":
+		push_error(
+			'net_client: %s state must be "full" or "depleted", got "%s": %s'
+			% [where, node_state, text]
+		)
+		return {}
+	return {
+		"id": int(state["id"]),
+		"kind": state["kind"],
+		"position": Vector2(state["x"], state["z"]),
+		"state": node_state,
 	}
 
 

@@ -41,12 +41,10 @@ extends Node
 ## a launcher or a connect screen; M0 has neither, and STANDING-ORDERS.md
 ## forbids adding one.
 ##
-## [b]Two registries, and they share nothing.[/b] Players live in
-## [member _avatars] and ground items in [member _items]. Item ids and player
-## ids are separate sequences in separate spaces (PROTOCOL.md, "Identity"), so
-## item 1 and player 1 are unrelated things and no lookup here is reachable from
-## the wrong one. One dictionary keyed by a bare integer would have made that
-## bug free to write and expensive to find.
+## [b]Three registries, and they share nothing.[/b] Players live in
+## [member _avatars], ground items in [member _items], and resource nodes in
+## [member _nodes]. Wire ids for each family are separate sequences
+## (PROTOCOL.md, "Identity"), so node 1 and item 1 are unrelated.
 ##
 ## Typed by [code]preload[/code] rather than by global [code]class_name[/code]
 ## throughout, per NOTES.md, "Godot authoring traps".
@@ -57,6 +55,8 @@ const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const PlayerAvatarScene := preload("res://scenes/player_avatar.tscn")
 const GroundItemScript := preload("res://scripts/ground_item.gd")
 const GroundItemScene := preload("res://scenes/ground_item.tscn")
+const ResourceNodeScript := preload("res://scripts/resource_node.gd")
+const ResourceNodeScene := preload("res://scenes/resource_node.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
@@ -117,6 +117,9 @@ signal move_to_requested(x: float, z: float)
 ## named.
 signal pickup_requested(item_id: int)
 
+## Emitted whenever a click on a resource node is forwarded as a `gather`. **M4b.**
+signal gather_requested(node_id: int)
+
 ## Emitted whenever a click on an occupied inventory slot is forwarded as a
 ## `drop`. **M1.**
 ##
@@ -143,6 +146,8 @@ signal unequip_requested(worn: String)
 ## exactly one of it per world and static content belongs in the scene file
 ## (CLAUDE.md). Its [i]children[/i] are runtime, which is why they are instanced.
 @export var ground_items: Node3D
+## Container the resource node bodies are instanced into. **M4b.**
+@export var resource_nodes: Node3D
 ## The [code]ground_picker.gd[/code] node whose clicks become intents.
 @export var ground_picker: Node
 ## The [code]inventory_panel.gd[/code] node the `inventory` message drives.
@@ -180,6 +185,8 @@ var _avatars := {}
 ## Item id to [code]ground_item.gd[/code]. A separate space from
 ## [member _avatars]: see the class docs.
 var _items := {}
+## Node id to [code]resource_node.gd[/code]. A third space from players and items.
+var _nodes := {}
 
 
 func _ready() -> void:
@@ -197,15 +204,22 @@ func _ready() -> void:
 	if ground_items == null:
 		push_error("Session.ground_items must point at a container node")
 		return
+	if resource_nodes == null:
+		push_error("Session.resource_nodes must point at a container node")
+		return
 
 	_net.welcomed.connect(_on_welcomed)
 	_net.welcome_items.connect(_on_welcome_items)
+	_net.welcome_nodes.connect(_on_welcome_nodes)
 	_net.tick_received.connect(_on_tick_received)
 	_net.spawned.connect(_on_spawned)
 	_net.despawned.connect(_on_despawned)
 	_net.path_assigned.connect(_on_path_assigned)
 	_net.item_spawned.connect(_on_item_spawned)
 	_net.item_despawned.connect(_on_item_despawned)
+	_net.node_spawned.connect(_on_node_spawned)
+	_net.node_despawned.connect(_on_node_despawned)
+	_net.node_state_changed.connect(_on_node_state_changed)
 	_net.inventory_changed.connect(_on_inventory_changed)
 	_net.equipment_changed.connect(_on_equipment_changed)
 	_net.server_error.connect(_on_server_error)
@@ -217,6 +231,7 @@ func _ready() -> void:
 	else:
 		_picker.ground_clicked.connect(_on_ground_clicked)
 		_picker.item_clicked.connect(_on_item_clicked)
+		_picker.node_clicked.connect(_on_node_clicked)
 
 	_panel = inventory_panel as InventoryPanelScript
 	if _panel == null:
@@ -321,6 +336,19 @@ func known_item_ids() -> Array:
 	return ids
 
 
+## The resource node body for [param id], or null. **M4b.**
+func node_for(id: int) -> ResourceNodeScript:
+	var body: ResourceNodeScript = _nodes.get(id)
+	return body
+
+
+## Every resource node id this session currently has a body for, ascending.
+func known_node_ids() -> Array:
+	var ids := _nodes.keys()
+	ids.sort()
+	return ids
+
+
 ## Sends a `move_to` for a ground-plane point, as a ground click would.
 ##
 ## Public so that a scripted client can drive the same path a click drives
@@ -359,6 +387,24 @@ func request_pickup(item_id: int) -> void:
 		push_warning("session: pickup of item %d dropped, the socket is not open" % item_id)
 		return
 	_net.send_pickup(item_id)
+
+
+## Sends `gather` for a resource node, as a click on that node's body would. **M4b.**
+##
+## [param node_id] must already be in this session's node registry. Nothing else
+## happens locally: inventory and node state change only when the server restates
+## them.
+func request_gather(node_id: int) -> void:
+	if node_for(node_id) == null:
+		push_warning(
+			"session: gather for node %d, which this client does not know; ignoring" % node_id
+		)
+		return
+	gather_requested.emit(node_id)
+	if _net == null or not _net.is_open():
+		push_warning("session: gather of node %d dropped, the socket is not open" % node_id)
+		return
+	_net.send_gather(node_id)
 
 
 ## Sends `drop` for an inventory slot, as a click on that slot would. **M1.**
@@ -505,6 +551,34 @@ func _on_welcome_items(
 		print("session: %d ground item(s) in the world" % _items.size())
 
 
+## The resource nodes `welcome` listed. **M4b.**
+func _on_welcome_nodes(
+	node_ids: PackedInt64Array,
+	node_kinds: PackedStringArray,
+	node_positions: PackedVector2Array,
+	node_states: PackedStringArray,
+) -> void:
+	if (
+		node_ids.size() != node_kinds.size()
+		or node_ids.size() != node_positions.size()
+		or node_ids.size() != node_states.size()
+	):
+		push_error(
+			"session: welcome.nodes ids, kinds, positions and states disagree in length; ignoring"
+		)
+		return
+
+	for index in node_ids.size():
+		var body := _ensure_node(int(node_ids[index]), node_kinds[index], node_states[index])
+		if body == null:
+			continue
+		var ground := node_positions[index]
+		body.place_at(ground.x, ground.y)
+
+	if not _nodes.is_empty():
+		print("session: %d resource node(s) in the world" % _nodes.size())
+
+
 ## `tick`, the server's heartbeat (`PROTOCOL.md`, "Clock").
 func _on_tick_received(t: int) -> void:
 	if not _clock.is_anchored():
@@ -602,6 +676,53 @@ func _on_item_despawned(id: int) -> void:
 		push_warning("session: item_despawn for unknown item %d; ignoring" % id)
 		return
 	_forget_item(id)
+
+
+## `node_spawn`. **M4b.** Idempotent: a known id is replaced.
+func _on_node_spawned(id: int, kind: String, spawn_position: Vector2, state: String) -> void:
+	if not _clock.is_anchored():
+		push_error("session: node_spawn for %d before welcome; ignoring" % id)
+		return
+	if _nodes.has(id):
+		push_warning("session: node_spawn for known node %d replaces the existing body" % id)
+		_forget_node(id)
+	var body := _ensure_node(id, kind, state)
+	if body == null:
+		return
+	body.place_at(spawn_position.x, spawn_position.y)
+
+
+## `node_despawn`. **M4b.**
+func _on_node_despawned(id: int) -> void:
+	if not _nodes.has(id):
+		push_warning("session: node_despawn for unknown node %d; ignoring" % id)
+		return
+	_forget_node(id)
+
+
+## `node_state`. **M4b.** Full restatement for one id.
+func _on_node_state_changed(
+	id: int, kind: String, spawn_position: Vector2, state: String
+) -> void:
+	if not _clock.is_anchored():
+		push_error("session: node_state for %d before welcome; ignoring" % id)
+		return
+	var body: ResourceNodeScript = _nodes.get(id)
+	if body == null:
+		body = _ensure_node(id, kind, state)
+		if body == null:
+			return
+		body.place_at(spawn_position.x, spawn_position.y)
+		return
+	if body.kind != kind:
+		_forget_node(id)
+		body = _ensure_node(id, kind, state)
+		if body == null:
+			return
+		body.place_at(spawn_position.x, spawn_position.y)
+		return
+	body.apply_state(state)
+	body.place_at(spawn_position.x, spawn_position.y)
 
 
 ## `spawn`. Idempotent: an id already known is replaced, never doubled
@@ -713,6 +834,26 @@ func _on_item_clicked(body: Node3D) -> void:
 		)
 		return
 	request_pickup(id)
+
+
+## A left click that met a resource node before it met the ground. **M4b.**
+##
+## The id comes from the registry, not from the node, same rule as pickup.
+func _on_node_clicked(body: Node3D) -> void:
+	var resource_node := body as ResourceNodeScript
+	if resource_node == null:
+		push_error(
+			"session: the picker reported a click on %s, which is not a resource node" % body
+		)
+		return
+	var id := _id_of_node_body(resource_node)
+	if id == 0:
+		push_warning(
+			"session: clicked a node body this session has no registry entry for (%s); ignoring"
+			% resource_node.name
+		)
+		return
+	request_gather(id)
 
 
 ## A click on an occupied inventory slot. **M1.**
@@ -838,6 +979,26 @@ func _ensure_item(id: int, kind: String) -> GroundItemScript:
 	return body
 
 
+## The body for resource node [param id], creating it if unseen. **M4b.**
+func _ensure_node(id: int, kind: String, state: String) -> ResourceNodeScript:
+	var existing: ResourceNodeScript = _nodes.get(id)
+	if existing != null:
+		return existing
+	if id <= 0:
+		push_error("session: node ids start at 1, got %d" % id)
+		return null
+
+	var body := ResourceNodeScene.instantiate() as ResourceNodeScript
+	if body == null:
+		push_error("session: resource_node.tscn did not instantiate as a ResourceNode")
+		return null
+	body.name = "Node%d" % id
+	body.configure(id, kind, state)
+	resource_nodes.add_child(body)
+	_nodes[id] = body
+	return body
+
+
 ## The item id [param body] is registered under, or 0 when it is registered
 ## under none. Item ids start at 1 (PROTOCOL.md, "Identity"), so 0 is not one.
 ##
@@ -847,6 +1008,13 @@ func _ensure_item(id: int, kind: String) -> GroundItemScript:
 func _id_of_item_body(body: GroundItemScript) -> int:
 	for id: int in _items:
 		if _items[id] == body:
+			return id
+	return 0
+
+
+func _id_of_node_body(body: ResourceNodeScript) -> int:
+	for id: int in _nodes:
+		if _nodes[id] == body:
 			return id
 	return 0
 
@@ -866,6 +1034,17 @@ func _forget_item(id: int) -> void:
 	body.queue_free()
 
 
+func _forget_node(id: int) -> void:
+	var body: ResourceNodeScript = _nodes.get(id)
+	if body == null:
+		return
+	_nodes.erase(id)
+	var parent := body.get_parent()
+	if parent != null:
+		parent.remove_child(body)
+	body.queue_free()
+
+
 ## Everything this session believes about the world, dropped.
 ##
 ## Called only from [method _on_welcomed]. A `welcome` is the whole world
@@ -878,6 +1057,8 @@ func _forget_everyone() -> void:
 		_forget(id)
 	for id: int in _items.keys():
 		_forget_item(id)
+	for id: int in _nodes.keys():
+		_forget_node(id)
 
 
 ## The websocket URL from `--server <url>`, or "" when it was not given.

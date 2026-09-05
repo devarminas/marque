@@ -1,0 +1,60 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/resource_node.gd" id="1_resource_node"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_trunk"]
+albedo_color = Color(0.42, 0.26, 0.12, 1)
+roughness = 0.85
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_foliage"]
+albedo_color = Color(0.16, 0.48, 0.18, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_unknown"]
+albedo_color = Color(0.95, 0.08, 0.85, 1)
+roughness = 0.75
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_depleted"]
+albedo_color = Color(0.35, 0.32, 0.28, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_trunk"]
+top_radius = 0.18
+bottom_radius = 0.22
+height = 1.4
+
+[sub_resource type="SphereMesh" id="SphereMesh_foliage"]
+radius = 0.7
+height = 1.4
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_node"]
+radius = 0.55
+height = 2.2
+
+[node name="ResourceNode" type="StaticBody3D" node_paths=PackedStringArray("trunk", "foliage")]
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("1_resource_node")
+ground_y = 0.0
+trunk = NodePath("Trunk")
+foliage = NodePath("Foliage")
+known_trunk_material = SubResource("StandardMaterial3D_trunk")
+known_foliage_material = SubResource("StandardMaterial3D_foliage")
+unknown_material = SubResource("StandardMaterial3D_unknown")
+depleted_trunk_material = SubResource("StandardMaterial3D_depleted")
+
+[node name="Trunk" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+cast_shadow = 1
+material_override = SubResource("StandardMaterial3D_trunk")
+mesh = SubResource("CylinderMesh_trunk")
+
+[node name="Foliage" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.85, 0)
+cast_shadow = 1
+material_override = SubResource("StandardMaterial3D_foliage")
+mesh = SubResource("SphereMesh_foliage")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+shape = SubResource("CapsuleShape3D_node")

@@ -37,8 +37,12 @@ class Recorder:
 		net = NetClientScript.new()
 		net.welcomed.connect(_on_welcomed)
 		net.welcome_items.connect(_on_welcome_items)
+		net.welcome_nodes.connect(_on_welcome_nodes)
 		net.item_spawned.connect(_on_item_spawned)
 		net.item_despawned.connect(_on_item_despawned)
+		net.node_spawned.connect(_on_node_spawned)
+		net.node_despawned.connect(_on_node_despawned)
+		net.node_state_changed.connect(_on_node_state_changed)
 		net.inventory_changed.connect(_on_inventory_changed)
 		net.equipment_changed.connect(_on_equipment_changed)
 		net.unknown_message.connect(_on_unknown_message)
@@ -101,6 +105,20 @@ class Recorder:
 			"positions": item_positions,
 		})
 
+	func _on_welcome_nodes(
+		node_ids: PackedInt64Array,
+		node_kinds: PackedStringArray,
+		node_positions: PackedVector2Array,
+		node_states: PackedStringArray,
+	) -> void:
+		events.append({
+			"signal": "welcome_nodes",
+			"ids": node_ids,
+			"kinds": node_kinds,
+			"positions": node_positions,
+			"states": node_states,
+		})
+
 	func _on_item_spawned(id: int, kind: String, item_position: Vector2) -> void:
 		events.append({
 			"signal": "item_spawned", "id": id, "kind": kind, "position": item_position
@@ -108,6 +126,29 @@ class Recorder:
 
 	func _on_item_despawned(id: int) -> void:
 		events.append({"signal": "item_despawned", "id": id})
+
+	func _on_node_spawned(id: int, kind: String, node_position: Vector2, state: String) -> void:
+		events.append({
+			"signal": "node_spawned",
+			"id": id,
+			"kind": kind,
+			"position": node_position,
+			"state": state,
+		})
+
+	func _on_node_despawned(id: int) -> void:
+		events.append({"signal": "node_despawned", "id": id})
+
+	func _on_node_state_changed(
+		id: int, kind: String, node_position: Vector2, state: String
+	) -> void:
+		events.append({
+			"signal": "node_state_changed",
+			"id": id,
+			"kind": kind,
+			"position": node_position,
+			"state": state,
+		})
 
 	func _on_inventory_changed(
 		size: int, slot_indices: PackedInt32Array, slot_kinds: PackedStringArray
@@ -146,6 +187,8 @@ func run(assertions: RefCounted) -> void:
 
 	_test_welcome_carries_items()
 	_test_welcome_without_items()
+	_test_welcome_carries_nodes()
+	_test_node_spawn_state_and_despawn()
 	_test_item_spawn_and_despawn()
 	_test_inventory()
 	_test_equipment()
@@ -170,8 +213,8 @@ func _test_welcome_carries_items() -> void:
 	)
 
 	_check(
-		recorder.names() == ["welcomed", "welcome_items"],
-		"welcome emits welcomed and then welcome_items, got %s" % [recorder.names()],
+		recorder.names() == ["welcomed", "welcome_items", "welcome_nodes"],
+		"welcome emits welcomed, welcome_items, then welcome_nodes, got %s" % [recorder.names()],
 	)
 	var items := recorder.of("welcome_items")
 	if not _check(items.size() == 1, "one welcome_items per welcome"):
@@ -217,7 +260,7 @@ func _test_welcome_without_items() -> void:
 		'{"welcome":{"you":2,"tick_ms":150,"tick":11,"players":[{"id":2,"x":1.0,"z":1.0}]}}'
 	)
 	_check(
-		recorder.names() == ["welcomed", "welcome_items"],
+		recorder.names() == ["welcomed", "welcome_items", "welcome_nodes"],
 		"a welcome with no items key is still a complete welcome, got %s" % [recorder.names()],
 	)
 	var absent := recorder.of("welcome_items")
@@ -231,6 +274,60 @@ func _test_welcome_without_items() -> void:
 		welcomes.size() == 1 and welcomes[0]["you"] == 2,
 		"and the players in it land unchanged",
 	)
+	recorder.release()
+
+
+## `welcome.nodes` lists resource nodes beside players and items. **M4b.**
+func _test_welcome_carries_nodes() -> void:
+	var recorder := Recorder.new()
+	recorder.feed(
+		'{"welcome":{"you":1,"tick_ms":150,"tick":10,'
+		+ '"players":[{"id":1,"x":0.0,"z":0.0}],'
+		+ '"nodes":[{"id":1,"kind":"tree","x":5.0,"z":0.0,"state":"full"},'
+		+ '{"id":2,"kind":"tree","x":-3.0,"z":4.0,"state":"depleted"}]}}'
+	)
+	var nodes := recorder.of("welcome_nodes")
+	if not _check(nodes.size() == 1, "one welcome_nodes per welcome"):
+		recorder.release()
+		return
+	var listed: Dictionary = nodes[0]
+	_check(Array(listed["ids"]) == [1, 2], "both listed nodes arrive, got %s" % [Array(listed["ids"])])
+	_check(
+		Array(listed["kinds"]) == ["tree", "tree"],
+		"with their kinds, got %s" % [Array(listed["kinds"])],
+	)
+	_check(
+		Array(listed["states"]) == ["full", "depleted"],
+		"and their states, got %s" % [Array(listed["states"])],
+	)
+	_check(
+		listed["positions"][0] == Vector2(5.0, 0.0)
+		and listed["positions"][1] == Vector2(-3.0, 4.0),
+		"and their ground positions, got %s" % [Array(listed["positions"])],
+	)
+	recorder.release()
+
+
+## `node_spawn` / `node_state` / `node_despawn`. **M4b.**
+func _test_node_spawn_state_and_despawn() -> void:
+	var recorder := Recorder.new()
+	recorder.feed('{"node_spawn":{"id":1,"kind":"tree","x":5.0,"z":0.0,"state":"full"}}')
+	var spawns := recorder.of("node_spawned")
+	if _check(spawns.size() == 1, "node_spawn emits once, got %d" % spawns.size()):
+		_check(spawns[0]["id"] == 1 and spawns[0]["kind"] == "tree", "carrying id and kind")
+		_check(spawns[0]["state"] == "full", 'and state "full"')
+		_check(spawns[0]["position"] == Vector2(5.0, 0.0), "and position")
+
+	recorder.clear()
+	recorder.feed('{"node_state":{"id":1,"kind":"tree","x":5.0,"z":0.0,"state":"depleted"}}')
+	var states := recorder.of("node_state_changed")
+	if _check(states.size() == 1, "node_state emits once, got %d" % states.size()):
+		_check(states[0]["state"] == "depleted", 'carrying state "depleted"')
+
+	recorder.clear()
+	recorder.feed('{"node_despawn":{"id":1}}')
+	var gone := recorder.of("node_despawned")
+	_check(gone.size() == 1 and gone[0]["id"] == 1, "node_despawn emits the id")
 	recorder.release()
 
 
@@ -386,9 +483,10 @@ func _test_a_null_list_means_empty() -> void:
 	# cannot pass the comparison above.
 	_check(
 		nulled == [
-			["welcomed", "welcome_items"],
+			["welcomed", "welcome_items", "welcome_nodes"],
 			["welcomed", 1, 5, [1]],
 			["welcome_items", [], [], []],
+			["welcome_nodes", [], [], [], []],
 		],
 		"a welcome whose items are null still joins the client, got %s" % [nulled],
 	)
@@ -477,6 +575,14 @@ func _replay(frame: String) -> Array:
 					Array(event["ids"]),
 					Array(event["kinds"]),
 					Array(event["positions"]),
+				])
+			"welcome_nodes":
+				out.append([
+					"welcome_nodes",
+					Array(event["ids"]),
+					Array(event["kinds"]),
+					Array(event["positions"]),
+					Array(event["states"]),
 				])
 			"inventory_changed":
 				out.append([
@@ -631,6 +737,11 @@ func _test_intent_frames() -> void:
 		% JSON.stringify(NetClientScript.pickup_frame(7)),
 	)
 	_check(
+		JSON.stringify(NetClientScript.gather_frame(1)) == '{"gather":{"node":1}}',
+		'gather frames as {"gather":{"node":1}}, got %s'
+		% JSON.stringify(NetClientScript.gather_frame(1)),
+	)
+	_check(
 		JSON.stringify(NetClientScript.drop_frame(3)) == '{"drop":{"slot":3}}',
 		'drop frames as {"drop":{"slot":3}}, got %s'
 		% JSON.stringify(NetClientScript.drop_frame(3)),
@@ -656,8 +767,9 @@ func _test_intent_frames() -> void:
 	# JSON, so the field names are asserted rather than assumed.
 	_check(
 		(NetClientScript.pickup_frame(1)["pickup"] as Dictionary).has("item")
-		and (NetClientScript.drop_frame(1)["drop"] as Dictionary).has("slot"),
-		"pickup names an item id and drop names a slot index",
+		and (NetClientScript.drop_frame(1)["drop"] as Dictionary).has("slot")
+		and (NetClientScript.gather_frame(1)["gather"] as Dictionary).has("node"),
+		"pickup names an item id, drop a slot index, gather a node id",
 	)
 	_check(
 		(NetClientScript.equip_frame(1)["equip"] as Dictionary).has("slot")
