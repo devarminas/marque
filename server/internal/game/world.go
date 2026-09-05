@@ -118,6 +118,24 @@ const (
 	EvUnequip = "unequip"
 
 	EvUnequipRejected = "unequip_rejected"
+
+	EvNodeSpawned = "node_spawned"
+
+	EvGather = "gather"
+
+	EvGatherRejected = "gather_rejected"
+
+	EvGatherResolved = "gather_resolved"
+
+	EvGatherLost = "gather_lost"
+
+	EvGatherCancelled = "gather_cancelled"
+
+	EvGatherNoRoom = "gather_no_room"
+
+	EvNodeDepleted = "node_depleted"
+
+	EvNodeRespawned = "node_respawned"
 )
 
 // Transport is the world's view of the network: a stream of connection events.
@@ -149,6 +167,9 @@ type player struct {
 
 	pending mnet.ItemID
 
+	gatherNode     mnet.NodeID
+	gatherProgress int
+
 	lastSeq mnet.Seq
 
 	expiresTick int64
@@ -164,6 +185,10 @@ type World struct {
 	log       *gamelog.Logger
 
 	items Store
+
+	nodes      map[mnet.NodeID]*resourceNode
+	nodeOrder  []mnet.NodeID
+	nextNodeID mnet.NodeID
 
 	tick   int64
 	nextID mnet.PlayerID
@@ -203,6 +228,7 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		transport:   transport,
 		log:         log,
 		items:       store,
+		nodes:       make(map[mnet.NodeID]*resourceNode),
 		resumeGrace: resumeGrace,
 		joinKit:     joinKit,
 		players:     make(map[mnet.PlayerID]*player),
@@ -281,8 +307,12 @@ func (w *World) step() {
 		if p.pending != 0 {
 			w.resolvePickup(p)
 		}
+		if p.gatherNode != 0 {
+			w.resolveGather(p)
+		}
 	}
 
+	w.respawnNodes()
 	w.expireSuspended()
 }
 
@@ -379,6 +409,7 @@ func (w *World) sendJoinStep(p *player) {
 		HeartbeatTicks: HeartbeatEveryTicks,
 		Players:        states,
 		Items:          w.groundItemStates(),
+		Nodes:          w.nodeStates(),
 	})
 
 	for _, other := range w.order {
@@ -506,6 +537,8 @@ func (w *World) handleFrame(ev mnet.Event) {
 		w.equip(p, msg, ev.Seq)
 	case mnet.Unequip:
 		w.unequip(p, msg, ev.Seq)
+	case mnet.Gather:
+		w.gather(p, msg, ev.Seq)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -545,6 +578,8 @@ func rejectionEvent(re string) string {
 		return EvEquipRejected
 	case mnet.MsgUnequip:
 		return EvUnequipRejected
+	case mnet.MsgGather:
+		return EvGatherRejected
 	default:
 		panic(fmt.Sprintf("game: no rejection event for %q", re))
 	}
@@ -581,6 +616,7 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo, seq mnet.Seq) {
 	}
 
 	p.pending = 0
+	w.cancelGather(p)
 	w.assignPath(p, points)
 }
 

@@ -46,6 +46,7 @@ func (w *World) pickup(p *player, msg mnet.Pickup, seq mnet.Seq) {
 	}
 
 	p.pending = item.ID
+	w.cancelGather(p)
 
 	points, assign := destinationPath(p, Point{X: item.X, Z: item.Z})
 	if !assign {

@@ -34,6 +34,9 @@ func TestTheJoinStepSendsEmptyListsAsArrays(t *testing.T) {
 	if !strings.Contains(welcome.raw, `"items":[]`) {
 		t.Errorf("an empty world's welcome encodes as %s, want it to carry \"items\":[]", welcome.raw)
 	}
+	if !strings.Contains(welcome.raw, `"nodes":[]`) {
+		t.Errorf("an empty world's welcome encodes as %s, want it to carry \"nodes\":[]", welcome.raw)
+	}
 	if !strings.Contains(welcome.raw, `"players":[{`) {
 		t.Errorf("welcome encodes as %s, want \"players\" to be an array", welcome.raw)
 	}
