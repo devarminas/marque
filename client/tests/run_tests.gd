@@ -51,6 +51,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "tick protocol", "script": preload("res://tests/test_tick_protocol.gd")},
 	{"name": "tick edges", "script": preload("res://tests/test_tick_edges.gd")},
 	{"name": "hp protocol", "script": preload("res://tests/test_hp_protocol.gd")},
+	{"name": "ability defs", "script": preload("res://tests/test_ability_defs.gd")},
 ]
 
 ## Suites that need a scene tree, run one at a time in this order.
