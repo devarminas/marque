@@ -110,10 +110,9 @@ version will otherwise believe it and negotiate its acceptance list downward.
 
 ## Milestones
 
-M0 through M5 are complete (Linear Unit issues Done: Foundation, Items, Reconnect, Equipment,
-Gathering and crafting, Combat). No milestone is In Progress. Parked work is Follow-up labelled
-issues in project *Project Marque*. The coordinator pastes each unit's brief into the worker's
-prompt.
+Which milestone is open, which units are Todo, and which Follow-ups are parked live only in
+Linear, project *Project Marque*. The coordinator pastes each unit's brief into the worker's
+prompt. Do not record program progress in this file.
 
 The wire contract for everything shipped is `PROTOCOL.md`, under its milestone markers. Read it.
 Do not re-derive it and do not negotiate with it. A unit that changes it copies the coordinator's
@@ -141,8 +140,8 @@ decides, and `origin/main` settles it.
 ## Picking this up in a new session
 
 1. Open the Linear project, `https://linear.app/arminas/project/project-marque-525be456de70`.
-   Find Todo Unit issues (or the In Progress milestone when one exists). Their descriptions are
-   the briefs. Issues labelled `Follow-up` are parked and block nothing.
+   Find Todo Unit issues. Their descriptions are the briefs. Issues labelled `Follow-up` are
+   parked and block nothing.
 2. Read this file, then [COORDINATION.md](COORDINATION.md) for the dispatch loop and every
    lesson about writing briefs and sizing verifications, then `PROTOCOL.md` and `NOTES.md`.
 3. Prove the stack is alive before dispatching anything. Recipe H and Recipe W in
