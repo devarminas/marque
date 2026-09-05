@@ -762,6 +762,16 @@ func _test_intent_frames() -> void:
 		'unequip frames as {"unequip":{"worn":"weapon"}}, got %s'
 		% JSON.stringify(NetClientScript.unequip_frame("weapon")),
 	)
+	_check(
+		JSON.stringify(NetClientScript.use_frame(3, 7)) == '{"use":{"on":7,"slot":3}}',
+		'use frames as {"use":{"on":7,"slot":3}}, got %s'
+		% JSON.stringify(NetClientScript.use_frame(3, 7)),
+	)
+	_check(
+		JSON.stringify(NetClientScript.use_frame(3, 3)) == '{"use":{"on":3,"slot":3}}',
+		'self-use frames as {"use":{"on":3,"slot":3}}, got %s'
+		% JSON.stringify(NetClientScript.use_frame(3, 3)),
+	)
 	# `drop` names a slot and `pickup` names an item id, and the two are
 	# different spaces. A sender that swapped them would still frame as valid
 	# JSON, so the field names are asserted rather than assumed.
@@ -773,8 +783,9 @@ func _test_intent_frames() -> void:
 	)
 	_check(
 		(NetClientScript.equip_frame(1)["equip"] as Dictionary).has("slot")
-		and (NetClientScript.unequip_frame("weapon")["unequip"] as Dictionary).has("worn"),
-		"equip names a bag slot and unequip names a worn slot",
+		and (NetClientScript.unequip_frame("weapon")["unequip"] as Dictionary).has("worn")
+		and (NetClientScript.use_frame(1, 2)["use"] as Dictionary).has("on"),
+		"equip names a bag slot, unequip a worn slot, use names slot and on",
 	)
 
 

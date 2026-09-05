@@ -111,6 +111,7 @@ var _move_to_intents := PackedVector2Array()
 var _pickup_intents := PackedInt32Array()
 var _gather_intents := PackedInt32Array()
 var _drop_intents := PackedInt32Array()
+var _use_intents: Array[Vector2i] = []
 var _nodes_container: Node3D = null
 
 
@@ -152,6 +153,9 @@ func _ready() -> void:
 	_session.pickup_requested.connect(func(id: int) -> void: _pickup_intents.append(id))
 	_session.gather_requested.connect(func(id: int) -> void: _gather_intents.append(id))
 	_session.drop_requested.connect(func(slot: int) -> void: _drop_intents.append(slot))
+	_session.use_requested.connect(
+		func(slot: int, on: int) -> void: _use_intents.append(Vector2i(slot, on))
+	)
 
 	# main.tscn's Session resolves its exported node paths in _ready, and a
 	# suite that asserts before that reads nulls that look like scene bugs. The
@@ -185,8 +189,9 @@ func _ready() -> void:
 	await _test_a_click_on_bare_ground_is_a_move_and_not_a_gather()
 	await _test_a_click_on_an_item_still_picks_up_beside_a_node()
 
-	await _test_clicking_an_occupied_slot_drops_it()
-	await _test_clicking_an_empty_slot_drops_nothing()
+	await _test_clicking_an_occupied_slot_uses_it()
+	await _test_cancel_clears_use_selection()
+	await _test_clicking_an_empty_slot_uses_nothing()
 	await _test_clicking_the_panel_chrome_reaches_nothing()
 
 	await _test_the_scripted_feed_still_builds_a_world()
@@ -607,6 +612,15 @@ func _test_the_intents_match_the_protocol_byte_for_byte() -> void:
 		'drop is {"drop":{"slot":3}}, got %s' % JSON.stringify(NetClientScript.drop_frame(3)),
 	)
 	_check(
+		JSON.stringify(NetClientScript.use_frame(3, 7)) == '{"use":{"on":7,"slot":3}}',
+		'use is {"use":{"on":7,"slot":3}}, got %s' % JSON.stringify(NetClientScript.use_frame(3, 7)),
+	)
+	_check(
+		JSON.stringify(NetClientScript.use_frame(3, 3)) == '{"use":{"on":3,"slot":3}}',
+		'self-use is {"use":{"on":3,"slot":3}}, got %s'
+		% JSON.stringify(NetClientScript.use_frame(3, 3)),
+	)
+	_check(
 		JSON.stringify(NetClientScript.drop_frame(0)) == '{"drop":{"slot":0}}',
 		"and slot 0 is a slot index like any other, got %s"
 		% JSON.stringify(NetClientScript.drop_frame(0)),
@@ -698,82 +712,118 @@ func _test_a_click_on_an_item_still_picks_up_beside_a_node() -> void:
 
 
 # --------------------------------------------------------------------------
-# The drop.
+# The use-on.
 # --------------------------------------------------------------------------
 
 
-## A real click on an occupied slot, pushed through the viewport, becomes a
-## `drop` naming that slot's index and nothing else.
+## Two real clicks on occupied slots become one `use` naming those indices.
 ##
-## [b]The slot clicked is the last one[/b], for a reason that is about the test
+## [b]The slots clicked are the last ones[/b], for a reason that is about the test
 ## environment and not about the game: the headless viewport is 64x64 while the
 ## shipped window is 1280x720, and a 28-slot panel anchored to the bottom-right
 ## corner has only its last cell inside a 64x64 rect. A [Control] does receive a
 ## press outside the viewport — M1k probed that and an off-screen slot consumed
 ## one — but it fires no [signal BaseButton.pressed] when it does, so the last
-## cell is the one a real click can drop from here. Two different sizes are used
-## so that the index is genuinely read from the slot rather than being the only
-## number available.
-func _test_clicking_an_occupied_slot_drops_it() -> void:
+## cell is the one a real click can reach here.
+func _test_clicking_an_occupied_slot_uses_it() -> void:
 	var last := WIRE_SIZE - 1
 	await _feed(
-		'{"inventory":{"size":%d,"slots":[{"slot":0,"kind":"acorn"},{"slot":%d,"kind":"acorn"}]}}'
+		'{"inventory":{"size":%d,"slots":[{"slot":0,"kind":"logs"},{"slot":%d,"kind":"logs"}]}}'
 		% [WIRE_SIZE, last]
 	)
 	_check(_panel.visible, "a panel with slots in it is drawn")
 
 	_watch()
 	await _click_slot(last)
+	_check(_use_intents.is_empty(), "the first click selects and sends no use yet")
+	_check(_drop_intents.is_empty(), "and sends no drop either, got %s" % [_drop_intents])
+	_check(_session.has_pending_use(), "with a pending use selection")
+
+	await _click_slot(last)
 	_check(
-		_drop_intents.size() == 1 and _drop_intents[0] == last,
-		"clicking slot %d sends one drop naming slot %d, got %s" % [last, last, _drop_intents],
+		_use_intents.size() == 1 and _use_intents[0] == Vector2i(last, last),
+		"the second click on slot %d sends use on itself, got %s" % [last, _use_intents],
 	)
-	_check(
-		_move_to_intents.is_empty() and _pickup_intents.is_empty(),
-		"and the click never reaches the world behind the panel",
-	)
+	_check(_drop_intents.is_empty(), "and still no drop")
+	_check(not _session.has_pending_use(), "and the selection is spent")
 
 	_check(
-		_panel.kind_in_slot(last) == "acorn",
-		"and the panel still shows the item, because a drop is not predicted",
+		_panel.kind_in_slot(last) == "logs",
+		"and the panel still shows the item, because a use is not predicted",
 	)
 	_check(
 		_panel.occupied_slot_count() == 2,
 		"nor is anything else, got %d occupied" % _panel.occupied_slot_count(),
 	)
 
-	# A different size, so the last slot is a different index. A panel that
-	# reported one hardcoded number would pass one of these two and not both.
 	var small := 4
-	await _feed(_inventory_frame(small, small))
+	await _feed(
+		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"logs"},{"slot":%d,"kind":"acorn"}]}}'
+		% [small, small - 2, small - 1]
+	)
 	_watch()
-	await _click_slot(small - 1)
+	# Off-screen slots do not fire Button.pressed in the 64x64 harness, so the
+	# cross-slot case drives the same session path the panel's signal uses.
+	_panel.slot_activated.emit(small - 2)
+	_panel.slot_activated.emit(small - 1)
 	_check(
-		_drop_intents.size() == 1 and _drop_intents[0] == small - 1,
-		"in an inventory of %d, clicking the last slot names %d, got %s"
-		% [small, small - 1, _drop_intents],
+		_use_intents.size() == 1 and _use_intents[0] == Vector2i(small - 2, small - 1),
+		"activating %d then %d in an inventory of %d names those indices, got %s"
+		% [small - 2, small - 1, small, _use_intents],
 	)
 
-	# What the server says is what changes it.
 	await _feed('{"inventory":{"size":%d,"slots":[]}}' % small)
 	_check(
 		_panel.occupied_slot_count() == 0,
-		"the inventory the server sends back is what empties the slot, got %d occupied"
+		"the inventory the server sends back is what empties the slots, got %d occupied"
 		% _panel.occupied_slot_count(),
 	)
 
 
-## An empty slot names nothing to drop, and the server would refuse an intent
+## Escape mid-selection clears the pending use and sends nothing.
+func _test_cancel_clears_use_selection() -> void:
+	var last := WIRE_SIZE - 1
+	await _feed(
+		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"logs"}]}}' % [WIRE_SIZE, last]
+	)
+	_watch()
+	await _click_slot(last)
+	_check(_session.has_pending_use(), "a first click leaves a pending selection")
+
+	var viewport := _camera.get_viewport()
+	var cancel := InputEventKey.new()
+	cancel.keycode = KEY_ESCAPE
+	cancel.physical_keycode = KEY_ESCAPE
+	cancel.pressed = true
+	viewport.push_input(cancel)
+	await get_tree().process_frame
+
+	_check(not _session.has_pending_use(), "escape clears the pending selection")
+	_check(_use_intents.is_empty(), "and sends no use, got %s" % [_use_intents])
+	_check(_drop_intents.is_empty(), "and no drop either")
+
+	_watch()
+	_check(_session.clear_use_selection() == false, "clearing idle is a no-op")
+	await _click_slot(last)
+	_check(_session.has_pending_use(), "a fresh first click selects again")
+	_check(_session.clear_use_selection(), "and clear_use_selection drops it")
+	_check(not _session.has_pending_use(), "leaving no pending selection")
+	_check(_use_intents.is_empty(), "without sending use")
+
+
+## An empty slot names nothing to use, and the server would refuse an intent
 ## that said otherwise.
 ##
-## Driven through the same real click as the test above, on the same widget, in
-## the same place: the only thing that changed is what the server said is in it.
-func _test_clicking_an_empty_slot_drops_nothing() -> void:
+## Driven on a small inventory so the empty cell sits inside the 64x64 harness
+## viewport (the same layout constraint as the occupied-slot click above).
+func _test_clicking_an_empty_slot_uses_nothing() -> void:
+	await _feed('{"inventory":{"size":4,"slots":[]}}')
 	_watch()
 	await _click_slot(3)
 	_check(
-		_drop_intents.is_empty(),
-		"clicking an empty slot sends no drop, got %s" % [_drop_intents],
+		_use_intents.is_empty() and _drop_intents.is_empty(),
+		"clicking an empty slot sends no use and no drop, got use %s drop %s"
+		% [_use_intents, _drop_intents],
 	)
 	_check(
 		_move_to_intents.is_empty() and _pickup_intents.is_empty(),
@@ -783,6 +833,8 @@ func _test_clicking_an_empty_slot_drops_nothing() -> void:
 	_watch()
 	_session.request_drop(-1)
 	_check(_drop_intents.is_empty(), "and a negative slot index is refused outright")
+	_session.request_use(-1, 0)
+	_check(_use_intents.is_empty(), "as is a negative use slot")
 
 
 ## [b]The M1k claim.[/b] A click on the panel's chrome sends nothing at all.
@@ -855,8 +907,8 @@ func _check_the_chrome_is_a_wall(state: String) -> void:
 		% [at, state, _move_to_intents],
 	)
 	_check(
-		_pickup_intents.is_empty() and _drop_intents.is_empty(),
-		"and no pickup and no drop either (%s): chrome is not a control, it is a wall" % state,
+		_pickup_intents.is_empty() and _drop_intents.is_empty() and _use_intents.is_empty(),
+		"and no pickup, drop, or use either (%s): chrome is not a control, it is a wall" % state,
 	)
 
 
@@ -960,6 +1012,7 @@ func _watch() -> void:
 	_pickup_intents.clear()
 	_gather_intents.clear()
 	_drop_intents.clear()
+	_use_intents.clear()
 
 
 ## Pushes a real left click at a viewport position and lets it be handled.

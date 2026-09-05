@@ -121,10 +121,16 @@ signal pickup_requested(item_id: int)
 signal gather_requested(node_id: int)
 
 ## Emitted whenever a click on an occupied inventory slot is forwarded as a
-## `drop`. **M1.**
+## `drop`. **M1.** Left-click no longer drops; callers use [method request_drop]
+## when they mean drop without a pending use selection.
 ##
 ## [param slot] is a slot index, never an item id (`PROTOCOL.md`, `drop`).
 signal drop_requested(slot: int)
+
+## Emitted whenever a completed two-click use-on is forwarded as `use`. **M4d.**
+##
+## [param slot] is the first slot; [param on] is the second (`PROTOCOL.md`, `use`).
+signal use_requested(slot: int, on: int)
 
 ## Emitted whenever a bag slot is forwarded as `equip`. **M3c.**
 signal equip_requested(slot: int)
@@ -187,6 +193,8 @@ var _avatars := {}
 var _items := {}
 ## Node id to [code]resource_node.gd[/code]. A third space from players and items.
 var _nodes := {}
+## Bag slot held for a pending use-on, or -1 when idle. **M4d.**
+var _use_from := -1
 
 
 func _ready() -> void:
@@ -448,6 +456,44 @@ func request_unequip(worn: String) -> void:
 		push_warning('session: unequip of "%s" dropped, the socket is not open' % worn)
 		return
 	_net.send_unequip(worn)
+
+
+## Sends `use` for two bag slots. **M4d.**
+##
+## The panel is not changed here. It changes when the `inventory` the server
+## sends back says it changed, and not before.
+func request_use(slot: int, on: int) -> void:
+	if slot < 0 or on < 0:
+		push_error("session: use for slot %d on %d; slot indices start at 0" % [slot, on])
+		return
+	clear_use_selection()
+	use_requested.emit(slot, on)
+	if _net == null or not _net.is_open():
+		push_warning("session: use of slot %d on %d dropped, the socket is not open" % [slot, on])
+		return
+	_net.send_use(slot, on)
+
+
+## Clears a pending use-on selection. Returns true when there was one.
+func clear_use_selection() -> bool:
+	if _use_from < 0:
+		return false
+	_use_from = -1
+	return true
+
+
+## True when the player has activated a first slot and is waiting on a second.
+func has_pending_use() -> bool:
+	return _use_from >= 0
+
+
+## Escape cancels a pending use-on even while a slot holds focus. **M4d.**
+func _input(event: InputEvent) -> void:
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	if not clear_use_selection():
+		return
+	get_viewport().set_input_as_handled()
 
 
 ## `welcome`. The whole world, restated.
@@ -856,9 +902,17 @@ func _on_node_clicked(body: Node3D) -> void:
 	request_gather(id)
 
 
-## A click on an occupied inventory slot. **M1.**
+## A click on an occupied inventory slot. First click selects; second completes
+## `use`. Escape clears the selection. Drop is not this path. **M4d.**
 func _on_slot_activated(slot: int) -> void:
-	request_drop(slot)
+	if slot < 0:
+		push_error("session: use for slot %d; slot indices start at 0" % slot)
+		return
+	if _use_from < 0:
+		_use_from = slot
+		return
+	var from := _use_from
+	request_use(from, slot)
 
 
 func _on_equip_requested(slot: int) -> void:
@@ -884,6 +938,7 @@ func _on_inventory_changed(
 	if _panel == null:
 		push_error("session: inventory arrived with no panel to draw it")
 		return
+	clear_use_selection()
 	_panel.apply(size, slot_indices, slot_kinds)
 
 

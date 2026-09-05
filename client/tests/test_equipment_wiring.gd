@@ -31,6 +31,7 @@ var _equipment: EquipmentPanelScript = null
 var _camera: Camera3D = null
 
 var _drop_intents := PackedInt32Array()
+var _use_intents: Array[Vector2i] = []
 var _equip_intents := PackedInt32Array()
 var _unequip_intents := PackedStringArray()
 
@@ -64,6 +65,9 @@ func _ready() -> void:
 		rig.set_process(false)
 
 	_session.drop_requested.connect(func(slot: int) -> void: _drop_intents.append(slot))
+	_session.use_requested.connect(
+		func(slot: int, on: int) -> void: _use_intents.append(Vector2i(slot, on))
+	)
 	_session.equip_requested.connect(func(slot: int) -> void: _equip_intents.append(slot))
 	_session.unequip_requested.connect(func(worn: String) -> void: _unequip_intents.append(worn))
 
@@ -73,7 +77,7 @@ func _ready() -> void:
 
 	_test_axe_is_a_known_kind()
 	await _test_equipment_restatement_draws_and_clears()
-	await _test_left_click_still_drops()
+	await _test_left_click_uses_not_drops()
 	await _test_right_click_equips()
 	await _test_drag_bag_to_weapon_equips()
 	await _test_activate_worn_unequips()
@@ -116,18 +120,25 @@ func _test_equipment_restatement_draws_and_clears() -> void:
 	)
 
 
-func _test_left_click_still_drops() -> void:
+func _test_left_click_uses_not_drops() -> void:
 	await _feed(
 		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"axe"}]}}'
 		% [WIRE_SIZE, AXE_SLOT]
 	)
 	_watch()
 	await _left_click_slot(AXE_SLOT)
-	_check(
-		_drop_intents.size() == 1 and _drop_intents[0] == AXE_SLOT,
-		"left-clicking the bag axe sends drop naming slot %d, got %s" % [AXE_SLOT, _drop_intents],
-	)
+	_check(_use_intents.is_empty(), "the first left-click selects and sends no use yet")
+	_check(_drop_intents.is_empty(), "and sends no drop")
 	_check(_equip_intents.is_empty(), "and sends no equip")
+	_check(_session.has_pending_use(), "with a pending use selection")
+
+	await _left_click_slot(AXE_SLOT)
+	_check(
+		_use_intents.size() == 1 and _use_intents[0] == Vector2i(AXE_SLOT, AXE_SLOT),
+		"the second left-click sends use on slot %d, got %s" % [AXE_SLOT, _use_intents],
+	)
+	_check(_drop_intents.is_empty(), "and still no drop")
+	_check(_equip_intents.is_empty(), "and still no equip")
 
 
 func _test_right_click_equips() -> void:
@@ -229,6 +240,7 @@ func _feed(text: String) -> void:
 
 func _watch() -> void:
 	_drop_intents.clear()
+	_use_intents.clear()
 	_equip_intents.clear()
 	_unequip_intents.clear()
 
