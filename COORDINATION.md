@@ -111,28 +111,16 @@ worker lost real time to its absence.
    two files it must not modify that did not exist yet at its branch point. That is confusing
    at best, and at worst it is the first hint that `main` has moved, arriving as a puzzle
    rather than as a fact.
-10. **Open every worker brief with the `SKILL.md` read instruction, and gate on the playbook
-    block.** Four M2 worker transcripts, grepped for `SKILL.md`, `playbooks/`, and
-    `principle-*` reads: two of the four never opened a playbook, and one never opened the
-    skill at all. The M2a writer's first call was `Skill poteto-mode`, which the skill
-    refuses by design; it took the refusal as an answer, never read `SKILL.md` or a playbook,
-    and reported in the brief's six "Report back" items, none of which asked what the
-    playbook required. `no-comments` never ran, and PR #20 merged 206 comment lines in 388
-    added production Go lines, 179 of 349 in `world.go`, which a human caught after the merge.
-    The agent definition alone does not load the skill. Neither does a prompt that begins
-    with `/poteto-mode`. A `poteto-agent` probed with that prefix on 2026-09-04 reported the
-    skill text absent from its context and `poteto-mode` absent from its available-skills
-    list, so do not retry it. The skill carries `disable-model-invocation`, which is why a
-    subagent's own `Skill poteto-mode` call is refused and why the slash form does nothing for
-    a subagent. The two compliant transcripts, the M2b writer and M2a verifier A, read
-    `SKILL.md` as a file and then opened the playbook. Every brief must name
-    `poteto-mode/SKILL.md` under the Claude skills root, tell the worker to read it in full
-    as a file before any work (the Skill tool will refuse), to copy its matched playbook's
-    steps into its todolist, and to end its report with the playbook block. The gate must ask
-    for that block, every step done or `skip: <reason>`, because a brief's own report format
-    otherwise displaces the checklist entirely. **A playbook block where Opening a PR, deslop,
-    or no-comments is skipped with a weak reason (`N/A`, `timebox`, `already clean`, or similar)
-    is a fail. Send the writer back.**
+10. **Open every worker brief with the absolute `SKILL.md` path, and gate on the playbook
+    block.** The Skill tool and `/poteto-mode` slash refuse for workers (`disable-model-invocation`);
+    only a file Read loads the skill. Every brief must include the absolute path to
+    poteto-mode `SKILL.md` (coordinator resolves it once per machine or session), tell the
+    worker to Read that path before any work, to copy its matched playbook's steps into its
+    todolist, and to end its report with the playbook block. The gate must ask for that block,
+    every step done or `skip: <reason>`, because a brief's own report format otherwise displaces
+    the checklist entirely. **A playbook block where Opening a PR, deslop, or no-comments is
+    skipped with a weak reason (`N/A`, `timebox`, `already clean`, or similar) is a fail. Send
+    the writer back.**
 
 ## Verifying a verification
 
@@ -344,21 +332,25 @@ serialize) per that playbook. Do not invent parallel writers outside Orchestrate
 *Writing a brief*.
 
 1. **Write.** One unit, one branch, one worktree (sibling of the repo or as the brief names).
-   `git worktree add`. Model `opus`. Paste `STANDING-ORDERS.md` verbatim and name the SHA you
-   took it from. Paste the unit's brief from its Linear issue.
+   `git worktree add`. Use a Task-allowed model on this Cursor host (often `inherit` /
+   `composer-2.5-fast`, or the pstack-models rule). Do not invent slugs Task rejects. Paste
+   `STANDING-ORDERS.md` verbatim and name the SHA you took it from. Paste the unit's brief from
+   its Linear issue (absolute poteto `SKILL.md` path included per rule 10).
 2. **Gate.** The writer must report a pushed branch, a head SHA, and the commands it ran with
    their exit codes and final lines. Missing any of those, send it back. The report must also
    carry the playbook block, the matched playbook and every step marked done or
    `skip: <reason>`. A missing block, one where every step is a skip, or a soft-skip fail under
    rule 10, sends the writer back. **Also require proof of no-comments:** Comment Sicko agent id
-   or report path, plus a short summary of deletions. No merge without that proof.
-3. **Verify.** Model `fable`, so the family differs from the writer. Never the writer itself.
-   Over about four checks, or if the checks span re-running and reading and adversarial probing,
-   split into two agents with a verdict each. *Sizing a verification* above has the rules.
-4. **Gate.** No merge without a verdict better than `type-check-only` from an agent that did not
-   write the code. CI green is not a verdict. A writer proving its own fix is not a verdict. A
-   verifier may note leftover narrating comments as findings; those void land the same way a
-   failed acceptance does.
+   or report path, plus a short summary of deletions (same receipt as STANDING-ORDERS Delivery).
+   No merge without that proof. Deslop: soft-skip ban only; no separate receipt.
+3. **Verify.** Different model family from the writer when Task allows a second family; never
+   the writer itself. Over about four checks, or if the checks span re-running and reading and
+   adversarial probing, split into two agents with a verdict each. *Sizing a verification*
+   above has the rules.
+4. **Gate.** The coordinator merges only after a verdict better than `type-check-only` from an
+   agent that did not write the code. CI green is not a verdict. A writer proving its own fix is
+   not a verdict. A verifier may note leftover narrating comments as findings; those void land
+   the same way a failed acceptance does.
 5. **Findings.** Send them to the writer as a numbered list demanding a per-item answer,
    including the items it declines. A new head SHA voids the verdict. Either re-verify, or show
    the delta is disjoint from what the verdict covered. Showing means running the diff, not
@@ -446,24 +438,34 @@ Historical M2 cutting notes and forks stay below for context. Open milestones an
 Linear; do not treat PR lists or dispatch order as current program state.
 
 **Every brief, in addition to its issue text.** Paste `STANDING-ORDERS.md` verbatim and name its
-SHA. Branch from current `origin/main`, and run `git merge origin/main` into the branch before
-writing anything. Test files are the writer's. Read `PROTOCOL.md` at the branch's SHA rather
-than any summary. Where a brief states a rule, the rule is the coordinator's decision and the
-writer copies it into `PROTOCOL.md` first, then codes against the file. A verify recipe passes
-only on exit 0 **and** the marker read from the last line of the redirected output. Redirect,
-never pipe. Only one Godot-driving agent at a time when a windowed demo is in the recipe.
+SHA. Include the absolute path to poteto-mode `SKILL.md` (rule 10). Branch from current
+`origin/main`, and run `git merge origin/main` into the branch before writing anything. Test
+files are the writer's. Read `PROTOCOL.md` at the branch's SHA rather than any summary. Where a
+brief states a rule, the rule is the coordinator's decision and the writer copies it into
+`PROTOCOL.md` first, then codes against the file. A verify recipe passes only on exit 0 **and**
+the marker read from the last line of the redirected output. Redirect, never pipe. Only one
+Godot-driving agent at a time when a windowed demo is in the recipe.
 
 ### The three recipes, named once
 
 Briefs name these by letter. Prefer the Linear document that carries the same text when it
 exists; keep the commands here for coordinators without Linear access.
 
-**Recipe G.** From `server/`, with a C toolchain Go can use as `CC` on PATH:
+**Recipe G.** From `server/`, with a C toolchain Go can use as `CC` on PATH. Prefer PowerShell
+(matches H/W). Git Bash form is equivalent.
+
+PowerShell:
+
+    $env:CGO_ENABLED = "1"
+    go test -race ./... > ../out-race.txt 2>&1; echo $LASTEXITCODE; Get-Content ../out-race.txt -Tail 5
+
+Git Bash:
 
     CGO_ENABLED=1 go test -race ./... > ../out-race.txt 2>&1; echo EXIT=$?; tail -5 ../out-race.txt
 
-Pass: `EXIT=0`, an `ok` line for each of `internal/game`, `internal/gamelog`, `internal/net`,
-no `DATA RACE`, no `FAIL` anywhere in `out-race.txt`. `internal/net` is slow under instrumentation.
+Pass: exit 0 (or `EXIT=0`), an `ok` line for each of `internal/game`, `internal/gamelog`,
+`internal/net`, no `DATA RACE`, no `FAIL` anywhere in `out-race.txt`. `internal/net` is slow
+under instrumentation.
 
 **Recipe H.** From the repo root, PowerShell:
 

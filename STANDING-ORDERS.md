@@ -75,20 +75,23 @@ node does not.
 ## Delivery
 
 - One unit per PR. One writer per branch.
-- Read poteto-mode `SKILL.md` as a file before any work (under your Claude skills root:
-  `poteto-mode/SKILL.md`). The Skill tool and `/poteto-mode` slash refuse for workers; only a
-  file Read loads it.
+- The brief names the absolute path to poteto-mode `SKILL.md`. Read that path as a file before
+  any work. The Skill tool and `/poteto-mode` slash refuse for workers; only a file Read loads it.
 - Match Feature (or Bug fix). Copy that playbook's steps into the todolist. End the report with
   the playbook block: every step done or `skip: <reason>`.
 - Before PR: run Opening a PR. That includes deslop (cursor-team-kit) then no-comments / Comment
   Sicko on the unit diff. Soft skips on Opening a PR, deslop, or no-comments are forbidden.
   Narrating `//` and `##` that restate the next lines are land blockers.
+- The writer report must include Comment Sicko agent id or report path, plus a short summary of
+  deletions.
 - `interrogate` is adversarial multi-model review of a diff. It is not a channel for asking the
   human. Run it when Opening a PR or Feature requires it, or when the brief says so.
 - Verifier runs on a different model family than the writer.
-- No merge to `main` without a verdict better than `type-check-only` for behavioral work.
-- `.claude/skills/verify-marque/SKILL.md` is the project's verification skill. Any behavioural
-  claim about the client or the server is proven the way it describes, before any generic driver.
+- Workers never merge to `main`. They may merge `origin/main` into their branch. The coordinator
+  merges only after an independent verdict better than `type-check-only` for behavioral work.
+- Repo-relative `.claude/skills/verify-marque/SKILL.md` is the project's verification skill. Any
+  behavioural claim about the client or the server is proven the way it describes, before any
+  generic driver.
 
 ## Tooling
 
