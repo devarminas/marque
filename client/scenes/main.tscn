@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3 uid="uid://bbk0w4hee5gof"]
+[gd_scene load_steps=19 format=3 uid="uid://bbk0w4hee5gof"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="2_checker"]
@@ -10,6 +10,8 @@
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
 [ext_resource type="PackedScene" path="res://scenes/worn_slot.tscn" id="10_worn_slot"]
+[ext_resource type="Script" path="res://scripts/hp_hud.gd" id="11_hp_hud"]
+[ext_resource type="Script" path="res://scripts/death_overlay.gd" id="12_death_overlay"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.38, 0.5, 0.68, 1)
@@ -182,7 +184,74 @@ text = "Equipment"
 [node name="WeaponSlot" parent="UI/EquipmentPanel/Margin/Rows" instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
-[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "ground_picker", "inventory_panel", "equipment_panel")]
+[node name="HpHud" type="Label" parent="UI"]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -72.0
+offset_right = 220.0
+offset_bottom = -40.0
+grow_horizontal = 1
+grow_vertical = 0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 16
+text = "HP —"
+visible = false
+script = ExtResource("11_hp_hud")
+
+[node name="DeathOverlay" type="Control" parent="UI" node_paths=PackedStringArray("respawn_button")]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+script = ExtResource("12_death_overlay")
+respawn_button = NodePath("Center/Column/RespawnButton")
+
+[node name="Dim" type="ColorRect" parent="UI/DeathOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.02, 0.02, 0.04, 0.72)
+
+[node name="Center" type="CenterContainer" parent="UI/DeathOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Column" type="VBoxContainer" parent="UI/DeathOverlay/Center"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="YouDied" type="Label" parent="UI/DeathOverlay/Center/Column"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 28
+text = "You died"
+horizontal_alignment = 1
+
+[node name="RespawnButton" type="Button" parent="UI/DeathOverlay/Center/Column"]
+custom_minimum_size = Vector2(160, 36)
+layout_mode = 2
+mouse_filter = 0
+text = "Respawn"
+
+[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "death_overlay")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
@@ -192,6 +261,8 @@ resource_nodes = NodePath("../ResourceNodes")
 ground_picker = NodePath("../GroundPicker")
 inventory_panel = NodePath("../UI/InventoryPanel")
 equipment_panel = NodePath("../UI/EquipmentPanel")
+hp_hud = NodePath("../UI/HpHud")
+death_overlay = NodePath("../UI/DeathOverlay")
 
 [node name="Net" type="Node" parent="Session"]
 script = ExtResource("7_net_client")

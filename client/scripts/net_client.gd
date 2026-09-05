@@ -166,6 +166,8 @@ signal equipment_changed(
 	worn_names: PackedStringArray, slot_names: PackedStringArray, slot_kinds: PackedStringArray
 )
 
+signal hp_changed(id: int, hp: int, max_hp: int)
+
 ## `error`: the server refused something this client sent. `re` names the
 ## rejected message and is [code]""[/code] when the frame could not be
 ## attributed to one. `message` is for a log, not for display and not for
@@ -332,6 +334,10 @@ func send_attack(player_id: int, seq: int = 0) -> Error:
 	return _send(attack_frame(player_id, _intent_seq(seq)))
 
 
+func send_respawn(seq: int = 0) -> Error:
+	return _send(respawn_frame(_intent_seq(seq)))
+
+
 ## The next `seq` this client will stamp, after the last welcome.
 func next_seq() -> int:
 	return _next_seq
@@ -385,6 +391,10 @@ static func use_frame(slot: int, on: int, seq: int = 0) -> Dictionary:
 
 static func attack_frame(player_id: int, seq: int = 0) -> Dictionary:
 	return {"attack": _intent_body({"player": player_id}, seq)}
+
+
+static func respawn_frame(seq: int = 0) -> Dictionary:
+	return {"respawn": _intent_body({}, seq)}
 
 
 static func _intent_body(body: Dictionary, seq: int) -> Dictionary:
@@ -512,6 +522,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_inventory(body, text)
 		"equipment":
 			_on_equipment(body, text)
+		"hp":
+			_on_hp(body, text)
 		"tick":
 			_on_tick(body, text)
 		"error":
@@ -531,6 +543,9 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 
 	var ids := PackedInt64Array()
 	var positions := PackedVector2Array()
+	var hp_ids := PackedInt64Array()
+	var hps := PackedInt32Array()
+	var max_hps := PackedInt32Array()
 	for entry: Variant in body["players"] as Array:
 		if typeof(entry) != TYPE_DICTIONARY:
 			push_error("net_client: welcome.players entry is not an object: %s" % text)
@@ -542,6 +557,15 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 		# Object form: {"id":..,"x":..,"z":..}. path.points uses [x, z] instead.
 		# Two encodings for one idea, deliberate and documented in PROTOCOL.md.
 		positions.append(Vector2(state["x"], state["z"]))
+		var pair: Array = []
+		var hp_status := _read_hit_points(state, text, pair)
+		if hp_status == ERR_INVALID_DATA:
+			return
+		if hp_status == OK:
+			var hit: Vector2i = pair[0]
+			hp_ids.append(int(state["id"]))
+			hps.append(hit.x)
+			max_hps.append(hit.y)
 
 	# M1. `items` is absent from every pre-M1 server and that is not an error:
 	# no items on the wire and no items in the world are the same statement.
@@ -607,6 +631,8 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 	# After `welcomed`, always: a listener rebuilds its world on that signal, so
 	# items announced before it would be freed by the very frame that announced
 	# them.
+	for index in hp_ids.size():
+		hp_changed.emit(int(hp_ids[index]), hps[index], max_hps[index])
 	welcome_items.emit(item_ids, item_kinds, item_positions)
 	welcome_nodes.emit(node_ids, node_kinds, node_positions, node_states)
 
@@ -665,7 +691,15 @@ static func _last_seq_of(body: Dictionary, text: String) -> int:
 func _on_spawn(body: Dictionary, text: String) -> void:
 	if not _has_numbers(body, ["id", "x", "z"], text):
 		return
-	spawned.emit(int(body["id"]), Vector2(body["x"], body["z"]))
+	var id := int(body["id"])
+	spawned.emit(id, Vector2(body["x"], body["z"]))
+	var pair: Array = []
+	var hp_status := _read_hit_points(body, text, pair)
+	if hp_status == ERR_INVALID_DATA:
+		return
+	if hp_status == OK:
+		var hit: Vector2i = pair[0]
+		hp_changed.emit(id, hit.x, hit.y)
 
 
 func _on_despawn(body: Dictionary, text: String) -> void:
@@ -841,6 +875,28 @@ func _on_equipment(body: Dictionary, text: String) -> void:
 		slot_kinds.append(occupied["kind"])
 
 	equipment_changed.emit(worn_names, slot_names, slot_kinds)
+
+
+func _on_hp(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["id", "hp", "max_hp"], text):
+		return
+	hp_changed.emit(int(body["id"]), int(body["hp"]), int(body["max_hp"]))
+
+
+static func _read_hit_points(state: Dictionary, text: String, out: Array) -> Error:
+	out.clear()
+	var has_hp := state.has("hp")
+	var has_max := state.has("max_hp")
+	if not has_hp and not has_max:
+		return ERR_DOES_NOT_EXIST
+	if not has_hp or not has_max:
+		push_error("net_client: hp and max_hp must both be present: %s" % text)
+		return ERR_INVALID_DATA
+	if not _is_number(state["hp"]) or not _is_number(state["max_hp"]):
+		push_error("net_client: hp and max_hp must be numbers: %s" % text)
+		return ERR_INVALID_DATA
+	out.append(Vector2i(int(state["hp"]), int(state["max_hp"])))
+	return OK
 
 
 ## One `{"id":..,"kind":..,"x":..,"z":..}` object, decoded.

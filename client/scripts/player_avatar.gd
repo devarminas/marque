@@ -73,6 +73,7 @@ var _desired_yaw := 0.0
 
 ## The scene's animation mixer, driving the Knight instanced below it.
 @onready var _animation: AnimationPlayer = $AnimationPlayer
+@onready var _hp_label: Label3D = $HpLabel
 
 
 ## Binds this avatar to a player id and to the connection's tick length.
@@ -93,6 +94,20 @@ func configure(id: int, tick_ms: int) -> void:
 ## are stated positions rather than movement.
 func teleport_to(x: float, z: float) -> void:
 	position = Vector3(x, ground_y, z)
+
+
+func set_hit_points(hp: int, max_hp: int) -> void:
+	if _hp_label == null:
+		return
+	_hp_label.text = "%d/%d" % [hp, max_hp]
+	_hp_label.visible = true
+
+
+func clear_hit_points() -> void:
+	if _hp_label == null:
+		return
+	_hp_label.text = ""
+	_hp_label.visible = false
 
 
 ## Adopts a [code]path[/code] message. Replaces any current path outright.
