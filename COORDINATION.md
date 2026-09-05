@@ -20,9 +20,8 @@ Program state lives in Linear, project *Project Marque*:
 - Shared verify recipes are a Linear document.
 
 The repo docs hold only what does not change per unit: the wire contract (`PROTOCOL.md`), the
-worker contract (`STANDING-ORDERS.md`), design rationale and Godot traps (`NOTES.md`), this
-playbook, and historical lessons in [COORDINATION-LESSONS.md](COORDINATION-LESSONS.md).
-Nothing in the repo records which unit is in flight.
+worker contract (`STANDING-ORDERS.md`), design rationale and Godot traps (`NOTES.md`), and this
+playbook. Nothing in the repo records which unit is in flight.
 
 ## Coordination, deliberately collapsed
 
@@ -124,15 +123,14 @@ worker lost real time to its absence.
 
 ## Active verification rules
 
-Compact gates. Narratives that paid for them live in [COORDINATION-LESSONS.md](COORDINATION-LESSONS.md).
-
 - A verify recipe requires exit 0 **and** the runner marker on the **last** line of redirected output. Grep is not enough.
 - Redirect harnesses to a file. Do not pipe them.
 - A worker's claim about anything it did not just run is a hypothesis until reproduced.
 - Never run timing-sensitive Godot work concurrently with other Godot agents.
 - Split a verification when checks exceed roughly four, or span re-running, reading, and adversarial probing. Give each half its own verdict.
 - A new head SHA voids a verdict unless the delta is shown disjoint from what the verdict covered.
-- Contested-demo baseline and sky-band Known flake: see *Lessons from M1* in COORDINATION-LESSONS.md.
+- Contested-demo `:541` / `:718` tick skew and sky-band still-camera flake: see Recipe W and
+  `.claude/skills/verify-marque/SKILL.md` Known flake.
 
 ## Picking this up in a new session
 
@@ -171,7 +169,7 @@ serialize) per that playbook. Do not invent parallel writers outside Orchestrate
 3. **Verify.** Different model family from the writer when Task allows a second family; never
    the writer itself. Over about four checks, or if the checks span re-running and reading and
    adversarial probing, split into two agents with a verdict each. *Active verification rules*
-   above; narratives in *Sizing a verification* in COORDINATION-LESSONS.md.
+   above.
 4. **Gate.** The coordinator merges only after a verdict better than `type-check-only` from an
    agent that did not write the code. CI green is not a verdict. A writer proving its own fix is
    not a verdict. A verifier may note leftover narrating comments as findings; those void land
@@ -195,7 +193,7 @@ just run is a hypothesis, including claims about the coordinator's own briefs.
 
 ## Recipes and brief paste rules
 
-Open milestones and units live in Linear. M2 reconnect forks and war stories live in COORDINATION-LESSONS.md.
+Open milestones and units live in Linear.
 
 **Every brief, in addition to its issue text.** Paste `STANDING-ORDERS.md` verbatim and name its
 SHA. Include the absolute path to poteto-mode `SKILL.md` (rule 10). Branch from current
@@ -243,12 +241,10 @@ acceptance criteria are read from it.
     powershell -ExecutionPolicy Bypass -File scripts/two_client_demo.ps1 > out-two.txt 2>&1; echo $LASTEXITCODE; Get-Content out-two.txt -Tail 3
     powershell -ExecutionPolicy Bypass -File scripts/contested_pickup_demo.ps1 > out-contested.txt 2>&1; echo $LASTEXITCODE; Get-Content out-contested.txt -Tail 3
 
-Pass: exit 0 and last lines `TWO CLIENT DEMO OK` and `CONTESTED PICKUP DEMO OK`. The contested
-demo has a known legitimate failure rate on `:541` and `:718` (M1j table in
-COORDINATION-LESSONS.md). A run that fails on only those lines is the baseline, not a
-regression; rerun up to three times. If `two_client_demo.ps1` fails only on the sky-band
-still-camera control, that run is the Known flake in COORDINATION-LESSONS.md, not a finding.
-The idle-machine control and geometry comparison there decide product vs flake. Any other
-failing line is a finding.
+Pass: exit 0 and last lines `TWO CLIENT DEMO OK` and `CONTESTED PICKUP DEMO OK`. A contested run
+that fails only on `:541` or `:718` is tick-skew baseline, not a regression; rerun up to three
+times. If `two_client_demo.ps1` fails only on the sky-band still-camera control, treat it as the
+Known flake in `.claude/skills/verify-marque/SKILL.md`, not a finding, unless idle-machine
+control or geometry also fails. Any other failing line is a finding.
 
 [ARM-107](https://linear.app/arminas/issue/ARM-107/fix-wrong-one-way-latency-comment-in-tick-clockgd).
