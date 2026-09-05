@@ -61,12 +61,16 @@ const ITEM_GROUND := Vector2(5.0, 8.0)
 ## the two click targets cannot steal each other.
 const NODE_GROUND := Vector2(-4.0, 6.0)
 
+## Where the remote player under the attack-click camera lies. Off item and node.
+const REMOTE_GROUND := Vector2(6.0, -5.0)
+
 ## The item id the click resolves to, and the player id sharing its number.
 ## Item ids and player ids are separate spaces (PROTOCOL.md, "Identity"), so a
 ## world holding both is the case that catches a client keying them together.
 const ITEM_ID := 3
 const PLAYER_ID := 3
 const NODE_ID := 3
+const REMOTE_PLAYER_ID := 7
 
 ## Camera height for the click tests. High enough that the whole viewport is
 ## ground, so a click that misses the item lands on the ground rather than the
@@ -110,9 +114,11 @@ var _items_container: Node3D = null
 var _move_to_intents := PackedVector2Array()
 var _pickup_intents := PackedInt32Array()
 var _gather_intents := PackedInt32Array()
+var _attack_intents := PackedInt32Array()
 var _drop_intents := PackedInt32Array()
 var _use_intents: Array[Vector2i] = []
 var _nodes_container: Node3D = null
+var _remotes_container: Node3D = null
 
 
 ## Suite contract, polled by `run_tests.gd`. Reports; never quits.
@@ -140,6 +146,7 @@ func _ready() -> void:
 	_grid = _root.get_node("UI/InventoryPanel/Margin/Rows/Slots") as GridContainer
 	_items_container = _root.get_node("GroundItems") as Node3D
 	_nodes_container = _root.get_node("ResourceNodes") as Node3D
+	_remotes_container = _root.get_node("RemotePlayers") as Node3D
 
 	# The rig chases its target every frame and would undo the camera placement
 	# the click tests depend on. Switched off rather than fought.
@@ -152,6 +159,7 @@ func _ready() -> void:
 	)
 	_session.pickup_requested.connect(func(id: int) -> void: _pickup_intents.append(id))
 	_session.gather_requested.connect(func(id: int) -> void: _gather_intents.append(id))
+	_session.attack_requested.connect(func(id: int) -> void: _attack_intents.append(id))
 	_session.drop_requested.connect(func(slot: int) -> void: _drop_intents.append(slot))
 	_session.use_requested.connect(
 		func(slot: int, on: int) -> void: _use_intents.append(Vector2i(slot, on))
@@ -188,6 +196,12 @@ func _ready() -> void:
 	await _test_a_click_on_a_node_is_a_gather_and_not_a_move()
 	await _test_a_click_on_bare_ground_is_a_move_and_not_a_gather()
 	await _test_a_click_on_an_item_still_picks_up_beside_a_node()
+
+	await _build_the_player_click_world()
+	_test_the_picker_separates_a_player_from_the_ground()
+	await _test_a_click_on_a_remote_player_is_an_attack_and_not_a_move()
+	await _test_a_click_on_self_is_not_an_attack()
+	await _test_a_click_on_bare_ground_is_a_move_and_not_an_attack()
 
 	await _test_clicking_an_occupied_slot_uses_it()
 	await _test_cancel_clears_use_selection()
@@ -496,6 +510,10 @@ func _test_a_click_on_an_item_is_a_pickup_and_not_a_move() -> void:
 		_gather_intents.is_empty(),
 		"and no gather, got %s" % [_gather_intents],
 	)
+	_check(
+		_attack_intents.is_empty(),
+		"and no attack, got %s" % [_attack_intents],
+	)
 
 
 ## [b]The unit's claim, half two.[/b] Fails if a click on bare ground produced a
@@ -524,6 +542,10 @@ func _test_a_click_on_bare_ground_is_a_move_and_not_a_pickup() -> void:
 	_check(
 		_gather_intents.is_empty(),
 		"and no gather, got %s" % [_gather_intents],
+	)
+	_check(
+		_attack_intents.is_empty(),
+		"and no attack, got %s" % [_attack_intents],
 	)
 
 
@@ -608,6 +630,11 @@ func _test_the_intents_match_the_protocol_byte_for_byte() -> void:
 		% JSON.stringify(NetClientScript.gather_frame(1)),
 	)
 	_check(
+		JSON.stringify(NetClientScript.attack_frame(2)) == '{"attack":{"player":2}}',
+		'attack is {"attack":{"player":2}}, got %s'
+		% JSON.stringify(NetClientScript.attack_frame(2)),
+	)
+	_check(
 		JSON.stringify(NetClientScript.drop_frame(3)) == '{"drop":{"slot":3}}',
 		'drop is {"drop":{"slot":3}}, got %s' % JSON.stringify(NetClientScript.drop_frame(3)),
 	)
@@ -675,6 +702,7 @@ func _test_a_click_on_a_node_is_a_gather_and_not_a_move() -> void:
 	)
 	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
+	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
 
 
 func _test_a_click_on_bare_ground_is_a_move_and_not_a_gather() -> void:
@@ -690,6 +718,7 @@ func _test_a_click_on_bare_ground_is_a_move_and_not_a_gather() -> void:
 	)
 	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
+	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
 
 
 func _test_a_click_on_an_item_still_picks_up_beside_a_node() -> void:
@@ -709,6 +738,104 @@ func _test_a_click_on_an_item_still_picks_up_beside_a_node() -> void:
 	)
 	_check(_gather_intents.is_empty(), "and gather does not steal it, got %s" % [_gather_intents])
 	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
+	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
+
+
+## A world holding this client and a remote player under the camera. **M5b.**
+func _build_the_player_click_world() -> void:
+	await _feed(
+		(
+			'{"welcome":{"you":%d,"tick_ms":150,"tick":900,"players":['
+			+ '{"id":%d,"x":0.0,"z":0.0},'
+			+ '{"id":%d,"x":%f,"z":%f}'
+			+ '],"items":[]}}'
+		)
+		% [PLAYER_ID, PLAYER_ID, REMOTE_PLAYER_ID, REMOTE_GROUND.x, REMOTE_GROUND.y]
+	)
+	_check(
+		_session.avatar_for(REMOTE_PLAYER_ID) != null,
+		"the world holds remote player %d for the attack click tests" % REMOTE_PLAYER_ID,
+	)
+	_check(_remotes_container != null, "RemotePlayers container is authored")
+	_look_straight_down_at(REMOTE_GROUND)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+
+func _test_the_picker_separates_a_player_from_the_ground() -> void:
+	var centre := _viewport_centre()
+	var on_player := _picker.pick(centre)
+	_check(
+		on_player["target"] == GroundPickerScript.Target.PLAYER,
+		"a cursor over a player resolves to the player, got target %d" % on_player["target"],
+	)
+	_check(
+		on_player["player"] == _session.avatar_for(REMOTE_PLAYER_ID),
+		"and to the body the registry holds for player %d" % REMOTE_PLAYER_ID,
+	)
+	var beside := _picker.pick(centre + _beside_offset())
+	_check(
+		beside["target"] == GroundPickerScript.Target.GROUND,
+		"a cursor beside it resolves to the ground, got target %d" % beside["target"],
+	)
+
+
+func _test_a_click_on_a_remote_player_is_an_attack_and_not_a_move() -> void:
+	_watch()
+	await _left_click(_viewport_centre())
+	_check(
+		_attack_intents.size() == 1,
+		"a click on a remote player sends one attack, got %d" % _attack_intents.size(),
+	)
+	_check(
+		_attack_intents.size() == 1 and _attack_intents[0] == REMOTE_PLAYER_ID,
+		"naming player %d, got %s" % [REMOTE_PLAYER_ID, _attack_intents],
+	)
+	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
+	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
+	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
+
+
+func _test_a_click_on_self_is_not_an_attack() -> void:
+	_look_straight_down_at(Vector2.ZERO)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+	var on_self := _picker.pick(_viewport_centre())
+	_check(
+		on_self["target"] == GroundPickerScript.Target.PLAYER,
+		"a cursor over self resolves to the player body, got target %d" % on_self["target"],
+	)
+	_check(
+		on_self["player"] == _session.avatar_for(PLAYER_ID),
+		"and to this client's own avatar",
+	)
+
+	_watch()
+	await _left_click(_viewport_centre())
+	_check(_attack_intents.is_empty(), "a click on self sends no attack, got %s" % [_attack_intents])
+	_check(_move_to_intents.is_empty(), "and no move_to either, got %s" % [_move_to_intents])
+	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
+	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
+
+
+func _test_a_click_on_bare_ground_is_a_move_and_not_an_attack() -> void:
+	_look_straight_down_at(REMOTE_GROUND)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var cursor := _viewport_centre() + _beside_offset()
+	var expected = _picker.pick_ground(cursor)
+	_check(expected != null, "the bare-ground cursor resolves to a ground point")
+
+	_watch()
+	await _left_click(cursor)
+	_check(
+		_move_to_intents.size() == 1,
+		"a click on bare ground sends one move_to, got %d" % _move_to_intents.size(),
+	)
+	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
+	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
+	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
 
 
 # --------------------------------------------------------------------------
@@ -1011,6 +1138,7 @@ func _watch() -> void:
 	_move_to_intents.clear()
 	_pickup_intents.clear()
 	_gather_intents.clear()
+	_attack_intents.clear()
 	_drop_intents.clear()
 	_use_intents.clear()
 
