@@ -81,16 +81,35 @@ func _test_overlay_authored_stop() -> void:
 func _test_welcome_draws_self_hp() -> void:
 	await _feed(
 		'{"welcome":{"you":1,"tick_ms":150,"tick":1,"heartbeat_ticks":10,'
-		+ '"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100},'
-		+ '{"id":2,"x":5,"z":5,"hp":70,"max_hp":100}]}}'
+		+ '"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},'
+		+ '{"id":2,"x":5,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}]}}'
 	)
 	_check(_hp_hud.visible, "welcome with hp shows the self chrome")
 	_check(
-		_hp_hud.text == "HP 100 / 100",
-		'self chrome reads "HP 100 / 100", got "%s"' % _hp_hud.text,
+		_hp_hud.text == "100",
+		'self HP numeral reads "100", got "%s"' % _hp_hud.text,
 	)
-	_check(_hp_hud.get_node_or_null("Row/Circle") != null, "with an authored circle")
-	_check(_hp_hud.get_node_or_null("Row/Bar") is ProgressBar, "and an authored bar")
+	_check(
+		_hp_hud.mana_text == "100",
+		'self mana numeral reads "100", got "%s"' % _hp_hud.mana_text,
+	)
+	var hp_bar: ProgressBar = _hp_hud.get_node_or_null("Stack/HpRow/Bar") as ProgressBar
+	var mana_bar: ProgressBar = _hp_hud.get_node_or_null("Stack/ManaRow/Bar") as ProgressBar
+	_check(hp_bar != null, "authored green HP bar")
+	_check(mana_bar != null, "authored blue mana bar under it")
+	_check(
+		hp_bar != null and mana_bar != null and hp_bar.get_parent().get_index() < mana_bar.get_parent().get_index(),
+		"HP row stacks above mana row",
+	)
+	_check(
+		hp_bar != null and hp_bar.get_theme_stylebox("fill").bg_color.g > hp_bar.get_theme_stylebox("fill").bg_color.b,
+		"HP fill is green",
+	)
+	_check(
+		mana_bar != null and mana_bar.get_theme_stylebox("fill").bg_color.b > mana_bar.get_theme_stylebox("fill").bg_color.g,
+		"mana fill is blue",
+	)
+	print("DEMO vitals hud hp=%s mana=%s green_over_blue=1" % [_hp_hud.text, _hp_hud.mana_text])
 	_check(
 		_hp_hud.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 		"and IGNORE so world clicks pass through, got filter %d" % _hp_hud.mouse_filter,
@@ -101,25 +120,40 @@ func _test_welcome_draws_self_hp() -> void:
 		"session caches self hp",
 	)
 	_check(
+		_session.mana_for(1) == Vector2i(100, 100),
+		"session caches self mana",
+	)
+	_check(
 		_session.hit_points_for(2) == Vector2i(70, 100),
 		"session caches other hp from welcome",
+	)
+	_check(
+		_session.mana_for(2) == Vector2i(40, 100),
+		"session caches other mana from welcome",
 	)
 
 
 func _test_live_hp_updates_display() -> void:
 	await _feed('{"hp":{"id":1,"hp":70,"max_hp":100}}')
 	_check(
-		_hp_hud.text == "HP 70 / 100",
+		_hp_hud.text == "70",
 		'live hp restatement updates self chrome to 70, got "%s"' % _hp_hud.text,
 	)
+	_check(_hp_hud.mana_text == "100", "mana numeral stays until a mana frame")
 	_check(not _death.visible, "hp 70 keeps the overlay hidden")
+	await _feed('{"mana":{"id":1,"mana":55,"max_mana":100}}')
+	_check(
+		_hp_hud.mana_text == "55",
+		'live mana restatement updates self chrome to 55, got "%s"' % _hp_hud.mana_text,
+	)
+	_check(_hp_hud.text == "70", "hp numeral stays across a mana frame")
 
 
 func _test_death_shows_overlay() -> void:
 	await _feed('{"hp":{"id":1,"hp":0,"max_hp":100}}')
 	_check(_death.visible, "local hp 0 shows the death overlay")
 	_check(
-		_hp_hud.text == "HP 0 / 100",
+		_hp_hud.text == "0",
 		'self chrome shows zero, got "%s"' % _hp_hud.text,
 	)
 
@@ -139,10 +173,15 @@ func _test_respawn_button_sends_intent() -> void:
 
 func _test_full_hp_hides_overlay() -> void:
 	await _feed('{"hp":{"id":1,"hp":100,"max_hp":100}}')
+	await _feed('{"mana":{"id":1,"mana":100,"max_mana":100}}')
 	_check(not _death.visible, "full hp after respawn hides the overlay")
 	_check(
-		_hp_hud.text == "HP 100 / 100",
+		_hp_hud.text == "100",
 		'self chrome returns to 100, got "%s"' % _hp_hud.text,
+	)
+	_check(
+		_hp_hud.mana_text == "100",
+		'self mana returns to 100, got "%s"' % _hp_hud.mana_text,
 	)
 
 

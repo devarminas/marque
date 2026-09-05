@@ -15,6 +15,7 @@ class Recorder:
 		net = NetClientScript.new()
 		net.welcomed.connect(_on_welcomed)
 		net.hp_changed.connect(_on_hp_changed)
+		net.mana_changed.connect(_on_mana_changed)
 		net.spawned.connect(_on_spawned)
 		net.unknown_message.connect(_on_unknown)
 
@@ -53,6 +54,9 @@ class Recorder:
 	func _on_hp_changed(id: int, hp: int, max_hp: int) -> void:
 		events.append({"signal": "hp_changed", "id": id, "hp": hp, "max_hp": max_hp})
 
+	func _on_mana_changed(id: int, mana: int, max_mana: int) -> void:
+		events.append({"signal": "mana_changed", "id": id, "mana": mana, "max_mana": max_mana})
+
 	func _on_spawned(id: int, _position: Vector2) -> void:
 		events.append({"signal": "spawned", "id": id})
 
@@ -65,10 +69,13 @@ var _assertions: RefCounted = null
 
 func run(assertions: RefCounted) -> void:
 	_assertions = assertions
-	print("== hp protocol: welcome, spawn, live hp, respawn frame ==")
+	print("== hp protocol: welcome, spawn, live hp/mana, respawn frame ==")
 	_test_welcome_emits_hp_after_welcomed()
+	_test_welcome_emits_mana()
 	_test_live_hp_frame()
+	_test_live_mana_frame()
 	_test_spawn_carries_hp()
+	_test_spawn_carries_mana()
 	_test_respawn_frame()
 	_test_pre_m5a_welcome_skips_hp()
 	assertions.finish()
@@ -97,6 +104,20 @@ func _test_welcome_emits_hp_after_welcomed() -> void:
 	rec.release()
 
 
+func _test_welcome_emits_mana() -> void:
+	var rec := Recorder.new()
+	rec.feed(
+		'{"welcome":{"you":1,"tick_ms":150,"tick":1,"heartbeat_ticks":10,'
+		+ '"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},'
+		+ '{"id":2,"x":5,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}]}}'
+	)
+	var manas := rec.of("mana_changed")
+	if _check(manas.size() == 2, "welcome carries two mana_changed events"):
+		_check(manas[0]["id"] == 1 and manas[0]["mana"] == 100, "first mana is self at 100")
+		_check(manas[1]["id"] == 2 and manas[1]["mana"] == 40, "second mana is other at 40")
+	rec.release()
+
+
 func _test_live_hp_frame() -> void:
 	var rec := Recorder.new()
 	rec.feed('{"hp":{"id":1,"hp":70,"max_hp":100}}')
@@ -105,6 +126,18 @@ func _test_live_hp_frame() -> void:
 		_check(
 			hps[0]["id"] == 1 and hps[0]["hp"] == 70 and hps[0]["max_hp"] == 100,
 			"live hp carries id/hp/max_hp, got %s" % [hps[0]],
+		)
+	rec.release()
+
+
+func _test_live_mana_frame() -> void:
+	var rec := Recorder.new()
+	rec.feed('{"mana":{"id":1,"mana":55,"max_mana":100}}')
+	var manas := rec.of("mana_changed")
+	if _check(manas.size() == 1, "a live mana frame emits once"):
+		_check(
+			manas[0]["id"] == 1 and manas[0]["mana"] == 55 and manas[0]["max_mana"] == 100,
+			"live mana carries id/mana/max_mana, got %s" % [manas[0]],
 		)
 	rec.release()
 
@@ -118,6 +151,18 @@ func _test_spawn_carries_hp() -> void:
 	)
 	var hps := rec.of("hp_changed")
 	_check(hps.size() == 1 and hps[0]["hp"] == 100, "spawn hp is full")
+	rec.release()
+
+
+func _test_spawn_carries_mana() -> void:
+	var rec := Recorder.new()
+	rec.feed('{"spawn":{"id":3,"x":1,"z":2,"hp":100,"max_hp":100,"mana":100,"max_mana":100}}')
+	_check(
+		rec.names() == ["spawned", "hp_changed", "mana_changed"],
+		"spawn emits mana after hp, got %s" % [rec.names()],
+	)
+	var manas := rec.of("mana_changed")
+	_check(manas.size() == 1 and manas[0]["mana"] == 100, "spawn mana is full")
 	rec.release()
 
 
@@ -138,5 +183,6 @@ func _test_pre_m5a_welcome_skips_hp() -> void:
 		+ '"players":[{"id":1,"x":0,"z":0}]}}'
 	)
 	_check(rec.of("hp_changed").is_empty(), "a pre-M5a welcome emits no hp")
+	_check(rec.of("mana_changed").is_empty(), "and no mana")
 	_check(rec.of("welcomed").size() == 1, "and still joins")
 	rec.release()

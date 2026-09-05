@@ -66,13 +66,15 @@ const (
 	MsgRespawn = "respawn"
 )
 
-// PlayerState is one player's position and public HP, as it appears inside welcome.
+// PlayerState is one player's position and public vitals, as it appears inside welcome.
 type PlayerState struct {
-	ID    PlayerID `json:"id"`
-	X     float64  `json:"x"`
-	Z     float64  `json:"z"`
-	HP    int      `json:"hp"`
-	MaxHP int      `json:"max_hp"`
+	ID      PlayerID `json:"id"`
+	X       float64  `json:"x"`
+	Z       float64  `json:"z"`
+	HP      int      `json:"hp"`
+	MaxHP   int      `json:"max_hp"`
+	Mana    int      `json:"mana"`
+	MaxMana int      `json:"max_mana"`
 }
 
 // ItemState is one ground item, as it appears inside welcome and item_spawn.
@@ -203,6 +205,13 @@ type HP struct {
 	MaxHP int      `json:"max_hp"`
 }
 
+// Mana restates one player's mana (PROTOCOL.md, "mana", M6b).
+type Mana struct {
+	ID      PlayerID `json:"id"`
+	Mana    int      `json:"mana"`
+	MaxMana int      `json:"max_mana"`
+}
+
 func (Welcome) isServerMessage()     {}
 func (Spawn) isServerMessage()       {}
 func (Despawn) isServerMessage()     {}
@@ -217,6 +226,7 @@ func (Inventory) isServerMessage()   {}
 func (Equipment) isServerMessage()   {}
 func (Tick) isServerMessage()        {}
 func (HP) isServerMessage()          {}
+func (Mana) isServerMessage()        {}
 
 // ClientMessage is one message a client can send: an intent, never a fact.
 // Name is its wire name, the same string an error carries as "re".
@@ -311,6 +321,7 @@ type serverEnvelope struct {
 	Equipment   *Equipment   `json:"equipment,omitempty"`
 	Tick        *Tick        `json:"tick,omitempty"`
 	HP          *HP          `json:"hp,omitempty"`
+	Mana        *Mana        `json:"mana,omitempty"`
 }
 
 // Encode renders one server message as a single WebSocket text frame payload.
@@ -347,6 +358,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.Tick = &v
 	case HP:
 		env.HP = &v
+	case Mana:
+		env.Mana = &v
 	default:
 		return nil, fmt.Errorf("net: encode: unhandled server message %T", m)
 	}

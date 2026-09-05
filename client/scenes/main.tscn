@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3 uid="uid://bbk0w4hee5gof"]
+[gd_scene load_steps=23 format=3 uid="uid://bbk0w4hee5gof"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="2_checker"]
@@ -37,6 +37,38 @@ size = Vector2(100, 100)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
 size = Vector3(100, 1, 100)
+
+[sub_resource type="StyleBoxFlat" id="style_hp_bg"]
+bg_color = Color(0.08, 0.1, 0.1, 0.85)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0, 0, 0, 1)
+
+[sub_resource type="StyleBoxFlat" id="style_hp_fill"]
+bg_color = Color(0.22, 0.78, 0.28, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0, 0, 0, 1)
+
+[sub_resource type="StyleBoxFlat" id="style_mana_bg"]
+bg_color = Color(0.08, 0.1, 0.14, 0.85)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0, 0, 0, 1)
+
+[sub_resource type="StyleBoxFlat" id="style_mana_fill"]
+bg_color = Color(0.2, 0.45, 0.95, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0, 0, 0, 1)
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -222,12 +254,12 @@ custom_minimum_size = Vector2(16, 16)
 mouse_filter = 0
 text = "I"
 
-[node name="HpHud" type="Control" parent="UI" node_paths=PackedStringArray("fill", "bar", "label")]
+[node name="HpHud" type="Control" parent="UI" node_paths=PackedStringArray("hp_bar", "hp_label", "mana_bar", "mana_label")]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 16.0
-offset_top = -56.0
+offset_top = -68.0
 offset_right = 220.0
 offset_bottom = -16.0
 grow_horizontal = 1
@@ -235,11 +267,12 @@ grow_vertical = 0
 mouse_filter = 2
 visible = false
 script = ExtResource("11_hp_hud")
-fill = NodePath("Row/Circle")
-bar = NodePath("Row/Bar")
-label = NodePath("Row/Label")
+hp_bar = NodePath("Stack/HpRow/Bar")
+hp_label = NodePath("Stack/HpRow/Label")
+mana_bar = NodePath("Stack/ManaRow/Bar")
+mana_label = NodePath("Stack/ManaRow/Label")
 
-[node name="Row" type="HBoxContainer" parent="UI/HpHud"]
+[node name="Stack" type="VBoxContainer" parent="UI/HpHud"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -247,32 +280,81 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 2
 
-[node name="Circle" type="ColorRect" parent="UI/HpHud/Row"]
-custom_minimum_size = Vector2(28, 28)
-layout_mode = 2
-size_flags_vertical = 4
-mouse_filter = 2
-color = Color(0.82, 0.18, 0.18, 1)
-
-[node name="Bar" type="ProgressBar" parent="UI/HpHud/Row"]
-custom_minimum_size = Vector2(100, 16)
+[node name="HpRow" type="Control" parent="UI/HpHud/Stack"]
+custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 4
 mouse_filter = 2
+
+[node name="Bar" type="ProgressBar" parent="UI/HpHud/Stack/HpRow"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/background = SubResource("style_hp_bg")
+theme_override_styles/fill = SubResource("style_hp_fill")
 max_value = 100.0
 value = 0.0
 show_percentage = false
 
-[node name="Label" type="Label" parent="UI/HpHud/Row"]
-layout_mode = 2
-size_flags_vertical = 4
+[node name="Label" type="Label" parent="UI/HpHud/Stack/HpRow"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
 theme_override_font_sizes/font_size = 14
-text = "HP —"
+text = "—"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ManaRow" type="Control" parent="UI/HpHud/Stack"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="Bar" type="ProgressBar" parent="UI/HpHud/Stack/ManaRow"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/background = SubResource("style_mana_bg")
+theme_override_styles/fill = SubResource("style_mana_fill")
+max_value = 100.0
+value = 0.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="UI/HpHud/Stack/ManaRow"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 14
+text = "—"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="DeathOverlay" type="Control" parent="UI" node_paths=PackedStringArray("respawn_button")]
 visible = false

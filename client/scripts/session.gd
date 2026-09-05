@@ -180,6 +180,7 @@ var _equipment: EquipmentPanelScript = null
 var _hp_hud: HpHudScript = null
 var _death_overlay: DeathOverlayScript = null
 var _hp := {}
+var _mana := {}
 var _local: PlayerAvatarScript = null
 var _clock := TickClock.new()
 ## This client's own player id, or 0 before `welcome`.
@@ -243,6 +244,7 @@ func _ready() -> void:
 	_net.inventory_changed.connect(_on_inventory_changed)
 	_net.equipment_changed.connect(_on_equipment_changed)
 	_net.hp_changed.connect(_on_hp_changed)
+	_net.mana_changed.connect(_on_mana_changed)
 	_net.server_error.connect(_on_server_error)
 	_net.disconnected.connect(_on_disconnected)
 
@@ -1027,6 +1029,10 @@ func _on_hp_changed(id: int, hp: int, max_hp: int) -> void:
 	_apply_hit_points(id, hp, max_hp)
 
 
+func _on_mana_changed(id: int, mana: int, max_mana: int) -> void:
+	_apply_mana(id, mana, max_mana)
+
+
 func _on_respawn_requested() -> void:
 	request_respawn()
 
@@ -1215,8 +1221,17 @@ func _apply_hit_points(id: int, hp: int, max_hp: int) -> void:
 		_death_overlay.visible = hp == 0
 
 
+func _apply_mana(id: int, mana: int, max_mana: int) -> void:
+	_mana[id] = Vector2i(mana, max_mana)
+	if id != _you:
+		return
+	if _hp_hud != null:
+		_hp_hud.apply_mana(mana, max_mana)
+
+
 func _clear_hit_points() -> void:
 	_hp.clear()
+	_mana.clear()
 	if _local != null:
 		_local.clear_hit_points()
 	if _hp_hud != null:
@@ -1227,6 +1242,13 @@ func _clear_hit_points() -> void:
 
 func hit_points_for(id: int) -> Vector2i:
 	var pair: Variant = _hp.get(id)
+	if pair == null:
+		return Vector2i(-1, -1)
+	return pair
+
+
+func mana_for(id: int) -> Vector2i:
+	var pair: Variant = _mana.get(id)
 	if pair == null:
 		return Vector2i(-1, -1)
 	return pair

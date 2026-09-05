@@ -21,11 +21,13 @@ func (p *player) dead() bool { return p.hp == 0 }
 
 func (p *player) wireState() mnet.PlayerState {
 	return mnet.PlayerState{
-		ID:    p.id,
-		X:     p.pos.X,
-		Z:     p.pos.Z,
-		HP:    p.hp,
-		MaxHP: MaxHP,
+		ID:      p.id,
+		X:       p.pos.X,
+		Z:       p.pos.Z,
+		HP:      p.hp,
+		MaxHP:   MaxHP,
+		Mana:    p.mana,
+		MaxMana: MaxMana,
 	}
 }
 
@@ -97,10 +99,12 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 	}
 
 	p.hp = MaxHP
+	p.mana = MaxMana
 	p.pos = Point{X: spawnX, Z: spawnZ}
 	p.remaining = nil
 	w.assignPath(p, []Point{p.pos})
 	w.broadcastHP(p)
+	w.broadcastMana(p)
 	w.log.Event(w.tick, EvRespawn, withSeq(gamelog.Fields{"player": p.id}, seq))
 }
 

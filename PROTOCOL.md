@@ -38,8 +38,10 @@ and the death/respawn UI are later units and nothing under an **M5a** marker des
 
 **M6 is in progress.** **M6a** is the shared ability content table and the `cast` ability-id
 field on the wire. Ability stats live in `shared/abilities.json` only; casting runtime, mana
-spend, hotbar UI, and VFX are later M6 units and nothing under an **M6a** marker describes them.
-A marker reading plain **M6** is reserved.
+spend at cast time, hotbar UI, and VFX are later M6 units and nothing under an **M6a** marker
+describes them. **M6b** is the mana pool and its restatement: `mana` / `max_mana` on player
+records, the live `mana` frame, join/respawn fill to `MaxMana`, and spend/refund hooks for the
+later cast unit. A marker reading plain **M6** is reserved.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -466,6 +468,10 @@ server uses for that player. Both are integers. **HP is public world state**, so
 there is no separate first-of-join `hp` frame analogous to `inventory`. A pre-M5a client ignores
 the new fields under compatibility rule 2 and is exactly as correct as it was before.
 
+**M6b.** Each entry of `welcome.players` also gains `mana` and `max_mana`, with the same public
+rule and integer types as `hp` / `max_hp`. A fresh join seeds mana at `MaxMana`. A pre-M6b client
+ignores the new fields under compatibility rule 2.
+
 A repeated `welcome` restates every player's current `hp` and `max_hp` with the rest of the
 world. A resumed connection reads the fight as it stands from that list.
 
@@ -495,13 +501,16 @@ client's clock were already perfect.
 
 ### `spawn` / `despawn`
 
-    {"spawn":{"id":2,"x":0.0,"z":0.0,"hp":100,"max_hp":100}}
+    {"spawn":{"id":2,"x":0.0,"z":0.0,"hp":100,"max_hp":100,"mana":100,"max_mana":100}}
     {"despawn":{"id":2}}
 
 Broadcast to everyone **except** the joining or leaving player, who learns its own existence
 from `welcome`.
 
 **M5a.** A joining player is announced with full hit points. Same `hp` / `max_hp` fields and
+public rule as `welcome.players`.
+
+**M6b.** A joining player is announced with full mana. Same `mana` / `max_mana` fields and
 public rule as `welcome.players`.
 
 ### `hp`. **M5a**
@@ -523,6 +532,21 @@ everyone; putting it on the wire still keeps the client off a parallel constant.
 
 **An `hp` for an unknown id is dropped with a loud log**, the same defence `path` already uses
 for an unknown walker. Under the ordering guarantees a conforming server cannot produce it.
+
+### `mana`. **M6b**
+
+    {"mana":{"id":2,"mana":55,"max_mana":100}}
+
+A full restatement of one player's mana, not a spend delta. Broadcast to **everyone, including
+the player whose mana changed**, matching `hp`. Sent whenever that player's current mana changes
+(a spend or refund hook runs, or a `respawn` restores it), and never otherwise. `welcome` and
+`spawn` already carried the opening values, so the join step does not emit a redundant
+per-player `mana` after them.
+
+`max_mana` rides on every `mana` frame for `max_hp`'s reason. The client never decrements mana
+locally before a server frame.
+
+**A `mana` for an unknown id is dropped with a loud log**, the same defence `hp` uses.
 
 ### `path`
 
@@ -1478,11 +1502,14 @@ death loot.
 Named constants, revisitable:
 
 - `MaxHP = 100`
+- `MaxMana = 100`
 - `AttackDamage = 10`
 - `AttackPeriodTicks = 4` (600 ms at 150 ms tick)
 - `AttackRange = 1.5` (resolution and chase halt only; see below)
 
-A fresh join and a successful `respawn` both set current HP to `MaxHP`.
+A fresh join and a successful `respawn` both set current HP to `MaxHP` and current mana to
+`MaxMana`. Spend and refund helpers exist for the later cast unit; they broadcast `mana` and
+write GAMELOG `mana_spend` / `mana_refund`. Casting does not spend mana in M6b.
 
 ### `attack` is pending engage, then period hits
 
