@@ -50,6 +50,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "item protocol", "script": preload("res://tests/test_item_protocol.gd")},
 	{"name": "tick protocol", "script": preload("res://tests/test_tick_protocol.gd")},
 	{"name": "tick edges", "script": preload("res://tests/test_tick_edges.gd")},
+	{"name": "hp protocol", "script": preload("res://tests/test_hp_protocol.gd")},
 ]
 
 ## Suites that need a scene tree, run one at a time in this order.
@@ -78,6 +79,7 @@ const SCENE_SUITES: Array = [
 	# real input at it, and connects to nothing.
 	{"name": "equipment", "scene": "res://tests/test_equipment.tscn"},
 	{"name": "equipment wiring", "scene": "res://tests/test_equipment_wiring.tscn"},
+	{"name": "hp", "scene": "res://tests/test_hp.tscn"},
 	# The two heartbeat suites feed main.tscn scripted frames like the two above,
 	# so they connect to nothing. They are the only suites that spend real
 	# seconds waiting on a deadline, and each caps Engine.max_fps for its own

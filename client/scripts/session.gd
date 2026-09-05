@@ -59,6 +59,8 @@ const ResourceNodeScript := preload("res://scripts/resource_node.gd")
 const ResourceNodeScene := preload("res://scenes/resource_node.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
+const HpHudScript := preload("res://scripts/hp_hud.gd")
+const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 
 ## Command-line flag naming the websocket URL, as `--server <url>` after the
@@ -138,6 +140,9 @@ signal equip_requested(slot: int)
 ## Emitted whenever an occupied worn slot is forwarded as `unequip`. **M3c.**
 signal unequip_requested(worn: String)
 
+## Emitted whenever the death overlay's Respawn control is pressed. **M5c.**
+signal respawn_requested()
+
 ## The [code]net_client.gd[/code] node. Authored as this node's child in
 ## [code]main.tscn[/code]; it needs to be in the tree because it polls its
 ## socket from [method Node._process].
@@ -163,11 +168,17 @@ signal unequip_requested(worn: String)
 @export var inventory_panel: Node
 ## The [code]equipment_panel.gd[/code] node the `equipment` message drives.
 @export var equipment_panel: Node
+@export var hp_hud: Node
+@export var death_overlay: Node
 
 var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
 var _panel: InventoryPanelScript = null
 var _equipment: EquipmentPanelScript = null
+var _hp_hud: HpHudScript = null
+var _death_overlay: DeathOverlayScript = null
+## Public hit points keyed by player id. Value is [code]Vector2i(hp, max_hp)[/code].
+var _hp := {}
 var _local: PlayerAvatarScript = null
 var _clock := TickClock.new()
 ## This client's own player id, or 0 before `welcome`.
@@ -230,6 +241,7 @@ func _ready() -> void:
 	_net.node_state_changed.connect(_on_node_state_changed)
 	_net.inventory_changed.connect(_on_inventory_changed)
 	_net.equipment_changed.connect(_on_equipment_changed)
+	_net.hp_changed.connect(_on_hp_changed)
 	_net.server_error.connect(_on_server_error)
 	_net.disconnected.connect(_on_disconnected)
 
@@ -254,6 +266,16 @@ func _ready() -> void:
 	else:
 		_equipment.worn_activated.connect(_on_worn_activated)
 		_equipment.equip_from_bag.connect(_on_equip_from_bag)
+
+	_hp_hud = hp_hud as HpHudScript
+	if _hp_hud == null:
+		push_error("Session.hp_hud must point at a node running hp_hud.gd")
+
+	_death_overlay = death_overlay as DeathOverlayScript
+	if _death_overlay == null:
+		push_error("Session.death_overlay must point at a node running death_overlay.gd")
+	else:
+		_death_overlay.respawn_requested.connect(_on_respawn_requested)
 
 	var url := _server_from_command_line()
 	if not url.is_empty():
@@ -474,6 +496,16 @@ func request_use(slot: int, on: int) -> void:
 	_net.send_use(slot, on)
 
 
+## Sends `respawn`. **M5c.** Overlay visibility changes only when an `hp` frame
+## restates local HP above zero.
+func request_respawn() -> void:
+	respawn_requested.emit()
+	if _net == null or not _net.is_open():
+		push_warning("session: respawn dropped, the socket is not open")
+		return
+	_net.send_respawn()
+
+
 ## Clears a pending use-on selection. Returns true when there was one.
 func clear_use_selection() -> bool:
 	if _use_from < 0:
@@ -526,6 +558,7 @@ func _on_welcomed(
 		token = _net.session_token()
 
 	_forget_everyone()
+	_clear_hit_points()
 	# The inventory is not part of `welcome` — it is private to one player and
 	# arrives as its own message inside the same atomic step (PROTOCOL.md,
 	# `welcome`) — so the panel is emptied here and refilled a frame later by
@@ -952,6 +985,14 @@ func _on_equipment_changed(
 	_equipment.apply(worn_names, slot_names, slot_kinds)
 
 
+func _on_hp_changed(id: int, hp: int, max_hp: int) -> void:
+	_apply_hit_points(id, hp, max_hp)
+
+
+func _on_respawn_requested() -> void:
+	request_respawn()
+
+
 ## The body for [param id], creating it if this session has not seen it before.
 ##
 ## The local body is the authored node; every other body is an instance of
@@ -1114,6 +1155,37 @@ func _forget_everyone() -> void:
 		_forget_item(id)
 	for id: int in _nodes.keys():
 		_forget_node(id)
+
+
+func _apply_hit_points(id: int, hp: int, max_hp: int) -> void:
+	_hp[id] = Vector2i(hp, max_hp)
+	var avatar: PlayerAvatarScript = _avatars.get(id)
+	if avatar != null:
+		avatar.set_hit_points(hp, max_hp)
+	if id != _you:
+		return
+	if _hp_hud != null:
+		_hp_hud.apply(hp, max_hp)
+	if _death_overlay != null:
+		_death_overlay.visible = hp == 0
+
+
+func _clear_hit_points() -> void:
+	_hp.clear()
+	if _local != null:
+		_local.clear_hit_points()
+	if _hp_hud != null:
+		_hp_hud.clear()
+	if _death_overlay != null:
+		_death_overlay.visible = false
+
+
+## Current hit points for [param id], or [code]Vector2i(-1, -1)[/code] when unknown.
+func hit_points_for(id: int) -> Vector2i:
+	var pair: Variant = _hp.get(id)
+	if pair == null:
+		return Vector2i(-1, -1)
+	return pair
 
 
 ## The websocket URL from `--server <url>`, or "" when it was not given.
