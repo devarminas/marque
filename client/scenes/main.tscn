@@ -65,6 +65,8 @@ shape = SubResource("BoxShape3D_ground")
 
 [node name="GroundItems" type="Node3D" parent="."]
 
+[node name="ResourceNodes" type="Node3D" parent="."]
+
 [node name="CameraRig" type="Node3D" parent="." node_paths=PackedStringArray("target", "camera")]
 transform = Transform3D(0.8660254, -0.28678823, 0.40957603, 0, 0.81915206, 0.57357645, -0.5, -0.49673176, 0.7094065, 0, 0, 0)
 script = ExtResource("3_camera_rig")
@@ -91,6 +93,7 @@ camera = NodePath("../CameraRig/Camera3D")
 ray_length = 4096.0
 ground_collision_mask = 1
 item_collision_mask = 2
+node_collision_mask = 8
 
 [node name="UI" type="CanvasLayer" parent="."]
 
@@ -178,12 +181,13 @@ text = "Equipment"
 [node name="WeaponSlot" parent="UI/EquipmentPanel/Margin/Rows" instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
-[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "ground_picker", "inventory_panel", "equipment_panel")]
+[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "ground_picker", "inventory_panel", "equipment_panel")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
 remote_players = NodePath("../RemotePlayers")
 ground_items = NodePath("../GroundItems")
+resource_nodes = NodePath("../ResourceNodes")
 ground_picker = NodePath("../GroundPicker")
 inventory_panel = NodePath("../UI/InventoryPanel")
 equipment_panel = NodePath("../UI/EquipmentPanel")

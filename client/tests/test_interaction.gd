@@ -57,11 +57,16 @@ const ODD_SIZE := 6
 ## always answers (0, 0) cannot pass.
 const ITEM_GROUND := Vector2(5.0, 8.0)
 
+## Where the resource node under the gather-click camera lies. Off the item so
+## the two click targets cannot steal each other.
+const NODE_GROUND := Vector2(-4.0, 6.0)
+
 ## The item id the click resolves to, and the player id sharing its number.
 ## Item ids and player ids are separate spaces (PROTOCOL.md, "Identity"), so a
 ## world holding both is the case that catches a client keying them together.
 const ITEM_ID := 3
 const PLAYER_ID := 3
+const NODE_ID := 3
 
 ## Camera height for the click tests. High enough that the whole viewport is
 ## ground, so a click that misses the item lands on the ground rather than the
@@ -104,7 +109,9 @@ var _items_container: Node3D = null
 ## Every intent the session emitted since the last [method _watch] call.
 var _move_to_intents := PackedVector2Array()
 var _pickup_intents := PackedInt32Array()
+var _gather_intents := PackedInt32Array()
 var _drop_intents := PackedInt32Array()
+var _nodes_container: Node3D = null
 
 
 ## Suite contract, polled by `run_tests.gd`. Reports; never quits.
@@ -131,6 +138,7 @@ func _ready() -> void:
 	_panel = _root.get_node("UI/InventoryPanel") as InventoryPanelScript
 	_grid = _root.get_node("UI/InventoryPanel/Margin/Rows/Slots") as GridContainer
 	_items_container = _root.get_node("GroundItems") as Node3D
+	_nodes_container = _root.get_node("ResourceNodes") as Node3D
 
 	# The rig chases its target every frame and would undo the camera placement
 	# the click tests depend on. Switched off rather than fought.
@@ -142,6 +150,7 @@ func _ready() -> void:
 		_move_to_intents.append(Vector2(x, z))
 	)
 	_session.pickup_requested.connect(func(id: int) -> void: _pickup_intents.append(id))
+	_session.gather_requested.connect(func(id: int) -> void: _gather_intents.append(id))
 	_session.drop_requested.connect(func(slot: int) -> void: _drop_intents.append(slot))
 
 	# main.tscn's Session resolves its exported node paths in _ready, and a
@@ -169,6 +178,12 @@ func _ready() -> void:
 	await _test_a_pickup_click_changes_nothing_locally()
 	await _test_an_unregistered_body_is_never_picked_up()
 	_test_the_intents_match_the_protocol_byte_for_byte()
+
+	await _build_the_node_click_world()
+	_test_the_picker_separates_a_node_from_the_ground()
+	await _test_a_click_on_a_node_is_a_gather_and_not_a_move()
+	await _test_a_click_on_bare_ground_is_a_move_and_not_a_gather()
+	await _test_a_click_on_an_item_still_picks_up_beside_a_node()
 
 	await _test_clicking_an_occupied_slot_drops_it()
 	await _test_clicking_an_empty_slot_drops_nothing()
@@ -472,6 +487,10 @@ func _test_a_click_on_an_item_is_a_pickup_and_not_a_move() -> void:
 		_move_to_intents.is_empty(),
 		"and no move_to, got %s" % [_move_to_intents],
 	)
+	_check(
+		_gather_intents.is_empty(),
+		"and no gather, got %s" % [_gather_intents],
+	)
 
 
 ## [b]The unit's claim, half two.[/b] Fails if a click on bare ground produced a
@@ -496,6 +515,10 @@ func _test_a_click_on_bare_ground_is_a_move_and_not_a_pickup() -> void:
 	_check(
 		_pickup_intents.is_empty(),
 		"and no pickup, got %s" % [_pickup_intents],
+	)
+	_check(
+		_gather_intents.is_empty(),
+		"and no gather, got %s" % [_gather_intents],
 	)
 
 
@@ -575,6 +598,11 @@ func _test_the_intents_match_the_protocol_byte_for_byte() -> void:
 		% JSON.stringify(NetClientScript.pickup_frame(7)),
 	)
 	_check(
+		JSON.stringify(NetClientScript.gather_frame(1)) == '{"gather":{"node":1}}',
+		'gather is {"gather":{"node":1}}, got %s'
+		% JSON.stringify(NetClientScript.gather_frame(1)),
+	)
+	_check(
 		JSON.stringify(NetClientScript.drop_frame(3)) == '{"drop":{"slot":3}}',
 		'drop is {"drop":{"slot":3}}, got %s' % JSON.stringify(NetClientScript.drop_frame(3)),
 	)
@@ -583,6 +611,90 @@ func _test_the_intents_match_the_protocol_byte_for_byte() -> void:
 		"and slot 0 is a slot index like any other, got %s"
 		% JSON.stringify(NetClientScript.drop_frame(0)),
 	)
+
+
+## A world holding a resource node under the camera. **M4b.**
+func _build_the_node_click_world() -> void:
+	await _feed(_welcome_frame())
+	await _feed(
+		'{"node_spawn":{"id":%d,"kind":"tree","x":%f,"z":%f,"state":"full"}}'
+		% [NODE_ID, NODE_GROUND.x, NODE_GROUND.y]
+	)
+	_check(
+		_session.node_for(NODE_ID) != null,
+		"the world holds node %d for the gather click tests" % NODE_ID,
+	)
+	_check(_nodes_container != null, "ResourceNodes container is authored")
+	_look_straight_down_at(NODE_GROUND)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+
+func _test_the_picker_separates_a_node_from_the_ground() -> void:
+	var centre := _viewport_centre()
+	var on_node := _picker.pick(centre)
+	_check(
+		on_node["target"] == GroundPickerScript.Target.NODE,
+		"a cursor over a node resolves to the node, got target %d" % on_node["target"],
+	)
+	_check(
+		on_node["node"] == _session.node_for(NODE_ID),
+		"and to the body the registry holds for node %d" % NODE_ID,
+	)
+	var beside := _picker.pick(centre + _beside_offset())
+	_check(
+		beside["target"] == GroundPickerScript.Target.GROUND,
+		"a cursor beside it resolves to the ground, got target %d" % beside["target"],
+	)
+
+
+func _test_a_click_on_a_node_is_a_gather_and_not_a_move() -> void:
+	_watch()
+	await _left_click(_viewport_centre())
+	_check(
+		_gather_intents.size() == 1,
+		"a click on a node sends one gather, got %d" % _gather_intents.size(),
+	)
+	_check(
+		_gather_intents.size() == 1 and _gather_intents[0] == NODE_ID,
+		"naming node %d, got %s" % [NODE_ID, _gather_intents],
+	)
+	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
+	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
+
+
+func _test_a_click_on_bare_ground_is_a_move_and_not_a_gather() -> void:
+	var cursor := _viewport_centre() + _beside_offset()
+	var expected = _picker.pick_ground(cursor)
+	_check(expected != null, "the bare-ground cursor resolves to a ground point")
+
+	_watch()
+	await _left_click(cursor)
+	_check(
+		_move_to_intents.size() == 1,
+		"a click on bare ground sends one move_to, got %d" % _move_to_intents.size(),
+	)
+	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
+	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
+
+
+func _test_a_click_on_an_item_still_picks_up_beside_a_node() -> void:
+	await _feed(
+		'{"item_spawn":{"id":%d,"kind":"acorn","x":%f,"z":%f}}'
+		% [ITEM_ID, ITEM_GROUND.x, ITEM_GROUND.y]
+	)
+	_look_straight_down_at(ITEM_GROUND)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+	_watch()
+	await _left_click(_viewport_centre())
+	_check(
+		_pickup_intents.size() == 1 and _pickup_intents[0] == ITEM_ID,
+		"a click on an item still sends pickup, got %s" % [_pickup_intents],
+	)
+	_check(_gather_intents.is_empty(), "and gather does not steal it, got %s" % [_gather_intents])
+	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
 
 
 # --------------------------------------------------------------------------
@@ -846,6 +958,7 @@ func _feed(text: String) -> void:
 func _watch() -> void:
 	_move_to_intents.clear()
 	_pickup_intents.clear()
+	_gather_intents.clear()
 	_drop_intents.clear()
 
 
