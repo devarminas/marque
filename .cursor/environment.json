@@ -1,0 +1,5 @@
+{
+  "name": "Project Marque",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh"
+}
