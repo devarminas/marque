@@ -140,7 +140,9 @@ func (w *World) resolveGather(p *player) {
 		return
 	}
 	if distanceBetween(p.pos, Point{X: n.x, Z: n.z}) > GatherRange {
-		w.cancelGather(p)
+		if p.gatherProgress > 0 {
+			w.cancelGather(p)
+		}
 		return
 	}
 	if !w.wearingAxe(p) {

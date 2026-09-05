@@ -39,6 +39,56 @@ func TestGatherFromOutOfRangeAssignsPathAndPending(t *testing.T) {
 	}
 }
 
+func TestGatherWalkThenYieldsAfterDuration(t *testing.T) {
+	pw := newGatherProbe(t)
+	alice := pw.joinWithAxe()
+	node := pw.seedTree()
+
+	pw.gather(alice, node.id)
+	for i := 0; i < 40 && (alice.gatherNode != 0 || alice.walking()); i++ {
+		pw.w.step()
+	}
+	if alice.walking() {
+		t.Fatal("walker never finished the path to the tree")
+	}
+	if alice.gatherNode != 0 {
+		t.Fatalf("gatherNode=%d after walk+duration, want 0", alice.gatherNode)
+	}
+	if bag := countKind(pw.w.items.Inventory(alice.id), KindLogs); bag != 1 {
+		t.Fatalf("inventory holds %d logs after walk+duration, want 1", bag)
+	}
+	if !node.depleted {
+		t.Fatal("node stayed full after a completed gather")
+	}
+	if got := pw.events(EvGatherCancelled); len(got) != 0 {
+		t.Fatalf("approach logged %d gather_cancelled, want 0", len(got))
+	}
+	if got := pw.events(EvGatherResolved); len(got) != 1 {
+		t.Fatalf("logged %d gather_resolved, want 1", len(got))
+	}
+}
+
+func TestGatherLeavingRangeAfterProgressCancels(t *testing.T) {
+	pw := newGatherProbe(t)
+	alice := pw.joinWithAxe()
+	node := pw.seedTree()
+	alice.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
+	pw.gather(alice, node.id)
+	pw.w.step()
+	if alice.gatherProgress != 1 {
+		t.Fatalf("gatherProgress=%d after one tick, want 1", alice.gatherProgress)
+	}
+
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.step()
+	if alice.gatherNode != 0 || alice.gatherProgress != 0 {
+		t.Fatalf("pending gather survived leaving range: node=%d progress=%d", alice.gatherNode, alice.gatherProgress)
+	}
+	if got := pw.events(EvGatherCancelled); len(got) != 1 {
+		t.Fatalf("logged %d %s, want 1", len(got), EvGatherCancelled)
+	}
+}
+
 func TestGatherYieldsAfterDurationWithAxe(t *testing.T) {
 	pw := newGatherProbe(t)
 	alice := pw.joinWithAxe()
