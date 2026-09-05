@@ -105,6 +105,16 @@ signal welcome_nodes(
 	node_states: PackedStringArray,
 )
 
+## Practice NPCs `welcome` listed, emitted after [signal welcome_nodes]. **M6e.**
+signal welcome_npcs(
+	npc_ids: PackedInt64Array,
+	npc_kinds: PackedStringArray,
+	npc_factions: PackedStringArray,
+	npc_positions: PackedVector2Array,
+	npc_hps: PackedInt32Array,
+	npc_max_hps: PackedInt32Array,
+)
+
 ## `spawn`: a player joined. Never carries this client's own id, which arrives
 ## in `welcome` instead.
 signal spawned(id: int, position: Vector2)
@@ -641,6 +651,30 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 			node_positions.append(node["position"])
 			node_states.append(node["state"])
 
+	var npc_ids := PackedInt64Array()
+	var npc_kinds := PackedStringArray()
+	var npc_factions := PackedStringArray()
+	var npc_positions := PackedVector2Array()
+	var npc_hps := PackedInt32Array()
+	var npc_max_hps := PackedInt32Array()
+	if body.has("npcs"):
+		var raw_npcs: Variant = body["npcs"]
+		if _is_null_list(raw_npcs, "welcome.npcs", text):
+			raw_npcs = []
+		if typeof(raw_npcs) != TYPE_ARRAY:
+			push_error("net_client: welcome.npcs is not an array: %s" % text)
+			return
+		for entry: Variant in raw_npcs as Array:
+			var npc := _npc_state(entry, "welcome.npcs entry", text)
+			if npc.is_empty():
+				return
+			npc_ids.append(npc["id"])
+			npc_kinds.append(npc["kind"])
+			npc_factions.append(npc["faction"])
+			npc_positions.append(npc["position"])
+			npc_hps.append(npc["hp"])
+			npc_max_hps.append(npc["max_hp"])
+
 	var heartbeat_ticks := _heartbeat_ticks_of(body, text)
 	_session = _session_of(body, text)
 	# Every applied welcome, including a second one. A click that was on the
@@ -665,6 +699,7 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 		mana_changed.emit(int(mana_ids[index]), manas[index], max_manas[index])
 	welcome_items.emit(item_ids, item_kinds, item_positions)
 	welcome_nodes.emit(node_ids, node_kinds, node_positions, node_states)
+	welcome_npcs.emit(npc_ids, npc_kinds, npc_factions, npc_positions, npc_hps, npc_max_hps)
 
 
 ## `welcome.heartbeat_ticks`, or 0 when it was absent, unreadable, or negative.
@@ -1008,6 +1043,36 @@ func _node_state(entry: Variant, where: String, text: String) -> Dictionary:
 		"kind": state["kind"],
 		"position": Vector2(state["x"], state["z"]),
 		"state": node_state,
+	}
+
+
+func _npc_state(entry: Variant, where: String, text: String) -> Dictionary:
+	if typeof(entry) != TYPE_DICTIONARY:
+		push_error("net_client: %s is not a JSON object: %s" % [where, text])
+		return {}
+	var state: Dictionary = entry
+	if not _has_numbers(state, ["id", "x", "z", "hp", "max_hp"], text):
+		return {}
+	if typeof(state.get("kind")) != TYPE_STRING:
+		push_error("net_client: %s has no kind string: %s" % [where, text])
+		return {}
+	if typeof(state.get("faction")) != TYPE_STRING:
+		push_error("net_client: %s has no faction string: %s" % [where, text])
+		return {}
+	var faction: String = state["faction"]
+	if faction != "friendly" and faction != "hostile":
+		push_error(
+			'net_client: %s faction must be "friendly" or "hostile", got "%s": %s'
+			% [where, faction, text]
+		)
+		return {}
+	return {
+		"id": int(state["id"]),
+		"kind": state["kind"],
+		"faction": faction,
+		"position": Vector2(state["x"], state["z"]),
+		"hp": int(state["hp"]),
+		"max_hp": int(state["max_hp"]),
 	}
 
 

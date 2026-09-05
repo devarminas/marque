@@ -235,7 +235,7 @@ const sharedAbilitiesJSON = `{
       "name": "Heal",
       "mana_cost": 20,
       "cooldown_ticks": 10,
-      "range": 0,
+      "range": 8,
       "target": "friendly",
       "effect": {"kind": "heal", "amount": 25},
       "ui": {"hotbar_slot": 1, "color": "green"}

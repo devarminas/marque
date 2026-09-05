@@ -29,8 +29,9 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				},
 				Items: []mnet.ItemState{{ID: 7, Kind: "acorn", X: 3, Z: -2}},
 				Nodes: []mnet.NodeState{},
+				Npcs:  []mnet.NpcState{},
 			},
-			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},{"id":2,"x":5,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[]}}`,
+			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},{"id":2,"x":5,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[],"npcs":[]}}`,
 		},
 		{
 			// An empty world is [] on both arrays, never null and never an
@@ -47,8 +48,9 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				Players: []mnet.PlayerState{},
 				Items:   []mnet.ItemState{},
 				Nodes:   []mnet.NodeState{},
+				Npcs:    []mnet.NpcState{},
 			},
-			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":150,"tick":0,"players":[],"items":[],"nodes":[]}}`,
+			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":150,"tick":0,"players":[],"items":[],"nodes":[],"npcs":[]}}`,
 		},
 		{
 			name: "node_state",
@@ -150,12 +152,14 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				Players:        []mnet.PlayerState{},
 				Items:          []mnet.ItemState{},
 				Nodes:          []mnet.NodeState{},
+				Npcs:           []mnet.NpcState{},
 			},
-			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":150,"tick":0,"heartbeat_ticks":10,"players":[],"items":[],"nodes":[]}}`,
+			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":150,"tick":0,"heartbeat_ticks":10,"players":[],"items":[],"nodes":[],"npcs":[]}}`,
 		},
 	}
 
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := mnet.Encode(tc.msg)

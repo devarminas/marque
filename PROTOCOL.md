@@ -41,8 +41,9 @@ field on the wire. Ability stats live in `shared/abilities.json` only. **M6b** i
 and its restatement. **M6c** is client tab targeting: left-click selects a living remote player
 with local chrome and does not send `attack`; Escape clears the selection; ground clicks move
 without clearing it. **M6d** is center hotbar chrome and server cast resolution from that JSON
-(mana spend, heal/damage, refusals). VFX polish is later. A marker reading plain **M6** is
-reserved.
+(mana spend, heal/damage, refusals). **M6e** is practice dummy NPCs (one friendly, one hostile),
+seeded into the world, selectable, and valid cast/attack targets by faction. VFX polish is later.
+A marker reading plain **M6** is reserved.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -376,9 +377,10 @@ file). It is **not** a player id, item id, or node id. Ability stats (mana cost,
 effect amount) never ride on this intent; unknown fields such as a client-authored `damage`
 are ignored under compatibility rule 2 and never applied.
 
-`player` names the target player id. **M6d** requires it for `friendly` and `hostile` target
-rules. Omitted or zero is `no_target` when the ability needs one. **M6a** froze the field names
-and the content source; **M6d** applies the cast.
+`player` names the target actor id: a player or a practice NPC that shares that id space
+(**M6e**). **M6d** requires it for `friendly` and `hostile` target rules. Omitted or zero is
+`no_target` when the ability needs one. **M6a** froze the field names and the content source;
+**M6d** applies the cast.
 
 `seq` may ride on the body under *Sequence numbers*, exactly as it does on `attack`.
 
@@ -474,6 +476,15 @@ the new fields under compatibility rule 2 and is exactly as correct as it was be
 **M6b.** Each entry of `welcome.players` also gains `mana` and `max_mana`, with the same public
 rule and integer types as `hp` / `max_hp`. A fresh join seeds mana at `MaxMana`. A pre-M6b client
 ignores the new fields under compatibility rule 2.
+
+**M6e.** `welcome` gains `npcs`, listing every practice dummy as of the same tick:
+
+    {"welcome":{...,"npcs":[
+      {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100,"max_hp":100},
+      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100}
+    ]}}
+
+A pre-M6e client ignores `npcs` under compatibility rule 2. See *Practice dummies*.
 
 A repeated `welcome` restates every player's current `hp` and `max_hp` with the rest of the
 world. A resumed connection reads the fight as it stands from that list.
@@ -1694,17 +1705,18 @@ The server looks up `cast.ability` in the shared catalog and applies that row on
 2. Unknown ability ids are refused (`unknown_ability`).
 3. Target rule from JSON:
    - `self`: caster only; a named `player` other than the caster is `wrong_target`.
-   - `friendly`: until factions exist, **only the caster** is friendly. Missing `player` is
-     `no_target`. Another living player is `wrong_target` (not healed).
-   - `hostile`: another living player. Missing `player` is `no_target`. Self is
-     `wrong_target`. Dead / unknown ids reuse `target_dead` / `unknown_player`.
+   - `friendly`: the caster, or a living NPC whose `faction` is `friendly`. Missing `player` is
+     `no_target`. Another living player is `wrong_target`. A hostile NPC is `wrong_target`.
+   - `hostile`: another living player, or a living NPC whose `faction` is `hostile`. Missing
+     `player` is `no_target`. Self and friendly NPCs are `wrong_target`. Dead / unknown ids
+     reuse `target_dead` / `unknown_player`.
 4. Range: distance on the ground plane must be `<=` the ability's `range`. Self casts skip the
    check. Out of range is `out_of_range` with **no mana spend and no HP change** (no walk-in).
 5. Mana: spend `mana_cost` from the JSON via the M6b helper. Failure is `insufficient_mana`
    with no effect.
 6. Effect: `heal` raises target HP by `effect.amount` capped at `MaxHP`; `damage` lowers it
    floored at 0 and may kill. Amounts come from JSON only. Success broadcasts `mana` (from the
-   spend) and `hp` for the target.
+   spend) and `hp` for the target (player or NPC id).
 
 A refused cast sends one `error` to the caster, logs `cast_rejected`, and changes nothing.
 Success logs `cast` then `cast_effect`. Cooldown clocks are still absent.
@@ -1713,15 +1725,42 @@ Success logs `cast` then `cast_effect`. Cooldown clocks are still absent.
 
 The client authors a center-bottom hotbar with two live slots driven by `ui.hotbar_slot` and
 `ui.color` from the same JSON (green heal, red fireball). Activating a slot (click or keys 1/2)
-sends `cast` with the ability id and the current selected player id, or the local player id for
-friendly/self abilities. The client never predicts HP or mana from the cast.
+sends `cast` with the ability id and the current selected actor id when that selection matches
+the ability's faction rule; otherwise friendly/self abilities fall back to the local player id.
+The client never predicts HP or mana from the cast.
 
 ### Deliberately absent (cast). **M6d**
 
 - No walk-into-range pending cast (OOR refuses immediately).
 - No cooldown enforcement, no VFX, no full 12-slot fill.
-- No factions beyond self-friendly / other-hostile.
 - No client-authored damage, heal, or mana fields on `cast`.
+
+## Practice dummies. **M6e**
+
+The server seeds exactly two stationary NPCs when it starts: one `faction: "friendly"` and one
+`faction: "hostile"`, both `kind: "dummy"`. Their ids sit in a reserved band at and above
+`1000001` so dense player ids stay untouched; `cast.player` and `attack.player` still name them.
+They never path, never attack, and never despawn.
+
+`welcome` carries them as `npcs`:
+
+    {"welcome":{...,"npcs":[
+      {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100,"max_hp":100},
+      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100}
+    ]}}
+
+HP restatements for dummies reuse the existing `hp` frame with the NPC's id. There is no separate
+`npc_spawn` in M6e: the dummies exist for the life of the process and every joiner learns them
+from `welcome`.
+
+Client left-click selects a living dummy with the same local chrome as a remote player. Faction
+rules for cast are above. Attack may engage a hostile dummy; a friendly dummy is `wrong_target`.
+
+### Deliberately absent (dummies). **M6e**
+
+- No AI, loot, respawn camps, or additional kinds.
+- No client-authoritative NPC spawn.
+- No separate NPC message family beyond `welcome.npcs` and reused `hp` frames.
 
 ## Tab targeting. **M6c**
 
@@ -1742,9 +1781,11 @@ Selection is client UX only. No `target` intent and no server mirror.
 
 ### Deliberately absent (tab targeting). **M6c**
 
-- No server-side selection, no `target` intent, no NPCs or combat dummies.
+- No server-side selection, no `target` intent.
 - No hotbar, cast resolution, or damage prediction on select.
 - No Tab-key cycle yet (revisitable with M6 hotbar).
+
+Practice dummy selection is **M6e**, not M6c.
 
 ## Deliberately absent
 

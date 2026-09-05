@@ -5,7 +5,7 @@
       "name": "Heal",
       "mana_cost": 20,
       "cooldown_ticks": 10,
-      "range": 0,
+      "range": 8,
       "target": "friendly",
       "effect": {
         "kind": "heal",

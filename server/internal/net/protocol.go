@@ -97,6 +97,18 @@ type NodeState struct {
 	State string  `json:"state"`
 }
 
+// NpcState is one practice NPC, as it appears inside welcome (PROTOCOL.md, M6e).
+// Ids use a reserved high band so cast/attack can name them with `player`.
+type NpcState struct {
+	ID      PlayerID `json:"id"`
+	Kind    string   `json:"kind"`
+	Faction string   `json:"faction"`
+	X       float64  `json:"x"`
+	Z       float64  `json:"z"`
+	HP      int      `json:"hp"`
+	MaxHP   int      `json:"max_hp"`
+}
+
 // InventorySlot is one occupied slot of one player's inventory; empty slots are
 // absent from the list (PROTOCOL.md, "inventory").
 type InventorySlot struct {
@@ -128,6 +140,7 @@ type Welcome struct {
 	Players        []PlayerState `json:"players"`
 	Items          []ItemState   `json:"items"`
 	Nodes          []NodeState   `json:"nodes"`
+	Npcs           []NpcState   `json:"npcs"`
 }
 
 // Spawn announces a player who just joined. Broadcast to everyone except the

@@ -57,6 +57,8 @@ const GroundItemScript := preload("res://scripts/ground_item.gd")
 const GroundItemScene := preload("res://scenes/ground_item.tscn")
 const ResourceNodeScript := preload("res://scripts/resource_node.gd")
 const ResourceNodeScene := preload("res://scenes/resource_node.tscn")
+const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
+const NpcDummyScene := preload("res://scenes/npc_dummy.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
@@ -169,6 +171,8 @@ signal respawn_requested()
 @export var ground_items: Node3D
 ## Container the resource node bodies are instanced into. **M4b.**
 @export var resource_nodes: Node3D
+## Container the practice NPC bodies are instanced into. **M6e.**
+@export var npcs: Node3D
 ## The [code]ground_picker.gd[/code] node whose clicks become intents.
 @export var ground_picker: Node
 ## The [code]inventory_panel.gd[/code] node the `inventory` message drives.
@@ -216,6 +220,7 @@ var _avatars := {}
 var _items := {}
 ## Node id to [code]resource_node.gd[/code]. A third space from players and items.
 var _nodes := {}
+var _npcs := {}
 ## Bag slot held for a pending use-on, or -1 when idle. **M4d.**
 var _use_from := -1
 ## Selected living remote player id, or 0 when none. **M6c.**
@@ -240,10 +245,14 @@ func _ready() -> void:
 	if resource_nodes == null:
 		push_error("Session.resource_nodes must point at a container node")
 		return
+	if npcs == null:
+		push_error("Session.npcs must point at a container node")
+		return
 
 	_net.welcomed.connect(_on_welcomed)
 	_net.welcome_items.connect(_on_welcome_items)
 	_net.welcome_nodes.connect(_on_welcome_nodes)
+	_net.welcome_npcs.connect(_on_welcome_npcs)
 	_net.tick_received.connect(_on_tick_received)
 	_net.spawned.connect(_on_spawned)
 	_net.despawned.connect(_on_despawned)
@@ -467,20 +476,24 @@ func request_gather(node_id: int) -> void:
 func request_attack(player_id: int) -> void:
 	if player_id == _you:
 		return
-	if not _avatars.has(player_id):
+	if not _avatars.has(player_id) and not _npcs.has(player_id):
 		push_warning(
-			"session: attack for player %d, which this client does not know; ignoring" % player_id
+			"session: attack for actor %d, which this client does not know; ignoring" % player_id
 		)
+		return
+	var dummy: NpcDummyScript = _npcs.get(player_id)
+	if dummy != null and dummy.faction != NpcDummyScript.FactionHostile:
+		push_warning("session: attack ignored for non-hostile npc %d" % player_id)
 		return
 	attack_requested.emit(player_id)
 	if _net == null or not _net.is_open():
-		push_warning("session: attack of player %d dropped, the socket is not open" % player_id)
+		push_warning("session: attack of actor %d dropped, the socket is not open" % player_id)
 		return
 	_net.send_attack(player_id)
 
 
-## Friendly/self abilities target this client. Hostile abilities use the tab
-## selection. Stats never leave the client: only ability id and target id. **M6d.**
+## Friendly abilities target a selected friendly dummy when one is selected,
+## otherwise self. Hostile abilities use the tab selection. **M6d** / **M6e.**
 func request_cast(ability_id: String) -> void:
 	if ability_id.is_empty():
 		return
@@ -507,9 +520,20 @@ func _cast_target_for(ability_id: String) -> int:
 	if typeof(ability) != TYPE_DICTIONARY:
 		return _selected_player_id
 	var target_rule := String(ability.get("target", ""))
-	if target_rule == AbilityDefs.TARGET_FRIENDLY or target_rule == AbilityDefs.TARGET_SELF:
+	if target_rule == AbilityDefs.TARGET_SELF:
+		return _you
+	if target_rule == AbilityDefs.TARGET_FRIENDLY:
+		if _selected_player_id > 0 and _npc_faction(_selected_player_id) == NpcDummyScript.FactionFriendly:
+			return _selected_player_id
 		return _you
 	return _selected_player_id
+
+
+func _npc_faction(actor_id: int) -> String:
+	var dummy: NpcDummyScript = _npcs.get(actor_id)
+	if dummy == null:
+		return ""
+	return dummy.faction
 
 
 ## Sends `drop` for an inventory slot, as a click on that slot would. **M1.**
@@ -597,11 +621,11 @@ func selected_player_id() -> int:
 	return _selected_player_id
 
 
-## Selects a living remote player. Refuses self, unknown ids, and HP 0. **M6c.**
+## Selects a living remote player or practice NPC. Refuses self and HP 0. **M6c** / **M6e.**
 func select_player(player_id: int) -> bool:
 	if player_id == _you or player_id <= 0:
 		return false
-	if not _avatars.has(player_id):
+	if not _avatars.has(player_id) and not _npcs.has(player_id):
 		return false
 	var pair := hit_points_for(player_id)
 	if pair.x == 0:
@@ -764,6 +788,37 @@ func _on_welcome_nodes(
 
 	if not _nodes.is_empty():
 		print("session: %d resource node(s) in the world" % _nodes.size())
+
+
+func _on_welcome_npcs(
+	npc_ids: PackedInt64Array,
+	npc_kinds: PackedStringArray,
+	npc_factions: PackedStringArray,
+	npc_positions: PackedVector2Array,
+	npc_hps: PackedInt32Array,
+	npc_max_hps: PackedInt32Array,
+) -> void:
+	if (
+		npc_ids.size() != npc_kinds.size()
+		or npc_ids.size() != npc_factions.size()
+		or npc_ids.size() != npc_positions.size()
+		or npc_ids.size() != npc_hps.size()
+		or npc_ids.size() != npc_max_hps.size()
+	):
+		push_error("session: welcome.npcs fields disagree in length; ignoring")
+		return
+
+	for index in npc_ids.size():
+		var id := int(npc_ids[index])
+		var body := _ensure_npc(id, npc_kinds[index], npc_factions[index])
+		if body == null:
+			continue
+		var ground := npc_positions[index]
+		body.place_at(ground.x, ground.y)
+		_apply_hit_points(id, npc_hps[index], npc_max_hps[index])
+
+	if not _npcs.is_empty():
+		print("session: %d practice npc(s) in the world" % _npcs.size())
 
 
 ## `tick`, the server's heartbeat (`PROTOCOL.md`, "Clock").
@@ -1043,36 +1098,56 @@ func _on_node_clicked(body: Node3D) -> void:
 	request_gather(id)
 
 
-## A left click that met a player body before it met the ground. **M6c.**
 func _on_player_clicked(body: Node3D) -> void:
 	var avatar := body as PlayerAvatarScript
-	if avatar == null:
-		push_error("session: the picker reported a click on %s, which is not a player avatar" % body)
+	if avatar != null:
+		var id := _id_of_avatar_body(avatar)
+		if id == 0:
+			push_warning(
+				"session: clicked a player body this session has no registry entry for (%s); ignoring"
+				% avatar.name
+			)
+			return
+		select_player(id)
 		return
-	var id := _id_of_avatar_body(avatar)
-	if id == 0:
+	var dummy := body as NpcDummyScript
+	if dummy == null:
+		push_error("session: the picker reported a click on %s, which is not selectable" % body)
+		return
+	var npc_id := _id_of_npc_body(dummy)
+	if npc_id == 0:
 		push_warning(
-			"session: clicked a player body this session has no registry entry for (%s); ignoring"
-			% avatar.name
+			"session: clicked an npc body this session has no registry entry for (%s); ignoring"
+			% dummy.name
 		)
 		return
-	select_player(id)
+	select_player(npc_id)
 
 
-## A right click that met a player body. **M5b.**
 func _on_player_attack_clicked(body: Node3D) -> void:
 	var avatar := body as PlayerAvatarScript
-	if avatar == null:
-		push_error("session: the picker reported a click on %s, which is not a player avatar" % body)
+	if avatar != null:
+		var id := _id_of_avatar_body(avatar)
+		if id == 0:
+			push_warning(
+				"session: clicked a player body this session has no registry entry for (%s); ignoring"
+				% avatar.name
+			)
+			return
+		request_attack(id)
 		return
-	var id := _id_of_avatar_body(avatar)
-	if id == 0:
+	var dummy := body as NpcDummyScript
+	if dummy == null:
+		push_error("session: the picker reported a click on %s, which is not selectable" % body)
+		return
+	var npc_id := _id_of_npc_body(dummy)
+	if npc_id == 0:
 		push_warning(
-			"session: clicked a player body this session has no registry entry for (%s); ignoring"
-			% avatar.name
+			"session: clicked an npc body this session has no registry entry for (%s); ignoring"
+			% dummy.name
 		)
 		return
-	request_attack(id)
+	request_attack(npc_id)
 
 
 ## A click on an occupied inventory slot. First click selects; second completes
@@ -1241,6 +1316,24 @@ func _ensure_node(id: int, kind: String, state: String) -> ResourceNodeScript:
 	return body
 
 
+func _ensure_npc(id: int, kind: String, faction: String) -> NpcDummyScript:
+	var existing: NpcDummyScript = _npcs.get(id)
+	if existing != null:
+		return existing
+	if id <= 0:
+		push_error("session: npc ids start at 1, got %d" % id)
+		return null
+
+	var body := NpcDummyScene.instantiate() as NpcDummyScript
+	if body == null:
+		push_error("session: npc_dummy.tscn did not instantiate as an NpcDummy")
+		return null
+	body.configure(id, kind, faction)
+	npcs.add_child(body)
+	_npcs[id] = body
+	return body
+
+
 ## The item id [param body] is registered under, or 0 when it is registered
 ## under none. Item ids start at 1 (PROTOCOL.md, "Identity"), so 0 is not one.
 ##
@@ -1264,6 +1357,13 @@ func _id_of_node_body(body: ResourceNodeScript) -> int:
 func _id_of_avatar_body(body: PlayerAvatarScript) -> int:
 	for id: int in _avatars:
 		if _avatars[id] == body:
+			return id
+	return 0
+
+
+func _id_of_npc_body(body: NpcDummyScript) -> int:
+	for id: int in _npcs:
+		if _npcs[id] == body:
 			return id
 	return 0
 
@@ -1294,6 +1394,19 @@ func _forget_node(id: int) -> void:
 	body.queue_free()
 
 
+func _forget_npc(id: int) -> void:
+	if id == _selected_player_id:
+		clear_selection()
+	var body: NpcDummyScript = _npcs.get(id)
+	if body == null:
+		return
+	_npcs.erase(id)
+	var parent := body.get_parent()
+	if parent != null:
+		parent.remove_child(body)
+	body.queue_free()
+
+
 ## Everything this session believes about the world, dropped.
 ##
 ## Called only from [method _on_welcomed]. A `welcome` is the whole world
@@ -1308,6 +1421,8 @@ func _forget_everyone() -> void:
 		_forget_item(id)
 	for id: int in _nodes.keys():
 		_forget_node(id)
+	for id: int in _npcs.keys():
+		_forget_npc(id)
 
 
 func _apply_hit_points(id: int, hp: int, max_hp: int) -> void:
@@ -1315,6 +1430,9 @@ func _apply_hit_points(id: int, hp: int, max_hp: int) -> void:
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar != null:
 		avatar.set_hit_points(hp, max_hp)
+	var dummy: NpcDummyScript = _npcs.get(id)
+	if dummy != null:
+		dummy.set_hit_points(hp, max_hp)
 	if id == _selected_player_id and hp == 0:
 		clear_selection()
 	if id != _you:
@@ -1331,6 +1449,11 @@ func _sync_selection_chrome() -> void:
 		if avatar == null:
 			continue
 		avatar.set_selected(id == _selected_player_id)
+	for id: int in _npcs:
+		var dummy: NpcDummyScript = _npcs[id]
+		if dummy == null:
+			continue
+		dummy.set_selected(id == _selected_player_id)
 
 
 func _apply_mana(id: int, mana: int, max_mana: int) -> void:

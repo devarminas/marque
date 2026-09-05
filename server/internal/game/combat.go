@@ -50,6 +50,28 @@ func (w *World) attack(p *player, msg mnet.Attack, seq mnet.Seq) {
 		})
 		return
 	}
+	if n, ok := w.npcs[msg.Player]; ok {
+		if n.faction != FactionHostile {
+			w.refuse(p, &mnet.RejectError{
+				Reason:      mnet.ReasonWrongTarget,
+				Detail:      "target is not hostile",
+				Re:          mnet.MsgAttack,
+				Disposition: mnet.ReplyError,
+			})
+			return
+		}
+		if n.dead() {
+			w.refuse(p, &mnet.RejectError{
+				Reason:      mnet.ReasonTargetDead,
+				Detail:      "that target is dead",
+				Re:          mnet.MsgAttack,
+				Disposition: mnet.ReplyError,
+			})
+			return
+		}
+		w.beginAttack(p, n.id, n.pos, seq)
+		return
+	}
 	target, live := w.players[msg.Player]
 	if !live {
 		w.refuse(p, &mnet.RejectError{
@@ -70,17 +92,21 @@ func (w *World) attack(p *player, msg mnet.Attack, seq mnet.Seq) {
 		return
 	}
 
+	w.beginAttack(p, target.id, target.pos, seq)
+}
+
+func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, seq mnet.Seq) {
 	w.cancelAttack(p, CauseReplaced)
 	p.pending = 0
 	w.cancelGather(p)
-	p.attackTarget = target.id
+	p.attackTarget = targetID
 	p.attackProgress = 0
-	w.log.Event(w.tick, EvAttack, withSeq(playerTargetFields(p.id, target.id), seq))
+	w.log.Event(w.tick, EvAttack, withSeq(playerTargetFields(p.id, targetID), seq))
 
-	if distanceBetween(p.pos, target.pos) <= AttackRange {
+	if distanceBetween(p.pos, targetPos) <= AttackRange {
 		return
 	}
-	points, assign := destinationPath(p, target.pos)
+	points, assign := destinationPath(p, targetPos)
 	if !assign {
 		return
 	}
@@ -109,6 +135,10 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 }
 
 func (w *World) resolveAttack(p *player) {
+	if n, ok := w.npcs[p.attackTarget]; ok {
+		w.resolveAttackOnNPC(p, n)
+		return
+	}
 	target, live := w.players[p.attackTarget]
 	if !live {
 		w.loseAttack(p)
@@ -148,6 +178,44 @@ func (w *World) resolveAttack(p *player) {
 	w.broadcastHP(target)
 	if target.hp == 0 {
 		w.kill(target, p)
+	}
+}
+
+func (w *World) resolveAttackOnNPC(p *player, target *npc) {
+	if target.dead() {
+		w.loseAttack(p)
+		return
+	}
+
+	dist := distanceBetween(p.pos, target.pos)
+	if dist > AttackRange {
+		points, assign := destinationPath(p, target.pos)
+		if assign {
+			w.assignPath(p, points)
+		}
+		return
+	}
+	if p.walking() {
+		w.assignHalt(p)
+	}
+
+	p.attackProgress++
+	if p.attackProgress < AttackPeriodTicks {
+		return
+	}
+
+	p.attackProgress = 0
+	target.hp -= AttackDamage
+	if target.hp < 0 {
+		target.hp = 0
+	}
+	fields := playerTargetFields(p.id, target.id)
+	fields["damage"] = AttackDamage
+	fields["target_hp"] = target.hp
+	w.log.Event(w.tick, EvAttackHit, fields)
+	w.broadcastNPCHP(target)
+	if target.dead() {
+		w.clearAttacksOn(target.id)
 	}
 }
 
