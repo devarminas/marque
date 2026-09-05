@@ -12,7 +12,7 @@ what it is for.
 Program state lives in Linear, project *Project Marque*:
 `https://linear.app/arminas/project/project-marque-525be456de70`.
 
-- A milestone is a Linear milestone (M0 Foundation, M1 Items and inventory, M2 Reconnect).
+- A milestone is a Linear milestone.
 - A unit is a Linear issue labelled `Unit`, under its milestone, whose description is the brief
   the coordinator pastes into the writer's prompt. A merged unit's issue records the verdict, the
   head SHA it applies to, and the PR link. The PR body carries the same ledger.
@@ -41,9 +41,8 @@ catches defects:
   SHA it applies to, and the commands actually run. A new head SHA voids the verdict, so a
   branch that moves after verification gets re-verified before it merges.
 
-Linear stays the program store. `bun` is available; orch CLI is optional bookkeeping
-(`bun` on `C:/Users/armin/.claude/skills/poteto-mode/scripts/orch/orch.ts`) when a single drain
-is not enough.
+Linear stays the program store. orch via bun on poteto-mode `scripts/orch/orch.ts` is optional
+bookkeeping when a single drain is not enough.
 
 ## Unit sizing
 
@@ -86,10 +85,9 @@ worker lost real time to its absence.
    it is a parse-time error and the first run never opened a socket. **Verify the API, not just
    the behaviour**, and mark a gotcha unverified rather than dressing a guess as knowledge.
    Two for two on this so far, both costing a worker its first run.
-4. **Acceptance criteria must be achievable with the tooling that exists.** `-race` was required
-   by M0 briefs while this machine had no C compiler. A criterion no one can satisfy trains
-   writers to negotiate with the acceptance list, which is the habit that ruins every verdict
-   downstream. `-race` runs now; see *Verified tooling* in `STANDING-ORDERS.md`.
+4. **Acceptance criteria must be achievable with the tooling that exists.** A criterion no one
+   can satisfy trains writers to negotiate with the acceptance list, which is the habit that
+   ruins every verdict downstream. See *Tooling* in `STANDING-ORDERS.md`.
 5. **A screenshot criterion must name the specific thing that would be missing.** "Shows
    lighting" was passed by a build whose sun pointed at the sky, lit by ambient alone. "Shows a
    cast shadow" would have failed it instantly.
@@ -128,7 +126,7 @@ worker lost real time to its absence.
     subagent's own `Skill poteto-mode` call is refused and why the slash form does nothing for
     a subagent. The two compliant transcripts, the M2b writer and M2a verifier A, read
     `SKILL.md` as a file and then opened the playbook. Every brief must name
-    `C:/Users/armin/.claude/skills/poteto-mode/SKILL.md`, tell the worker to read it in full
+    `poteto-mode/SKILL.md` under the Claude skills root, tell the worker to read it in full
     as a file before any work (the Skill tool will refuse), to copy its matched playbook's
     steps into its todolist, and to end its report with the playbook block. The gate must ask
     for that block, every step done or `skip: <reason>`, because a brief's own report format
@@ -345,7 +343,7 @@ serialize) per that playbook. Do not invent parallel writers outside Orchestrate
 `poteto-agent` and every brief opens with the `SKILL.md` read instruction from rule 10 under
 *Writing a brief*.
 
-1. **Write.** One unit, one branch, one worktree under `C:\Users\armin\Documents\Projects\game\`.
+1. **Write.** One unit, one branch, one worktree (sibling of the repo or as the brief names).
    `git worktree add`. Model `opus`. Paste `STANDING-ORDERS.md` verbatim and name the SHA you
    took it from. Paste the unit's brief from its Linear issue.
 2. **Gate.** The writer must report a pushed branch, a head SHA, and the commands it ran with
@@ -442,39 +440,30 @@ sky-band failures under load are still this flake. Call a product regression onl
 if an idle-machine control also fails the sky band, or if geometry differs.
 Read `.claude/skills/verify-marque/SKILL.md` Known flake for the steps.
 
-## M2
+## Recipes and brief paste rules
 
-**The milestone sentence.** A client whose socket dies mid-action comes back as the same player
-with the same inventory, and an intent it sends twice is applied once. Six units, three Go and
-three Godot, no unit touching both.
+Historical M2 cutting notes and forks stay below for context. Open milestones and units live in
+Linear; do not treat PR lists or dispatch order as current program state.
 
-Merged: M2a durable identity (PR #20), M2b sequence numbers and dedupe (PR #22), M2c client
-heartbeat and tick protocol (PR #21). Open units and their briefs are Linear issues under the
-milestone *M2 Reconnect*. `PROTOCOL.md`'s **M2** markers name what each open unit discharges.
-
-**Dispatch order.** M2d, then M2e, then M2f. Each issue names the units it depends on. Only one
-Godot-driving agent at a time when a windowed demo is in the recipe.
-
-**Every M2 brief, in addition to its issue text.** Paste `STANDING-ORDERS.md` verbatim and name its
-SHA. Worktree under `C:\Users\armin\Documents\Projects\game\`, branch from current `origin/main`,
-and run `git merge origin/main` into the branch before writing anything. Test files are the
-writer's. Read `PROTOCOL.md` at the branch's SHA rather than any summary. Where a brief states a
-rule, the rule is the coordinator's decision and the writer copies it into `PROTOCOL.md` first,
-then codes against the file. A verify recipe passes only on exit 0 **and** the marker read from the
-last line of the redirected output. Redirect, never pipe.
+**Every brief, in addition to its issue text.** Paste `STANDING-ORDERS.md` verbatim and name its
+SHA. Branch from current `origin/main`, and run `git merge origin/main` into the branch before
+writing anything. Test files are the writer's. Read `PROTOCOL.md` at the branch's SHA rather
+than any summary. Where a brief states a rule, the rule is the coordinator's decision and the
+writer copies it into `PROTOCOL.md` first, then codes against the file. A verify recipe passes
+only on exit 0 **and** the marker read from the last line of the redirected output. Redirect,
+never pipe. Only one Godot-driving agent at a time when a windowed demo is in the recipe.
 
 ### The three recipes, named once
 
-The M2 briefs name these by letter. The Linear document *M2 recipes G, H, W* carries the same
-text.
+Briefs name these by letter. Prefer the Linear document that carries the same text when it
+exists; keep the commands here for coordinators without Linear access.
 
-**Recipe G.** From `server/`, Git Bash:
+**Recipe G.** From `server/`, with a C toolchain Go can use as `CC` on PATH:
 
-    export PATH="/c/Users/armin/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin:$PATH"
     CGO_ENABLED=1 go test -race ./... > ../out-race.txt 2>&1; echo EXIT=$?; tail -5 ../out-race.txt
 
 Pass: `EXIT=0`, an `ok` line for each of `internal/game`, `internal/gamelog`, `internal/net`,
-no `DATA RACE`, no `FAIL` anywhere in `out-race.txt`. `internal/net` takes about 90 seconds.
+no `DATA RACE`, no `FAIL` anywhere in `out-race.txt`. `internal/net` is slow under instrumentation.
 
 **Recipe H.** From the repo root, PowerShell:
 
@@ -483,9 +472,9 @@ no `DATA RACE`, no `FAIL` anywhere in `out-race.txt`. `internal/net` takes about
 
 Pass: exit 0, last line `INTEROP OK`, and inside the transcript `INTEROP RAN: N assertions, 0
 failed`, `WIRING RAN: N assertions, 0 failed`, and `PASS: N assertion(s) held across M suite(s)`
-with M equal to the suite count in `client/tests/run_tests.gd` (13 at `cf8d862`). Report the
-numbers you got. The transcript also prints the server's whole event log under
-`--- marqued event log ---`; several acceptance criteria are read from it.
+with M equal to the suite count in `client/tests/run_tests.gd`. Report the numbers you got. The
+transcript also prints the server's whole event log under `--- marqued event log ---`; several
+acceptance criteria are read from it.
 
 **Recipe W.** From the repo root, PowerShell, idle machine, one demo at a time:
 
@@ -493,12 +482,12 @@ numbers you got. The transcript also prints the server's whole event log under
     powershell -ExecutionPolicy Bypass -File scripts/contested_pickup_demo.ps1 > out-contested.txt 2>&1; echo $LASTEXITCODE; Get-Content out-contested.txt -Tail 3
 
 Pass: exit 0 and last lines `TWO CLIENT DEMO OK` and `CONTESTED PICKUP DEMO OK`. The contested
-demo has a known legitimate failure rate near 38% on `:541` and `:718` (the M1j table above). A
-run that fails on only those lines is the baseline, not a regression; rerun up to three times.
-If `two_client_demo.ps1` fails only on the sky-band still-camera control, that run is the
-Known flake above, not a finding. The idle-machine control and the geometry comparison in
-the Known flake paragraph decide whether the sky-band failure is a product regression. Any
-other failing line is a finding.
+demo has a known legitimate failure rate on `:541` and `:718` (the M1j table above). A run that
+fails on only those lines is the baseline, not a regression; rerun up to three times. If
+`two_client_demo.ps1` fails only on the sky-band still-camera control, that run is the Known
+flake above, not a finding. The idle-machine control and the geometry comparison in the Known
+flake paragraph decide whether the sky-band failure is a product regression. Any other failing
+line is a finding.
 
 ### Forks decided while cutting M2, all revisitable
 

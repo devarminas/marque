@@ -12,7 +12,21 @@ not need and which is never pasted into a brief.
 RuneScape-like point-and-click farming/crafting MMO. Multiplayer, persistent inventory,
 single authoritative server. Codename: Project Marque.
 
-Repo: `github.com/devarminas/marque` (private). Local: `C:\Users\armin\Documents\Projects\game\marque`.
+Code and PRs: `github.com/devarminas/marque` (private). Clone or open the worktree the brief
+names; do not invent a local path from this file.
+
+## Sources of truth
+
+- **Program state** (milestones, unit briefs, Follow-ups): Linear project *Project Marque*
+  (`https://linear.app/arminas/project/project-marque-525be456de70`).
+- **Code and PRs:** GitHub repo above. The PR body is the ledger for a unit's verdict and SHA.
+- **Wire contract:** `PROTOCOL.md` in the repo, under its milestone markers. Read it. Do not
+  re-derive it and do not negotiate with it. A unit that changes it copies the coordinator's
+  rule into the file first, then codes against the file.
+- **Design rationale and Godot traps:** `NOTES.md`. Do not re-derive settled decisions.
+
+Do not record which milestone or unit is open in this file. The coordinator pastes each unit's
+brief from Linear into the worker's prompt.
 
 ## Settled. Do not re-open these.
 
@@ -22,8 +36,8 @@ Repo: `github.com/devarminas/marque` (private). Local: `C:\Users\armin\Documents
 4. **Tick rate 150ms.** One constant, deliberately revisitable once there is gameplay to feel.
 5. Transport is WebSocket carrying JSON. Monorepo with `server/` and `client/`.
 6. Storage is in-memory behind a `Store` interface. Postgres arrives later with zero game-logic change.
-7. Pathfinding lives only on the server. Client walks polylines it is given. M0 stubs it to a
-   straight line; real navmesh comes later.
+7. Pathfinding lives only on the server. Client walks polylines it is given. Early milestones
+   stub it to a straight line; real navmesh comes later.
 8. One goroutine owns all game state. The tick loop is the transaction boundary, not DB transactions.
 9. Client sends intents, never facts. Client state is a cache with zero authority.
 10. Game logic never reaches into the visual tree.
@@ -61,8 +75,9 @@ node does not.
 ## Delivery
 
 - One unit per PR. One writer per branch.
-- Read `C:/Users/armin/.claude/skills/poteto-mode/SKILL.md` as a file before any work. The Skill
-  tool and `/poteto-mode` slash refuse for workers; only a file Read loads it.
+- Read poteto-mode `SKILL.md` as a file before any work (under your Claude skills root:
+  `poteto-mode/SKILL.md`). The Skill tool and `/poteto-mode` slash refuse for workers; only a
+  file Read loads it.
 - Match Feature (or Bug fix). Copy that playbook's steps into the todolist. End the report with
   the playbook block: every step done or `skip: <reason>`.
 - Before PR: run Opening a PR. That includes deslop (cursor-team-kit) then no-comments / Comment
@@ -75,49 +90,17 @@ node does not.
 - `.claude/skills/verify-marque/SKILL.md` is the project's verification skill. Any behavioural
   claim about the client or the server is proven the way it describes, before any generic driver.
 
-## Verified tooling
+## Tooling
 
-Go 1.27.0, compiles and runs and tests, module proxy reachable. Godot 4.7.2. gh 2.97.0
-authenticated as `devarminas`. git 2.55. bun 1.4.1.
-
-The orch CLI is `bun` on
-`C:/Users/armin/.claude/skills/poteto-mode/scripts/orch/orch.ts`. Linear stays the program store;
-orch is optional bookkeeping when a single drain is enough. Absent: Postgres, not needed until
-after M1.
-
-**`go test -race` runs. Every Go unit's verify recipe uses it.** It is not on PATH by default,
-so put it there:
-
-    export PATH="/c/Users/armin/AppData/Local/Microsoft/WinGet/Packages/MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/llvm-mingw-20260616-ucrt-x86_64/bin:$PATH"
-
-That is LLVM-MinGW UCRT `22.1.8-20260616`, `clang` targeting `x86_64-w64-windows-gnu`, exposed
-as `gcc.exe` and `cc.exe`. Go picks it up as `CC=gcc` with `CGO_ENABLED=1`. Run
-`CGO_ENABLED=1 go test -race ./...` from `server/`.
-
-**The baseline is clean, measured rather than assumed.** On `main` at `06e542e`, all three
-packages pass, zero data races, exit 0, with `internal/net` alone taking 86 seconds under
-instrumentation. A race the detector reports on your branch is yours. One reported in code you
-did not touch is a finding against `main` and a new unit; report it and do not fix it.
-
-**Say what ran and what it found, not that the server is race-free.** A clean `-race` run means
-no race was *detected* along the paths the tests exercise. It is not a proof of absence.
-
-This paragraph used to say a C compiler was absent, that `-race` could never run, and that a Go
-unit's ledger row should record dropping it. That was true from M0 until the human installed the
-toolchain mid-session on 2026-09-02, and it was **pasted verbatim into every worker spawn while
-it was true**. It is corrected here rather than deleted, because a worker who read the old
-version will otherwise believe it and negotiate its acceptance list downward.
-
-## Milestones
-
-Which milestone is open, which units are Todo, and which Follow-ups are parked live only in
-Linear, project *Project Marque*. The coordinator pastes each unit's brief into the worker's
-prompt. Do not record program progress in this file.
-
-The wire contract for everything shipped is `PROTOCOL.md`, under its milestone markers. Read it.
-Do not re-derive it and do not negotiate with it. A unit that changes it copies the coordinator's
-rule into the file first, then codes against the file. The M1j finding that two clients agree on
-a tick number rather than a moment is recorded in `COORDINATION.md`, *Lessons from M1*.
+- Language majors are under *Settled* (Godot 4.7, Go 1.27). Confirm patch versions and CLIs on
+  the machine before claiming a tool is absent. Do not negotiate the acceptance list downward.
+- Every Go unit whose brief names Recipe G runs `CGO_ENABLED=1 go test -race ./...` from
+  `server/`. Put a C toolchain Go can use as `CC` on PATH first. A race on your branch is yours.
+  A race in code you did not touch is a finding against `main` and a new unit.
+- Say what ran and what it found. A clean `-race` run means no race was *detected* on the paths
+  the tests exercise. It is not a proof of absence.
+- orch via bun on poteto-mode `scripts/orch/orch.ts` is optional bookkeeping when a single drain
+  is enough. Linear remains the program store either way.
 
 ## Pasting these orders
 
@@ -128,26 +111,17 @@ drifts from the file on disk and the worker cannot tell which one binds.
 **On conflict, the newer of the two wins, and you say which one you used.** Compare the paste's
 named SHA against your worktree's copy. If your branch forked before the paste's commit, the
 **paste** is newer and it binds. If `main` has moved past the paste, run `git fetch` and read
-`origin/main`'s copy, which is newer than both.
-
-This used to say "the file in the repo wins", flatly, and an M1b verifier caught that it is
-wrong in the commonest case. Its branch forked one commit before a line here was corrected, so
-its worktree carried the falsehood and the paste carried the fix. **Obeying the old rule
-literally would have resurrected a corrected falsehood**, which is the precise opposite of what
-the rule is for. Neither copy is authoritative by virtue of being on disk; recency is what
-decides, and `origin/main` settles it.
+`origin/main`'s copy, which is newer than both. Recency decides; neither copy is authoritative
+only because it sits on disk.
 
 ## Picking this up in a new session
 
-1. Open the Linear project, `https://linear.app/arminas/project/project-marque-525be456de70`.
-   Find Todo Unit issues. Their descriptions are the briefs. Issues labelled `Follow-up` are
-   parked and block nothing.
-2. Read this file, then [COORDINATION.md](COORDINATION.md) for the dispatch loop and every
-   lesson about writing briefs and sizing verifications, then `PROTOCOL.md` and `NOTES.md`.
-3. Prove the stack is alive before dispatching anything. Recipe H and Recipe W in
-   `COORDINATION.md` are the commands. Redirect them to a file; do not pipe them.
+1. Open Linear *Project Marque*. Find Todo Unit issues. Their descriptions are the briefs.
+   Issues labelled `Follow-up` are parked and block nothing.
+2. Read this file, then [COORDINATION.md](COORDINATION.md), then `PROTOCOL.md` and `NOTES.md`.
+3. Prove the stack is alive before dispatching anything. Shared recipes live in Linear and are
+   named in `COORDINATION.md`; redirect output to a file, do not pipe.
 4. Run the dispatch loop from `COORDINATION.md` on the first Todo issue.
 
-This file is the worker contract and nothing else. Nothing about which unit is in flight lives
-here or in any other repo doc; Linear holds it. Settled decisions are written down with their
-reasoning in `PROTOCOL.md` and `NOTES.md`. Do not re-derive them.
+This file is the worker contract and nothing else. Program progress lives in Linear. Code lives
+on GitHub. Settled decisions live in `PROTOCOL.md` and `NOTES.md`.
