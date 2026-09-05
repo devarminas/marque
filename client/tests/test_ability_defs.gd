@@ -1,7 +1,5 @@
 extends RefCounted
 
-## Loader tests for [code]scripts/ability_defs.gd[/code]. Tree-free.
-
 const AbilityDefs := preload("res://scripts/ability_defs.gd")
 const Assertions := preload("res://tests/assertions.gd")
 

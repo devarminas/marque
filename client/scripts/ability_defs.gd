@@ -1,13 +1,5 @@
 extends RefCounted
 
-## Loads ability definitions from the shared JSON table.
-##
-## The only content source is [code]shared/abilities.json[/code] at the repo
-## root (PROTOCOL.md, Abilities / M6a). This client does not invent fallback
-## spells when the file is missing or malformed: [method load_from_path]
-## returns an empty catalog and logs, and callers must treat that as no
-## abilities.
-##
 ## Never instantiated. Typed by [code]preload[/code]:
 ##
 ## [codeblock]

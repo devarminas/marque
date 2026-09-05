@@ -1,8 +1,4 @@
 // Package abilitydef loads the shared ability content table.
-//
-// The only content source is shared/abilities.json at the repo root.
-// Callers pass an explicit path or resolve the default relative to the
-// process working directory / known repo layout.
 package abilitydef
 
 import (
