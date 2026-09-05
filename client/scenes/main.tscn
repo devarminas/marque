@@ -95,6 +95,7 @@ camera = NodePath("../CameraRig/Camera3D")
 ray_length = 4096.0
 ground_collision_mask = 1
 item_collision_mask = 2
+player_collision_mask = 4
 node_collision_mask = 8
 
 [node name="UI" type="CanvasLayer" parent="."]

@@ -122,6 +122,9 @@ signal pickup_requested(item_id: int)
 ## Emitted whenever a click on a resource node is forwarded as a `gather`. **M4b.**
 signal gather_requested(node_id: int)
 
+## Emitted whenever a click on another player is forwarded as an `attack`. **M5b.**
+signal attack_requested(player_id: int)
+
 ## Emitted whenever a click on an occupied inventory slot is forwarded as a
 ## `drop`. **M1.** Left-click no longer drops; callers use [method request_drop]
 ## when they mean drop without a pending use selection.
@@ -252,6 +255,7 @@ func _ready() -> void:
 		_picker.ground_clicked.connect(_on_ground_clicked)
 		_picker.item_clicked.connect(_on_item_clicked)
 		_picker.node_clicked.connect(_on_node_clicked)
+		_picker.player_clicked.connect(_on_player_clicked)
 
 	_panel = inventory_panel as InventoryPanelScript
 	if _panel == null:
@@ -435,6 +439,26 @@ func request_gather(node_id: int) -> void:
 		push_warning("session: gather of node %d dropped, the socket is not open" % node_id)
 		return
 	_net.send_gather(node_id)
+
+
+## Sends `attack` for another player, as a click on that player's body would. **M5b.**
+##
+## Self and unknown ids are refused here so a click on this client's own body
+## never becomes an `attack`. The server also refuses `self`; this keeps the
+## intent off the wire entirely for the local case.
+func request_attack(player_id: int) -> void:
+	if player_id == _you:
+		return
+	if not _avatars.has(player_id):
+		push_warning(
+			"session: attack for player %d, which this client does not know; ignoring" % player_id
+		)
+		return
+	attack_requested.emit(player_id)
+	if _net == null or not _net.is_open():
+		push_warning("session: attack of player %d dropped, the socket is not open" % player_id)
+		return
+	_net.send_attack(player_id)
 
 
 ## Sends `drop` for an inventory slot, as a click on that slot would. **M1.**
@@ -935,6 +959,24 @@ func _on_node_clicked(body: Node3D) -> void:
 	request_gather(id)
 
 
+## A left click that met a player body before it met the ground. **M5b.**
+##
+## The id comes from the registry, not from the node, same rule as pickup.
+func _on_player_clicked(body: Node3D) -> void:
+	var avatar := body as PlayerAvatarScript
+	if avatar == null:
+		push_error("session: the picker reported a click on %s, which is not a player avatar" % body)
+		return
+	var id := _id_of_avatar_body(avatar)
+	if id == 0:
+		push_warning(
+			"session: clicked a player body this session has no registry entry for (%s); ignoring"
+			% avatar.name
+		)
+		return
+	request_attack(id)
+
+
 ## A click on an occupied inventory slot. First click selects; second completes
 ## `use`. Escape clears the selection. Drop is not this path. **M4d.**
 func _on_slot_activated(slot: int) -> void:
@@ -1111,6 +1153,13 @@ func _id_of_item_body(body: GroundItemScript) -> int:
 func _id_of_node_body(body: ResourceNodeScript) -> int:
 	for id: int in _nodes:
 		if _nodes[id] == body:
+			return id
+	return 0
+
+
+func _id_of_avatar_body(body: PlayerAvatarScript) -> int:
+	for id: int in _avatars:
+		if _avatars[id] == body:
 			return id
 	return 0
 

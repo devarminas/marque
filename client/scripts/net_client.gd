@@ -332,6 +332,13 @@ func send_use(slot: int, on: int, seq: int = 0) -> Error:
 	return _send(use_frame(slot, on, _intent_seq(seq)))
 
 
+## Sends `attack`: engage another player in melee. **M5b.**
+##
+## `player` is a player id, never an item or node id (`PROTOCOL.md`, Combat).
+func send_attack(player_id: int, seq: int = 0) -> Error:
+	return _send(attack_frame(player_id, _intent_seq(seq)))
+
+
 ## Sends `respawn`: a request to return from death. **M5c.**
 func send_respawn(seq: int = 0) -> Error:
 	return _send(respawn_frame(_intent_seq(seq)))
@@ -386,6 +393,10 @@ static func unequip_frame(worn: String, seq: int = 0) -> Dictionary:
 
 static func use_frame(slot: int, on: int, seq: int = 0) -> Dictionary:
 	return {"use": _intent_body({"slot": slot, "on": on}, seq)}
+
+
+static func attack_frame(player_id: int, seq: int = 0) -> Dictionary:
+	return {"attack": _intent_body({"player": player_id}, seq)}
 
 
 static func respawn_frame(seq: int = 0) -> Dictionary:
