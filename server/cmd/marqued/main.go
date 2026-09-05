@@ -110,6 +110,9 @@ func run() error {
 			return err
 		}
 	}
+	if err := world.SeedResourceNode(game.KindTree, game.SeedTreeX, game.SeedTreeZ); err != nil {
+		return err
+	}
 
 	signalCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()

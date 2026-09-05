@@ -376,6 +376,9 @@ type frame struct {
 	Error       *mnet.Error       `json:"error"`
 	ItemSpawn   *mnet.ItemSpawn   `json:"item_spawn"`
 	ItemDespawn *mnet.ItemDespawn `json:"item_despawn"`
+	NodeSpawn   *mnet.NodeSpawn   `json:"node_spawn"`
+	NodeDespawn *mnet.NodeDespawn `json:"node_despawn"`
+	NodeState   *mnet.NodeUpdate  `json:"node_state"`
 	Inventory   *mnet.Inventory   `json:"inventory"`
 	Equipment   *mnet.Equipment   `json:"equipment"`
 	Tick        *mnet.Tick        `json:"tick"`
@@ -403,6 +406,12 @@ func (f frame) kind() string {
 		return "item_spawn"
 	case f.ItemDespawn != nil:
 		return "item_despawn"
+	case f.NodeSpawn != nil:
+		return "node_spawn"
+	case f.NodeDespawn != nil:
+		return "node_despawn"
+	case f.NodeState != nil:
+		return "node_state"
 	case f.Inventory != nil:
 		return "inventory"
 	case f.Equipment != nil:

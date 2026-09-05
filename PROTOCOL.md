@@ -23,6 +23,12 @@ server half of equipment and is shipped with this file: worn slots, `equip`, `un
 `equipment` restatement, and the kind `axe`. A marker reading plain **M3** is reserved. The
 client panel is M3b onward and nothing under an **M3a** marker describes it.
 
+**M4 is in progress.** **M4a** is the server half of resource nodes and gathering and is shipped
+with this file: the third entity family, `gather`, node restatement frames, axe gate, deplete
+and respawn, and contested first-completer-wins. A marker reading plain **M4** is reserved.
+Craft and the client draw of nodes are later units and nothing under an **M4a** marker
+describes them.
+
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
 stale is the only way it can fail.
@@ -310,6 +316,13 @@ bug to write, and one field name over two spaces is that bug with the id space l
 `worn` is a slot name, and the names this server has are the ones it puts in `equipment.worn`.
 A name it does not have is refused, and so is one it has but that holds nothing.
 
+### `gather`. **M4a**
+
+    {"gather":{"node":1}}
+
+A request to chop a resource node. `node` is a node id, which is **not** a player id and **not**
+an item id; see *Entity naming*. Semantics are in *Gathering*.
+
 ## Messages, server to client
 
 ### `welcome`
@@ -370,10 +383,19 @@ tick:
                 "players":[{"id":1,"x":0.0,"z":0.0}],
                 "items":[{"id":7,"kind":"acorn","x":3.0,"z":-2.0}]}}
 
-`items` is the world, so it belongs in `welcome` alongside `players`. **The joining player's own
-inventory is not in `welcome`**; it is private to one player rather than part of the world, and
-it arrives as a separate `inventory` message inside the same atomic step. A pre-M1 client
-ignores the `items` field under compatibility rule 2 and is exactly as correct as it was before.
+**M4a** adds another sibling, `nodes`, listing every resource node as of the same tick, each
+with its live state (`full` or `depleted`):
+
+    {"welcome":{"you":1,"tick_ms":150,"tick":142,
+                "players":[{"id":1,"x":0.0,"z":0.0}],
+                "items":[],
+                "nodes":[{"id":1,"kind":"tree","x":5.0,"z":0.0,"state":"full"}]}}
+
+`items` and `nodes` are the world, so they belong in `welcome` alongside `players`. **The
+joining player's own inventory is not in `welcome`**; it is private to one player rather than
+part of the world, and it arrives as a separate `inventory` message inside the same atomic step.
+A pre-M1 client ignores the `items` field under compatibility rule 2 and is exactly as correct
+as it was before. A pre-M4a client ignores `nodes` the same way.
 
 **A repeated `welcome` is a full restatement of the world, not a patch.** "First message on every
 connection" constrains position and never constrained multiplicity. A client receiving a second
@@ -480,10 +502,29 @@ Broadcast to **everyone, including the player who caused it**. This is `path`'s 
 have to conjure the body from its own intent, which is the client inventing state the server
 never announced.
 
-`kind` is an item type name. M1 ships exactly one, `acorn`. **A client that does not know a
-`kind` renders it magenta and keeps going** (`NOTES.md`, the palette), because a missing asset
-must scream rather than render nothing, and because unknown kinds are how content is added
-without a client release.
+`kind` is an item type name. M1 ships exactly one, `acorn`. **M3a** adds `axe`. **M4a** adds
+`logs`, the gather yield. **A client that does not know a `kind` renders it magenta and keeps
+going** (`NOTES.md`, the palette), because a missing asset must scream rather than render
+nothing, and because unknown kinds are how content is added without a client release.
+
+### `node_spawn` / `node_despawn` / `node_state`. **M4a**
+
+    {"node_spawn":{"id":1,"kind":"tree","x":5.0,"z":0.0,"state":"full"}}
+    {"node_despawn":{"id":1}}
+    {"node_state":{"id":1,"kind":"tree","x":5.0,"z":0.0,"state":"depleted"}}
+
+Resource nodes are a third entity family beside players and ground items. Wire ids are integers
+from their own sequence, like item ids. `state` is `full` or `depleted`.
+
+`node_spawn` announces a node that has entered the world. `node_despawn` announces one that has
+left. M4a seeds trees at process start and never removes them, so those two frames are not on
+the ordinary path; they exist so a later unit that adds or removes nodes has a name, and so a
+client can treat nodes the way it treats items under the same envelope rules.
+
+`node_state` is the ordinary live update: broadcast to everyone when a node's `state` changes
+(deplete or respawn). It carries the full node record, not a patch field, so a client that
+missed nothing still replaces what it held for that id. A client that does not know a node
+`kind` renders it magenta and keeps going, the same rule as `item_spawn`.
 
 ### `inventory`. **M1**
 
@@ -590,8 +631,10 @@ The server validates every intent against its own state. It never trusts a clien
 ### Entity naming, decided
 
 **Every entity family gets its own message names and its own id space.** Items are named by
-`item_spawn`, `item_despawn`, `welcome.items`, and `pickup.item`. There is no polymorphic
-`entity` message, no `kind` or `type` discriminator bolted onto `spawn`, and no shared id space.
+`item_spawn`, `item_despawn`, `welcome.items`, and `pickup.item`. **M4a** adds nodes, named by
+`node_spawn`, `node_despawn`, `node_state`, `welcome.nodes`, and `gather.node`. There is no
+polymorphic `entity` message, no `kind` or `type` discriminator bolted onto `spawn`, and no
+shared id space.
 
 The compatibility rules above already chose this, and the argument is short enough to check.
 Adding a discriminator field to `spawn` would be read by every pre-M1 client under rule 2,
@@ -849,6 +892,62 @@ A pickup that arrives at a full bag logs `pickup_no_room` and sends an `error` *
 through the refusal path, because a pickup fails on arrival rather than on receipt and there was
 no intent left to reject. An `unequip` fails on receipt like any other refused intent, so it
 takes the ordinary path and gets a reason rather than an event of its own.
+
+## Gathering. **M4a**
+
+Resource nodes are the third entity family. M4a ships one kind, `tree`, seeded at a fixed
+position (`SeedTreeX`, `SeedTreeZ` = 5, 0). A live full tree yields one `logs` into the lowest
+free bag slot when a gather resolves.
+
+### Tunables
+
+Named constants, revisitable:
+
+- `GatherRange = 0.5` (resolution only, never path assignment; same doctrine as `PickupRange`)
+- `GatherDurationTicks = 3` (consecutive in-range ticks with axe worn before yield)
+- `NodeRespawnTicks = 20` (ticks a depleted node stays depleted before returning to full)
+
+### `gather` is pending, then duration
+
+- **`gather` is `move_to` at the node's position, plus a pending gather.** Same path
+  construction, same broadcast, same degenerate rules as pickup. A degenerate gather by a
+  stationary player already in range is allowed: no path, pending stays, duration counts on
+  later ticks.
+- **Gather requires worn `weapon == axe` at receipt.** Otherwise the server refuses with
+  `error` naming `gather`, the node is unchanged, and GAMELOG records `gather_rejected`. Join
+  still seeds an axe into the bag (M3); the player must `equip` it before a successful gather.
+- **After arrival in range**, the pending gather stays pending for `GatherDurationTicks` ticks
+  of continuous presence in range with the axe still worn, then resolves: grant one `logs`,
+  deplete the node, broadcast `node_state`, send `inventory`, GAMELOG success. Yield must not
+  happen on the first in-range tick when the duration is greater than zero.
+- **Leaving range, losing the axe, or `move_to` cancels** the pending gather (clear pending; no
+  yield). A second `gather` replaces the first. A player has at most one pending gather. A
+  pending pickup and a pending gather are mutually exclusive: starting one clears the other.
+- **A depleted node does not accept new gathers** until respawn. After `NodeRespawnTicks` it
+  returns to full: GAMELOG plus `node_state`.
+
+### Contested gather
+
+Two players may pending-gather the same full node. **First completer who reaches resolution on
+a full node wins that depletion.** Resolution iterates players in join order inside `step`,
+after movement, matching contested pickup. The winner depletes the node in that same iteration;
+any other pending gather for that node then refuses/empties with no second `logs`.
+
+### Log vocabulary. **M4a**
+
+| Event | Fields | When |
+|---|---|---|
+| `node_spawned` | `node`, `kind`, `x`, `z`, `state` | a node entered the world by seed |
+| `gather` | `player`, `node`, `seq` | a `gather` intent was accepted (pending set) |
+| `gather_rejected` | `player`, `reason`, `detail`, `re` | a `gather` refused on receipt |
+| `gather_resolved` | `player`, `node`, `kind`, `slot` | one completed gather (yielded `logs`) |
+| `gather_lost` | `player`, `node` | pending gather ended because the node was no longer gatherable |
+| `gather_cancelled` | `player`, `node` | pending gather cleared (left range, lost axe, or replaced) |
+| `gather_no_room` | `player`, `node` | gather reached resolution with a full bag |
+| `node_depleted` | `node` | a node became depleted |
+| `node_respawned` | `node` | a depleted node returned to full |
+
+`gather_rejected.reason` is one of `unknown_node`, `node_depleted`, or `needs_axe`.
 
 ## Ordering and the join race
 

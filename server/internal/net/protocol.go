@@ -31,6 +31,18 @@ func (p Point) Z() float64 { return p[1] }
 // naming").
 type ItemID int64
 
+// NodeID identifies one resource node for the lifetime of one server process: a
+// separate sequence from PlayerID and ItemID, assigned from 1, never reused
+// (PROTOCOL.md, "Entity naming", M4a).
+type NodeID int64
+
+// NodeFull and NodeDepleted are the two live states a resource node carries on
+// the wire (PROTOCOL.md, "node_state").
+const (
+	NodeFull     = "full"
+	NodeDepleted = "depleted"
+)
+
 // Seq is one intent's sequence number (PROTOCOL.md, "Sequence numbers"). Zero
 // means the frame carried none.
 type Seq int64
@@ -48,6 +60,7 @@ const (
 	MsgDrop    = "drop"
 	MsgEquip   = "equip"
 	MsgUnequip = "unequip"
+	MsgGather  = "gather"
 )
 
 // PlayerState is one player's position, as it appears inside welcome.
@@ -63,6 +76,16 @@ type ItemState struct {
 	Kind string  `json:"kind"`
 	X    float64 `json:"x"`
 	Z    float64 `json:"z"`
+}
+
+// NodeState is one resource node, as it appears inside welcome and node frames
+// (PROTOCOL.md, "Gathering", M4a).
+type NodeState struct {
+	ID    NodeID  `json:"id"`
+	Kind  string  `json:"kind"`
+	X     float64 `json:"x"`
+	Z     float64 `json:"z"`
+	State string  `json:"state"`
 }
 
 // InventorySlot is one occupied slot of one player's inventory; empty slots are
@@ -84,8 +107,8 @@ type EquipmentSlot struct {
 type ServerMessage interface{ isServerMessage() }
 
 // Welcome is the first message a client receives: You and Session name the
-// receiver, LastSeq is the highest seq accepted from it, and Players and Items
-// are the world as of Tick (PROTOCOL.md, "welcome").
+// receiver, LastSeq is the highest seq accepted from it, and Players, Items,
+// and Nodes are the world as of Tick (PROTOCOL.md, "welcome").
 type Welcome struct {
 	You            PlayerID      `json:"you"`
 	Session        string        `json:"session"`
@@ -95,6 +118,7 @@ type Welcome struct {
 	HeartbeatTicks int           `json:"heartbeat_ticks,omitempty"`
 	Players        []PlayerState `json:"players"`
 	Items          []ItemState   `json:"items"`
+	Nodes          []NodeState   `json:"nodes"`
 }
 
 // Spawn announces a player who just joined. Broadcast to everyone except the
@@ -133,6 +157,19 @@ type ItemDespawn struct {
 	ID ItemID `json:"id"`
 }
 
+// NodeSpawn announces a resource node that has entered the world (PROTOCOL.md,
+// "node_spawn", M4a).
+type NodeSpawn NodeState
+
+// NodeDespawn announces a resource node that has left the world.
+type NodeDespawn struct {
+	ID NodeID `json:"id"`
+}
+
+// NodeUpdate announces a resource node's current record after a state change.
+// Named NodeUpdate in Go because NodeState is already the wire record type.
+type NodeUpdate NodeState
+
 // Inventory is one player's whole inventory, sent to that player only. Size is
 // the slot count; Slots lists the occupied slots.
 type Inventory struct {
@@ -161,6 +198,9 @@ func (Path) isServerMessage()        {}
 func (Error) isServerMessage()       {}
 func (ItemSpawn) isServerMessage()   {}
 func (ItemDespawn) isServerMessage() {}
+func (NodeSpawn) isServerMessage()   {}
+func (NodeDespawn) isServerMessage() {}
+func (NodeUpdate) isServerMessage()  {}
 func (Inventory) isServerMessage()   {}
 func (Equipment) isServerMessage()   {}
 func (Tick) isServerMessage()        {}
@@ -202,17 +242,25 @@ type Unequip struct {
 	Worn EquipSlot `json:"worn"`
 }
 
+// Gather is a request to chop the resource node with id Node (PROTOCOL.md,
+// "gather").
+type Gather struct {
+	Node NodeID `json:"node"`
+}
+
 func (MoveTo) isClientMessage()  {}
 func (Pickup) isClientMessage()  {}
 func (Drop) isClientMessage()    {}
 func (Equip) isClientMessage()   {}
 func (Unequip) isClientMessage() {}
+func (Gather) isClientMessage()  {}
 
 func (MoveTo) Name() string  { return MsgMoveTo }
 func (Pickup) Name() string  { return MsgPickup }
 func (Drop) Name() string    { return MsgDrop }
 func (Equip) Name() string   { return MsgEquip }
 func (Unequip) Name() string { return MsgUnequip }
+func (Gather) Name() string  { return MsgGather }
 
 type serverEnvelope struct {
 	Welcome     *Welcome     `json:"welcome,omitempty"`
@@ -222,6 +270,9 @@ type serverEnvelope struct {
 	Error       *Error       `json:"error,omitempty"`
 	ItemSpawn   *ItemSpawn   `json:"item_spawn,omitempty"`
 	ItemDespawn *ItemDespawn `json:"item_despawn,omitempty"`
+	NodeSpawn   *NodeSpawn   `json:"node_spawn,omitempty"`
+	NodeDespawn *NodeDespawn `json:"node_despawn,omitempty"`
+	NodeState   *NodeUpdate  `json:"node_state,omitempty"`
 	Inventory   *Inventory   `json:"inventory,omitempty"`
 	Equipment   *Equipment   `json:"equipment,omitempty"`
 	Tick        *Tick        `json:"tick,omitempty"`
@@ -247,6 +298,12 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.ItemSpawn = &v
 	case ItemDespawn:
 		env.ItemDespawn = &v
+	case NodeSpawn:
+		env.NodeSpawn = &v
+	case NodeDespawn:
+		env.NodeDespawn = &v
+	case NodeUpdate:
+		env.NodeState = &v
 	case Inventory:
 		env.Inventory = &v
 	case Equipment:
@@ -304,6 +361,12 @@ const (
 	// rather than on receipt, so it logs pickup_no_room and never reaches the
 	// refusal path (PROTOCOL.md, "Log vocabulary", M3a).
 	ReasonInventoryFull RejectReason = "inventory_full"
+	// ReasonUnknownNode: a gather naming no live resource node.
+	ReasonUnknownNode RejectReason = "unknown_node"
+	// ReasonNodeDepleted: a gather naming a live node that is not full.
+	ReasonNodeDepleted RejectReason = "node_depleted"
+	// ReasonNeedsAxe: a gather without worn weapon == axe (PROTOCOL.md, M4a).
+	ReasonNeedsAxe RejectReason = "needs_axe"
 	// ReasonUnknownSender: a frame from a connection with no player.
 	ReasonUnknownSender RejectReason = "unknown_sender"
 	// ReasonBinaryFrame: a WebSocket binary frame.
@@ -381,6 +444,10 @@ type unequipWire struct {
 	Worn *EquipSlot `json:"worn"`
 }
 
+type gatherWire struct {
+	Node *NodeID `json:"node"`
+}
+
 type seqWire struct {
 	Seq *int64 `json:"seq"`
 }
@@ -418,6 +485,8 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 			decodeBody = decodeEquip
 		case MsgUnequip:
 			decodeBody = decodeUnequip
+		case MsgGather:
+			decodeBody = decodeGather
 		default:
 			return nil, 0, &RejectError{
 				Reason:      ReasonUnknownMessage,
@@ -520,6 +589,17 @@ func decodeUnequip(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonMissingField, MsgUnequip, "unequip needs a worn slot name")
 	}
 	return Unequip{Worn: *wire.Worn}, nil
+}
+
+func decodeGather(payload []byte) (ClientMessage, error) {
+	var wire gatherWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgGather, "gather: %v", err)
+	}
+	if wire.Node == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgGather, "gather needs a node id")
+	}
+	return Gather{Node: *wire.Node}, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }

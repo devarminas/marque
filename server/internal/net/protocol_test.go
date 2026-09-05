@@ -28,8 +28,9 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 					{ID: 2, X: 5, Z: 5},
 				},
 				Items: []mnet.ItemState{{ID: 7, Kind: "acorn", X: 3, Z: -2}},
+				Nodes: []mnet.NodeState{},
 			},
-			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0},{"id":2,"x":5,"z":5}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}]}}`,
+			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0},{"id":2,"x":5,"z":5}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[]}}`,
 		},
 		{
 			// An empty world is [] on both arrays, never null and never an
@@ -45,8 +46,14 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				Tick:    0,
 				Players: []mnet.PlayerState{},
 				Items:   []mnet.ItemState{},
+				Nodes:   []mnet.NodeState{},
 			},
-			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":150,"tick":0,"players":[],"items":[]}}`,
+			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":150,"tick":0,"players":[],"items":[],"nodes":[]}}`,
+		},
+		{
+			name: "node_state",
+			msg:  mnet.NodeUpdate{ID: 1, Kind: "tree", X: 5, Z: 0, State: mnet.NodeDepleted},
+			want: `{"node_state":{"id":1,"kind":"tree","x":5,"z":0,"state":"depleted"}}`,
 		},
 		{
 			name: "item_spawn",
@@ -132,8 +139,9 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				HeartbeatTicks: 10,
 				Players:        []mnet.PlayerState{},
 				Items:          []mnet.ItemState{},
+				Nodes:          []mnet.NodeState{},
 			},
-			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":150,"tick":0,"heartbeat_ticks":10,"players":[],"items":[]}}`,
+			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":150,"tick":0,"heartbeat_ticks":10,"players":[],"items":[],"nodes":[]}}`,
 		},
 	}
 
@@ -215,6 +223,7 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 		{mnet.MsgDrop, `{"drop":{"slot":3}}`},
 		{mnet.MsgEquip, `{"equip":{"slot":3}}`},
 		{mnet.MsgUnequip, `{"unequip":{"worn":"weapon"}}`},
+		{mnet.MsgGather, `{"gather":{"node":1}}`},
 	}
 
 	for _, tc := range cases {
@@ -319,6 +328,8 @@ func TestDecodeRejections(t *testing.T) {
 		{"an unequip whose worn slot is a number", `{"unequip":{"worn":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "unequip"},
 		{"a bad seq on an equip", `{"equip":{"slot":0,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "equip"},
 		{"a bad seq on an unequip", `{"unequip":{"worn":"weapon","seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "unequip"},
+		{"a gather naming no node", `{"gather":{}}`, mnet.ReasonMissingField, mnet.ReplyError, "gather"},
+		{"a gather whose node is not a number", `{"gather":{"node":"tree"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "gather"},
 	}
 
 	for _, tc := range cases {

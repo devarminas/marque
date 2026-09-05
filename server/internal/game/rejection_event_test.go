@@ -8,7 +8,9 @@ import (
 
 func TestEveryClientMessageHasItsOwnRejectionEvent(t *testing.T) {
 	seen := map[string]string{}
-	for _, m := range []mnet.ClientMessage{mnet.MoveTo{}, mnet.Pickup{}, mnet.Drop{}} {
+	for _, m := range []mnet.ClientMessage{
+		mnet.MoveTo{}, mnet.Pickup{}, mnet.Drop{}, mnet.Equip{}, mnet.Unequip{}, mnet.Gather{},
+	} {
 		ev := rejectionEvent(m.Name())
 		if prior, dup := seen[ev]; dup {
 			t.Fatalf("%s and %s share rejection event %q", prior, m.Name(), ev)
