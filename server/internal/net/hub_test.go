@@ -455,7 +455,7 @@ func TestUnknownMessageIsIgnored(t *testing.T) {
 	aliceWelcome := alice.welcome()
 
 	alice.sendRaw(`{"tick":{"t":9000}}`)
-	alice.sendRaw(`{"use":{"slot":3,"on":7}}`)
+	alice.sendRaw(`{"cast":{"spell":1}}`)
 
 	ignored := h.awaitEvents(game.EvIntentIgnored, 2)
 	for _, ev := range ignored {

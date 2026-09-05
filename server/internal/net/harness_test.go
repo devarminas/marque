@@ -525,6 +525,11 @@ func (c *client) unequip(worn mnet.EquipSlot) {
 	c.sendRaw(fmt.Sprintf(`{"unequip":{"worn":%q}}`, worn))
 }
 
+func (c *client) use(slot, on int) {
+	c.t.Helper()
+	c.sendRaw(fmt.Sprintf(`{"use":{"slot":%d,"on":%d}}`, slot, on))
+}
+
 func (c *client) next() frame {
 	c.t.Helper()
 

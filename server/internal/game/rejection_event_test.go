@@ -9,7 +9,7 @@ import (
 func TestEveryClientMessageHasItsOwnRejectionEvent(t *testing.T) {
 	seen := map[string]string{}
 	for _, m := range []mnet.ClientMessage{
-		mnet.MoveTo{}, mnet.Pickup{}, mnet.Drop{}, mnet.Equip{}, mnet.Unequip{}, mnet.Gather{},
+		mnet.MoveTo{}, mnet.Pickup{}, mnet.Drop{}, mnet.Equip{}, mnet.Unequip{}, mnet.Gather{}, mnet.Use{},
 	} {
 		ev := rejectionEvent(m.Name())
 		if prior, dup := seen[ev]; dup {

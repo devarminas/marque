@@ -61,6 +61,7 @@ const (
 	MsgEquip   = "equip"
 	MsgUnequip = "unequip"
 	MsgGather  = "gather"
+	MsgUse     = "use"
 )
 
 // PlayerState is one player's position, as it appears inside welcome.
@@ -248,12 +249,20 @@ type Gather struct {
 	Node NodeID `json:"node"`
 }
 
+// Use is a request to use the item in bag slot Slot on the item in bag slot On
+// (PROTOCOL.md, "use").
+type Use struct {
+	Slot int `json:"slot"`
+	On   int `json:"on"`
+}
+
 func (MoveTo) isClientMessage()  {}
 func (Pickup) isClientMessage()  {}
 func (Drop) isClientMessage()    {}
 func (Equip) isClientMessage()   {}
 func (Unequip) isClientMessage() {}
 func (Gather) isClientMessage()  {}
+func (Use) isClientMessage()     {}
 
 func (MoveTo) Name() string  { return MsgMoveTo }
 func (Pickup) Name() string  { return MsgPickup }
@@ -261,6 +270,7 @@ func (Drop) Name() string    { return MsgDrop }
 func (Equip) Name() string   { return MsgEquip }
 func (Unequip) Name() string { return MsgUnequip }
 func (Gather) Name() string  { return MsgGather }
+func (Use) Name() string     { return MsgUse }
 
 type serverEnvelope struct {
 	Welcome     *Welcome     `json:"welcome,omitempty"`
@@ -367,6 +377,9 @@ const (
 	ReasonNodeDepleted RejectReason = "node_depleted"
 	// ReasonNeedsAxe: a gather without worn weapon == axe (PROTOCOL.md, M4a).
 	ReasonNeedsAxe RejectReason = "needs_axe"
+	// ReasonNoRecipe: a use whose slots or kinds do not match the one craft
+	// recipe (PROTOCOL.md, "Crafting").
+	ReasonNoRecipe RejectReason = "no_recipe"
 	// ReasonUnknownSender: a frame from a connection with no player.
 	ReasonUnknownSender RejectReason = "unknown_sender"
 	// ReasonBinaryFrame: a WebSocket binary frame.
@@ -448,6 +461,11 @@ type gatherWire struct {
 	Node *NodeID `json:"node"`
 }
 
+type useWire struct {
+	Slot *int `json:"slot"`
+	On   *int `json:"on"`
+}
+
 type seqWire struct {
 	Seq *int64 `json:"seq"`
 }
@@ -487,6 +505,8 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 			decodeBody = decodeUnequip
 		case MsgGather:
 			decodeBody = decodeGather
+		case MsgUse:
+			decodeBody = decodeUse
 		default:
 			return nil, 0, &RejectError{
 				Reason:      ReasonUnknownMessage,
@@ -600,6 +620,17 @@ func decodeGather(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonMissingField, MsgGather, "gather needs a node id")
 	}
 	return Gather{Node: *wire.Node}, nil
+}
+
+func decodeUse(payload []byte) (ClientMessage, error) {
+	var wire useWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgUse, "use: %v", err)
+	}
+	if wire.Slot == nil || wire.On == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgUse, "use needs both slot and on")
+	}
+	return Use{Slot: *wire.Slot, On: *wire.On}, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
