@@ -41,6 +41,9 @@ const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const PickupDemoScript := preload("res://scripts/pickup_demo.gd")
 const EquipDemoScript := preload("res://scripts/equip_demo.gd")
 const GatherCraftDemoScript := preload("res://scripts/gather_craft_demo.gd")
+const CombatDemoScript := preload("res://scripts/combat_demo.gd")
+const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
+const HpHudScript := preload("res://scripts/hp_hud.gd")
 
 ## One capture to [constant SCREENSHOT_PATH], then quit. M0c's visual check.
 const SCREENSHOT_FLAG := "--screenshot"
@@ -110,6 +113,9 @@ const EQUIP_SHOTS_FLAG := "--equip-shots"
 ## `<prefix>_3.png`. **M4e**, the milestone. Two clients share the same flag.
 const GATHER_CRAFT_SHOTS_FLAG := "--gather-craft-shots"
 
+const COMBAT_SHOTS_FLAG := "--combat-shots"
+const COMBAT_ROLE_FLAG := "--combat-role"
+
 ## How many phases the demo runs. One per client.
 const DEMO_PHASES := 2
 
@@ -173,6 +179,9 @@ func _ready() -> void:
 		return
 	if GATHER_CRAFT_SHOTS_FLAG in args:
 		await _run_gather_craft_demo(args)
+		return
+	if COMBAT_SHOTS_FLAG in args:
+		await _run_combat_demo(args)
 		return
 	if SHOTS_FLAG in args:
 		await _run_demo(args)
@@ -317,6 +326,31 @@ func _run_gather_craft_demo(args: Array) -> void:
 
 	var demo := GatherCraftDemoScript.new()
 	var code: int = await demo.run(self, session, inventory, equipment, prefix)
+	get_tree().quit(code)
+
+
+func _run_combat_demo(args: Array) -> void:
+	var prefix := _argument_after(args, COMBAT_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % COMBAT_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+	var role := _argument_after(args, COMBAT_ROLE_FLAG)
+	if role.is_empty():
+		push_error("%s needs attacker or victim after it" % COMBAT_ROLE_FLAG)
+		get_tree().quit(1)
+		return
+
+	var session := get_node_or_null("Session") as SessionScript
+	var death := get_node_or_null("UI/DeathOverlay") as DeathOverlayScript
+	var hp_hud := get_node_or_null("UI/HpHud") as HpHudScript
+	if session == null or death == null or hp_hud == null:
+		push_error("main.tscn is missing Session, UI/DeathOverlay, or UI/HpHud")
+		get_tree().quit(1)
+		return
+
+	var demo := CombatDemoScript.new()
+	var code: int = await demo.run(self, session, death, hp_hud, prefix, role)
 	get_tree().quit(code)
 
 

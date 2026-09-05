@@ -29,6 +29,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/contested_pickup_demo.ps1` | `CONTESTED PICKUP DEMO OK` |
 | `scripts/equip_demo.ps1` | `EQUIP DEMO OK` |
 | `scripts/gather_craft_demo.ps1` | `GATHER CRAFT DEMO OK` |
+| `scripts/combat_demo.ps1` | `COMBAT DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
 | each scripted client | `DEMO done` on its stdout |
@@ -136,6 +137,8 @@ anything looks off.
 | `--drop-click fx,fy` | Where the winner of that contest clicks the ground before dropping, as viewport fractions. Required alongside `--pickup-shots`, and refused rather than defaulted if it will not parse. |
 | `--equip-shots <abs-prefix>` | Enter the equip milestone demo mode (`equip_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M3d.** Single client; join kit seeds the axe. Absolute host path required. |
 | `--gather-craft-shots <abs-prefix>` | Enter the gather-then-craft milestone demo mode (`gather_craft_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M4e.** Two clients; both equip then race the seeded tree. Absolute host path required. |
+| `--combat-shots <abs-prefix>` | Enter the combat milestone demo mode (`combat_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M5d.** Requires `--combat-role attacker\|victim`. Absolute host path required. |
+| `--combat-role attacker\|victim` | Which side of the combat demo this client plays. Required alongside `--combat-shots`. |
 | `--screenshot` | No server needed: render `main.tscn`, save one frame to `user://shot.png`, print its absolute path, quit. The single-client visual baseline. |
 
 Scripted demo mode waits for **two** players (`DEMO_MIN_PLAYERS` in `main.gd`), so a

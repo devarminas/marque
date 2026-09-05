@@ -67,5 +67,8 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
   the left, equip the seeded axe, see it in the weapon slot, unequip back to the bag.
 - [Gather then craft](./gather-craft.md) — the M4 milestone: equip, race a tree
   for one logs yield, craft logs→sticks; contested second gatherer gets nothing.
+- [Kill and respawn](./combat-kill-respawn.md) — the M5 milestone: out-of-range
+  click-attack, walk-in hits of 10 to death, death overlay, respawn to HP 100,
+  act again.
 - [Server liveness](./heartbeat-liveness.md) — the M2c milestone: heartbeat ticks,
   the three-interval liveness window, and the loud abandon of a silent server.
