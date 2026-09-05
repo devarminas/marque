@@ -24,13 +24,13 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				TickMS:  150,
 				Tick:    142,
 				Players: []mnet.PlayerState{
-					{ID: 1, X: 0, Z: 0},
-					{ID: 2, X: 5, Z: 5},
+					{ID: 1, X: 0, Z: 0, HP: 100, MaxHP: 100},
+					{ID: 2, X: 5, Z: 5, HP: 70, MaxHP: 100},
 				},
 				Items: []mnet.ItemState{{ID: 7, Kind: "acorn", X: 3, Z: -2}},
 				Nodes: []mnet.NodeState{},
 			},
-			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0},{"id":2,"x":5,"z":5}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[]}}`,
+			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100},{"id":2,"x":5,"z":5,"hp":70,"max_hp":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[]}}`,
 		},
 		{
 			// An empty world is [] on both arrays, never null and never an
@@ -96,8 +96,13 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 		},
 		{
 			name: "spawn",
-			msg:  mnet.Spawn{ID: 2, X: 0, Z: 0},
-			want: `{"spawn":{"id":2,"x":0,"z":0}}`,
+			msg:  mnet.Spawn{ID: 2, X: 0, Z: 0, HP: 100, MaxHP: 100},
+			want: `{"spawn":{"id":2,"x":0,"z":0,"hp":100,"max_hp":100}}`,
+		},
+		{
+			name: "hp",
+			msg:  mnet.HP{ID: 2, HP: 90, MaxHP: 100},
+			want: `{"hp":{"id":2,"hp":90,"max_hp":100}}`,
 		},
 		{
 			name: "despawn",
@@ -225,6 +230,8 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 		{mnet.MsgUnequip, `{"unequip":{"worn":"weapon"}}`},
 		{mnet.MsgGather, `{"gather":{"node":1}}`},
 		{mnet.MsgUse, `{"use":{"slot":3,"on":3}}`},
+		{mnet.MsgAttack, `{"attack":{"player":2}}`},
+		{mnet.MsgRespawn, `{"respawn":{}}`},
 	}
 
 	for _, tc := range cases {

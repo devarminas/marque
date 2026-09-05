@@ -62,13 +62,17 @@ const (
 	MsgUnequip = "unequip"
 	MsgGather  = "gather"
 	MsgUse     = "use"
+	MsgAttack  = "attack"
+	MsgRespawn = "respawn"
 )
 
-// PlayerState is one player's position, as it appears inside welcome.
+// PlayerState is one player's position and public HP, as it appears inside welcome.
 type PlayerState struct {
-	ID PlayerID `json:"id"`
-	X  float64  `json:"x"`
-	Z  float64  `json:"z"`
+	ID    PlayerID `json:"id"`
+	X     float64  `json:"x"`
+	Z     float64  `json:"z"`
+	HP    int      `json:"hp"`
+	MaxHP int      `json:"max_hp"`
 }
 
 // ItemState is one ground item, as it appears inside welcome and item_spawn.
@@ -192,6 +196,13 @@ type Tick struct {
 	T int64 `json:"t"`
 }
 
+// HP restates one player's hit points (PROTOCOL.md, "hp", M5a).
+type HP struct {
+	ID    PlayerID `json:"id"`
+	HP    int      `json:"hp"`
+	MaxHP int      `json:"max_hp"`
+}
+
 func (Welcome) isServerMessage()     {}
 func (Spawn) isServerMessage()       {}
 func (Despawn) isServerMessage()     {}
@@ -205,6 +216,7 @@ func (NodeUpdate) isServerMessage()  {}
 func (Inventory) isServerMessage()   {}
 func (Equipment) isServerMessage()   {}
 func (Tick) isServerMessage()        {}
+func (HP) isServerMessage()          {}
 
 // ClientMessage is one message a client can send: an intent, never a fact.
 // Name is its wire name, the same string an error carries as "re".
@@ -256,6 +268,14 @@ type Use struct {
 	On   int `json:"on"`
 }
 
+// Attack is a request to engage another player in melee (PROTOCOL.md, "attack", M5a).
+type Attack struct {
+	Player PlayerID `json:"player"`
+}
+
+// Respawn is a request to leave the dead state (PROTOCOL.md, "respawn", M5a).
+type Respawn struct{}
+
 func (MoveTo) isClientMessage()  {}
 func (Pickup) isClientMessage()  {}
 func (Drop) isClientMessage()    {}
@@ -263,6 +283,8 @@ func (Equip) isClientMessage()   {}
 func (Unequip) isClientMessage() {}
 func (Gather) isClientMessage()  {}
 func (Use) isClientMessage()     {}
+func (Attack) isClientMessage()  {}
+func (Respawn) isClientMessage() {}
 
 func (MoveTo) Name() string  { return MsgMoveTo }
 func (Pickup) Name() string  { return MsgPickup }
@@ -271,6 +293,8 @@ func (Equip) Name() string   { return MsgEquip }
 func (Unequip) Name() string { return MsgUnequip }
 func (Gather) Name() string  { return MsgGather }
 func (Use) Name() string     { return MsgUse }
+func (Attack) Name() string  { return MsgAttack }
+func (Respawn) Name() string { return MsgRespawn }
 
 type serverEnvelope struct {
 	Welcome     *Welcome     `json:"welcome,omitempty"`
@@ -286,6 +310,7 @@ type serverEnvelope struct {
 	Inventory   *Inventory   `json:"inventory,omitempty"`
 	Equipment   *Equipment   `json:"equipment,omitempty"`
 	Tick        *Tick        `json:"tick,omitempty"`
+	HP          *HP          `json:"hp,omitempty"`
 }
 
 // Encode renders one server message as a single WebSocket text frame payload.
@@ -320,6 +345,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.Equipment = &v
 	case Tick:
 		env.Tick = &v
+	case HP:
+		env.HP = &v
 	default:
 		return nil, fmt.Errorf("net: encode: unhandled server message %T", m)
 	}
@@ -380,6 +407,16 @@ const (
 	// ReasonNoRecipe: a use whose slots or kinds do not match the one craft
 	// recipe (PROTOCOL.md, "Crafting").
 	ReasonNoRecipe RejectReason = "no_recipe"
+	// ReasonUnknownPlayer: an attack naming no live player (PROTOCOL.md, M5a).
+	ReasonUnknownPlayer RejectReason = "unknown_player"
+	// ReasonSelf: an attack naming the attacker's own id.
+	ReasonSelf RejectReason = "self"
+	// ReasonTargetDead: an attack naming a player whose HP is already 0.
+	ReasonTargetDead RejectReason = "target_dead"
+	// ReasonDead: an ordinary intent from a player whose HP is 0.
+	ReasonDead RejectReason = "dead"
+	// ReasonNotDead: a respawn from a living player.
+	ReasonNotDead RejectReason = "not_dead"
 	// ReasonUnknownSender: a frame from a connection with no player.
 	ReasonUnknownSender RejectReason = "unknown_sender"
 	// ReasonBinaryFrame: a WebSocket binary frame.
@@ -466,6 +503,10 @@ type useWire struct {
 	On   *int `json:"on"`
 }
 
+type attackWire struct {
+	Player *PlayerID `json:"player"`
+}
+
 type seqWire struct {
 	Seq *int64 `json:"seq"`
 }
@@ -507,6 +548,10 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 			decodeBody = decodeGather
 		case MsgUse:
 			decodeBody = decodeUse
+		case MsgAttack:
+			decodeBody = decodeAttack
+		case MsgRespawn:
+			decodeBody = decodeRespawn
 		default:
 			return nil, 0, &RejectError{
 				Reason:      ReasonUnknownMessage,
@@ -631,6 +676,25 @@ func decodeUse(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonMissingField, MsgUse, "use needs both slot and on")
 	}
 	return Use{Slot: *wire.Slot, On: *wire.On}, nil
+}
+
+func decodeAttack(payload []byte) (ClientMessage, error) {
+	var wire attackWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgAttack, "attack: %v", err)
+	}
+	if wire.Player == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgAttack, "attack needs a player id")
+	}
+	return Attack{Player: *wire.Player}, nil
+}
+
+func decodeRespawn(payload []byte) (ClientMessage, error) {
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgRespawn, "respawn: %v", err)
+	}
+	return Respawn{}, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
