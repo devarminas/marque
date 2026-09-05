@@ -30,6 +30,12 @@ and is shipped with this file: the `use` intent and logs→sticks. A marker read
 is reserved. The client draw of nodes is a later unit and nothing under an **M4a** or **M4c**
 marker describes it.
 
+**M5 is in progress.** **M5a** is the server half of PvP combat and is shipped with this
+file: public hit points on player records, the `attack` and `respawn` intents, pending engage
+shaped like pickup and gather, constant-damage hits on a tick period, death at HP 0, and the
+`hp` restatement. A marker reading plain **M5** is reserved. Client click-to-attack, HP draw,
+and the death/respawn UI are later units and nothing under an **M5a** marker describes them.
+
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
 stale is the only way it can fail.
@@ -333,6 +339,24 @@ the same space `drop.slot` and `equip.slot` use, and for the same reason: the cl
 positions in its cached inventory and the server looks up what is actually there. Semantics are
 in *Crafting*.
 
+### `attack`. **M5a**
+
+    {"attack":{"player":2}}
+
+A request to engage another player in melee. `player` is a player id, the same space as
+`welcome.you`, `spawn.id`, and `path.id`; see *Entity naming*. It is **not** an item id and
+**not** a node id. Semantics are in *Combat*.
+
+### `respawn`. **M5a**
+
+    {"respawn":{}}
+
+A request to leave the dead state and return to play at the join spawn. The body is empty.
+Semantics are in *Combat*.
+
+`seq` may ride on either body under *Sequence numbers*, exactly as it does on `pickup` and
+`gather`.
+
 ## Messages, server to client
 
 ### `welcome`
@@ -407,6 +431,24 @@ part of the world, and it arrives as a separate `inventory` message inside the s
 A pre-M1 client ignores the `items` field under compatibility rule 2 and is exactly as correct
 as it was before. A pre-M4a client ignores `nodes` the same way.
 
+**M5a.** Each entry of `welcome.players` gains `hp` and `max_hp`:
+
+    {"welcome":{"you":1,"session":"…","last_seq":0,
+                "tick_ms":150,"tick":142,"heartbeat_ticks":10,
+                "players":[{"id":1,"x":0.0,"z":0.0,"hp":100,"max_hp":100},
+                           {"id":2,"x":5.0,"z":5.0,"hp":70,"max_hp":100}],
+                "items":[],
+                "nodes":[{"id":1,"kind":"tree","x":5.0,"z":0.0,"state":"full"}]}}
+
+`hp` is that player's current hit points as of `welcome.tick`. `max_hp` is the ceiling this
+server uses for that player. Both are integers. **HP is public world state**, so it belongs in
+`welcome` beside position, the same way ground items and nodes do. It is **not** a private bag:
+there is no separate first-of-join `hp` frame analogous to `inventory`. A pre-M5a client ignores
+the new fields under compatibility rule 2 and is exactly as correct as it was before.
+
+A repeated `welcome` restates every player's current `hp` and `max_hp` with the rest of the
+world. A resumed connection reads the fight as it stands from that list.
+
 **A repeated `welcome` is a full restatement of the world, not a patch.** "First message on every
 connection" constrains position and never constrained multiplicity. A client receiving a second
 `welcome` frees every body, re-anchors its clock, and rebuilds from the list. That is the only
@@ -433,11 +475,34 @@ client's clock were already perfect.
 
 ### `spawn` / `despawn`
 
-    {"spawn":{"id":2,"x":0.0,"z":0.0}}
+    {"spawn":{"id":2,"x":0.0,"z":0.0,"hp":100,"max_hp":100}}
     {"despawn":{"id":2}}
 
 Broadcast to everyone **except** the joining or leaving player, who learns its own existence
 from `welcome`.
+
+**M5a.** A joining player is announced with full hit points. Same `hp` / `max_hp` fields and
+public rule as `welcome.players`.
+
+### `hp`. **M5a**
+
+    {"hp":{"id":2,"hp":90,"max_hp":100}}
+
+A full restatement of one player's hit points, not a damage delta. Broadcast to **everyone,
+including the player whose HP changed**, which is `path`'s rule and `item_spawn`'s: there is no
+private channel that already told the subject, and a subject that invented its own HP from the
+intent would be inventing state the server never announced.
+
+Sent whenever that player's current HP changes (a hit lands, or a `respawn` restores it), and
+never otherwise. `welcome` and `spawn` already carried the opening values, so the join step does
+not emit a redundant per-player `hp` after them.
+
+`max_hp` rides on every `hp` frame for `inventory.size`'s reason: the client draws the bar it is
+told to draw rather than hardcoding a second copy of the ceiling. M5a ships one ceiling for
+everyone; putting it on the wire still keeps the client off a parallel constant.
+
+**An `hp` for an unknown id is dropped with a loud log**, the same defence `path` already uses
+for an unknown walker. Under the ordering guarantees a conforming server cannot produce it.
 
 ### `path`
 
@@ -931,8 +996,9 @@ Named constants, revisitable:
   deplete the node, broadcast `node_state`, send `inventory`, GAMELOG success. Yield must not
   happen on the first in-range tick when the duration is greater than zero.
 - **Leaving range, losing the axe, or `move_to` cancels** the pending gather (clear pending; no
-  yield). A second `gather` replaces the first. A player has at most one pending gather. A
-  pending pickup and a pending gather are mutually exclusive: starting one clears the other.
+  yield). A second `gather` replaces the first. A player has at most one pending gather.
+  **A player has at most one pending action among pickup, gather, and attack.** Starting one
+  clears the others.
 - **A depleted node does not accept new gathers** until respawn. After `NodeRespawnTicks` it
   returns to full: GAMELOG plus `node_state`.
 
@@ -1378,6 +1444,180 @@ a GDScript client will get it subtly wrong.
 - **`equipment.slots[].slot` is a string, not a number**, for the same reason. It is the only
   `slot` field on the wire that is not an index, which is why the intent that names one is
   spelled `worn` instead.
+
+## Combat. **M5a**
+
+PvP only. The target of an attack is a durable player id. There are no NPCs on this contract.
+Equipped weapon is ignored for damage. There is no ranged aiming, no defence roll, and no
+death loot.
+
+### Tunables
+
+Named constants, revisitable:
+
+- `MaxHP = 100`
+- `AttackDamage = 10`
+- `AttackPeriodTicks = 4` (600 ms at 150 ms tick)
+- `AttackRange = 1.5` (resolution and chase halt only; see below)
+
+A fresh join and a successful `respawn` both set current HP to `MaxHP`.
+
+### `attack` is pending engage, then period hits
+
+**Clicking a player walks you into range and then hits them on a period for as long as you stay
+engaged.** That is RuneScape's answer and it is taken without further argument. The shape is
+pickup and gather's pending action, not an instantaneous one-shot.
+
+- **`attack` is a pending attack on `player`, plus a path toward that player's current
+  position when out of range.** Same path construction helpers, same broadcast, same degenerate
+  rules as pickup and gather. A degenerate attack by a stationary player already inside
+  `AttackRange` is allowed: no path, pending stays, period ticks begin on later `step`s.
+- **`AttackRange` governs hit resolution and whether the attacker needs to walk, never a
+  refusal to path.** Out of range → walk (and keep chasing). In range → hits may land. There is
+  no distance at which the server declines to engage a living target it knows.
+- **A player has at most one pending attack.** A second `attack` replaces the first (retarget).
+  Starting an attack clears a pending pickup and a pending gather. Starting a pickup or gather
+  clears a pending attack. A `move_to` clears a pending attack, because clicking the ground is
+  telling the server you wanted something else. Those three pending families stay mutually
+  exclusive: a player holds at most one of them.
+- **Engage is continuous until cancelled.** Cancellation is exactly: a `move_to`, a new
+  conflicting intent (another `attack`, or a `pickup` / `gather`), the attacker's death, or the
+  target's death (or the target leaving the world). Leaving `AttackRange` does **not** cancel;
+  it resumes the chase.
+- **No auto-retaliate in M5a.** Being hit does not invent an `attack` pending on the target.
+  The target engages only by sending its own `attack`. Revisitable the first time a fight feels
+  one-sided for lack of it.
+
+### Chase a moving target
+
+A ground item and a tree stay put; a player does not. While a pending attack is live and the
+attacker is outside `AttackRange` of the target, each `step` (after movement) re-paths the
+attacker toward the target's **current** position with the ordinary path helpers. That is the
+chase. When the attacker is inside `AttackRange` and still walking, the server assigns a
+one-element halt path at the attacker's current position so the walk does not carry them back
+out before the next hit — the same "halt here" tool pickup already uses when an item vanishes.
+
+`AttackRange` is not coupled to `WalkSpeed * tick_ms` by a silent margin the way an early
+pickup carve-out was. Path assignment keys on the ordinary minimum path length; range keys only
+the hit / halt decision.
+
+### Hits
+
+Hits resolve inside the tick loop, in `step`, after movement has advanced, on the state-owning
+goroutine — the same transaction boundary pickup and gather use.
+
+- **Period ticks accumulate only while the attacker is within `AttackRange` of a living
+  target** and still has that player as its pending attack. Out-of-range ticks do not advance
+  the counter and do not reset it (the counter **pauses**; leaving range is not a cancel).
+- **When the counter reaches `AttackPeriodTicks`, the server deals `AttackDamage` once**,
+  clamps the target's HP at zero, resets the counter to 0, broadcasts one `hp` restatement for
+  the target, and leaves the pending attack in place so the next period can fire. The first hit
+  therefore cannot land on the first in-range tick when `AttackPeriodTicks` is greater than
+  zero, matching gather's duration rule.
+- **Damage is constant.** Worn equipment is not consulted. There is no accuracy roll.
+- **Same-tick mutual hits are ordered by player join order**, exactly as contested pickup and
+  contested gather iterate `order` inside `step`. The first attacker in join order whose period
+  matures applies damage first; a target that reaches 0 HP in that pass cancels every pending
+  attack that named them before a later attacker in the same pass can hit a corpse.
+
+### Death
+
+**HP 0 is dead.** The body stays in the world at its last position; there is no `despawn` for
+death. The server broadcasts the `hp` restatement that carried `hp: 0`, clears that player's
+pending pickup, gather, and attack, and clears every other player's pending attack that named
+them.
+
+**A dead player refuses every ordinary intent**: `move_to`, `pickup`, `drop`, `equip`,
+`unequip`, `gather`, `use`, and `attack`. Each refusal is one `error` naming that intent and a
+GAMELOG rejection with reason `dead`. The bag and worn slots are untouched. **`respawn` is the
+only intent a dead player may have applied.**
+
+There is no auto-respawn timer. Death ends only on a successful `respawn`.
+
+### `respawn`
+
+`respawn` is immediate. No walk, no pending action.
+
+- **Accepted only when the player is dead** (current HP is 0). Otherwise refused with `error`
+  naming `respawn` and reason `not_dead`.
+- On success: current HP becomes `MaxHP`, position becomes the join spawn (`spawnX`, `spawnZ`,
+  the same point a fresh join uses), any residual path is cleared, a one-element halt `path` at
+  that spawn is broadcast so every client moves the body without a second snapshot format, and
+  one `hp` restatement with full HP is broadcast. GAMELOG records the respawn.
+- Inventory and equipment are unchanged. Nothing is dropped on death in M5a.
+
+### Refusals on `attack` receipt
+
+The server answers with `error` naming `attack`, and sets no pending attack, when:
+
+- `player` is not a live player id (`unknown_player`) — stale and fabricated are one case, as
+  with unknown items and nodes
+- `player` is the attacker's own id (`self`)
+- the target's current HP is 0 (`target_dead`)
+- the attacker is dead (`dead`)
+
+A suspended target is still in the world and may be engaged; suspension is not death.
+
+### Suspension and combat
+
+**A suspended player keeps HP, pending attack, and in-flight paths exactly as it keeps its
+bag.** The tick loop still advances the body, still resolves in-range hit periods against a
+live target, and still applies damage (broadcast `hp`, including to everyone else) while the
+socket is gone; frames addressed to the suspended player are dropped until resume. On resume,
+`welcome.players[]` restates every live HP, including its own. Combat must not assume
+`conn != nil` when resolving pending attacks or broadcasting.
+
+### Public HP and observers
+
+Anyone who can see a player can see that player's HP: `welcome`, `spawn`, and every `hp`
+restatement are broadcasts (or join-scoped world restatements). Private restatements stay
+`inventory` and `equipment` only.
+
+### Log vocabulary. **M5a**
+
+| Event | Fields | When |
+|---|---|---|
+| `attack` | `player`, `target`, `seq` | an `attack` intent was accepted (pending set) |
+| `attack_rejected` | `player`, `reason`, `detail`, `re` | an `attack` refused on receipt |
+| `attack_hit` | `player`, `target`, `damage`, `target_hp` | one period matured and damage applied |
+| `attack_cancelled` | `player`, `target`, `cause` | pending attack cleared without a kill |
+| `attack_lost` | `player`, `target` | pending attack cleared because the target died or left the world |
+| `death` | `player`, `killer` | a player's HP reached 0 (`killer` omitted when death had no hitting player) |
+| `respawn` | `player`, `seq` | one completed respawn |
+| `respawn_rejected` | `player`, `reason`, `detail`, `re` | a `respawn` refused on receipt |
+
+`attack_rejected.reason` is one of `unknown_player`, `self`, `target_dead`, or `dead`.
+`respawn_rejected.reason` is `not_dead`.
+
+`attack_cancelled.cause` is one of `move_to`, `pickup`, `gather`, `replaced`, or
+`attacker_died`. `replaced` means a new `attack` superseded the old one. Target death uses
+`attack_lost`, not `attack_cancelled`.
+
+`seq` rides on `attack` and on successful `respawn` when the frame carried one and is omitted
+when it did not, which is *Sequence numbers*' rule extended to these two. The `_rejected`
+events carry `refuse`'s ordinary field set, exactly as `gather_rejected` does.
+
+`attack_hit.target_hp` is the target's current HP **after** the hit, so a reader of the event
+log does not have to reconstruct the clamp. `death` is logged in the same tick as the hit that
+produced it, after that hit.
+
+### Ordering note for the join step. **M5a**
+
+No new frame is inserted into the atomic welcome step for HP. Public HP arrives inside
+`welcome.players` (and inside `spawn` for everyone else). Private `inventory` and `equipment`
+remain the trailing frames of the join, unchanged.
+
+### Deliberately absent (combat). **M5a**
+
+Named so nobody adds them thinking they were forgotten.
+
+- No weapon damage tables, no defence, no prayer, no NPC targets.
+- No auto-retaliate (revisitable).
+- No death loot, no skull, no safe-zone rules.
+- No damage-delta wire message; HP changes are restatements only.
+- No `engage` / `disengage` client-visible pending frames; pending attack is server state.
+- No client UI contract under **M5a** markers.
+- No auto-respawn timer. **`respawn` is the only way back.**
 
 ## Deliberately absent
 

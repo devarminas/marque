@@ -109,6 +109,7 @@ func (w *World) gather(p *player, msg mnet.Gather, seq mnet.Seq) {
 
 	w.cancelGather(p)
 	p.pending = 0
+	w.cancelAttack(p, CauseGather)
 	p.gatherNode = n.id
 	p.gatherProgress = 0
 	w.log.Event(w.tick, EvGather, withSeq(playerNodeFields(p.id, n.id), seq))

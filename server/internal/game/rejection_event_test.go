@@ -10,6 +10,7 @@ func TestEveryClientMessageHasItsOwnRejectionEvent(t *testing.T) {
 	seen := map[string]string{}
 	for _, m := range []mnet.ClientMessage{
 		mnet.MoveTo{}, mnet.Pickup{}, mnet.Drop{}, mnet.Equip{}, mnet.Unequip{}, mnet.Gather{}, mnet.Use{},
+		mnet.Attack{}, mnet.Respawn{},
 	} {
 		ev := rejectionEvent(m.Name())
 		if prior, dup := seen[ev]; dup {
@@ -28,5 +29,5 @@ func TestAnUnknownIntentNameHasNoQuietRejectionEvent(t *testing.T) {
 			t.Fatal("rejectionEvent accepted an intent name it does not know")
 		}
 	}()
-	rejectionEvent("attack")
+	rejectionEvent("teleport")
 }
