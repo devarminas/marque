@@ -25,9 +25,10 @@ client panel is M3b onward and nothing under an **M3a** marker describes it.
 
 **M4 is in progress.** **M4a** is the server half of resource nodes and gathering and is shipped
 with this file: the third entity family, `gather`, node restatement frames, axe gate, deplete
-and respawn, and contested first-completer-wins. A marker reading plain **M4** is reserved.
-Craft and the client draw of nodes are later units and nothing under an **M4a** marker
-describes them.
+and respawn, and contested first-completer-wins. **M4c** is the server half of one craft recipe
+and is shipped with this file: the `use` intent and logs→sticks. A marker reading plain **M4**
+is reserved. The client draw of nodes is a later unit and nothing under an **M4a** or **M4c**
+marker describes it.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -240,7 +241,7 @@ set of the numbers it has seen.
 - **`last_seq` is per player, not per connection.** It is 0 at a fresh join, it survives
   suspension and resume because the player does (see *When the connection dies*), and it dies
   with the player.
-- **`move_to`, `pickup` and `drop` log events carry `seq` when the frame did**, and omit the
+- **`move_to`, `pickup`, `drop` and `use` log events carry `seq` when the frame did**, and omit the
   field when it did not. That is what lets a reader of the event log tell a first application
   from a retry without joining two lines together.
 
@@ -322,6 +323,15 @@ A name it does not have is refused, and so is one it has but that holds nothing.
 
 A request to chop a resource node. `node` is a node id, which is **not** a player id and **not**
 an item id; see *Entity naming*. Semantics are in *Gathering*.
+
+### `use`. **M4c**
+
+    {"use":{"slot":3,"on":3}}
+
+A request to use the item in bag slot `slot` on the item in bag slot `on`. Both are bag indices,
+the same space `drop.slot` and `equip.slot` use, and for the same reason: the client names
+positions in its cached inventory and the server looks up what is actually there. Semantics are
+in *Crafting*.
 
 ## Messages, server to client
 
@@ -503,7 +513,7 @@ have to conjure the body from its own intent, which is the client inventing stat
 never announced.
 
 `kind` is an item type name. M1 ships exactly one, `acorn`. **M3a** adds `axe`. **M4a** adds
-`logs`, the gather yield. **A client that does not know a `kind` renders it magenta and keeps
+`logs`, the gather yield. **M4c** adds `sticks`, the craft product. **A client that does not know a `kind` renders it magenta and keeps
 going** (`NOTES.md`, the palette), because a missing asset must scream rather than render
 nothing, and because unknown kinds are how content is added without a client release.
 
@@ -949,6 +959,47 @@ any other pending gather for that node then refuses/empties with no second `logs
 
 `gather_rejected.reason` is one of `unknown_node`, `node_depleted`, or `needs_axe`.
 
+## Crafting. **M4c**
+
+M4c ships exactly one recipe: consume one `logs` and produce one `sticks`. **M4a** already
+named `logs` as the gather yield; **M4c** adds `sticks` as a kind. Nothing stacks; one item per
+slot still holds.
+
+### `use` is immediate self-use
+
+- **`use` resolves on receipt.** No walk, no pending, no duration. Unlike `gather` and
+  `pickup`, arriving is not part of the action.
+- **M4c is self-use only.** `on` must equal `slot`. The one recipe converts the `logs` in that
+  bag slot into `sticks`. A frame whose `on` differs from `slot` is refused as `no_recipe`; the
+  bag is unchanged. Later units may teach `on` a second slot; this one does not.
+- **Consume then produce, in one Store transaction.** The `logs` leave `slot`. One `sticks`
+  lands in the **lowest free bag slot**. Room is checked **before** the consume: a full bag
+  refuses with `inventory_full` even though emptying the logs slot would free space. That keeps
+  "no room for sticks" a real refusal for a one-for-one recipe, matching `unequip`'s full-bag
+  path rather than inventing an in-place rewrite. Revisitable when a recipe should replace
+  in place.
+- **One `inventory` restatement** on success. Nothing is broadcast: the bag is private.
+- **Duplicate `seq` does not craft twice**, under *Sequence numbers*' ordinary high-water mark.
+  A refused `use` still consumes a valid `seq`.
+
+### Refusals
+
+The server answers with `error` naming `use`, and the bag is exactly as it was, when:
+
+- `slot` or `on` is outside `0 .. inventory.size-1` (`no_such_slot`)
+- `slot` is empty (`empty_slot`)
+- `on` ≠ `slot`, or `slot` holds anything other than `logs` (`no_recipe`)
+- the bag has no free slot for `sticks` (`inventory_full`)
+
+### Log vocabulary. **M4c**
+
+| Event | Fields | When |
+|---|---|---|
+| `use` | `player`, `slot`, `on`, `from`, `to`, `seq` | one completed craft (`from` is the consumed kind, `to` the produced kind; `seq` when the frame carried one) |
+| `use_rejected` | `player`, `reason`, `detail`, `re` | a `use` refused on receipt |
+
+`use_rejected.reason` is one of `no_such_slot`, `empty_slot`, `no_recipe`, or `inventory_full`.
+
 ## Ordering and the join race
 
 Getting this wrong produces a duplicated avatar or a client that never learns about a player,
@@ -1343,10 +1394,11 @@ Named so nobody adds them thinking they were forgotten.
   anyone who can read the wire can resume as you. That is the same standard as the ids above,
   which are sequential and unverified, and it is stated here so nobody mistakes the token for a
   login.
-- No banking, trading, crafting, or item stacking. One item per slot, and, until **M3a**, the
-  ground as the only container outside a player's own inventory. M3a adds worn slots as a second
-  one and changes nothing else on this line: still no stacking, still no trading, and no
-  container anybody but its owner can address.
+- No banking, trading, or item stacking. One item per slot, and, until **M3a**, the ground as
+  the only container outside a player's own inventory. M3a adds worn slots as a second one.
+  **M4c** adds one self-use craft (`logs`→`sticks`) and changes nothing else on this line: still
+  no stacking, still no trading, still no container anybody but its owner can address, and no
+  second recipe.
 - No item ownership, drop timers, or per-player visibility. RuneScape hides a drop from everyone
   but the dropper for a minute; Marque does not, because M1 has no combat and no loot to
   protect, and a hidden item cannot be contested by two clients. **Revisitable**, and the first

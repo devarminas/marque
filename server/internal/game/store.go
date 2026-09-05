@@ -57,6 +57,8 @@ var (
 	ErrNoSuchWornSlot = errors.New("game: no such worn slot")
 	// ErrEmptyWornSlot: a worn slot this server has, holding nothing.
 	ErrEmptyWornSlot = errors.New("game: worn slot is empty")
+	// ErrNoRecipe: the slot's kind is not the consume kind a craft asked for.
+	ErrNoRecipe = errors.New("game: no matching craft recipe")
 )
 
 // GroundItem is one item lying in the world.
@@ -95,6 +97,15 @@ type Unequipped struct {
 	Worn mnet.EquipSlot
 	Kind string
 	Bag  int
+}
+
+// Crafted records one craft: Consume left bag slot From, Produce landed in bag
+// slot Into.
+type Crafted struct {
+	From    int
+	Into    int
+	Consume string
+	Produce string
 }
 
 // Store holds every item location in the game: what is on the ground and what
@@ -146,6 +157,12 @@ type Store interface {
 	// lowest free slot of their inventory, completely or not at all. Fails with
 	// ErrNoSuchPlayer, ErrNoSuchWornSlot, ErrEmptyWornSlot, or ErrInventoryFull.
 	UnequipWornSlot(player mnet.PlayerID, slot mnet.EquipSlot) (Unequipped, error)
+
+	// CraftInventorySlot consumes consumeKind from slot and places produceKind
+	// in the lowest free bag slot, completely or not at all. Room is checked
+	// before the consume (PROTOCOL.md, "Crafting"). Fails with ErrNoSuchPlayer,
+	// ErrNoSuchSlot, ErrEmptySlot, ErrNoRecipe, or ErrInventoryFull.
+	CraftInventorySlot(player mnet.PlayerID, slot int, consumeKind, produceKind string) (Crafted, error)
 
 	// Inventory lists one player's occupied slots, ascending by index. An
 	// unknown player returns nil.
@@ -336,6 +353,38 @@ func (s *memStore) UnequipWornSlot(player mnet.PlayerID, slot mnet.EquipSlot) (U
 	held.bag[index] = kind
 
 	return Unequipped{Worn: slot, Kind: kind, Bag: index}, nil
+}
+
+func (s *memStore) CraftInventorySlot(player mnet.PlayerID, slot int, consumeKind, produceKind string) (Crafted, error) {
+	if consumeKind == "" || produceKind == "" {
+		panic(fmt.Sprintf("game: craft with empty kind for player %d", player))
+	}
+	held, known := s.held[player]
+	if !known {
+		return Crafted{}, fmt.Errorf("craft slot %d for player %d: %w", slot, player, ErrNoSuchPlayer)
+	}
+	if slot < 0 || slot >= InventorySize {
+		return Crafted{}, fmt.Errorf("craft slot %d for player %d: %w", slot, player, ErrNoSuchSlot)
+	}
+	kind := held.bag[slot]
+	if kind == "" {
+		return Crafted{}, fmt.Errorf("craft slot %d for player %d: %w", slot, player, ErrEmptySlot)
+	}
+	if kind != consumeKind {
+		return Crafted{}, fmt.Errorf("craft %q from slot %d for player %d: %w", kind, slot, player, ErrNoRecipe)
+	}
+	if _, room := held.free(); !room {
+		return Crafted{}, fmt.Errorf("craft slot %d for player %d: %w", slot, player, ErrInventoryFull)
+	}
+
+	held.bag[slot] = ""
+	index, room := held.free()
+	if !room {
+		panic(fmt.Sprintf("game: craft freed slot %d for player %d and still found no room", slot, player))
+	}
+	held.bag[index] = produceKind
+
+	return Crafted{From: slot, Into: index, Consume: consumeKind, Produce: produceKind}, nil
 }
 
 func (s *memStore) Inventory(player mnet.PlayerID) []Slot {

@@ -136,6 +136,10 @@ const (
 	EvNodeDepleted = "node_depleted"
 
 	EvNodeRespawned = "node_respawned"
+
+	EvUse = "use"
+
+	EvUseRejected = "use_rejected"
 )
 
 // Transport is the world's view of the network: a stream of connection events.
@@ -539,6 +543,8 @@ func (w *World) handleFrame(ev mnet.Event) {
 		w.unequip(p, msg, ev.Seq)
 	case mnet.Gather:
 		w.gather(p, msg, ev.Seq)
+	case mnet.Use:
+		w.use(p, msg, ev.Seq)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -580,6 +586,8 @@ func rejectionEvent(re string) string {
 		return EvUnequipRejected
 	case mnet.MsgGather:
 		return EvGatherRejected
+	case mnet.MsgUse:
+		return EvUseRejected
 	default:
 		panic(fmt.Sprintf("game: no rejection event for %q", re))
 	}
