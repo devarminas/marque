@@ -74,6 +74,7 @@ var _desired_yaw := 0.0
 ## The scene's animation mixer, driving the Knight instanced below it.
 @onready var _animation: AnimationPlayer = $AnimationPlayer
 @onready var _hp_label: Label3D = $HpLabel
+@onready var _selection_ring: MeshInstance3D = $SelectionRing
 
 
 ## Binds this avatar to a player id and to the connection's tick length.
@@ -108,6 +109,16 @@ func clear_hit_points() -> void:
 		return
 	_hp_label.text = ""
 	_hp_label.visible = false
+
+
+func set_selected(on: bool) -> void:
+	if _selection_ring == null:
+		return
+	_selection_ring.visible = on
+
+
+func is_selected() -> bool:
+	return _selection_ring != null and _selection_ring.visible
 
 
 ## Adopts a [code]path[/code] message. Replaces any current path outright.

@@ -344,7 +344,7 @@ func _click_at(position: Vector2) -> void:
 	var viewport := _root.get_viewport()
 	for pressed: bool in [true, false]:
 		var event := InputEventMouseButton.new()
-		event.button_index = MOUSE_BUTTON_LEFT
+		event.button_index = MOUSE_BUTTON_RIGHT
 		event.pressed = pressed
 		event.position = position
 		viewport.push_input(event)
