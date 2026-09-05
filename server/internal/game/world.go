@@ -11,6 +11,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/devarminas/marque/server/internal/abilitydef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
@@ -160,6 +161,12 @@ const (
 	EvManaSpend = "mana_spend"
 
 	EvManaRefund = "mana_refund"
+
+	EvCast = "cast"
+
+	EvCastRejected = "cast_rejected"
+
+	EvCastEffect = "cast_effect"
 )
 
 // Transport is the world's view of the network: a stream of connection events.
@@ -227,6 +234,8 @@ type World struct {
 
 	joinKit []string
 
+	abilities *abilitydef.Catalog
+
 	players map[mnet.PlayerID]*player
 
 	byConn map[*mnet.Conn]*player
@@ -265,6 +274,11 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		byConn:      make(map[*mnet.Conn]*player),
 		bySession:   make(map[string]*player),
 	}
+}
+
+// SetAbilities installs the shared ability catalog used by cast. Nil rejects every cast.
+func (w *World) SetAbilities(c *abilitydef.Catalog) {
+	w.abilities = c
 }
 
 // Run drives the world until ctx is cancelled. It must be called on exactly one
@@ -604,6 +618,8 @@ func (w *World) handleFrame(ev mnet.Event) {
 		w.attack(p, msg, ev.Seq)
 	case mnet.Respawn:
 		w.respawnPlayer(p, ev.Seq)
+	case mnet.Cast:
+		w.cast(p, msg, ev.Seq)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -651,6 +667,8 @@ func rejectionEvent(re string) string {
 		return EvAttackRejected
 	case mnet.MsgRespawn:
 		return EvRespawnRejected
+	case mnet.MsgCast:
+		return EvCastRejected
 	default:
 		panic(fmt.Sprintf("game: no rejection event for %q", re))
 	}

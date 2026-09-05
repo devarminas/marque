@@ -237,6 +237,7 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 		{mnet.MsgUse, `{"use":{"slot":3,"on":3}}`},
 		{mnet.MsgAttack, `{"attack":{"player":2}}`},
 		{mnet.MsgRespawn, `{"respawn":{}}`},
+		{mnet.MsgCast, `{"cast":{"ability":"heal","player":1}}`},
 	}
 
 	for _, tc := range cases {

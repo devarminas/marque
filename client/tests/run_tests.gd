@@ -81,6 +81,7 @@ const SCENE_SUITES: Array = [
 	{"name": "equipment", "scene": "res://tests/test_equipment.tscn"},
 	{"name": "equipment wiring", "scene": "res://tests/test_equipment_wiring.tscn"},
 	{"name": "hp", "scene": "res://tests/test_hp.tscn"},
+	{"name": "hotbar", "scene": "res://tests/test_hotbar.tscn"},
 	# The two heartbeat suites feed main.tscn scripted frames like the two above,
 	# so they connect to nothing. They are the only suites that spend real
 	# seconds waiting on a deadline, and each caps Engine.max_fps for its own

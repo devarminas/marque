@@ -37,13 +37,12 @@ shaped like pickup and gather, constant-damage hits on a tick period, death at H
 and the death/respawn UI are later units and nothing under an **M5a** marker describes them.
 
 **M6 is in progress.** **M6a** is the shared ability content table and the `cast` ability-id
-field on the wire. Ability stats live in `shared/abilities.json` only; casting runtime, mana
-spend at cast time, hotbar UI, and VFX are later M6 units and nothing under an **M6a** marker
-describes them. **M6b** is the mana pool and its restatement: `mana` / `max_mana` on player
-records, the live `mana` frame, join/respawn fill to `MaxMana`, and spend/refund hooks for the
-later cast unit. **M6c** is client tab targeting: left-click selects a living remote player
+field on the wire. Ability stats live in `shared/abilities.json` only. **M6b** is the mana pool
+and its restatement. **M6c** is client tab targeting: left-click selects a living remote player
 with local chrome and does not send `attack`; Escape clears the selection; ground clicks move
-without clearing it. A marker reading plain **M6** is reserved.
+without clearing it. **M6d** is center hotbar chrome and server cast resolution from that JSON
+(mana spend, heal/damage, refusals). VFX polish is later. A marker reading plain **M6** is
+reserved.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -366,18 +365,20 @@ Semantics are in *Combat*.
 `seq` may ride on either body under *Sequence numbers*, exactly as it does on `pickup` and
 `gather`.
 
-### `cast`. **M6a**
+### `cast`. **M6a** / **M6d**
 
-    {"cast":{"ability":"heal"}}
+    {"cast":{"ability":"heal","player":1}}
     {"cast":{"ability":"fireball","player":2}}
 
 A request to cast an ability. `ability` is a string id from the shared content table
 `shared/abilities.json` (the only ability content source; both client and server load that
-file). It is **not** a player id, item id, or node id.
+file). It is **not** a player id, item id, or node id. Ability stats (mana cost, range,
+effect amount) never ride on this intent; unknown fields such as a client-authored `damage`
+are ignored under compatibility rule 2 and never applied.
 
-Optional `player` names another player when the ability's target rule needs one. **M6a** freezes
-the field names and the content source only. Applying the cast, spending mana, cooldowns, and
-effects are later M6 units.
+`player` names the target player id. **M6d** requires it for `friendly` and `hostile` target
+rules. Omitted or zero is `no_target` when the ability needs one. **M6a** froze the field names
+and the content source; **M6d** applies the cast.
 
 `seq` may ride on the body under *Sequence numbers*, exactly as it does on `attack`.
 
@@ -1684,6 +1685,43 @@ Wire `cast.ability` names an id from that table. M6a does not apply casts.
 - No cast application, mana spend, cooldown clocks, or effect resolution.
 - No hotbar chrome, VFX, or client click-to-cast binding under **M6a** markers.
 - No second ability table in Go or GDScript.
+
+## Cast resolution. **M6d**
+
+The server looks up `cast.ability` in the shared catalog and applies that row only.
+
+1. Dead casters are refused (`dead`).
+2. Unknown ability ids are refused (`unknown_ability`).
+3. Target rule from JSON:
+   - `self`: caster only; a named `player` other than the caster is `wrong_target`.
+   - `friendly`: until factions exist, **only the caster** is friendly. Missing `player` is
+     `no_target`. Another living player is `wrong_target` (not healed).
+   - `hostile`: another living player. Missing `player` is `no_target`. Self is
+     `wrong_target`. Dead / unknown ids reuse `target_dead` / `unknown_player`.
+4. Range: distance on the ground plane must be `<=` the ability's `range`. Self casts skip the
+   check. Out of range is `out_of_range` with **no mana spend and no HP change** (no walk-in).
+5. Mana: spend `mana_cost` from the JSON via the M6b helper. Failure is `insufficient_mana`
+   with no effect.
+6. Effect: `heal` raises target HP by `effect.amount` capped at `MaxHP`; `damage` lowers it
+   floored at 0 and may kill. Amounts come from JSON only. Success broadcasts `mana` (from the
+   spend) and `hp` for the target.
+
+A refused cast sends one `error` to the caster, logs `cast_rejected`, and changes nothing.
+Success logs `cast` then `cast_effect`. Cooldown clocks are still absent.
+
+### Hotbar. **M6d**
+
+The client authors a center-bottom hotbar with two live slots driven by `ui.hotbar_slot` and
+`ui.color` from the same JSON (green heal, red fireball). Activating a slot (click or keys 1/2)
+sends `cast` with the ability id and the current selected player id, or the local player id for
+friendly/self abilities. The client never predicts HP or mana from the cast.
+
+### Deliberately absent (cast). **M6d**
+
+- No walk-into-range pending cast (OOR refuses immediately).
+- No cooldown enforcement, no VFX, no full 12-slot fill.
+- No factions beyond self-friendly / other-hostile.
+- No client-authored damage, heal, or mana fields on `cast`.
 
 ## Tab targeting. **M6c**
 

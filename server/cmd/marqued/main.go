@@ -97,6 +97,7 @@ func run() error {
 	log := gamelog.New(os.Stdout, *enableLog)
 	hub := mnet.NewHub()
 	world := game.NewWorld(hub, log, game.NewMemoryStore(), game.ResumeGraceTicks, game.DefaultJoinKit)
+	world.SetAbilities(abilities)
 
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {

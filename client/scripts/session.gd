@@ -61,6 +61,8 @@ const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
+const HotbarScript := preload("res://scripts/hotbar.gd")
+const AbilityDefs := preload("res://scripts/ability_defs.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 
 ## Command-line flag naming the websocket URL, as `--server <url>` after the
@@ -125,6 +127,9 @@ signal gather_requested(node_id: int)
 ## Emitted whenever a right-click on another player is forwarded as an `attack`. **M5b.**
 signal attack_requested(player_id: int)
 
+## Emitted whenever a hotbar slot is forwarded as `cast`. **M6d.**
+signal cast_requested(ability_id: String, target_id: int)
+
 ## Emitted when the client tab-target changes. [param player_id] is 0 when cleared. **M6c.**
 signal selection_changed(player_id: int)
 
@@ -175,6 +180,7 @@ signal respawn_requested()
 @export var equipment_panel: Node
 @export var hp_hud: Node
 @export var death_overlay: Node
+@export var hotbar: Node
 
 var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
@@ -182,6 +188,7 @@ var _panel: InventoryPanelScript = null
 var _equipment: EquipmentPanelScript = null
 var _hp_hud: HpHudScript = null
 var _death_overlay: DeathOverlayScript = null
+var _hotbar: HotbarScript = null
 var _hp := {}
 var _mana := {}
 var _local: PlayerAvatarScript = null
@@ -286,6 +293,11 @@ func _ready() -> void:
 		push_error("Session.death_overlay must point at a node running death_overlay.gd")
 	else:
 		_death_overlay.respawn_requested.connect(_on_respawn_requested)
+	_hotbar = hotbar as HotbarScript
+	if _hotbar == null:
+		push_error("Session.hotbar must point at a node running hotbar.gd")
+	else:
+		_hotbar.ability_activated.connect(_on_hotbar_ability)
 
 	var url := _server_from_command_line()
 	if not url.is_empty():
@@ -465,6 +477,39 @@ func request_attack(player_id: int) -> void:
 		push_warning("session: attack of player %d dropped, the socket is not open" % player_id)
 		return
 	_net.send_attack(player_id)
+
+
+## Friendly/self abilities target this client. Hostile abilities use the tab
+## selection. Stats never leave the client: only ability id and target id. **M6d.**
+func request_cast(ability_id: String) -> void:
+	if ability_id.is_empty():
+		return
+	var target_id := _cast_target_for(ability_id)
+	cast_requested.emit(ability_id, target_id)
+	if _net == null or not _net.is_open():
+		push_warning("session: cast %s dropped, the socket is not open" % ability_id)
+		return
+	if target_id < 1:
+		_net.send_cast(ability_id, 0)
+		return
+	_net.send_cast(ability_id, target_id)
+
+
+func _on_hotbar_ability(ability_id: String) -> void:
+	request_cast(ability_id)
+
+
+func _cast_target_for(ability_id: String) -> int:
+	var catalog: Dictionary = AbilityDefs._empty_catalog()
+	if _hotbar != null:
+		catalog = _hotbar.catalog()
+	var ability: Variant = AbilityDefs.get_ability(catalog, ability_id)
+	if typeof(ability) != TYPE_DICTIONARY:
+		return _selected_player_id
+	var target_rule := String(ability.get("target", ""))
+	if target_rule == AbilityDefs.TARGET_FRIENDLY or target_rule == AbilityDefs.TARGET_SELF:
+		return _you
+	return _selected_player_id
 
 
 ## Sends `drop` for an inventory slot, as a click on that slot would. **M1.**
