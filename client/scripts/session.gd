@@ -122,8 +122,11 @@ signal pickup_requested(item_id: int)
 ## Emitted whenever a click on a resource node is forwarded as a `gather`. **M4b.**
 signal gather_requested(node_id: int)
 
-## Emitted whenever a click on another player is forwarded as an `attack`. **M5b.**
+## Emitted whenever a right-click on another player is forwarded as an `attack`. **M5b.**
 signal attack_requested(player_id: int)
+
+## Emitted when the client tab-target changes. [param player_id] is 0 when cleared. **M6c.**
+signal selection_changed(player_id: int)
 
 ## Emitted whenever a click on an occupied inventory slot is forwarded as a
 ## `drop`. **M1.** Left-click no longer drops; callers use [method request_drop]
@@ -208,6 +211,8 @@ var _items := {}
 var _nodes := {}
 ## Bag slot held for a pending use-on, or -1 when idle. **M4d.**
 var _use_from := -1
+## Selected living remote player id, or 0 when none. **M6c.**
+var _selected_player_id := 0
 
 
 func _ready() -> void:
@@ -256,6 +261,7 @@ func _ready() -> void:
 		_picker.item_clicked.connect(_on_item_clicked)
 		_picker.node_clicked.connect(_on_node_clicked)
 		_picker.player_clicked.connect(_on_player_clicked)
+		_picker.player_attack_clicked.connect(_on_player_attack_clicked)
 
 	_panel = inventory_panel as InventoryPanelScript
 	if _panel == null:
@@ -541,13 +547,48 @@ func has_pending_use() -> bool:
 	return _use_from >= 0
 
 
-## Escape cancels a pending use-on even while a slot holds focus. **M4d.**
+## The currently selected remote player id, or 0 when none. **M6c.**
+func selected_player_id() -> int:
+	return _selected_player_id
+
+
+## Selects a living remote player. Refuses self, unknown ids, and HP 0. **M6c.**
+func select_player(player_id: int) -> bool:
+	if player_id == _you or player_id <= 0:
+		return false
+	if not _avatars.has(player_id):
+		return false
+	var pair := hit_points_for(player_id)
+	if pair.x == 0:
+		return false
+	if _selected_player_id == player_id:
+		_sync_selection_chrome()
+		return true
+	_selected_player_id = player_id
+	_sync_selection_chrome()
+	selection_changed.emit(_selected_player_id)
+	return true
+
+
+## Clears the tab target. Returns true when there was one. **M6c.**
+func clear_selection() -> bool:
+	if _selected_player_id == 0:
+		return false
+	_selected_player_id = 0
+	_sync_selection_chrome()
+	selection_changed.emit(0)
+	return true
+
+
+## Escape cancels a pending use-on first, then clears the tab target. **M4d** / **M6c.**
 func _input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
-	if not clear_use_selection():
+	if clear_use_selection():
+		get_viewport().set_input_as_handled()
 		return
-	get_viewport().set_input_as_handled()
+	if clear_selection():
+		get_viewport().set_input_as_handled()
 
 
 ## `welcome`. The whole world, restated.
@@ -957,10 +998,24 @@ func _on_node_clicked(body: Node3D) -> void:
 	request_gather(id)
 
 
-## A left click that met a player body before it met the ground. **M5b.**
-##
-## The id comes from the registry, not from the node, same rule as pickup.
+## A left click that met a player body before it met the ground. **M6c.**
 func _on_player_clicked(body: Node3D) -> void:
+	var avatar := body as PlayerAvatarScript
+	if avatar == null:
+		push_error("session: the picker reported a click on %s, which is not a player avatar" % body)
+		return
+	var id := _id_of_avatar_body(avatar)
+	if id == 0:
+		push_warning(
+			"session: clicked a player body this session has no registry entry for (%s); ignoring"
+			% avatar.name
+		)
+		return
+	select_player(id)
+
+
+## A right click that met a player body. **M5b.**
+func _on_player_attack_clicked(body: Node3D) -> void:
 	var avatar := body as PlayerAvatarScript
 	if avatar == null:
 		push_error("session: the picker reported a click on %s, which is not a player avatar" % body)
@@ -1072,6 +1127,8 @@ func _ensure_avatar(id: int) -> PlayerAvatarScript:
 ## Drops one body. The local one is never freed — it is authored content and the
 ## camera follows it — so it is only unbound.
 func _forget(id: int) -> void:
+	if id == _selected_player_id:
+		clear_selection()
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar == null:
 		return
@@ -1213,12 +1270,22 @@ func _apply_hit_points(id: int, hp: int, max_hp: int) -> void:
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar != null:
 		avatar.set_hit_points(hp, max_hp)
+	if id == _selected_player_id and hp == 0:
+		clear_selection()
 	if id != _you:
 		return
 	if _hp_hud != null:
 		_hp_hud.apply(hp, max_hp)
 	if _death_overlay != null:
 		_death_overlay.visible = hp == 0
+
+
+func _sync_selection_chrome() -> void:
+	for id: int in _avatars:
+		var avatar: PlayerAvatarScript = _avatars[id]
+		if avatar == null:
+			continue
+		avatar.set_selected(id == _selected_player_id)
 
 
 func _apply_mana(id: int, mana: int, max_mana: int) -> void:

@@ -26,8 +26,11 @@ signal item_clicked(item: Node3D)
 ## Emitted on a left click whose ray meets a resource node first. **M4b.**
 signal node_clicked(resource_node: Node3D)
 
-## Emitted on a left click whose ray meets a player body first. **M5b.**
+## Emitted on a left click whose ray meets a player body first. **M6c.**
 signal player_clicked(avatar: Node3D)
+
+## Emitted on a right click whose ray meets a player body first. **M5b.**
+signal player_attack_clicked(avatar: Node3D)
 
 enum Target {
 	NOTHING,
@@ -51,7 +54,14 @@ const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 
 func _unhandled_input(event: InputEvent) -> void:
 	var button := event as InputEventMouseButton
-	if button == null or button.button_index != MOUSE_BUTTON_LEFT or not button.pressed:
+	if button == null or not button.pressed:
+		return
+	if button.button_index == MOUSE_BUTTON_RIGHT:
+		var attack_pick := pick(button.position)
+		if attack_pick["target"] == Target.PLAYER:
+			player_attack_clicked.emit(attack_pick["player"])
+		return
+	if button.button_index != MOUSE_BUTTON_LEFT:
 		return
 	var picked := pick(button.position)
 	match picked["target"]:

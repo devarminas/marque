@@ -20,10 +20,10 @@ attacker click-engages the victim, walks in, lands period hits of 10 until HP
 
 ## How to get to it (user POV)
 
-- Walk away from the other player until you are outside melee range. Left-click
+- Walk away from the other player until you are outside melee range. Right-click
   their body: you path in and hit every `AttackPeriodTicks` for 10 damage until
-  they die. On death the overlay appears; press Respawn to return to full HP at
-  the join spawn, then move again.
+  they die. (Left-click only selects; it does not attack.) On death the overlay
+  appears; press Respawn to return to full HP at the join spawn, then move again.
 
 ## Driving it with scripts/combat_demo.ps1
 
@@ -58,7 +58,8 @@ client stdout/stderr logs, and `server.stdout.ndjson`.
 - **Both spawn stacked.** The victim must walk out of `AttackRange` before the
   attack click, or the walk-in claim is vacuous and the harness fails shot 1.
 - **Click the body, not `request_attack`.** The demo unprojects the remote
-  avatar and pushes a real left click through the picker.
+  avatar and pushes a real **right** click through the picker (left-click is
+  select-only after M6c).
 - **Kill takes wall time.** Ten period hits at 4 ticks × 150 ms, plus the walk,
   so the client timeout is 180 s. Do not treat a slow idle desktop as a hang
   until that budget expires.

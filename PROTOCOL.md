@@ -41,7 +41,9 @@ field on the wire. Ability stats live in `shared/abilities.json` only; casting r
 spend at cast time, hotbar UI, and VFX are later M6 units and nothing under an **M6a** marker
 describes them. **M6b** is the mana pool and its restatement: `mana` / `max_mana` on player
 records, the live `mana` frame, join/respawn fill to `MaxMana`, and spend/refund hooks for the
-later cast unit. A marker reading plain **M6** is reserved.
+later cast unit. **M6c** is client tab targeting: left-click selects a living remote player
+with local chrome and does not send `attack`; Escape clears the selection; ground clicks move
+without clearing it. A marker reading plain **M6** is reserved.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -1682,6 +1684,29 @@ Wire `cast.ability` names an id from that table. M6a does not apply casts.
 - No cast application, mana spend, cooldown clocks, or effect resolution.
 - No hotbar chrome, VFX, or client click-to-cast binding under **M6a** markers.
 - No second ability table in Go or GDScript.
+
+## Tab targeting. **M6c**
+
+Selection is client UX only. No `target` intent and no server mirror.
+
+- **Left-click** on a living remote player sets the local selection and draws selection chrome
+  on that avatar. It does **not** send `attack` and does not start a pending attack.
+- **Self** cannot be selected as a hostile damage target. There is no heal-self exception in
+  M6c.
+- **HP 0** bodies cannot be newly selected. A selected player that reaches HP 0 clears the
+  selection.
+- **Ground click** sends `move_to` only. Selection persists.
+- **Escape** (`ui_cancel`) clears the selection after it has cleared any pending inventory
+  use-on selection.
+- **Right-click** on a remote player still sends `attack` until M6f binds attack to a context
+  menu. That is a temporary carry of M5b engage, not a claim that right-click is the final
+  attack affordance.
+
+### Deliberately absent (tab targeting). **M6c**
+
+- No server-side selection, no `target` intent, no NPCs or combat dummies.
+- No hotbar, cast resolution, or damage prediction on select.
+- No Tab-key cycle yet (revisitable with M6 hotbar).
 
 ## Deliberately absent
 

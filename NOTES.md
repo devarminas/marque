@@ -389,3 +389,10 @@ management, Postgres behind `Store`.
   exists would mean touching every mutation twice.
 - Navmesh, A*, and funnel are one to two weeks that produce nothing playable, so a straight-line
   stub shipped first. The polyline protocol does not care where the points came from.
+
+### Tab targeting (M6c)
+
+Left-click on another living player selects them (yellow ring under the feet). Selection does
+not send `attack`. Escape clears the selection (after any pending inventory use-on). A ground
+click moves and leaves the selection alone. Self and corpses are not selectable as hostile
+targets. Right-click still engages attack until M6f.

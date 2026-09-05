@@ -32,6 +32,7 @@ const GroundItemScene := preload("res://scenes/ground_item.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
+const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
 ## The scripted world the screenshot is captured from. Driven here as well so
@@ -62,7 +63,7 @@ const ITEM_GROUND := Vector2(5.0, 8.0)
 ## the two click targets cannot steal each other.
 const NODE_GROUND := Vector2(-4.0, 6.0)
 
-## Where the remote player under the attack-click camera lies. Off item and node.
+## Where the remote player under the select-click camera lies. Off item and node.
 const REMOTE_GROUND := Vector2(6.0, -5.0)
 
 ## The item id the click resolves to, and the player id sharing its number.
@@ -117,6 +118,7 @@ var _move_to_intents := PackedVector2Array()
 var _pickup_intents := PackedInt32Array()
 var _gather_intents := PackedInt32Array()
 var _attack_intents := PackedInt32Array()
+var _selection_events := PackedInt32Array()
 var _drop_intents := PackedInt32Array()
 var _use_intents: Array[Vector2i] = []
 var _nodes_container: Node3D = null
@@ -163,6 +165,7 @@ func _ready() -> void:
 	_session.pickup_requested.connect(func(id: int) -> void: _pickup_intents.append(id))
 	_session.gather_requested.connect(func(id: int) -> void: _gather_intents.append(id))
 	_session.attack_requested.connect(func(id: int) -> void: _attack_intents.append(id))
+	_session.selection_changed.connect(func(id: int) -> void: _selection_events.append(id))
 	_session.drop_requested.connect(func(slot: int) -> void: _drop_intents.append(slot))
 	_session.use_requested.connect(
 		func(slot: int, on: int) -> void: _use_intents.append(Vector2i(slot, on))
@@ -202,9 +205,11 @@ func _ready() -> void:
 
 	await _build_the_player_click_world()
 	_test_the_picker_separates_a_player_from_the_ground()
-	await _test_a_click_on_a_remote_player_is_an_attack_and_not_a_move()
-	await _test_a_click_on_self_is_not_an_attack()
-	await _test_a_click_on_bare_ground_is_a_move_and_not_an_attack()
+	await _test_a_click_on_a_remote_player_selects_and_does_not_attack()
+	await _test_a_click_on_self_is_not_a_selection()
+	await _test_a_ground_click_moves_and_keeps_selection()
+	await _test_escape_clears_player_selection()
+	await _test_a_right_click_on_a_remote_player_is_an_attack()
 
 	await _test_clicking_an_occupied_slot_uses_it()
 	await _test_cancel_clears_use_selection()
@@ -775,7 +780,7 @@ func _build_the_player_click_world() -> void:
 	)
 	_check(
 		_session.avatar_for(REMOTE_PLAYER_ID) != null,
-		"the world holds remote player %d for the attack click tests" % REMOTE_PLAYER_ID,
+		"the world holds remote player %d for the select click tests" % REMOTE_PLAYER_ID,
 	)
 	_check(_remotes_container != null, "RemotePlayers container is authored")
 	_look_straight_down_at(REMOTE_GROUND)
@@ -801,23 +806,27 @@ func _test_the_picker_separates_a_player_from_the_ground() -> void:
 	)
 
 
-func _test_a_click_on_a_remote_player_is_an_attack_and_not_a_move() -> void:
+func _test_a_click_on_a_remote_player_selects_and_does_not_attack() -> void:
 	_watch()
 	await _left_click(_viewport_centre())
 	_check(
-		_attack_intents.size() == 1,
-		"a click on a remote player sends one attack, got %d" % _attack_intents.size(),
+		_session.selected_player_id() == REMOTE_PLAYER_ID,
+		"a left click on a remote player selects them, got %d" % _session.selected_player_id(),
 	)
 	_check(
-		_attack_intents.size() == 1 and _attack_intents[0] == REMOTE_PLAYER_ID,
-		"naming player %d, got %s" % [REMOTE_PLAYER_ID, _attack_intents],
+		_selection_events.size() == 1 and _selection_events[0] == REMOTE_PLAYER_ID,
+		"and emits selection_changed once, got %s" % [_selection_events],
 	)
+	var remote: PlayerAvatarScript = _session.avatar_for(REMOTE_PLAYER_ID)
+	_check(remote != null and remote.is_selected(), "with the selection ring visible")
+	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
 	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
 	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
 
 
-func _test_a_click_on_self_is_not_an_attack() -> void:
+func _test_a_click_on_self_is_not_a_selection() -> void:
+	_session.clear_selection()
 	_look_straight_down_at(Vector2.ZERO)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
@@ -834,16 +843,29 @@ func _test_a_click_on_self_is_not_an_attack() -> void:
 
 	_watch()
 	await _left_click(_viewport_centre())
-	_check(_attack_intents.is_empty(), "a click on self sends no attack, got %s" % [_attack_intents])
+	_check(
+		_session.selected_player_id() == 0,
+		"a click on self leaves selection empty, got %d" % _session.selected_player_id(),
+	)
+	_check(_selection_events.is_empty(), "and emits no selection_changed")
+	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
 	_check(_move_to_intents.is_empty(), "and no move_to either, got %s" % [_move_to_intents])
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
 	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
 
-
-func _test_a_click_on_bare_ground_is_a_move_and_not_an_attack() -> void:
 	_look_straight_down_at(REMOTE_GROUND)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
+
+
+func _test_a_ground_click_moves_and_keeps_selection() -> void:
+	_watch()
+	await _left_click(_viewport_centre())
+	_check(
+		_session.selected_player_id() == REMOTE_PLAYER_ID,
+		"precondition: remote is selected, got %d" % _session.selected_player_id(),
+	)
+
 	var cursor := _viewport_centre() + _beside_offset()
 	var expected = _picker.pick_ground(cursor)
 	_check(expected != null, "the bare-ground cursor resolves to a ground point")
@@ -854,9 +876,55 @@ func _test_a_click_on_bare_ground_is_a_move_and_not_an_attack() -> void:
 		_move_to_intents.size() == 1,
 		"a click on bare ground sends one move_to, got %d" % _move_to_intents.size(),
 	)
+	_check(
+		_session.selected_player_id() == REMOTE_PLAYER_ID,
+		"and selection persists, got %d" % _session.selected_player_id(),
+	)
+	_check(_selection_events.is_empty(), "with no selection_changed")
 	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
 	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
+
+
+func _test_escape_clears_player_selection() -> void:
+	_check(
+		_session.selected_player_id() == REMOTE_PLAYER_ID,
+		"precondition: remote still selected before Escape",
+	)
+	_watch()
+	var viewport := _camera.get_viewport()
+	var cancel := InputEventKey.new()
+	cancel.keycode = KEY_ESCAPE
+	cancel.physical_keycode = KEY_ESCAPE
+	cancel.pressed = true
+	viewport.push_input(cancel)
+	await get_tree().process_frame
+
+	_check(_session.selected_player_id() == 0, "Escape clears the tab target")
+	_check(
+		_selection_events.size() == 1 and _selection_events[0] == 0,
+		"and emits selection_changed(0), got %s" % [_selection_events],
+	)
+	var remote: PlayerAvatarScript = _session.avatar_for(REMOTE_PLAYER_ID)
+	_check(remote != null and not remote.is_selected(), "and hides the selection ring")
+	_check(_attack_intents.is_empty(), "and sends no attack")
+
+
+func _test_a_right_click_on_a_remote_player_is_an_attack() -> void:
+	_look_straight_down_at(REMOTE_GROUND)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_watch()
+	await _right_click(_viewport_centre())
+	_check(
+		_attack_intents.size() == 1,
+		"a right click on a remote player sends one attack, got %d" % _attack_intents.size(),
+	)
+	_check(
+		_attack_intents.size() == 1 and _attack_intents[0] == REMOTE_PLAYER_ID,
+		"naming player %d, got %s" % [REMOTE_PLAYER_ID, _attack_intents],
+	)
+	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
 
 
 # --------------------------------------------------------------------------
@@ -1163,6 +1231,7 @@ func _watch() -> void:
 	_pickup_intents.clear()
 	_gather_intents.clear()
 	_attack_intents.clear()
+	_selection_events.clear()
 	_drop_intents.clear()
 	_use_intents.clear()
 
@@ -1172,6 +1241,17 @@ func _left_click(screen_position: Vector2) -> void:
 	var viewport := _camera.get_viewport()
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = screen_position
+	viewport.push_input(press)
+	await get_tree().process_frame
+
+
+## Pushes a real right click at a viewport position and lets it be handled.
+func _right_click(screen_position: Vector2) -> void:
+	var viewport := _camera.get_viewport()
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_RIGHT
 	press.pressed = true
 	press.position = screen_position
 	viewport.push_input(press)
