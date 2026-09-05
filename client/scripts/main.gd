@@ -40,6 +40,7 @@ const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const PickupDemoScript := preload("res://scripts/pickup_demo.gd")
 const EquipDemoScript := preload("res://scripts/equip_demo.gd")
+const GatherCraftDemoScript := preload("res://scripts/gather_craft_demo.gd")
 
 ## One capture to [constant SCREENSHOT_PATH], then quit. M0c's visual check.
 const SCREENSHOT_FLAG := "--screenshot"
@@ -105,6 +106,10 @@ const DROP_CLICK_FLAG := "--drop-click"
 ## `<prefix>_3.png`. **M3d**, the milestone.
 const EQUIP_SHOTS_FLAG := "--equip-shots"
 
+## Three captures around gather and craft, written to `<prefix>_1.png` through
+## `<prefix>_3.png`. **M4e**, the milestone. Two clients share the same flag.
+const GATHER_CRAFT_SHOTS_FLAG := "--gather-craft-shots"
+
 ## How many phases the demo runs. One per client.
 const DEMO_PHASES := 2
 
@@ -165,6 +170,9 @@ func _ready() -> void:
 		return
 	if EQUIP_SHOTS_FLAG in args:
 		await _run_equip_demo(args)
+		return
+	if GATHER_CRAFT_SHOTS_FLAG in args:
+		await _run_gather_craft_demo(args)
 		return
 	if SHOTS_FLAG in args:
 		await _run_demo(args)
@@ -287,6 +295,27 @@ func _run_equip_demo(args: Array) -> void:
 		return
 
 	var demo := EquipDemoScript.new()
+	var code: int = await demo.run(self, session, inventory, equipment, prefix)
+	get_tree().quit(code)
+
+
+## The gather-then-craft milestone, from this client's side. **M4e.**
+func _run_gather_craft_demo(args: Array) -> void:
+	var prefix := _argument_after(args, GATHER_CRAFT_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % GATHER_CRAFT_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+
+	var session := get_node_or_null("Session") as SessionScript
+	var inventory := get_node_or_null("UI/InventoryPanel") as InventoryPanelScript
+	var equipment := get_node_or_null("UI/EquipmentPanel") as EquipmentPanelScript
+	if session == null or inventory == null or equipment == null:
+		push_error("main.tscn is missing Session, UI/InventoryPanel, or UI/EquipmentPanel")
+		get_tree().quit(1)
+		return
+
+	var demo := GatherCraftDemoScript.new()
 	var code: int = await demo.run(self, session, inventory, equipment, prefix)
 	get_tree().quit(code)
 
