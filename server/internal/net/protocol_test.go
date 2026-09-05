@@ -24,13 +24,13 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				TickMS:  150,
 				Tick:    142,
 				Players: []mnet.PlayerState{
-					{ID: 1, X: 0, Z: 0, HP: 100, MaxHP: 100},
-					{ID: 2, X: 5, Z: 5, HP: 70, MaxHP: 100},
+					{ID: 1, X: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100},
+					{ID: 2, X: 5, Z: 5, HP: 70, MaxHP: 100, Mana: 40, MaxMana: 100},
 				},
 				Items: []mnet.ItemState{{ID: 7, Kind: "acorn", X: 3, Z: -2}},
 				Nodes: []mnet.NodeState{},
 			},
-			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100},{"id":2,"x":5,"z":5,"hp":70,"max_hp":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[]}}`,
+			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},{"id":2,"x":5,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[]}}`,
 		},
 		{
 			// An empty world is [] on both arrays, never null and never an
@@ -96,13 +96,18 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 		},
 		{
 			name: "spawn",
-			msg:  mnet.Spawn{ID: 2, X: 0, Z: 0, HP: 100, MaxHP: 100},
-			want: `{"spawn":{"id":2,"x":0,"z":0,"hp":100,"max_hp":100}}`,
+			msg:  mnet.Spawn{ID: 2, X: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100},
+			want: `{"spawn":{"id":2,"x":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100}}`,
 		},
 		{
 			name: "hp",
 			msg:  mnet.HP{ID: 2, HP: 90, MaxHP: 100},
 			want: `{"hp":{"id":2,"hp":90,"max_hp":100}}`,
+		},
+		{
+			name: "mana",
+			msg:  mnet.Mana{ID: 2, Mana: 55, MaxMana: 100},
+			want: `{"mana":{"id":2,"mana":55,"max_mana":100}}`,
 		},
 		{
 			name: "despawn",

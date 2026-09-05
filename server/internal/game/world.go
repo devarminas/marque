@@ -156,6 +156,10 @@ const (
 	EvRespawn = "respawn"
 
 	EvRespawnRejected = "respawn_rejected"
+
+	EvManaSpend = "mana_spend"
+
+	EvManaRefund = "mana_refund"
 )
 
 // Transport is the world's view of the network: a stream of connection events.
@@ -193,7 +197,8 @@ type player struct {
 	attackTarget   mnet.PlayerID
 	attackProgress int
 
-	hp int
+	hp   int
+	mana int
 
 	lastSeq mnet.Seq
 
@@ -407,6 +412,7 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		conn:    conn,
 		pos:     Point{X: spawnX, Z: spawnZ},
 		hp:      MaxHP,
+		mana:    MaxMana,
 	}
 	w.players[p.id] = p
 	w.byConn[conn] = p
