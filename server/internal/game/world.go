@@ -140,6 +140,22 @@ const (
 	EvUse = "use"
 
 	EvUseRejected = "use_rejected"
+
+	EvAttack = "attack"
+
+	EvAttackRejected = "attack_rejected"
+
+	EvAttackHit = "attack_hit"
+
+	EvAttackCancelled = "attack_cancelled"
+
+	EvAttackLost = "attack_lost"
+
+	EvDeath = "death"
+
+	EvRespawn = "respawn"
+
+	EvRespawnRejected = "respawn_rejected"
 )
 
 // Transport is the world's view of the network: a stream of connection events.
@@ -173,6 +189,11 @@ type player struct {
 
 	gatherNode     mnet.NodeID
 	gatherProgress int
+
+	attackTarget   mnet.PlayerID
+	attackProgress int
+
+	hp int
 
 	lastSeq mnet.Seq
 
@@ -314,6 +335,9 @@ func (w *World) step() {
 		if p.gatherNode != 0 {
 			w.resolveGather(p)
 		}
+		if p.attackTarget != 0 {
+			w.resolveAttack(p)
+		}
 	}
 
 	w.respawnNodes()
@@ -382,6 +406,7 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		session: newSessionToken(),
 		conn:    conn,
 		pos:     Point{X: spawnX, Z: spawnZ},
+		hp:      MaxHP,
 	}
 	w.players[p.id] = p
 	w.byConn[conn] = p
@@ -396,13 +421,13 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 
 	w.seedJoinKit(p)
 	w.sendJoinStep(p)
-	w.broadcast(mnet.Spawn{ID: p.id, X: p.pos.X, Z: p.pos.Z}, p)
+	w.broadcast(mnet.Spawn(p.wireState()), p)
 }
 
 func (w *World) sendJoinStep(p *player) {
 	states := make([]mnet.PlayerState, 0, len(w.order))
 	for _, other := range w.order {
-		states = append(states, mnet.PlayerState{ID: other.id, X: other.pos.X, Z: other.pos.Z})
+		states = append(states, other.wireState())
 	}
 	w.send(p, mnet.Welcome{
 		You:            p.id,
@@ -495,6 +520,9 @@ func (w *World) retire(p *player) {
 	}
 	w.items.RemovePlayer(p.id)
 
+	w.clearAttacksOn(p.id)
+	w.clearAttack(p)
+
 	w.broadcast(mnet.Despawn{ID: p.id}, p)
 }
 
@@ -532,19 +560,44 @@ func (w *World) handleFrame(ev mnet.Event) {
 
 	switch msg := ev.Msg.(type) {
 	case mnet.MoveTo:
+		if w.refuseIfDead(p, mnet.MsgMoveTo) {
+			return
+		}
 		w.moveTo(p, msg, ev.Seq)
 	case mnet.Pickup:
+		if w.refuseIfDead(p, mnet.MsgPickup) {
+			return
+		}
 		w.pickup(p, msg, ev.Seq)
 	case mnet.Drop:
+		if w.refuseIfDead(p, mnet.MsgDrop) {
+			return
+		}
 		w.drop(p, msg, ev.Seq)
 	case mnet.Equip:
+		if w.refuseIfDead(p, mnet.MsgEquip) {
+			return
+		}
 		w.equip(p, msg, ev.Seq)
 	case mnet.Unequip:
+		if w.refuseIfDead(p, mnet.MsgUnequip) {
+			return
+		}
 		w.unequip(p, msg, ev.Seq)
 	case mnet.Gather:
+		if w.refuseIfDead(p, mnet.MsgGather) {
+			return
+		}
 		w.gather(p, msg, ev.Seq)
 	case mnet.Use:
+		if w.refuseIfDead(p, mnet.MsgUse) {
+			return
+		}
 		w.use(p, msg, ev.Seq)
+	case mnet.Attack:
+		w.attack(p, msg, ev.Seq)
+	case mnet.Respawn:
+		w.respawnPlayer(p, ev.Seq)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -588,6 +641,10 @@ func rejectionEvent(re string) string {
 		return EvGatherRejected
 	case mnet.MsgUse:
 		return EvUseRejected
+	case mnet.MsgAttack:
+		return EvAttackRejected
+	case mnet.MsgRespawn:
+		return EvRespawnRejected
 	default:
 		panic(fmt.Sprintf("game: no rejection event for %q", re))
 	}
@@ -625,6 +682,7 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo, seq mnet.Seq) {
 
 	p.pending = 0
 	w.cancelGather(p)
+	w.cancelAttack(p, CauseMoveTo)
 	w.assignPath(p, points)
 }
 
