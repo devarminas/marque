@@ -115,8 +115,10 @@ Preconditions:
   keep them out of the panel's rect, measured as (1024, 272) to (1264, 704) at
   1280x720.
 - **The dropped item lands under the dropper's feet**, because that is what a drop
-  does (`PROTOCOL.md`, *Drop*). In the third capture it is a sliver of green at the
-  base of a capsule, not a clear silhouette. Assert it from the `DEMO item` lines and
+  does (`PROTOCOL.md`, *Drop*). In the third capture it sits at the base of the
+  winner's avatar — the axe is drawn with its own model now rather than a
+  placeholder, so look for the axe, not a coloured sliver, and expect overlap, not
+  a clear silhouette. Assert it from the `DEMO item` lines and
   the GAMELOG, not from the pixels.
 - **Arriving and dropping on the same tick is correct.** The tick loop steps movement
   and then drains intents, so a drop handled in the arrival tick uses the arrival

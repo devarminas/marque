@@ -53,7 +53,7 @@ either alone.
 
 **A screenshot assertion must name the specific thing that would be missing.** "The
 screenshot shows lighting" was passed in this repo by a build whose sun pointed at
-the sky, lit by ambient alone; "the capsule casts a shadow on the ground" would have
+the sky, lit by ambient alone; "the avatar casts a shadow on the ground" would have
 failed it instantly. Assert the shadow, the second body, the displacement between two
 named frames — never the vibe.
 
@@ -330,8 +330,8 @@ watchdog above it can never fire and is decorative. The server-backed suites ski
 themselves when `MARQUE_WS_URL` is unset, so a green run with no `INTEROP RAN:` line
 tested far less than it appears to. `scripts/interop_test.ps1` enforces all of this
 and is the canonical full-stack pass. The suite count is the length of
-`TREE_FREE_SUITES` plus `SCENE_SUITES` in `client/tests/run_tests.gd`, 13 at
-`cf8d862`; the assertion count grows with every unit, so run the suite for the current
+`TREE_FREE_SUITES` plus `SCENE_SUITES` in `client/tests/run_tests.gd`, 15 at
+`af818e3`; the assertion count grows with every unit, so run the suite for the current
 number and report what you got rather than comparing against a figure written here.
 
 ## Cleanup

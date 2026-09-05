@@ -51,3 +51,8 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-equip`: three PNGs,
   `equipment` and `inventory` frames have been applied, not merely after the click.
 - **Panel opacity.** Keep scripted clicks off the inventory panel rect when adding
   new steps; both panels swallow clicks (M1k, M3b).
+- **Equip onto an occupied worn slot does not reject.** The server swaps the two
+  items, returning the displaced one to the bag, and the `equip` log line carries a
+  `displaced` field instead of a rejection event. The demo never exercises this
+  path; a probe that sends a second equip onto a worn slot should expect the swap,
+  not `equip_rejected`.
