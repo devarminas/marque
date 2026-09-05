@@ -320,6 +320,11 @@ func send_unequip(worn: String, seq: int = 0) -> Error:
 	return _send(unequip_frame(worn, _intent_seq(seq)))
 
 
+## Sends `use`: use the item in one bag slot on another. **M4d.**
+func send_use(slot: int, on: int, seq: int = 0) -> Error:
+	return _send(use_frame(slot, on, _intent_seq(seq)))
+
+
 ## The next `seq` this client will stamp, after the last welcome.
 func next_seq() -> int:
 	return _next_seq
@@ -365,6 +370,10 @@ static func equip_frame(slot: int, seq: int = 0) -> Dictionary:
 
 static func unequip_frame(worn: String, seq: int = 0) -> Dictionary:
 	return {"unequip": _intent_body({"worn": worn}, seq)}
+
+
+static func use_frame(slot: int, on: int, seq: int = 0) -> Dictionary:
+	return {"use": _intent_body({"slot": slot, "on": on}, seq)}
 
 
 static func _intent_body(body: Dictionary, seq: int) -> Dictionary:
