@@ -1,14 +1,10 @@
 extends PanelContainer
 
-## What the player is wearing. Authored in `main.tscn`, opened and closed by the
-## player. **M3b** panel chrome; **M3c** worn restatement and unequip/drag targets.
+## Right dock: authored worn cross above nested inventory. I toggles visibility.
 
-const WornSlotScene := preload("res://scenes/worn_slot.tscn")
 const WornSlotScript := preload("res://scripts/worn_slot.gd")
-const InventorySlotScene := preload("res://scenes/inventory_slot.tscn")
-const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 
-const TOGGLE_ACTION := "toggle_equipment"
+const TOGGLE_ACTION := "toggle_inventory"
 
 ## Emitted when the player activates an occupied worn slot (`unequip`).
 signal worn_activated(worn: String)
@@ -16,16 +12,21 @@ signal worn_activated(worn: String)
 ## Emitted when a bag slot is dropped onto a worn slot (`equip`).
 signal equip_from_bag(bag_slot: int)
 
-@export var slot_rows: VBoxContainer
-@export var weapon_slot: WornSlotScript
+@export var helmet_slot: WornSlotScript
+@export var left_hand_slot: WornSlotScript
+@export var chest_slot: WornSlotScript
+@export var right_hand_slot: WornSlotScript
+@export var trousers_slot: WornSlotScript
 
 var _slots := {}
 
 
 func _ready() -> void:
-	if weapon_slot != null:
-		weapon_slot.configure("weapon")
-		_bind_slot(weapon_slot)
+	_bind_authored(helmet_slot, "helmet")
+	_bind_authored(left_hand_slot, "left hand")
+	_bind_authored(chest_slot, "chest")
+	_bind_authored(right_hand_slot, "right hand")
+	_bind_authored(trousers_slot, "trousers")
 
 
 func toggle() -> void:
@@ -39,7 +40,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
-## Applies one `equipment` frame, wholesale.
+## Applies one `equipment` frame, wholesale. Never grows worn widgets.
 func apply(
 	worn_names: PackedStringArray,
 	slot_names: PackedStringArray,
@@ -52,7 +53,9 @@ func apply(
 		)
 		return
 
-	_sync_worn_slots(worn_names)
+	for name: String in worn_names:
+		if not _slots.has(name):
+			push_error('EquipmentPanel.apply: unknown worn name "%s"' % name)
 
 	for slot: WornSlotScript in _slots.values():
 		slot.show_empty()
@@ -78,40 +81,15 @@ func kind_in_slot(worn: String) -> String:
 	return "" if slot == null else slot.kind
 
 
-func _sync_worn_slots(worn_names: PackedStringArray) -> void:
-	if slot_rows == null:
-		push_error("EquipmentPanel: the scene did not assign slot rows")
-		return
-
-	for name: String in worn_names:
-		if _slots.has(name):
-			continue
-		var slot := _make_slot(name)
-		if slot == null:
-			return
-		slot_rows.add_child(slot)
-		_bind_slot(slot)
-
-
-func _make_slot(name: String) -> WornSlotScript:
-	if name == "weapon" and weapon_slot != null:
-		return weapon_slot
-
-	var slot := WornSlotScene.instantiate() as WornSlotScript
+func _bind_authored(slot: WornSlotScript, worn_name: String) -> void:
 	if slot == null:
-		push_error("EquipmentPanel: worn_slot.tscn did not instantiate as a WornSlot")
-		return null
-	slot.name = "%sSlot" % name.capitalize()
-	slot.configure(name)
-	return slot
-
-
-func _bind_slot(slot: WornSlotScript) -> void:
-	if slot.worn_name.is_empty():
+		push_error('EquipmentPanel: missing authored slot for "%s"' % worn_name)
 		return
-	if _slots.has(slot.worn_name):
+	slot.configure(worn_name)
+	if _slots.has(worn_name):
+		push_error('EquipmentPanel: duplicate authored slot for "%s"' % worn_name)
 		return
-	_slots[slot.worn_name] = slot
+	_slots[worn_name] = slot
 	if not slot.activated.is_connected(_on_worn_activated):
 		slot.activated.connect(_on_worn_activated)
 	if not slot.equip_from_bag.is_connected(_on_equip_from_bag):

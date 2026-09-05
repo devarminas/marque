@@ -89,6 +89,12 @@ func _test_welcome_draws_self_hp() -> void:
 		_hp_hud.text == "HP 100 / 100",
 		'self chrome reads "HP 100 / 100", got "%s"' % _hp_hud.text,
 	)
+	_check(_hp_hud.get_node_or_null("Row/Circle") != null, "with an authored circle")
+	_check(_hp_hud.get_node_or_null("Row/Bar") is ProgressBar, "and an authored bar")
+	_check(
+		_hp_hud.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+		"and IGNORE so world clicks pass through, got filter %d" % _hp_hud.mouse_filter,
+	)
 	_check(not _death.visible, "living welcome keeps the death overlay hidden")
 	_check(
 		_session.hit_points_for(1) == Vector2i(100, 100),

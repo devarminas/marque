@@ -18,20 +18,30 @@ const (
 	KindAxe = "axe"
 )
 
-// SlotWeapon is the only worn slot M3a has (PROTOCOL.md, "Worn slots").
-const SlotWeapon mnet.EquipSlot = "weapon"
+// Worn slot names on the wire (PROTOCOL.md, "Worn slots"). Exact strings,
+// including spaces.
+const (
+	SlotHelmet    mnet.EquipSlot = "helmet"
+	SlotLeftHand  mnet.EquipSlot = "left hand"
+	SlotChest     mnet.EquipSlot = "chest"
+	SlotRightHand mnet.EquipSlot = "right hand"
+	SlotTrousers  mnet.EquipSlot = "trousers"
+)
 
-// WornSlots is the closed, ordered list of worn slot names, in the order a
-// client draws them. It rides on the wire in every equipment restatement so the
-// client never holds a second copy of it. Read-only.
-var WornSlots = []mnet.EquipSlot{SlotWeapon}
+// WornSlots is the closed, ordered list of worn slot names. It rides on the
+// wire in every equipment restatement so the client never holds a second copy
+// of it. Read-only. Draw order on the client is scene-authored; this order is
+// the wire restatement order.
+var WornSlots = []mnet.EquipSlot{
+	SlotHelmet, SlotLeftHand, SlotChest, SlotRightHand, SlotTrousers,
+}
 
 // wornSlotOf says which worn slot a kind belongs in. A kind absent from the
 // table cannot be worn, which is how acorn is refused: a lookup that misses,
-// not a rule naming the kinds that are not weapons. Adding a wearable kind is
-// one line here plus its name in WornSlots.
+// not a rule naming the kinds that are not wearable. Adding a wearable kind is
+// one line here; the slot must already be in WornSlots.
 var wornSlotOf = map[string]mnet.EquipSlot{
-	KindAxe: SlotWeapon,
+	KindAxe: SlotRightHand,
 }
 
 // DefaultJoinKit is what a joining player is given, in the order it is placed:

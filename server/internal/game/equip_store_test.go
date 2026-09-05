@@ -72,14 +72,14 @@ func TestEquipIsOneMove(t *testing.T) {
 		t.Fatalf("equipping slot 0: %v", err)
 	}
 
-	want := Equipped{Worn: SlotWeapon, Kind: KindAxe, Bag: 0}
+	want := Equipped{Worn: SlotRightHand, Kind: KindAxe, Bag: 0}
 	if done != want {
 		t.Fatalf("the equip reported %+v, want %+v", done, want)
 	}
 	if got := s.Inventory(7); len(got) != 0 {
 		t.Fatalf("the bag still holds %+v after the axe left it: the axe is in both places at once", got)
 	}
-	kind, wearing := wornKindIn(s, 7, SlotWeapon)
+	kind, wearing := wornKindIn(s, 7, SlotRightHand)
 	if !wearing {
 		t.Fatal("the axe left the bag and never reached the worn slot")
 	}
@@ -101,7 +101,7 @@ func TestEquipNeverTouchesTheGround(t *testing.T) {
 	if _, err := s.EquipInventorySlot(1, 0); err != nil {
 		t.Fatalf("equipping slot 0: %v", err)
 	}
-	if _, err := s.UnequipWornSlot(1, SlotWeapon); err != nil {
+	if _, err := s.UnequipWornSlot(1, SlotRightHand); err != nil {
 		t.Fatalf("unequipping: %v", err)
 	}
 
@@ -203,7 +203,7 @@ func TestEquipSwapsThroughTheBagSlotItVacated(t *testing.T) {
 	if got := s.Inventory(1); len(got) != InventorySize {
 		t.Fatalf("the bag holds %d slots after a swap, want the same full %d: a swap moves two items and creates none", len(got), InventorySize)
 	}
-	if kind, _ := wornKindIn(s, 1, SlotWeapon); kind != KindAxe {
+	if kind, _ := wornKindIn(s, 1, SlotRightHand); kind != KindAxe {
 		t.Fatalf("the worn slot holds %q after the swap, want %q", kind, KindAxe)
 	}
 	axes := 0
@@ -229,16 +229,16 @@ func TestUnequipIsOneMove(t *testing.T) {
 		t.Fatalf("equipping: %v", err)
 	}
 
-	done, err := s.UnequipWornSlot(1, SlotWeapon)
+	done, err := s.UnequipWornSlot(1, SlotRightHand)
 	if err != nil {
 		t.Fatalf("unequipping: %v", err)
 	}
 
-	want := Unequipped{Worn: SlotWeapon, Kind: KindAxe, Bag: 0}
+	want := Unequipped{Worn: SlotRightHand, Kind: KindAxe, Bag: 0}
 	if done != want {
 		t.Fatalf("the unequip reported %+v, want %+v", done, want)
 	}
-	if _, wearing := wornKindIn(s, 1, SlotWeapon); wearing {
+	if _, wearing := wornKindIn(s, 1, SlotRightHand); wearing {
 		t.Fatal("the worn slot still holds the axe after it left")
 	}
 	held := s.Inventory(1)
@@ -265,7 +265,7 @@ func TestUnequipFillsTheLowestFreeSlot(t *testing.T) {
 		t.Fatalf("emptying slot 0: %v", err)
 	}
 
-	done, err := s.UnequipWornSlot(1, SlotWeapon)
+	done, err := s.UnequipWornSlot(1, SlotRightHand)
 	if err != nil {
 		t.Fatalf("unequipping: %v", err)
 	}
@@ -327,9 +327,9 @@ func TestARefusedUnequipChangesNothing(t *testing.T) {
 		full bool
 		want error
 	}{
-		{"a slot this server does not have", "helmet", false, ErrNoSuchWornSlot},
+		{"a slot this server does not have", "cape", false, ErrNoSuchWornSlot},
 		{"a name that is no name at all", "", false, ErrNoSuchWornSlot},
-		{"a full bag", SlotWeapon, true, ErrInventoryFull},
+		{"a full bag", SlotRightHand, true, ErrInventoryFull},
 	}
 
 	for _, tc := range cases {
@@ -349,7 +349,7 @@ func TestARefusedUnequipChangesNothing(t *testing.T) {
 			if _, err := s.UnequipWornSlot(1, tc.slot); !errors.Is(err, tc.want) {
 				t.Fatalf("unequipping %q returned %v, want %v", tc.slot, err, tc.want)
 			}
-			if kind, wearing := wornKindIn(s, 1, SlotWeapon); !wearing || kind != KindAxe {
+			if kind, wearing := wornKindIn(s, 1, SlotRightHand); !wearing || kind != KindAxe {
 				t.Fatalf("a refused unequip left the worn slot as %+v, want the axe still on", s.Worn(1))
 			}
 			if items := s.GroundItems(); len(items) != 0 {
@@ -375,7 +375,7 @@ func TestUnequippingAnEmptyWornSlotIsItsOwnRefusal(t *testing.T) {
 	s := NewMemoryStore()
 	s.AddPlayer(1)
 
-	if _, err := s.UnequipWornSlot(1, SlotWeapon); !errors.Is(err, ErrEmptyWornSlot) {
+	if _, err := s.UnequipWornSlot(1, SlotRightHand); !errors.Is(err, ErrEmptyWornSlot) {
 		t.Fatalf("unequipping an empty worn slot returned %v, want ErrEmptyWornSlot", err)
 	}
 }
@@ -390,7 +390,7 @@ func TestEquipAndUnequipForAnUnknownPlayerFail(t *testing.T) {
 	if _, err := s.EquipInventorySlot(42, 0); !errors.Is(err, ErrNoSuchPlayer) {
 		t.Errorf("equipping for an unknown player returned %v, want ErrNoSuchPlayer", err)
 	}
-	if _, err := s.UnequipWornSlot(42, SlotWeapon); !errors.Is(err, ErrNoSuchPlayer) {
+	if _, err := s.UnequipWornSlot(42, SlotRightHand); !errors.Is(err, ErrNoSuchPlayer) {
 		t.Errorf("unequipping for an unknown player returned %v, want ErrNoSuchPlayer", err)
 	}
 	if _, err := s.SpawnInventoryItem(42, KindAxe); !errors.Is(err, ErrNoSuchPlayer) {

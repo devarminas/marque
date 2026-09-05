@@ -29,11 +29,10 @@ const Assertions := preload("res://tests/assertions.gd")
 
 ## The action `project.godot` authors, and the physical key it is bound to.
 ## Physical, so the bind survives a non-QWERTY layout.
-const TOGGLE_ACTION := "toggle_equipment"
-const TOGGLE_KEY := KEY_E
+const TOGGLE_ACTION := "toggle_inventory"
+const TOGGLE_KEY := KEY_I
 
-## How far the panel sits from the two edges it is anchored to, matching the
-## inventory panel's inset on the opposite corner.
+## How far the dock sits from the edges it is anchored to.
 const EDGE_INSET := 16.0
 
 ## Camera height for the click tests. High enough that the whole viewport is
@@ -48,12 +47,11 @@ const LAYOUT_EPSILON := 0.5
 ## in the client being able to change it.
 const SCRIPTS_DIR := "res://scripts"
 
-## Everything the panel draws inside itself. All of it authored, and none of it
-## allowed to catch a click.
+## Dock chrome that must IGNORE so the root STOP is the only opaque surface.
 const CHROME_PATHS := [
 	"Margin",
 	"Margin/Rows",
-	"Margin/Rows/Heading",
+	"Margin/Rows/WornCross",
 ]
 
 @onready var _world: Node3D = $World
@@ -100,8 +98,8 @@ func _ready() -> void:
 	_session = _root.get_node("Session") as SessionScript
 	_picker = _root.get_node("GroundPicker") as GroundPickerScript
 	_camera = _root.get_node("CameraRig/Camera3D") as Camera3D
-	_panel = _root.get_node("UI/EquipmentPanel") as EquipmentPanelScript
-	_inventory = _root.get_node("UI/InventoryPanel") as InventoryPanelScript
+	_panel = _root.get_node("UI/RightDock") as EquipmentPanelScript
+	_inventory = _root.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
 
 	# The rig chases its target every frame and would undo the camera placement
 	# the click tests depend on. Switched off rather than fought.
@@ -150,8 +148,8 @@ func _ready() -> void:
 ## file and fails only this one.
 func _test_the_panel_is_authored_before_anything_runs() -> void:
 	var unopened := MainScene.instantiate() as Node3D
-	var panel := unopened.get_node_or_null("UI/EquipmentPanel") as Control
-	_check(panel != null, "main.tscn authors UI/EquipmentPanel, before any _ready runs")
+	var panel := unopened.get_node_or_null("UI/RightDock") as Control
+	_check(panel != null, "main.tscn authors UI/RightDock, before any _ready runs")
 	if panel == null:
 		unopened.queue_free()
 		return
@@ -169,14 +167,18 @@ func _test_the_panel_is_authored_before_anything_runs() -> void:
 		"and the scene file is what makes it opaque, got filter %d" % panel.mouse_filter,
 	)
 	_check(
-		panel.anchor_left == 0.0 and panel.anchor_right == 0.0,
-		"and anchors it to the left edge, got left %f right %f"
+		panel.anchor_left == 1.0 and panel.anchor_right == 1.0,
+		"and anchors it to the right edge, got left %f right %f"
 		% [panel.anchor_left, panel.anchor_right],
 	)
 
-	# The chrome is authored too, and exactly one node in the panel stops a
-	# click. A container that stopped as well would work today and would move
-	# the boundary the next time the tree changed shape.
+	var toggle := unopened.get_node_or_null("UI/InventoryToggle") as Button
+	_check(toggle != null, "and authors UI/InventoryToggle beside the dock")
+	_check(
+		toggle != null and toggle.mouse_filter == Control.MOUSE_FILTER_STOP,
+		"with STOP so the closed dock still offers a clickable I",
+	)
+
 	for path: String in CHROME_PATHS:
 		var chrome := panel.get_node_or_null(path) as Control
 		_check(chrome != null, "and authors %s inside it" % path)
@@ -188,19 +190,18 @@ func _test_the_panel_is_authored_before_anything_runs() -> void:
 	unopened.queue_free()
 
 
-## [b]AC4.[/b] The panel is one of the UI layer's children, alongside the
-## inventory panel, and the two are anchored to opposite sides.
+## [b]AC1 / AC3.[/b] The dock hangs off UI/ and hosts the nested inventory.
 func _test_the_panel_hangs_off_the_ui_layer() -> void:
 	var layer := _panel.get_parent()
-	_check(layer != null and layer.name == "UI", "the panel hangs off UI/")
+	_check(layer != null and layer.name == "UI", "the dock hangs off UI/")
 	_check(layer is CanvasLayer, "which is a CanvasLayer, so it draws over the world")
 	_check(
-		_inventory != null and _inventory.get_parent() == layer,
-		"the same layer the inventory panel hangs off",
+		_inventory != null and _inventory.get_parent().get_parent().get_parent() == _panel,
+		"and nests the inventory panel under the dock",
 	)
 	_check(
-		_inventory.anchor_left == 1.0 and _panel.anchor_left == 0.0,
-		"and the inventory is anchored right while equipment is anchored left",
+		_panel.anchor_left == 1.0 and _panel.anchor_right == 1.0,
+		"anchored to the right edge",
 	)
 
 
@@ -231,19 +232,16 @@ func _test_no_client_script_assigns_a_mouse_filter() -> void:
 	_check(scanned > 1, "and more than one script was scanned, got %d" % scanned)
 
 
-## One worn slot, drawn and empty. What is worn arrives on the wire in a later
-## unit, so "empty" is the whole of M3b's claim about its contents.
-##
-## The empty colour is read off `inventory_slot.tscn` rather than written down
-## here, so "a worn slot looks like an empty slot" cannot quietly decay into "a
-## worn slot is whatever shade this test was written with".
+## Five authored worn slots, drawn empty until an equipment frame arrives.
 func _test_the_worn_weapon_slot_is_drawn_empty() -> void:
 	_panel.visible = true
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	var slot := _panel.get_node_or_null("Margin/Rows/WeaponSlot") as WornSlotScript
-	_check(slot != null, "the panel draws a worn weapon slot")
+	var slot := _panel.get_node_or_null(
+		"Margin/Rows/WornCross/HandsRow/RightHandSlot"
+	) as WornSlotScript
+	_check(slot != null, "the dock draws an authored right-hand worn slot")
 	if slot == null:
 		return
 	_check(
@@ -259,7 +257,11 @@ func _test_the_worn_weapon_slot_is_drawn_empty() -> void:
 	)
 	reference.queue_free()
 
-	_check(slot.worn_name == "weapon", "and named for the slot it is")
+	_check(slot.worn_name == "right hand", "and named for the slot it is")
+	_check(_panel.slot_at("helmet") != null, "with helmet authored")
+	_check(_panel.slot_at("left hand") != null, "with left hand authored")
+	_check(_panel.slot_at("chest") != null, "with chest authored")
+	_check(_panel.slot_at("trousers") != null, "with trousers authored")
 	_panel.visible = false
 
 
@@ -292,7 +294,7 @@ func _test_the_keybind_is_authored() -> void:
 	press.pressed = true
 	_check(
 		InputMap.event_is_action(press, TOGGLE_ACTION),
-		"and binds it to the physical E key, so it stays put on a non-QWERTY layout",
+		"and binds it to the physical I key, so it stays put on a non-QWERTY layout",
 	)
 
 
@@ -310,17 +312,8 @@ func _test_the_authored_key_opens_and_closes_it() -> void:
 	_check(not _panel.visible, "and pressing it again closes it")
 
 
-## The panel is drawn against the left edge, measured on a live frame rather
-## than read off the anchors. The inset matches the inventory panel's on the
-## opposite corner.
-##
-## [b]The bottom edge is load-bearing and not decoration.[/b] The headless
-## viewport is 64x64 (NOTES.md), where this panel is far wider than the whole
-## screen, so an equipment panel anchored anywhere but the bottom would cover
-## `test_wiring.gd`'s `CLICK_AT` and leave the suite with no world to click.
-## Anchored to the bottom-left with this inset, its bottom edge lands exactly on
-## the 16px strip that constant already aims at. `test_wiring.gd` guards the
-## constant; this guards the edge that makes it reachable.
+## The dock is drawn against the right edge. The bottom inset keeps
+## `test_wiring.gd`'s `CLICK_AT` on the free strip below the chrome.
 func _test_the_panel_is_left_anchored_where_it_is_drawn() -> void:
 	_panel.visible = true
 	await get_tree().process_frame
@@ -330,11 +323,11 @@ func _test_the_panel_is_left_anchored_where_it_is_drawn() -> void:
 	var rect := _panel.get_global_rect()
 	print("EQUIPMENT panel rect %s in viewport %s" % [rect, screen.size])
 
-	_check(rect.has_area(), "the open panel is laid out with an area, got %s" % [rect])
+	_check(rect.has_area(), "the open dock is laid out with an area, got %s" % [rect])
 	_check(
-		absf(rect.position.x - EDGE_INSET) < LAYOUT_EPSILON,
-		"its left edge sits %f px from the left edge, expected %f"
-		% [rect.position.x, EDGE_INSET],
+		absf(rect.end.x - (screen.size.x - EDGE_INSET)) < LAYOUT_EPSILON,
+		"its right edge sits %f px from the right edge, expected %f"
+		% [screen.size.x - rect.end.x, EDGE_INSET],
 	)
 	_check(
 		absf(rect.end.y - (screen.size.y - EDGE_INSET)) < LAYOUT_EPSILON,
@@ -349,18 +342,8 @@ func _test_the_panel_is_left_anchored_where_it_is_drawn() -> void:
 # --------------------------------------------------------------------------
 
 
-## [b]AC2.[/b] A click inside the open panel's rect sends no `move_to`.
-##
-## The inventory panel is asserted closed first. It is anchored to the opposite
-## corner and covers most of a 64x64 viewport when it is open, so an open one
-## would be free to swallow this click and let a transparent equipment panel
-## pass this test.
+## [b]AC2 / AC5.[/b] A click inside the open dock's rect sends no `move_to`.
 func _test_an_open_panel_swallows_a_click() -> void:
-	_check(
-		not _inventory.visible,
-		"the inventory panel is closed, so nothing else can be what stops this click",
-	)
-
 	_look_straight_down()
 	_panel.visible = true
 	await get_tree().process_frame
@@ -369,7 +352,7 @@ func _test_an_open_panel_swallows_a_click() -> void:
 	_click_point = _point_inside_the_panel()
 	_check(
 		_click_point != Vector2.INF,
-		"the open panel covers a point inside the viewport to click",
+		"the open dock covers a point inside the viewport to click",
 	)
 	if _click_point == Vector2.INF:
 		return
@@ -383,7 +366,7 @@ func _test_an_open_panel_swallows_a_click() -> void:
 	await _push_left_click(_click_point)
 	_check(
 		_move_to_intents.is_empty(),
-		"but a click on the open panel at %v sends no move_to, got %s"
+		"but a click on the open dock at %v sends no move_to, got %s"
 		% [_click_point, _move_to_intents],
 	)
 

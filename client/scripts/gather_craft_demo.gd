@@ -13,11 +13,11 @@ const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 const ResourceNodeScript := preload("res://scripts/resource_node.gd")
 
 const AXE_KIND := "axe"
-const WEAPON_WORN := "weapon"
+const WEAPON_WORN := "right hand"
 const LOGS_KIND := "logs"
 const STICKS_KIND := "sticks"
 const TREE_KIND := "tree"
-const TOGGLE_KEY := KEY_E
+const TOGGLE_KEY := KEY_I
 
 const SCREENSHOT_WARMUP_FRAMES := 15
 const REQUIRED_PLAYERS := 2

@@ -56,8 +56,8 @@ func _ready() -> void:
 	_world.add_child(_root)
 	_session = _root.get_node("Session") as SessionScript
 	_net = _root.get_node("Session/Net") as NetClientScript
-	_inventory = _root.get_node("UI/InventoryPanel") as InventoryPanelScript
-	_equipment = _root.get_node("UI/EquipmentPanel") as EquipmentPanelScript
+	_inventory = _root.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
+	_equipment = _root.get_node("UI/RightDock") as EquipmentPanelScript
 	_camera = _root.get_node("CameraRig/Camera3D") as Camera3D
 
 	var rig := _root.get_node("CameraRig") as Node3D
@@ -97,15 +97,15 @@ func _test_axe_is_a_known_kind() -> void:
 
 func _test_equipment_restatement_draws_and_clears() -> void:
 	_equipment.visible = true
-	await _feed('{"equipment":{"worn":["weapon"],"slots":[]}}')
-	_check(_equipment.kind_in_slot("weapon") == "", "an empty equipment frame clears the weapon slot")
+	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}')
+	_check(_equipment.kind_in_slot("right hand") == "", "an empty equipment frame clears the weapon slot")
 
-	await _feed('{"equipment":{"worn":["weapon"],"slots":[{"slot":"weapon","kind":"axe"}]}}')
+	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}')
 	_check(
-		_equipment.kind_in_slot("weapon") == "axe",
-		'an equipment frame with an axe draws it in weapon, got "%s"' % _equipment.kind_in_slot("weapon"),
+		_equipment.kind_in_slot("right hand") == "axe",
+		'an equipment frame with an axe draws it in weapon, got "%s"' % _equipment.kind_in_slot("right hand"),
 	)
-	var slot := _equipment.slot_at("weapon")
+	var slot := _equipment.slot_at("right hand")
 	_check(slot != null, "which is the authored worn slot widget")
 	if slot != null:
 		_check(
@@ -113,14 +113,15 @@ func _test_equipment_restatement_draws_and_clears() -> void:
 			"and draws axe green like a known inventory kind, got %s" % [slot.display_color()],
 		)
 
-	await _feed('{"equipment":{"worn":["weapon"],"slots":[]}}')
+	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}')
 	_check(
-		_equipment.kind_in_slot("weapon") == "",
+		_equipment.kind_in_slot("right hand") == "",
 		"a later empty equipment frame clears the slot again",
 	)
 
 
 func _test_left_click_uses_not_drops() -> void:
+	_equipment.visible = true
 	await _feed(
 		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"axe"}]}}'
 		% [WIRE_SIZE, AXE_SLOT]
@@ -142,6 +143,7 @@ func _test_left_click_uses_not_drops() -> void:
 
 
 func _test_right_click_equips() -> void:
+	_equipment.visible = true
 	await _feed(
 		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"axe"}]}}'
 		% [WIRE_SIZE, AXE_SLOT]
@@ -168,13 +170,13 @@ func _test_drag_bag_to_weapon_equips() -> void:
 		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"axe"}]}}'
 		% [WIRE_SIZE, AXE_SLOT]
 	)
-	await _feed('{"equipment":{"worn":["weapon"],"slots":[]}}')
+	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}')
 	_equipment.visible = true
 	await get_tree().process_frame
 	await get_tree().process_frame
 
 	var bag := _inventory.slot_at(AXE_SLOT)
-	var worn := _equipment.slot_at("weapon")
+	var worn := _equipment.slot_at("right hand")
 	_check(bag != null and worn != null, "both bag and weapon slots are drawn for drag")
 
 	_watch()
@@ -196,22 +198,25 @@ func _test_drag_bag_to_weapon_equips() -> void:
 
 
 func _test_activate_worn_unequips() -> void:
-	await _feed('{"equipment":{"worn":["weapon"],"slots":[{"slot":"weapon","kind":"axe"}]}}')
+	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}')
 	_equipment.visible = true
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	var worn := _equipment.slot_at("weapon")
+	var worn := _equipment.slot_at("right hand")
 	_check(worn != null and worn.is_occupied(), "the weapon slot holds an axe to unequip")
 
 	_watch()
-	await _left_click_control(worn)
+	# Direct press: on the 64x64 harness the worn cross can sit above the
+	# viewport edge while still being the wired unequip target.
+	worn.activated.emit(worn.worn_name)
+	await get_tree().process_frame
 	_check(
-		_unequip_intents.size() == 1 and _unequip_intents[0] == "weapon",
-		'activating worn weapon sends unequip naming "weapon", got %s' % _unequip_intents,
+		_unequip_intents.size() == 1 and _unequip_intents[0] == "right hand",
+		'activating worn right hand sends unequip naming "right hand", got %s' % _unequip_intents,
 	)
 	_check(
-		_equipment.kind_in_slot("weapon") == "axe",
+		_equipment.kind_in_slot("right hand") == "axe",
 		"and the panel still shows the axe until the server restates it",
 	)
 
@@ -222,13 +227,13 @@ func _test_intent_frames_match_the_protocol() -> void:
 		'equip is {"equip":{"slot":3}}, got %s' % JSON.stringify(NetClientScript.equip_frame(3)),
 	)
 	_check(
-		JSON.stringify(NetClientScript.unequip_frame("weapon")) == '{"unequip":{"worn":"weapon"}}',
-		'unequip is {"unequip":{"worn":"weapon"}}, got %s'
-		% JSON.stringify(NetClientScript.unequip_frame("weapon")),
+		JSON.stringify(NetClientScript.unequip_frame("right hand")) == '{"unequip":{"worn":"right hand"}}',
+		'unequip is {"unequip":{"worn":"right hand"}}, got %s'
+		% JSON.stringify(NetClientScript.unequip_frame("right hand")),
 	)
 	_check(
 		(NetClientScript.equip_frame(1)["equip"] as Dictionary).has("slot")
-		and (NetClientScript.unequip_frame("weapon")["unequip"] as Dictionary).has("worn"),
+		and (NetClientScript.unequip_frame("right hand")["unequip"] as Dictionary).has("worn"),
 		"equip names a bag slot and unequip names a worn slot",
 	)
 

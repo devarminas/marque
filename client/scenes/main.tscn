@@ -100,7 +100,7 @@ node_collision_mask = 8
 
 [node name="UI" type="CanvasLayer" parent="."]
 
-[node name="InventoryPanel" type="PanelContainer" parent="UI" node_paths=PackedStringArray("slot_grid", "heading")]
+[node name="RightDock" type="PanelContainer" parent="UI" node_paths=PackedStringArray("helmet_slot", "left_hand_slot", "chest_slot", "right_hand_slot", "trousers_slot")]
 anchors_preset = 3
 anchor_left = 1.0
 anchor_top = 1.0
@@ -114,12 +114,14 @@ grow_horizontal = 0
 grow_vertical = 0
 visible = false
 mouse_filter = 0
-script = ExtResource("8_inventory_panel")
-slot_grid = NodePath("Margin/Rows/Slots")
-heading = NodePath("Margin/Rows/Heading")
-unknown_heading = "Inventory —"
+script = ExtResource("9_equipment_panel")
+helmet_slot = NodePath("Margin/Rows/WornCross/HelmetRow/HelmetSlot")
+left_hand_slot = NodePath("Margin/Rows/WornCross/HandsRow/LeftHandSlot")
+chest_slot = NodePath("Margin/Rows/WornCross/HandsRow/ChestSlot")
+right_hand_slot = NodePath("Margin/Rows/WornCross/HandsRow/RightHandSlot")
+trousers_slot = NodePath("Margin/Rows/WornCross/TrousersRow/TrousersSlot")
 
-[node name="Margin" type="MarginContainer" parent="UI/InventoryPanel"]
+[node name="Margin" type="MarginContainer" parent="UI/RightDock"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/margin_left = 10
@@ -127,79 +129,150 @@ theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 10
 
-[node name="Rows" type="VBoxContainer" parent="UI/InventoryPanel/Margin"]
+[node name="Rows" type="VBoxContainer" parent="UI/RightDock/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="WornCross" type="VBoxContainer" parent="UI/RightDock/Margin/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="HelmetRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross"]
+layout_mode = 2
+mouse_filter = 2
+alignment = 1
+theme_override_constants/separation = 4
+
+[node name="HelmetSlot" parent="UI/RightDock/Margin/Rows/WornCross/HelmetRow" instance=ExtResource("10_worn_slot")]
+layout_mode = 2
+
+[node name="HandsRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross"]
+layout_mode = 2
+mouse_filter = 2
+alignment = 1
+theme_override_constants/separation = 4
+
+[node name="LeftHandSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" instance=ExtResource("10_worn_slot")]
+layout_mode = 2
+
+[node name="ChestSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" instance=ExtResource("10_worn_slot")]
+layout_mode = 2
+
+[node name="RightHandSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" instance=ExtResource("10_worn_slot")]
+layout_mode = 2
+
+[node name="TrousersRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross"]
+layout_mode = 2
+mouse_filter = 2
+alignment = 1
+theme_override_constants/separation = 4
+
+[node name="TrousersSlot" parent="UI/RightDock/Margin/Rows/WornCross/TrousersRow" instance=ExtResource("10_worn_slot")]
+layout_mode = 2
+
+[node name="InventoryPanel" type="PanelContainer" parent="UI/RightDock/Margin/Rows" node_paths=PackedStringArray("slot_grid", "heading")]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("8_inventory_panel")
+slot_grid = NodePath("Margin/Rows/Slots")
+heading = NodePath("Margin/Rows/Heading")
+unknown_heading = "Inventory —"
+
+[node name="Margin" type="MarginContainer" parent="UI/RightDock/Margin/Rows/InventoryPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 0
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 0
+theme_override_constants/margin_bottom = 0
+
+[node name="Rows" type="VBoxContainer" parent="UI/RightDock/Margin/Rows/InventoryPanel/Margin"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 6
 
-[node name="Heading" type="Label" parent="UI/InventoryPanel/Margin/Rows"]
+[node name="Heading" type="Label" parent="UI/RightDock/Margin/Rows/InventoryPanel/Margin/Rows"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
 theme_override_font_sizes/font_size = 14
 text = "Inventory —"
 
-[node name="Slots" type="GridContainer" parent="UI/InventoryPanel/Margin/Rows"]
+[node name="Slots" type="GridContainer" parent="UI/RightDock/Margin/Rows/InventoryPanel/Margin/Rows"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/h_separation = 4
 theme_override_constants/v_separation = 4
 columns = 4
 
-[node name="EquipmentPanel" type="PanelContainer" parent="UI" node_paths=PackedStringArray("slot_rows", "weapon_slot")]
+[node name="InventoryToggle" type="Button" parent="UI"]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -20.0
+offset_top = -20.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 0
+grow_vertical = 0
+custom_minimum_size = Vector2(16, 16)
+mouse_filter = 0
+text = "I"
+
+[node name="HpHud" type="Control" parent="UI" node_paths=PackedStringArray("fill", "bar", "label")]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 16.0
-offset_top = -16.0
-offset_right = 16.0
+offset_top = -56.0
+offset_right = 220.0
 offset_bottom = -16.0
 grow_horizontal = 1
 grow_vertical = 0
+mouse_filter = 2
 visible = false
-mouse_filter = 0
-script = ExtResource("9_equipment_panel")
-slot_rows = NodePath("Margin/Rows")
-weapon_slot = NodePath("Margin/Rows/WeaponSlot")
+script = ExtResource("11_hp_hud")
+fill = NodePath("Row/Circle")
+bar = NodePath("Row/Bar")
+label = NodePath("Row/Label")
 
-[node name="Margin" type="MarginContainer" parent="UI/EquipmentPanel"]
-layout_mode = 2
+[node name="Row" type="HBoxContainer" parent="UI/HpHud"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
-theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 10
+theme_override_constants/separation = 8
 
-[node name="Rows" type="VBoxContainer" parent="UI/EquipmentPanel/Margin"]
+[node name="Circle" type="ColorRect" parent="UI/HpHud/Row"]
+custom_minimum_size = Vector2(28, 28)
 layout_mode = 2
+size_flags_vertical = 4
 mouse_filter = 2
-theme_override_constants/separation = 6
+color = Color(0.82, 0.18, 0.18, 1)
 
-[node name="Heading" type="Label" parent="UI/EquipmentPanel/Margin/Rows"]
+[node name="Bar" type="ProgressBar" parent="UI/HpHud/Row"]
+custom_minimum_size = Vector2(100, 16)
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+max_value = 100.0
+value = 0.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="UI/HpHud/Row"]
+layout_mode = 2
+size_flags_vertical = 4
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
 theme_override_font_sizes/font_size = 14
-text = "Equipment"
-
-[node name="WeaponSlot" parent="UI/EquipmentPanel/Margin/Rows" instance=ExtResource("10_worn_slot")]
-layout_mode = 2
-
-[node name="HpHud" type="Label" parent="UI"]
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 16.0
-offset_top = -72.0
-offset_right = 220.0
-offset_bottom = -40.0
-grow_horizontal = 1
-grow_vertical = 0
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
-theme_override_font_sizes/font_size = 16
 text = "HP —"
-visible = false
-script = ExtResource("11_hp_hud")
 
 [node name="DeathOverlay" type="Control" parent="UI" node_paths=PackedStringArray("respawn_button")]
 visible = false
@@ -259,10 +332,12 @@ remote_players = NodePath("../RemotePlayers")
 ground_items = NodePath("../GroundItems")
 resource_nodes = NodePath("../ResourceNodes")
 ground_picker = NodePath("../GroundPicker")
-inventory_panel = NodePath("../UI/InventoryPanel")
-equipment_panel = NodePath("../UI/EquipmentPanel")
+inventory_panel = NodePath("../UI/RightDock/Margin/Rows/InventoryPanel")
+equipment_panel = NodePath("../UI/RightDock")
 hp_hud = NodePath("../UI/HpHud")
 death_overlay = NodePath("../UI/DeathOverlay")
 
 [node name="Net" type="Node" parent="Session"]
 script = ExtResource("7_net_client")
+
+[connection signal="pressed" from="UI/InventoryToggle" to="UI/RightDock" method="toggle"]

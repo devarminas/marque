@@ -78,10 +78,10 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 		{
 			name: "equipment",
 			msg: mnet.Equipment{
-				Worn:  []mnet.EquipSlot{"weapon"},
-				Slots: []mnet.EquipmentSlot{{Slot: "weapon", Kind: "axe"}},
+				Worn:  []mnet.EquipSlot{"helmet", "left hand", "chest", "right hand", "trousers"},
+				Slots: []mnet.EquipmentSlot{{Slot: "right hand", Kind: "axe"}},
 			},
-			want: `{"equipment":{"worn":["weapon"],"slots":[{"slot":"weapon","kind":"axe"}]}}`,
+			want: `{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}`,
 		},
 		{
 			// A worn slot's name is a string on the wire and the only "slot"
@@ -89,10 +89,10 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			// is spelled "worn".
 			name: "empty equipment",
 			msg: mnet.Equipment{
-				Worn:  []mnet.EquipSlot{"weapon"},
+				Worn:  []mnet.EquipSlot{"helmet", "left hand", "chest", "right hand", "trousers"},
 				Slots: []mnet.EquipmentSlot{},
 			},
-			want: `{"equipment":{"worn":["weapon"],"slots":[]}}`,
+			want: `{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}`,
 		},
 		{
 			name: "spawn",
@@ -227,7 +227,7 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 		{mnet.MsgPickup, `{"pickup":{"item":7}}`},
 		{mnet.MsgDrop, `{"drop":{"slot":3}}`},
 		{mnet.MsgEquip, `{"equip":{"slot":3}}`},
-		{mnet.MsgUnequip, `{"unequip":{"worn":"weapon"}}`},
+		{mnet.MsgUnequip, `{"unequip":{"worn":"right hand"}}`},
 		{mnet.MsgGather, `{"gather":{"node":1}}`},
 		{mnet.MsgUse, `{"use":{"slot":3,"on":3}}`},
 		{mnet.MsgAttack, `{"attack":{"player":2}}`},
@@ -327,7 +327,7 @@ func TestDecodeRejections(t *testing.T) {
 		// "missing z"'s reason: an equip of slot 0 is a real intent and must not
 		// be what an empty body means.
 		{"an equip naming no slot", `{"equip":{}}`, mnet.ReasonMissingField, mnet.ReplyError, "equip"},
-		{"an equip whose slot is not a number", `{"equip":{"slot":"weapon"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "equip"},
+		{"an equip whose slot is not a number", `{"equip":{"slot":"right hand"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "equip"},
 		{"an equip whose slot is fractional", `{"equip":{"slot":1.5}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "equip"},
 		{"an unequip naming no worn slot", `{"unequip":{}}`, mnet.ReasonMissingField, mnet.ReplyError, "unequip"},
 		// The confusion the field name exists to prevent: drop's field sent to
@@ -335,7 +335,7 @@ func TestDecodeRejections(t *testing.T) {
 		{"an unequip carrying a bag index", `{"unequip":{"slot":0}}`, mnet.ReasonMissingField, mnet.ReplyError, "unequip"},
 		{"an unequip whose worn slot is a number", `{"unequip":{"worn":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "unequip"},
 		{"a bad seq on an equip", `{"equip":{"slot":0,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "equip"},
-		{"a bad seq on an unequip", `{"unequip":{"worn":"weapon","seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "unequip"},
+		{"a bad seq on an unequip", `{"unequip":{"worn":"right hand","seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "unequip"},
 		{"a gather naming no node", `{"gather":{}}`, mnet.ReasonMissingField, mnet.ReplyError, "gather"},
 		{"a gather whose node is not a number", `{"gather":{"node":"tree"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "gather"},
 	}

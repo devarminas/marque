@@ -97,7 +97,6 @@ func _rebuild(size: int) -> void:
 		child.queue_free()
 	_slots.clear()
 	_size = size
-	visible = size > 0
 
 	for index in size:
 		var slot := InventorySlotScene.instantiate() as InventorySlotScript
