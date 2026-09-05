@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/devarminas/marque/server/internal/abilitydef"
 	"github.com/devarminas/marque/server/internal/game"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
@@ -75,9 +76,23 @@ func main() {
 func run() error {
 	addr := flag.String("addr", "127.0.0.1:8080", "host:port to listen on")
 	enableLog := flag.Bool("gamelog", true, "write the NDJSON event log to stdout")
+	abilitiesPath := flag.String("abilities", "", "path to shared/abilities.json (default: search from cwd, or MARQUE_ABILITIES)")
 	var seeds itemSeeds
 	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world.")
 	flag.Parse()
+
+	path := strings.TrimSpace(*abilitiesPath)
+	if path == "" {
+		resolved, err := abilitydef.ResolvePath()
+		if err != nil {
+			return err
+		}
+		path = resolved
+	}
+	abilities, err := abilitydef.Load(path)
+	if err != nil {
+		return err
+	}
 
 	log := gamelog.New(os.Stdout, *enableLog)
 	hub := mnet.NewHub()
@@ -103,6 +118,8 @@ func run() error {
 		"seeded_items":      len(seeds),
 		"join_kit":          game.DefaultJoinKit,
 		"worn_slots":        game.WornSlots,
+		"abilities":         abilities.Len(),
+		"abilities_path":    path,
 	})
 
 	for _, seed := range seeds {

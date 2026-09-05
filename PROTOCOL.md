@@ -36,6 +36,11 @@ shaped like pickup and gather, constant-damage hits on a tick period, death at H
 `hp` restatement. A marker reading plain **M5** is reserved. Client click-to-attack, HP draw,
 and the death/respawn UI are later units and nothing under an **M5a** marker describes them.
 
+**M6 is in progress.** **M6a** is the shared ability content table and the `cast` ability-id
+field on the wire. Ability stats live in `shared/abilities.json` only; casting runtime, mana
+spend, hotbar UI, and VFX are later M6 units and nothing under an **M6a** marker describes them.
+A marker reading plain **M6** is reserved.
+
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
 stale is the only way it can fail.
@@ -356,6 +361,21 @@ Semantics are in *Combat*.
 
 `seq` may ride on either body under *Sequence numbers*, exactly as it does on `pickup` and
 `gather`.
+
+### `cast`. **M6a**
+
+    {"cast":{"ability":"heal"}}
+    {"cast":{"ability":"fireball","player":2}}
+
+A request to cast an ability. `ability` is a string id from the shared content table
+`shared/abilities.json` (the only ability content source; both client and server load that
+file). It is **not** a player id, item id, or node id.
+
+Optional `player` names another player when the ability's target rule needs one. **M6a** freezes
+the field names and the content source only. Applying the cast, spending mana, cooldowns, and
+effects are later M6 units.
+
+`seq` may ride on the body under *Sequence numbers*, exactly as it does on `attack`.
 
 ## Messages, server to client
 
@@ -1620,6 +1640,21 @@ Named so nobody adds them thinking they were forgotten.
 - No `engage` / `disengage` client-visible pending frames; pending attack is server state.
 - No client UI contract under **M5a** markers.
 - No auto-respawn timer. **`respawn` is the only way back.**
+
+## Abilities. **M6a**
+
+Ability definitions are content, not code. The checked-in file `shared/abilities.json` is the
+only source for ability ids, names, mana costs, cooldowns, ranges, effect payloads, target
+rules, and UI hints. The server refuses to start if that file is missing or malformed. The
+client logs and keeps an empty catalog; it does not invent fallback spells.
+
+Wire `cast.ability` names an id from that table. M6a does not apply casts.
+
+### Deliberately absent (abilities). **M6a**
+
+- No cast application, mana spend, cooldown clocks, or effect resolution.
+- No hotbar chrome, VFX, or client click-to-cast binding under **M6a** markers.
+- No second ability table in Go or GDScript.
 
 ## Deliberately absent
 

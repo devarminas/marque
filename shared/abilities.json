@@ -1,0 +1,36 @@
+{
+  "abilities": [
+    {
+      "id": "heal",
+      "name": "Heal",
+      "mana_cost": 20,
+      "cooldown_ticks": 10,
+      "range": 0,
+      "target": "friendly",
+      "effect": {
+        "kind": "heal",
+        "amount": 25
+      },
+      "ui": {
+        "hotbar_slot": 1,
+        "color": "green"
+      }
+    },
+    {
+      "id": "fireball",
+      "name": "Fireball",
+      "mana_cost": 35,
+      "cooldown_ticks": 8,
+      "range": 8,
+      "target": "hostile",
+      "effect": {
+        "kind": "damage",
+        "amount": 40
+      },
+      "ui": {
+        "hotbar_slot": 2,
+        "color": "red"
+      }
+    }
+  ]
+}
