@@ -123,7 +123,7 @@ func (w *World) gather(p *player, msg mnet.Gather, seq mnet.Seq) {
 
 func (w *World) wearingAxe(p *player) bool {
 	for _, worn := range w.items.Worn(p.id) {
-		if worn.Slot == SlotWeapon && worn.Kind == KindAxe {
+		if worn.Slot == SlotRightHand && worn.Kind == KindAxe {
 			return true
 		}
 	}

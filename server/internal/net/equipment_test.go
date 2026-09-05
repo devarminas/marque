@@ -64,8 +64,16 @@ func TestDefaultJoinKitIsOneAxe(t *testing.T) {
 	if len(game.DefaultJoinKit) != 1 || game.DefaultJoinKit[0] != game.KindAxe {
 		t.Fatalf("DefaultJoinKit is %v, want exactly one %q", game.DefaultJoinKit, game.KindAxe)
 	}
-	if len(game.WornSlots) != 1 || game.WornSlots[0] != game.SlotWeapon {
-		t.Fatalf("WornSlots is %v, want exactly %q", game.WornSlots, game.SlotWeapon)
+	wantWorn := []mnet.EquipSlot{
+		game.SlotHelmet, game.SlotLeftHand, game.SlotChest, game.SlotRightHand, game.SlotTrousers,
+	}
+	if len(game.WornSlots) != len(wantWorn) {
+		t.Fatalf("WornSlots is %v, want %v", game.WornSlots, wantWorn)
+	}
+	for i, slot := range wantWorn {
+		if game.WornSlots[i] != slot {
+			t.Fatalf("WornSlots is %v, want %v", game.WornSlots, wantWorn)
+		}
 	}
 }
 
@@ -123,13 +131,18 @@ func TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty(t *testing.T) {
 	if len(worn.Slots) != 0 {
 		t.Fatalf("a joining player is wearing %+v, want nothing", worn.Slots)
 	}
-	if len(worn.Worn) != len(game.WornSlots) || worn.Worn[0] != game.SlotWeapon {
+	if len(worn.Worn) != len(game.WornSlots) {
 		t.Fatalf("equipment names slots %v, want the server's own list %v", worn.Worn, game.WornSlots)
+	}
+	for i, slot := range game.WornSlots {
+		if worn.Worn[i] != slot {
+			t.Fatalf("equipment names slots %v, want the server's own list %v", worn.Worn, game.WornSlots)
+		}
 	}
 	if !strings.Contains(f.raw, `"slots":[]`) {
 		t.Errorf("an empty equipment encodes as %s, want it to carry \"slots\":[]", f.raw)
 	}
-	if !strings.Contains(f.raw, `"worn":["weapon"]`) {
+	if !strings.Contains(f.raw, `"worn":["helmet","left hand","chest","right hand","trousers"]`) {
 		t.Errorf("equipment encodes as %s, want \"worn\" to be an array of names", f.raw)
 	}
 	assertNoNulls(t, "equipment", f.raw)
@@ -181,9 +194,9 @@ func TestEquippingAnAxeIsOneMoveFromBagToWeapon(t *testing.T) {
 		}
 	}
 
-	kind, wearing := wornKind(worn, game.SlotWeapon)
+	kind, wearing := wornKind(worn, game.SlotRightHand)
 	if !wearing || kind != game.KindAxe {
-		t.Fatalf("alice is wearing %+v, want an axe in %q", worn.Slots, game.SlotWeapon)
+		t.Fatalf("alice is wearing %+v, want an axe in %q", worn.Slots, game.SlotRightHand)
 	}
 	if _, occupied := bagKind(held, 0); occupied {
 		t.Fatalf("bag slot 0 still holds something after the axe left it: %+v; the axe is in both places at once", held.Slots)
@@ -213,8 +226,8 @@ func TestEquippingAnAxeIsOneMoveFromBagToWeapon(t *testing.T) {
 		t.Fatalf("logged %d %s events, want 1: %+v", len(equipped), game.EvEquip, equipped)
 	}
 	ev := equipped[0]
-	if ev["kind"] != game.KindAxe || ev["worn"] != string(game.SlotWeapon) || ev["slot"] != float64(0) {
-		t.Errorf("%s reads %+v, want the axe going from slot 0 to %q", game.EvEquip, ev, game.SlotWeapon)
+	if ev["kind"] != game.KindAxe || ev["worn"] != string(game.SlotRightHand) || ev["slot"] != float64(0) {
+		t.Errorf("%s reads %+v, want the axe going from slot 0 to %q", game.EvEquip, ev, game.SlotRightHand)
 	}
 	if _, swapped := ev["displaced"]; swapped {
 		t.Errorf("%s carries \"displaced\" for an equip into a free slot: %+v", game.EvEquip, ev)
@@ -232,7 +245,7 @@ func TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot(t *testing.T) {
 	h.awaitEvents(game.EvEquip, 1)
 	alice.drain()
 
-	alice.unequip(game.SlotWeapon)
+	alice.unequip(game.SlotRightHand)
 	h.awaitEvents(game.EvUnequip, 1)
 
 	frames := alice.collect(silenceWindow)
@@ -270,8 +283,8 @@ func TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot(t *testing.T) {
 	if len(unequipped) != 1 {
 		t.Fatalf("logged %d %s events, want 1: %+v", len(unequipped), game.EvUnequip, unequipped)
 	}
-	if ev := unequipped[0]; ev["kind"] != game.KindAxe || ev["worn"] != string(game.SlotWeapon) || ev["slot"] != float64(0) {
-		t.Errorf("%s reads %+v, want the axe coming from %q into slot 0", game.EvUnequip, ev, game.SlotWeapon)
+	if ev := unequipped[0]; ev["kind"] != game.KindAxe || ev["worn"] != string(game.SlotRightHand) || ev["slot"] != float64(0) {
+		t.Errorf("%s reads %+v, want the axe coming from %q into slot 0", game.EvUnequip, ev, game.SlotRightHand)
 	}
 }
 
@@ -292,7 +305,7 @@ func TestUnequipFillsTheLowestFreeSlotRatherThanTheOneItLeft(t *testing.T) {
 	h.awaitEvents(game.EvDrop, 1)
 	alice.drain()
 
-	alice.unequip(game.SlotWeapon)
+	alice.unequip(game.SlotRightHand)
 	h.awaitEvents(game.EvUnequip, 1)
 
 	held := alice.awaitInventory()
@@ -415,7 +428,7 @@ func TestUnequippingIntoAFullBagIsRefusedAndTheAxeStaysWorn(t *testing.T) {
 	}
 	alice.drain()
 
-	alice.unequip(game.SlotWeapon)
+	alice.unequip(game.SlotRightHand)
 
 	got := alice.awaitError()
 	if got.Re != mnet.MsgUnequip {
@@ -445,7 +458,7 @@ func TestUnequippingIntoAFullBagIsRefusedAndTheAxeStaysWorn(t *testing.T) {
 	// is the server restating what it holds rather than the test remembering.
 	alice.destroy()
 	resumed := readJoinStep(h.dialResume("alice-again", world.Session))
-	kind, wearing := wornKind(resumed.equipment, game.SlotWeapon)
+	kind, wearing := wornKind(resumed.equipment, game.SlotRightHand)
 	if !wearing || kind != game.KindAxe {
 		t.Fatalf("alice is wearing %+v after the refusal, want the axe still on", resumed.equipment.Slots)
 	}
@@ -464,10 +477,10 @@ func TestUnequipRefusalsNameTheirReasonAndChangeNothing(t *testing.T) {
 		worn mnet.EquipSlot
 		want mnet.RejectReason
 	}{
-		{"a slot this server does not have", "helmet", mnet.ReasonNoSuchWornSlot},
+		{"a slot this server does not have", "cape", mnet.ReasonNoSuchWornSlot},
 		{"a name that is no name at all", "", mnet.ReasonNoSuchWornSlot},
 		{"the wrong case", "WEAPON", mnet.ReasonNoSuchWornSlot},
-		{"a slot it has, wearing nothing", game.SlotWeapon, mnet.ReasonEmptyWornSlot},
+		{"a slot it has, wearing nothing", game.SlotRightHand, mnet.ReasonEmptyWornSlot},
 	}
 
 	for _, tc := range cases {
@@ -587,7 +600,7 @@ func TestWornEquipmentSurvivesSuspendAndResume(t *testing.T) {
 		t.Fatalf("the resume was handed player %d, want %d back", resumed.welcome.You, first.You)
 	}
 
-	kind, wearing := wornKind(resumed.equipment, game.SlotWeapon)
+	kind, wearing := wornKind(resumed.equipment, game.SlotRightHand)
 	if !wearing {
 		t.Fatalf("the resumed player is wearing %+v, want the axe it had on when the socket died", resumed.equipment.Slots)
 	}
@@ -616,11 +629,11 @@ func (c *client) awaitEquipmentBeforeDeath(t *testing.T) string {
 		if f.Equipment == nil {
 			continue
 		}
-		if kind, wearing := wornKind(*f.Equipment, game.SlotWeapon); wearing {
+		if kind, wearing := wornKind(*f.Equipment, game.SlotRightHand); wearing {
 			return kind
 		}
 	}
-	t.Fatalf("client %s: no equipment naming a worn %q arrived", c.name, game.SlotWeapon)
+	t.Fatalf("client %s: no equipment naming a worn %q arrived", c.name, game.SlotRightHand)
 	return ""
 }
 

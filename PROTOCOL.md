@@ -312,7 +312,7 @@ intent it could have resolved. Semantics are in *Equipment*.
 
 ### `unequip`. **M3a**
 
-    {"unequip":{"worn":"weapon"}}
+    {"unequip":{"worn":"right hand"}}
 
 A request to take off whatever is in that worn slot and put it back in the bag. The field is
 `worn` and **not** `slot`, deliberately: `slot` already means a bag index in `drop` and `equip`,
@@ -645,7 +645,7 @@ never otherwise.
 
 ### `equipment`. **M3a**
 
-    {"equipment":{"worn":["weapon"],"slots":[{"slot":"weapon","kind":"axe"}]}}
+    {"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}
 
 Sent to **one player only**, never broadcast. A full restatement of that player's worn
 equipment, on `inventory`'s doctrine and for its reason: a restatement cannot drift, and a
@@ -658,15 +658,16 @@ mean a bag change and a worn change could not be told apart by a client that onl
 Both restatements go out on an `equip` or an `unequip`, because both containers changed.
 
 `worn` is the **closed, ordered list of worn slot names this server has**. It is
-`inventory.size`'s analogue and it is on the wire for `size`'s reason exactly: the client draws
-the panel it is told to draw rather than hardcoding a second copy of the server's slot list. The
-order is the order to draw them in. M3a ships one name, `weapon`.
+`inventory.size`'s analogue and it is on the wire for `size`'s reason exactly: the client learns
+the closed name set from the server rather than inventing one. The wire order is the
+restatement order; the client's draw layout is scene-authored. This server ships five names:
+`helmet`, `left hand`, `chest`, `right hand`, `trousers`.
 
 `slots` lists **only occupied slots**, each carrying its own slot name, exactly as
 `inventory.slots` carries its own index. An empty worn slot is absent from the list rather than
 present with a null or empty `kind`, so a fresh player's `equipment` is
-`{"worn":["weapon"],"slots":[]}`. Every name in `slots` is one of the names in `worn`; nothing
-else can appear there.
+`{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}`. Every name in
+`slots` is one of the names in `worn`; nothing else can appear there.
 
 **Both lists are `[]` when empty and never `null`**, which is the rule the `inventory` section
 above states at length. A fresh player's `equipment` is the ordinary case of an empty `slots`,
@@ -848,15 +849,15 @@ That is RuneScape's shape and it is taken without further argument. The alternat
 and rejected was a second indexed container, which would have made "which container is slot 3
 in" a question every intent had to answer.
 
-**M3a ships exactly one slot name, `weapon`.** The names this server has ride on the wire in
-`equipment.worn`, so a client never holds a second copy of the list. Adding a name later is
-additive: a client that draws the panel from `equipment.worn` grows a slot without a release,
-and one that hardcoded the list is the thing this field exists to prevent.
+**This server ships five slot names:** `helmet`, `left hand`, `chest`, `right hand`,
+`trousers`. The names ride on the wire in `equipment.worn`, so a client never holds a second
+copy of the closed set as authority. The client authors fixed chrome for those names; it does
+not grow worn widgets from the restatement list.
 
 **A kind belongs to at most one worn slot, and the server owns that mapping.** `axe` belongs to
-`weapon`. A kind that belongs to no slot cannot be worn, which is how `acorn` is refused: it is
-a lookup that misses, not a special case naming the kinds that are not weapons. The client is
-never told the mapping and never needs it, because `equip` names a bag slot and the server
+`right hand`. A kind that belongs to no slot cannot be worn, which is how `acorn` is refused: it
+is a lookup that misses, not a special case naming the kinds that are not wearable. The client
+is never told the mapping and never needs it, because `equip` names a bag slot and the server
 resolves the destination.
 
 ### `kind axe`. **M3a**
@@ -988,7 +989,7 @@ Named constants, revisitable:
   construction, same broadcast, same degenerate rules as pickup. A degenerate gather by a
   stationary player already in range is allowed: no path, pending stays, duration counts on
   later ticks.
-- **Gather requires worn `weapon == axe` at receipt.** Otherwise the server refuses with
+- **Gather requires worn `right hand == axe` at receipt.** Otherwise the server refuses with
   `error` naming `gather`, the node is unchanged, and GAMELOG records `gather_rejected`. Join
   still seeds an axe into the bag (M3); the player must `equip` it before a successful gather.
 - **After arrival in range**, the pending gather stays pending for `GatherDurationTicks` ticks
@@ -1438,7 +1439,8 @@ a GDScript client will get it subtly wrong.
   `Vector2.y` component holds world **Z**. This has caught people already.
 - **M3a's two intents address different spaces with different types.** `equip.slot` is a bag
   index and must be written as a JSON integer literal, per the `seq` rule above.
-  `unequip.worn` is a slot **name**, a string, and `"weapon"` is the only one M3a has. A client
+  `unequip.worn` is a slot **name**, a string, and the closed set is the five names in
+  `equipment.worn` (`helmet`, `left hand`, `chest`, `right hand`, `trousers`). A client
   that sends `{"unequip":{"slot":0}}` has confused the two and gets a `missing_field` refusal
   naming `unequip`.
 - **`equipment.slots[].slot` is a string, not a number**, for the same reason. It is the only
