@@ -117,14 +117,6 @@ named SHA against your worktree's copy. If your branch forked before the paste's
 `origin/main`'s copy, which is newer than both. Recency decides; neither copy is authoritative
 only because it sits on disk.
 
-## Picking this up in a new session
-
-1. Open Linear *Project Marque*. Find Todo Unit issues. Their descriptions are the briefs.
-   Issues labelled `Follow-up` are parked and block nothing.
-2. Read this file, then [COORDINATION.md](COORDINATION.md), then `PROTOCOL.md` and `NOTES.md`.
-3. Prove the stack is alive before dispatching anything. Shared recipes live in Linear and are
-   named in `COORDINATION.md`; redirect output to a file, do not pipe.
-4. Run the dispatch loop from `COORDINATION.md` on the first Todo issue.
-
 This file is the worker contract and nothing else. Program progress lives in Linear. Code lives
-on GitHub. Settled decisions live in `PROTOCOL.md` and `NOTES.md`.
+on GitHub. Settled decisions live in `PROTOCOL.md` and `NOTES.md`. Coordinator pickup, dispatch,
+and recipes live in [COORDINATION.md](COORDINATION.md).
