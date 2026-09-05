@@ -30,6 +30,7 @@ const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const GroundItemScript := preload("res://scripts/ground_item.gd")
 const GroundItemScene := preload("res://scenes/ground_item.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
+const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
@@ -107,6 +108,7 @@ var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
 var _camera: Camera3D = null
 var _panel: InventoryPanelScript = null
+var _dock: EquipmentPanelScript = null
 var _grid: GridContainer = null
 var _items_container: Node3D = null
 
@@ -142,8 +144,9 @@ func _ready() -> void:
 	_net = _root.get_node("Session/Net") as NetClientScript
 	_picker = _root.get_node("GroundPicker") as GroundPickerScript
 	_camera = _root.get_node("CameraRig/Camera3D") as Camera3D
-	_panel = _root.get_node("UI/InventoryPanel") as InventoryPanelScript
-	_grid = _root.get_node("UI/InventoryPanel/Margin/Rows/Slots") as GridContainer
+	_panel = _root.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
+	_dock = _root.get_node("UI/RightDock") as EquipmentPanelScript
+	_grid = _root.get_node("UI/RightDock/Margin/Rows/InventoryPanel/Margin/Rows/Slots") as GridContainer
 	_items_container = _root.get_node("GroundItems") as Node3D
 	_nodes_container = _root.get_node("ResourceNodes") as Node3D
 	_remotes_container = _root.get_node("RemotePlayers") as Node3D
@@ -222,11 +225,12 @@ func _ready() -> void:
 # --------------------------------------------------------------------------
 
 
-## CLAUDE.md, "Scene authoring": there is one inventory panel per world, so the
-## panel, its heading and its grid are authored in `main.tscn`. A `_ready` that
-## built them would be a scene edit written in the wrong language.
+## CLAUDE.md, "Scene authoring": inventory lives under the right dock in
+## `main.tscn`. A `_ready` that built them would be a scene edit written in the
+## wrong language.
 func _test_the_panel_is_authored() -> void:
-	_check(_panel != null, "main.tscn authors an inventory panel running inventory_panel.gd")
+	_check(_dock != null, "main.tscn authors UI/RightDock running equipment_panel.gd")
+	_check(_panel != null, "with a nested inventory panel running inventory_panel.gd")
 	_check(_grid != null, "with an authored grid for its slots")
 	_check(
 		_grid != null and _grid.get_child_count() == 0,
@@ -237,8 +241,8 @@ func _test_the_panel_is_authored() -> void:
 		"and the panel draws no slots before any inventory frame",
 	)
 	_check(
-		_panel != null and not _panel.visible,
-		"and is not drawn at all until then, so it cannot sit in front of the world"
+		_dock != null and not _dock.visible,
+		"and the dock starts closed so it cannot sit in front of the world"
 		+ " swallowing clicks while the client is uninformed",
 	)
 	_check(
@@ -246,19 +250,21 @@ func _test_the_panel_is_authored() -> void:
 		"and the grid's column count is authored, not computed (%d)"
 		% [0 if _grid == null else _grid.columns],
 	)
-	# The panel is opaque (M1k), and exactly one node makes it so: the panel
-	# stops, its containers stay IGNORE. A container that stopped too would work
-	# today and would move the boundary the next time the tree changed shape, so
-	# where a click stops stays a property of the panel alone.
 	_check(
-		_panel.mouse_filter == Control.MOUSE_FILTER_STOP,
-		"and the panel stops every click inside its rect, got filter %d" % _panel.mouse_filter,
+		_dock != null and _dock.mouse_filter == Control.MOUSE_FILTER_STOP,
+		"and the dock stops every click inside its rect, got filter %d"
+		% (-1 if _dock == null else _dock.mouse_filter),
+	)
+	_check(
+		_panel != null and _panel.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+		"while nested inventory chrome stays IGNORE, got filter %d"
+		% (-1 if _panel == null else _panel.mouse_filter),
 	)
 	for chrome in [_panel.get_node("Margin"), _panel.get_node("Margin/Rows"), _grid]:
 		var control := chrome as Control
 		_check(
 			control != null and control.mouse_filter == Control.MOUSE_FILTER_IGNORE,
-			"and %s hands a missed click down to the panel rather than catching it"
+			"and %s hands a missed click down rather than catching it"
 			% [null if control == null else control.name],
 		)
 
@@ -383,7 +389,7 @@ func _test_the_grid_size_comes_from_the_wire() -> void:
 	)
 	await _feed('{"inventory":{"size":0,"slots":[]}}')
 	_check(_panel.slot_count() == 0, "an inventory of no slots draws none")
-	_check(not _panel.visible, "and a panel with no slots is hidden rather than drawn empty")
+	_check(_grid.get_child_count() == 0, "and clears the grid rather than drawing empty chrome")
 
 
 ## An item kind this client has no art for still shows something, and it screams
@@ -423,8 +429,8 @@ func _test_welcome_empties_the_panel() -> void:
 	)
 	_check(_grid.get_child_count() == 0, "and empties the authored grid with it")
 	_check(
-		not _panel.visible,
-		"and takes the panel down with it, so the world behind it is clickable again",
+		_panel.slot_count() == 0,
+		"so bag size no longer owns dock visibility",
 	)
 
 
@@ -436,6 +442,12 @@ func _test_welcome_empties_the_panel() -> void:
 ## A world holding player %d and item %d at once, with the camera looking
 ## straight down at the item.
 func _build_the_click_world() -> void:
+	# Inventory unit tests above feed a full bag into a closed dock. Keep the
+	# dock closed for world clicks; an open right dock covers the beside-cursor.
+	_dock.visible = false
+	var toggle := _root.get_node_or_null("UI/InventoryToggle") as CanvasItem
+	if toggle != null:
+		toggle.visible = false
 	await _feed(_welcome_frame())
 	await _feed(
 		'{"item_spawn":{"id":%d,"kind":"acorn","x":%f,"z":%f}}'
@@ -519,6 +531,7 @@ func _test_a_click_on_an_item_is_a_pickup_and_not_a_move() -> void:
 ## [b]The unit's claim, half two.[/b] Fails if a click on bare ground produced a
 ## `pickup`.
 func _test_a_click_on_bare_ground_is_a_move_and_not_a_pickup() -> void:
+	_check(not _dock.visible, "the dock stays closed so a beside-cursor can reach the ground")
 	var cursor := _viewport_centre() + _beside_offset()
 	var expected = _picker.pick_ground(cursor)
 	_check(expected != null, "the bare-ground cursor resolves to a ground point")
@@ -656,6 +669,10 @@ func _test_the_intents_match_the_protocol_byte_for_byte() -> void:
 
 ## A world holding a resource node under the camera. **M4b.**
 func _build_the_node_click_world() -> void:
+	_dock.visible = false
+	var toggle := _root.get_node_or_null("UI/InventoryToggle") as CanvasItem
+	if toggle != null:
+		toggle.visible = false
 	await _feed(_welcome_frame())
 	await _feed(
 		'{"node_spawn":{"id":%d,"kind":"tree","x":%f,"z":%f,"state":"full"}}'
@@ -743,6 +760,10 @@ func _test_a_click_on_an_item_still_picks_up_beside_a_node() -> void:
 
 ## A world holding this client and a remote player under the camera. **M5b.**
 func _build_the_player_click_world() -> void:
+	_dock.visible = false
+	var toggle := _root.get_node_or_null("UI/InventoryToggle") as CanvasItem
+	if toggle != null:
+		toggle.visible = false
 	await _feed(
 		(
 			'{"welcome":{"you":%d,"tick_ms":150,"tick":900,"players":['
@@ -854,11 +875,12 @@ func _test_a_click_on_bare_ground_is_a_move_and_not_an_attack() -> void:
 ## cell is the one a real click can reach here.
 func _test_clicking_an_occupied_slot_uses_it() -> void:
 	var last := WIRE_SIZE - 1
+	_dock.visible = true
 	await _feed(
 		'{"inventory":{"size":%d,"slots":[{"slot":0,"kind":"logs"},{"slot":%d,"kind":"logs"}]}}'
 		% [WIRE_SIZE, last]
 	)
-	_check(_panel.visible, "a panel with slots in it is drawn")
+	_check(_dock.visible, "a dock with slots in it is drawn")
 
 	_watch()
 	await _click_slot(last)
@@ -944,6 +966,7 @@ func _test_cancel_clears_use_selection() -> void:
 ## Driven on a small inventory so the empty cell sits inside the 64x64 harness
 ## viewport (the same layout constraint as the occupied-slot click above).
 func _test_clicking_an_empty_slot_uses_nothing() -> void:
+	_dock.visible = true
 	await _feed('{"inventory":{"size":4,"slots":[]}}')
 	_watch()
 	await _click_slot(3)
@@ -1003,20 +1026,21 @@ func _test_clicking_the_panel_chrome_reaches_nothing() -> void:
 ## it reports what the click [i]would[/i] have hit — and then the click hits the
 ## panel instead.
 func _check_the_chrome_is_a_wall(state: String) -> void:
+	_dock.visible = true
 	# A rebuilt grid has not sorted its children yet, and a widget with no rect
 	# is a rect that every point misses. Rendering first also means the filter
 	# is judged by what a real click does rather than by reading the property,
 	# which is what `_test_the_panel_is_authored` does before any frame runs.
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_check(_panel.visible, "the full-size panel is drawn (%s)" % state)
+	_check(_dock.visible, "the full-size dock is drawn (%s)" % state)
 
 	var screen := _camera.get_viewport().get_visible_rect()
-	var panel_rect := _panel.get_global_rect()
+	var panel_rect := _dock.get_global_rect()
 	print("INTERACTION panel rect %s in viewport %s (%s)" % [panel_rect, screen.size, state])
 
 	var chrome: Variant = _panel_chrome_point(panel_rect, screen)
-	_check(chrome != null, "the panel draws chrome inside the viewport to click on (%s)" % state)
+	_check(chrome != null, "the dock draws chrome inside the viewport to click on (%s)" % state)
 	if chrome == null:
 		return
 	var at: Vector2 = chrome
@@ -1092,7 +1116,7 @@ func _test_the_scripted_feed_still_builds_a_world() -> void:
 	)
 
 	var session := feeder.get_node("Session") as SessionScript
-	var panel := feeder.get_node("UI/InventoryPanel") as InventoryPanelScript
+	var panel := feeder.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
 	_check(
 		session.known_item_ids().size() == FEED_FIXTURE_ITEMS,
 		"and they build %d item body(s), got %d"

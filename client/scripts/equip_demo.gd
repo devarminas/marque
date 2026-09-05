@@ -10,8 +10,8 @@ const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 const WornSlotScript := preload("res://scripts/worn_slot.gd")
 
 const AXE_KIND := "axe"
-const WEAPON_WORN := "weapon"
-const TOGGLE_KEY := KEY_E
+const WEAPON_WORN := "right hand"
+const TOGGLE_KEY := KEY_I
 
 const SCREENSHOT_WARMUP_FRAMES := 15
 const JOIN_TIMEOUT_MSEC := 20000

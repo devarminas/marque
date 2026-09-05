@@ -94,8 +94,8 @@ class Client:
 		camera = root.get_node("CameraRig/Camera3D") as Camera3D
 		local_body = root.get_node("Player") as Node3D
 		remote_players = root.get_node("RemotePlayers") as Node3D
-		panel = root.get_node("UI/InventoryPanel") as InventoryPanelScript
-		equipment = root.get_node("UI/EquipmentPanel") as EquipmentPanelScript
+		panel = root.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
+		equipment = root.get_node("UI/RightDock") as EquipmentPanelScript
 		root.name = "Client" + label
 		session.joined.connect(_on_joined)
 		session.move_to_requested.connect(_on_move_to_requested)
@@ -403,23 +403,22 @@ func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> voi
 	_check_ground(client, 5, Vector2(3.5, -1.25), "a one-element halt path holds at its point")
 
 
-## The inventory panel is opaque, and [constant CLICK_AT] has to miss it.
+## The inventory dock is opaque when open, and [constant CLICK_AT] has to miss it.
 func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
+	client.equipment.visible = true
 	client.feed('{"inventory":{"size":28,"slots":[]}}')
-	# A rebuilt grid has not sorted its children yet, and a widget with no rect
-	# is a rect that every point misses.
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_check(client.panel.visible, "an inventory frame draws the panel")
+	_check(client.equipment.visible, "opening the dock shows inventory chrome")
 	_check(
-		client.panel.mouse_filter == Control.MOUSE_FILTER_STOP,
-		"and the panel stops clicks rather than letting them through, got filter %d"
-		% client.panel.mouse_filter,
+		client.equipment.mouse_filter == Control.MOUSE_FILTER_STOP,
+		"and the dock stops clicks rather than letting them through, got filter %d"
+		% client.equipment.mouse_filter,
 	)
 
 	var viewport := client.camera.get_viewport()
 	var screen := viewport.get_visible_rect()
-	var panel_rect := client.panel.get_global_rect()
+	var panel_rect := client.equipment.get_global_rect()
 	print("WIRING panel rect %s in viewport %s" % [panel_rect, screen.size])
 
 	var scripted := screen.size * CLICK_AT
@@ -429,11 +428,11 @@ func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
 	)
 	_check(
 		not panel_rect.has_point(scripted),
-		"and outside the panel %s, which would otherwise swallow it" % [panel_rect],
+		"and outside the dock %s, which would otherwise swallow it" % [panel_rect],
 	)
 
 	var chrome: Variant = _chrome_point(client, panel_rect, screen)
-	_check(chrome != null, "the panel draws chrome inside the viewport to click on")
+	_check(chrome != null, "the dock draws chrome inside the viewport to click on")
 	if chrome == null:
 		return
 	var at: Vector2 = chrome
@@ -442,18 +441,22 @@ func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
 	await get_tree().process_frame
 	_check(
 		client.clicks.is_empty(),
-		"a click on the panel's chrome at %v walks nobody, got %s" % [at, client.clicks],
+		"a click on the dock's chrome at %v walks nobody, got %s" % [at, client.clicks],
 	)
 
 
-## A point inside the panel's drawn rect, inside the viewport, and on no slot
-## widget, or null when the panel draws no such point.
+## A point inside the dock's drawn rect, inside the viewport, and on no slot
+## widget, or null when the dock draws no such point.
 static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> Variant:
 	var slots: Array[Rect2] = []
 	for index in client.panel.slot_count():
 		var slot := client.panel.slot_at(index)
 		if slot != null:
 			slots.append(slot.get_global_rect())
+	for worn in ["helmet", "left hand", "chest", "right hand", "trousers"]:
+		var worn_slot := client.equipment.slot_at(worn)
+		if worn_slot != null:
+			slots.append(worn_slot.get_global_rect())
 
 	for inset: Vector2 in [Vector2(4, 4), Vector2(4, 20), Vector2(20, 4), Vector2(20, 20)]:
 		var candidate := panel_rect.end - inset
@@ -469,24 +472,14 @@ static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> V
 	return null
 
 
-## [b]M3b's geometry guard.[/b] The player can have the inventory and the
-## equipment panel open at the same time, and [constant CLICK_AT] has to miss
-## both of them at once.
-##
-## Two opaque panels are not one problem twice. At the 64x64 headless viewport
-## each is wider than the whole screen (NOTES.md, "Godot authoring traps"), so
-## the free area is not either panel's leftovers but the intersection of them,
-## and an equipment panel anchored anywhere but the bottom-left closes that
-## intersection completely and leaves this suite with no world to click.
-##
-## Run with the inventory panel already drawn by the test above, so what is
-## measured here is the state a player is actually in with both open.
+## [b]ARM-105 geometry guard.[/b] With the right dock open, [constant CLICK_AT]
+## still has to miss it so world clicks keep working.
 func _test_the_scripted_click_misses_an_open_equipment_panel(client: Client) -> void:
-	client.equipment.toggle()
-	await get_tree().process_frame
-	await get_tree().process_frame
-	_check(client.equipment.visible, "the equipment panel opens")
-	_check(client.panel.visible, "with the inventory panel still open beside it")
+	if not client.equipment.visible:
+		client.equipment.visible = true
+		await get_tree().process_frame
+		await get_tree().process_frame
+	_check(client.equipment.visible, "the dock is open for the geometry check")
 
 	var screen := client.camera.get_viewport().get_visible_rect()
 	var equipment_rect := client.equipment.get_global_rect()
@@ -495,15 +488,11 @@ func _test_the_scripted_click_misses_an_open_equipment_panel(client: Client) -> 
 	var scripted := screen.size * CLICK_AT
 	_check(
 		not equipment_rect.has_point(scripted),
-		"the scripted click %v is outside the equipment panel %s"
+		"the scripted click %v is outside the dock %s"
 		% [scripted, equipment_rect],
 	)
-	_check(
-		not client.panel.get_global_rect().has_point(scripted),
-		"and still outside the inventory panel, so both can be open at once",
-	)
 
-	client.equipment.toggle()
+	client.equipment.visible = false
 	await get_tree().process_frame
 	_check(not client.equipment.visible, "and it closes again for the tests below")
 

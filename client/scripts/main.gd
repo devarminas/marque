@@ -244,7 +244,7 @@ func _print_world_contents() -> void:
 	if session == null:
 		push_error("main.tscn has no Session node to report")
 		return
-	var panel := get_node_or_null("UI/InventoryPanel") as InventoryPanelScript
+	var panel := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
 	var slots := -1 if panel == null else panel.slot_count()
 	var carried := -1 if panel == null else panel.occupied_slot_count()
 	print(
@@ -276,9 +276,9 @@ func _run_pickup_demo(args: Array) -> void:
 		return
 
 	var session := get_node_or_null("Session") as SessionScript
-	var panel := get_node_or_null("UI/InventoryPanel") as InventoryPanelScript
+	var panel := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
 	if session == null or panel == null:
-		push_error("main.tscn is missing the Session or UI/InventoryPanel node to drive")
+		push_error("main.tscn is missing the Session or UI/RightDock inventory panel to drive")
 		get_tree().quit(1)
 		return
 
@@ -296,10 +296,10 @@ func _run_equip_demo(args: Array) -> void:
 		return
 
 	var session := get_node_or_null("Session") as SessionScript
-	var inventory := get_node_or_null("UI/InventoryPanel") as InventoryPanelScript
-	var equipment := get_node_or_null("UI/EquipmentPanel") as EquipmentPanelScript
+	var inventory := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
+	var equipment := get_node_or_null("UI/RightDock") as EquipmentPanelScript
 	if session == null or inventory == null or equipment == null:
-		push_error("main.tscn is missing Session, UI/InventoryPanel, or UI/EquipmentPanel")
+		push_error("main.tscn is missing Session or UI/RightDock")
 		get_tree().quit(1)
 		return
 
@@ -317,10 +317,10 @@ func _run_gather_craft_demo(args: Array) -> void:
 		return
 
 	var session := get_node_or_null("Session") as SessionScript
-	var inventory := get_node_or_null("UI/InventoryPanel") as InventoryPanelScript
-	var equipment := get_node_or_null("UI/EquipmentPanel") as EquipmentPanelScript
+	var inventory := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
+	var equipment := get_node_or_null("UI/RightDock") as EquipmentPanelScript
 	if session == null or inventory == null or equipment == null:
-		push_error("main.tscn is missing Session, UI/InventoryPanel, or UI/EquipmentPanel")
+		push_error("main.tscn is missing Session or UI/RightDock")
 		get_tree().quit(1)
 		return
 

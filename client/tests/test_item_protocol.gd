@@ -415,21 +415,21 @@ func _test_inventory() -> void:
 func _test_equipment() -> void:
 	var recorder := Recorder.new()
 
-	recorder.feed('{"equipment":{"worn":["weapon"],"slots":[]}}')
+	recorder.feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}')
 	var empty := recorder.of("equipment_changed")
 	if _check(empty.size() == 1, "an empty equipment frame is a message, not a silence"):
-		_check(Array(empty[0]["worn"]) == ["weapon"], "worn survives, got %s" % [Array(empty[0]["worn"])])
+		_check(Array(empty[0]["worn"]) == ["helmet", "left hand", "chest", "right hand", "trousers"], "worn survives, got %s" % [Array(empty[0]["worn"])])
 		_check(
 			(empty[0]["slots"] as PackedStringArray).is_empty(),
 			"with nothing worn, got %s" % [Array(empty[0]["slots"])],
 		)
 
 	recorder.clear()
-	recorder.feed('{"equipment":{"worn":["weapon"],"slots":[{"slot":"weapon","kind":"axe"}]}}')
+	recorder.feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}')
 	var one := recorder.of("equipment_changed")
 	if _check(one.size() == 1, "one occupied worn slot decodes"):
 		_check(
-			Array(one[0]["slots"]) == ["weapon"],
+			Array(one[0]["slots"]) == ["right hand"],
 			"as the slot name the server gave it, got %s" % [Array(one[0]["slots"])],
 		)
 		_check(Array(one[0]["kinds"]) == ["axe"], "with its kind, got %s" % [Array(one[0]["kinds"])])
@@ -758,9 +758,9 @@ func _test_intent_frames() -> void:
 		% JSON.stringify(NetClientScript.equip_frame(3)),
 	)
 	_check(
-		JSON.stringify(NetClientScript.unequip_frame("weapon")) == '{"unequip":{"worn":"weapon"}}',
-		'unequip frames as {"unequip":{"worn":"weapon"}}, got %s'
-		% JSON.stringify(NetClientScript.unequip_frame("weapon")),
+		JSON.stringify(NetClientScript.unequip_frame("right hand")) == '{"unequip":{"worn":"right hand"}}',
+		'unequip frames as {"unequip":{"worn":"right hand"}}, got %s'
+		% JSON.stringify(NetClientScript.unequip_frame("right hand")),
 	)
 	_check(
 		JSON.stringify(NetClientScript.use_frame(3, 7)) == '{"use":{"on":7,"slot":3}}',
@@ -783,7 +783,7 @@ func _test_intent_frames() -> void:
 	)
 	_check(
 		(NetClientScript.equip_frame(1)["equip"] as Dictionary).has("slot")
-		and (NetClientScript.unequip_frame("weapon")["unequip"] as Dictionary).has("worn")
+		and (NetClientScript.unequip_frame("right hand")["unequip"] as Dictionary).has("worn")
 		and (NetClientScript.use_frame(1, 2)["use"] as Dictionary).has("on"),
 		"equip names a bag slot, unequip a worn slot, use names slot and on",
 	)
