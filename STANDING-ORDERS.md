@@ -61,19 +61,29 @@ node does not.
 ## Delivery
 
 - One unit per PR. One writer per branch.
+- Read `C:/Users/armin/.claude/skills/poteto-mode/SKILL.md` as a file before any work. The Skill
+  tool and `/poteto-mode` slash refuse for workers; only a file Read loads it.
+- Match Feature (or Bug fix). Copy that playbook's steps into the todolist. End the report with
+  the playbook block: every step done or `skip: <reason>`.
+- Before PR: run Opening a PR. That includes deslop (cursor-team-kit) then no-comments / Comment
+  Sicko on the unit diff. Soft skips on Opening a PR, deslop, or no-comments are forbidden.
+  Narrating `//` and `##` that restate the next lines are land blockers.
+- `interrogate` is adversarial multi-model review of a diff. It is not a channel for asking the
+  human. Run it when Opening a PR or Feature requires it, or when the brief says so.
 - Verifier runs on a different model family than the writer.
 - No merge to `main` without a verdict better than `type-check-only` for behavioral work.
-- `interrogate` is adversarial multi-model review of a diff. It is not a channel for asking the
-  human questions.
 - `.claude/skills/verify-marque/SKILL.md` is the project's verification skill. Any behavioural
   claim about the client or the server is proven the way it describes, before any generic driver.
 
 ## Verified tooling
 
 Go 1.27.0, compiles and runs and tests, module proxy reachable. Godot 4.7.2. gh 2.97.0
-authenticated as `devarminas`. git 2.55.
+authenticated as `devarminas`. git 2.55. bun 1.4.1.
 
-Absent: `bun`, so the orch CLI is unavailable. Absent: Postgres, not needed until after M1.
+The orch CLI is `bun` on
+`C:/Users/armin/.claude/skills/poteto-mode/scripts/orch/orch.ts`. Linear stays the program store;
+orch is optional bookkeeping when a single drain is enough. Absent: Postgres, not needed until
+after M1.
 
 **`go test -race` runs. Every Go unit's verify recipe uses it.** It is not on PATH by default,
 so put it there:
@@ -100,11 +110,12 @@ version will otherwise believe it and negotiate its acceptance list downward.
 
 ## Milestones
 
-M0 and M1 are complete. M2, reconnect without duplicates, is in progress. The open units and
-their briefs are Linear issues in project *Project Marque*; the coordinator pastes the brief
-into the worker's prompt, so a worker never needs to look the program state up.
+M0 through M5 are complete (Linear Unit issues Done: Foundation, Items, Reconnect, Equipment,
+Gathering and crafting, Combat). No milestone is In Progress. Parked work is Follow-up labelled
+issues in project *Project Marque*. The coordinator pastes each unit's brief into the worker's
+prompt.
 
-The wire contract for everything shipped is `PROTOCOL.md`, under its M1 and M2 markers. Read it.
+The wire contract for everything shipped is `PROTOCOL.md`, under its milestone markers. Read it.
 Do not re-derive it and do not negotiate with it. A unit that changes it copies the coordinator's
 rule into the file first, then codes against the file. The M1j finding that two clients agree on
 a tick number rather than a moment is recorded in `COORDINATION.md`, *Lessons from M1*.
@@ -130,8 +141,8 @@ decides, and `origin/main` settles it.
 ## Picking this up in a new session
 
 1. Open the Linear project, `https://linear.app/arminas/project/project-marque-525be456de70`.
-   Find the milestone that is In Progress and the issues under it that are Todo. Their
-   descriptions are the briefs. Issues labelled `Follow-up` are parked and block nothing.
+   Find Todo Unit issues (or the In Progress milestone when one exists). Their descriptions are
+   the briefs. Issues labelled `Follow-up` are parked and block nothing.
 2. Read this file, then [COORDINATION.md](COORDINATION.md) for the dispatch loop and every
    lesson about writing briefs and sizing verifications, then `PROTOCOL.md` and `NOTES.md`.
 3. Prove the stack is alive before dispatching anything. Recipe H and Recipe W in

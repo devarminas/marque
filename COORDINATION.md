@@ -41,7 +41,9 @@ catches defects:
   SHA it applies to, and the commands actually run. A new head SHA voids the verdict, so a
   branch that moves after verification gets re-verified before it merges.
 
-Reintroduce the store only if the queue outgrows a single drain. It has not.
+Linear stays the program store. `bun` is available; orch CLI is optional bookkeeping
+(`bun` on `C:/Users/armin/.claude/skills/poteto-mode/scripts/orch/orch.ts`) when a single drain
+is not enough.
 
 ## Unit sizing
 
@@ -130,7 +132,9 @@ worker lost real time to its absence.
     as a file before any work (the Skill tool will refuse), to copy its matched playbook's
     steps into its todolist, and to end its report with the playbook block. The gate must ask
     for that block, every step done or `skip: <reason>`, because a brief's own report format
-    otherwise displaces the checklist entirely.
+    otherwise displaces the checklist entirely. **A playbook block where Opening a PR, deslop,
+    or no-comments is skipped with a weak reason (`N/A`, `timebox`, `already clean`, or similar)
+    is a fail. Send the writer back.**
 
 ## Verifying a verification
 
@@ -330,12 +334,16 @@ verification runs again.
 
 ## The dispatch loop
 
-**The coordinator is a dispatcher, not an implementer.** It does not write code, read diffs line
-by line, or reason about the domain. It launches agents, gates on their output, and moves to the
-next unit. A coordinator that finds itself designing something has taken a worker's job.
+**The coordinator is a dispatcher, not an implementer.** It does not write code, deep-review
+diffs, or reason about the domain. Completions that need a diff judgment become verifier units;
+the coordinator gates on verdicts, not on reading the patch. A coordinator that finds itself
+designing something has taken a worker's job.
 
-One unit at a time. Every agent is `poteto-agent` and every brief opens with the `SKILL.md` read
-instruction from rule 10 under *Writing a brief*.
+**Default: one unit at a time** for a single-drain coordinator. An **Orchestrate** program may
+run a rolling window of independent units (still one writer per branch; shared files and Godot
+serialize) per that playbook. Do not invent parallel writers outside Orchestrate. Every agent is
+`poteto-agent` and every brief opens with the `SKILL.md` read instruction from rule 10 under
+*Writing a brief*.
 
 1. **Write.** One unit, one branch, one worktree under `C:\Users\armin\Documents\Projects\game\`.
    `git worktree add`. Model `opus`. Paste `STANDING-ORDERS.md` verbatim and name the SHA you
@@ -343,13 +351,16 @@ instruction from rule 10 under *Writing a brief*.
 2. **Gate.** The writer must report a pushed branch, a head SHA, and the commands it ran with
    their exit codes and final lines. Missing any of those, send it back. The report must also
    carry the playbook block, the matched playbook and every step marked done or
-   `skip: <reason>`. A missing block, or one where every step is a skip, sends the writer back
-   the same way.
+   `skip: <reason>`. A missing block, one where every step is a skip, or a soft-skip fail under
+   rule 10, sends the writer back. **Also require proof of no-comments:** Comment Sicko agent id
+   or report path, plus a short summary of deletions. No merge without that proof.
 3. **Verify.** Model `fable`, so the family differs from the writer. Never the writer itself.
    Over about four checks, or if the checks span re-running and reading and adversarial probing,
    split into two agents with a verdict each. *Sizing a verification* above has the rules.
 4. **Gate.** No merge without a verdict better than `type-check-only` from an agent that did not
-   write the code. CI green is not a verdict. A writer proving its own fix is not a verdict.
+   write the code. CI green is not a verdict. A writer proving its own fix is not a verdict. A
+   verifier may note leftover narrating comments as findings; those void land the same way a
+   failed acceptance does.
 5. **Findings.** Send them to the writer as a numbered list demanding a per-item answer,
    including the items it declines. A new head SHA voids the verdict. Either re-verify, or show
    the delta is disjoint from what the verdict covered. Showing means running the diff, not
