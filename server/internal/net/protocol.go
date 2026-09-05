@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 )
 
 // PlayerID identifies a connected player for the lifetime of one server
@@ -64,6 +65,7 @@ const (
 	MsgUse     = "use"
 	MsgAttack  = "attack"
 	MsgRespawn = "respawn"
+	MsgCast    = "cast"
 )
 
 // PlayerState is one player's position and public vitals, as it appears inside welcome.
@@ -286,6 +288,13 @@ type Attack struct {
 // Respawn is a request to leave the dead state (PROTOCOL.md, "respawn", M5a).
 type Respawn struct{}
 
+// Cast is a request to cast an ability from shared/abilities.json (PROTOCOL.md, "cast", M6d).
+// Player is 0 when the body omitted the field. Ability stats never ride on this intent.
+type Cast struct {
+	Ability string
+	Player  PlayerID
+}
+
 func (MoveTo) isClientMessage()  {}
 func (Pickup) isClientMessage()  {}
 func (Drop) isClientMessage()    {}
@@ -295,6 +304,7 @@ func (Gather) isClientMessage()  {}
 func (Use) isClientMessage()     {}
 func (Attack) isClientMessage()  {}
 func (Respawn) isClientMessage() {}
+func (Cast) isClientMessage()    {}
 
 func (MoveTo) Name() string  { return MsgMoveTo }
 func (Pickup) Name() string  { return MsgPickup }
@@ -305,6 +315,7 @@ func (Gather) Name() string  { return MsgGather }
 func (Use) Name() string     { return MsgUse }
 func (Attack) Name() string  { return MsgAttack }
 func (Respawn) Name() string { return MsgRespawn }
+func (Cast) Name() string    { return MsgCast }
 
 type serverEnvelope struct {
 	Welcome     *Welcome     `json:"welcome,omitempty"`
@@ -430,6 +441,16 @@ const (
 	ReasonDead RejectReason = "dead"
 	// ReasonNotDead: a respawn from a living player.
 	ReasonNotDead RejectReason = "not_dead"
+	// ReasonUnknownAbility: a cast naming no id in shared/abilities.json (PROTOCOL.md, M6d).
+	ReasonUnknownAbility RejectReason = "unknown_ability"
+	// ReasonNoTarget: a cast that needs a player id and did not name one.
+	ReasonNoTarget RejectReason = "no_target"
+	// ReasonWrongTarget: a cast whose target rule rejects the named player (faction / self).
+	ReasonWrongTarget RejectReason = "wrong_target"
+	// ReasonInsufficientMana: a cast whose mana_cost exceeds the caster's current mana.
+	ReasonInsufficientMana RejectReason = "insufficient_mana"
+	// ReasonOutOfRange: a cast whose target is farther than the ability's range.
+	ReasonOutOfRange RejectReason = "out_of_range"
 	// ReasonUnknownSender: a frame from a connection with no player.
 	ReasonUnknownSender RejectReason = "unknown_sender"
 	// ReasonBinaryFrame: a WebSocket binary frame.
@@ -520,6 +541,11 @@ type attackWire struct {
 	Player *PlayerID `json:"player"`
 }
 
+type castWire struct {
+	Ability *string   `json:"ability"`
+	Player  *PlayerID `json:"player"`
+}
+
 type seqWire struct {
 	Seq *int64 `json:"seq"`
 }
@@ -565,6 +591,8 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 			decodeBody = decodeAttack
 		case MsgRespawn:
 			decodeBody = decodeRespawn
+		case MsgCast:
+			decodeBody = decodeCast
 		default:
 			return nil, 0, &RejectError{
 				Reason:      ReasonUnknownMessage,
@@ -708,6 +736,21 @@ func decodeRespawn(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonMalformedJSON, MsgRespawn, "respawn: %v", err)
 	}
 	return Respawn{}, nil
+}
+
+func decodeCast(payload []byte) (ClientMessage, error) {
+	var wire castWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgCast, "cast: %v", err)
+	}
+	if wire.Ability == nil || strings.TrimSpace(*wire.Ability) == "" {
+		return nil, rejectIntent(ReasonMissingField, MsgCast, "cast needs an ability id")
+	}
+	msg := Cast{Ability: strings.TrimSpace(*wire.Ability)}
+	if wire.Player != nil {
+		msg.Player = *wire.Player
+	}
+	return msg, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }

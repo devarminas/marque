@@ -336,6 +336,11 @@ func send_attack(player_id: int, seq: int = 0) -> Error:
 	return _send(attack_frame(player_id, _intent_seq(seq)))
 
 
+## [param target_id] of 0 omits `player` on the wire (server may refuse). **M6d.**
+func send_cast(ability_id: String, target_id: int = 0, seq: int = 0) -> Error:
+	return _send(cast_frame(ability_id, target_id, _intent_seq(seq)))
+
+
 func send_respawn(seq: int = 0) -> Error:
 	return _send(respawn_frame(_intent_seq(seq)))
 
@@ -393,6 +398,13 @@ static func use_frame(slot: int, on: int, seq: int = 0) -> Dictionary:
 
 static func attack_frame(player_id: int, seq: int = 0) -> Dictionary:
 	return {"attack": _intent_body({"player": player_id}, seq)}
+
+
+static func cast_frame(ability_id: String, target_id: int = 0, seq: int = 0) -> Dictionary:
+	var body := {"ability": ability_id}
+	if target_id >= 1:
+		body["player"] = target_id
+	return {"cast": _intent_body(body, seq)}
 
 
 static func respawn_frame(seq: int = 0) -> Dictionary:
