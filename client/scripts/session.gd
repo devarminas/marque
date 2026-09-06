@@ -937,9 +937,9 @@ func _poll_move_intent() -> void:
 	if Input.is_action_pressed("move_right"):
 		local_x += 1.0
 	if Input.is_action_pressed("move_forward"):
-		local_z -= 1.0
-	if Input.is_action_pressed("move_back"):
 		local_z += 1.0
+	if Input.is_action_pressed("move_back"):
+		local_z -= 1.0
 
 	var dx := 0.0
 	var dz := 0.0

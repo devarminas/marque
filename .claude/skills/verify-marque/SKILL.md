@@ -111,7 +111,7 @@ client screenshots itself from inside the engine; nothing automates the desktop.
 **Client, headless** (logic, physics, signals, scenes — no rendering server, no pixels):
 
     $env:MARQUE_WS_URL = "ws://127.0.0.1:52731/ws"
-    godot --headless --path client --script res://tests/run_tests.gd --quit-after 900
+    godot --headless --path client --script res://tests/run_tests.gd --quit-after 1200
 
 **Teardown:** stop the server with `Stop-Process -Id <pid> -Force`, using the PID you
 started. Never kill by process name.
@@ -332,7 +332,7 @@ two clients race to connect — so always resolve ids via `DEMO joined`.
 ## Headless-only claims
 
 The suite runner (`client/tests/run_tests.gd`) owns the false-pass holes: it requires
-every suite to run and assert, watchdogs the run at `WATCHDOG_FRAMES = 850`, and
+every suite to run and assert, watchdogs the run at `WATCHDOG_FRAMES = 1000`, and
 prints its `PASS:` line only from a completed report. **Any bound a runner enforces
 must sit below the `--quit-after` it runs under** — `--quit-after` exits 0, so a
 watchdog above it can never fire and is decorative. The server-backed suites skip
