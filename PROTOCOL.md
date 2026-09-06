@@ -36,7 +36,7 @@ shaped like pickup and gather, constant-damage hits on a tick period, death at H
 `hp` restatement. A marker reading plain **M5** is reserved. Client click-to-attack, HP draw,
 and the death/respawn UI are later units and nothing under an **M5a** marker describes them.
 
-**M6 is in progress.** **M6a** is the shared ability content table and the `cast` ability-id
+**M6 is closed by observation under M6i.** **M6a** is the shared ability content table and the `cast` ability-id
 field on the wire. Ability stats live in `shared/abilities.json` only. **M6b** is the mana pool
 and its restatement. **M6c** is client tab targeting: left-click selects a living remote player
 with local chrome and does not send `attack`; Escape clears the selection; ground clicks move
@@ -44,8 +44,10 @@ without clearing it. **M6d** is center hotbar chrome and server cast resolution 
 (mana spend, heal/damage, refusals). **M6e** is practice dummy NPCs (one friendly, one hostile),
 seeded into the world, selectable, and valid cast/attack targets by faction. **M6f** is
 right-click basic attack: right-click on a hostile (player or enemy dummy) sends `attack` and
-also sets selection; left-click stays select-only; friendly dummies refuse. VFX polish is later.
-A marker reading plain **M6** is reserved.
+also sets selection; left-click stays select-only; friendly dummies refuse. **M6g** is
+server-authoritative WASD `move` intents. **M6h** is the cast-success flash on the target.
+**M6i** is the milestone demo (`scripts/tab_combat_demo.ps1`); last-line marker
+`TAB COMBAT DEMO OK`. A marker reading plain **M6** is reserved.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being

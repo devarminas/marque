@@ -45,6 +45,7 @@ const CombatDemoScript := preload("res://scripts/combat_demo.gd")
 const DummyCastDemoScript := preload("res://scripts/dummy_cast_demo.gd")
 const DummyAttackDemoScript := preload("res://scripts/dummy_attack_demo.gd")
 const WasdDemoScript := preload("res://scripts/wasd_demo.gd")
+const TabCombatDemoScript := preload("res://scripts/tab_combat_demo.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
 
@@ -121,6 +122,7 @@ const DUMMY_CAST_FLAG := "--dummy-cast"
 const DUMMY_ATTACK_FLAG := "--dummy-attack"
 const COMBAT_ROLE_FLAG := "--combat-role"
 const WASD_SHOTS_FLAG := "--wasd-shots"
+const TAB_COMBAT_SHOTS_FLAG := "--tab-combat-shots"
 
 ## How many phases the demo runs. One per client.
 const DEMO_PHASES := 2
@@ -194,6 +196,9 @@ func _ready() -> void:
 		return
 	if DUMMY_ATTACK_FLAG in args:
 		await _run_dummy_attack_demo()
+		return
+	if TAB_COMBAT_SHOTS_FLAG in args:
+		await _run_tab_combat_demo(args)
 		return
 	if WASD_SHOTS_FLAG in args:
 		await _run_wasd_demo(args)
@@ -404,6 +409,22 @@ func _run_dummy_attack_demo() -> void:
 		return
 	var demo := DummyAttackDemoScript.new()
 	var code: int = await demo.run(self, session)
+	get_tree().quit(code)
+
+
+func _run_tab_combat_demo(args: Array) -> void:
+	var prefix := _argument_after(args, TAB_COMBAT_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % TAB_COMBAT_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+	var session := get_node_or_null("Session") as SessionScript
+	if session == null:
+		push_error("main.tscn is missing Session")
+		get_tree().quit(1)
+		return
+	var demo := TabCombatDemoScript.new()
+	var code: int = await demo.run(self, session, prefix)
 	get_tree().quit(code)
 
 

@@ -80,5 +80,7 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
   intents, sticky steer, short path segments; click-to-move remains.
 - [Cast effect on target](./cast-effect-on-target.md) — M6h: placeholder flash on
   the cast target after server mana success; refuse stays silent.
+- [Tab combat loop](./tab-combat-loop.md) — M6i milestone: fireball, heal,
+  right-click attack, WASD in one DEMO/GAMELOG pass.
 - [Server liveness](./heartbeat-liveness.md) — the M2c milestone: heartbeat ticks,
   the three-interval liveness window, and the loud abandon of a silent server.
