@@ -962,9 +962,8 @@ slots into one exchange: a two-handed kind occupies `left hand` and `right hand`
 one-handed kind occupies exactly one of them. Handedness and slot come from the same table, so
 they cannot disagree.
 
-- **`axe`, `lumberjack axe`, `pickaxe`, `sword` are one-handed, and each occupies `right hand`.**
-- **`staff`, `bow`, `lumberjack axe` (two-handed axe) are two-handed, and occupy `left hand` and
-  `right hand`.**
+- **`axe`, `pickaxe`, `sword` are one-handed, and each occupies `right hand`.**
+- **`staff`, `bow`, `lumberjack axe` are two-handed, and occupy `left hand` and `right hand`.**
 
 The two axes differ: the lumberjack axe is a distinct kind from the one-handed `axe`, and it is
 the two-handed one. `kind` names the item; handedness is a property of the kind. **A kind cannot
@@ -1038,7 +1037,7 @@ In every case the bag and the worn slots are exactly as they were.
 
 ### `unequip`
 
-`unequip` is `equip`'s reverse transaction and it is immediate for the same reason. **The kind
+`unequip` is `equip`'s reverse transaction and it is immediate for the same reason. The kind
 leaves its worn slot and lands in the **lowest free bag slot**, which is RuneScape's rule and
 the same one `pickup` fills a slot by. Both restatements go out again. **A two-handed unequip
 clears both hand slots in the same move**, because the kind is worn across both and neither can

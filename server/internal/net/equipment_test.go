@@ -694,3 +694,28 @@ func TestASequencedEquipIsDedupedAndLogsItsSeq(t *testing.T) {
 	// no error.
 	alice.expectSilence()
 }
+
+// TestATwoHandedEquipRestatesBothHands is the wire half of AC1: the equipment
+// restatement after a 2H equip shows the kind in both hand slots, so a client
+// that draws fixed chrome for those names sees the truth without merging
+// anything itself.
+func TestATwoHandedEquipRestatesBothHands(t *testing.T) {
+	h := newHarnessWithKit(t, []string{game.KindStaff})
+
+	alice := h.dial("alice")
+	alice.welcome()
+	alice.drain()
+
+	alice.sendRaw(`{"equip":{"slot":0}}`)
+	h.awaitEvents(game.EvEquip, 1)
+
+	alice.awaitInventory()
+	eq := alice.equipment()
+	seen := make(map[mnet.EquipSlot]string)
+	for _, s := range eq.Slots {
+		seen[s.Slot] = s.Kind
+	}
+	if seen[game.SlotLeftHand] != game.KindStaff || seen[game.SlotRightHand] != game.KindStaff {
+		t.Fatalf("the restatement shows %v, want %q in both hand slots", seen, game.KindStaff)
+	}
+}

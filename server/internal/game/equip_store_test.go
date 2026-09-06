@@ -461,8 +461,8 @@ func wornKindsIn(s Store, player mnet.PlayerID, kind string) []mnet.EquipSlot {
 	return slots
 }
 
-// TestAOneHandedKindOccupiesOneHand only, the right hand, so the left hand
-// stays free for a shield or a second one-handed tool. M7b, AC2.
+// TestAOneHandedKindOccupiesOneHand: the right hand, so the left hand stays
+// free for a shield or a second one-handed tool. M7b, AC2.
 func TestAOneHandedKindOccupiesOneHand(t *testing.T) {
 	s := NewMemoryStore()
 	s.AddPlayer(1)
