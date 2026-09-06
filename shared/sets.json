@@ -1,0 +1,66 @@
+{
+  "sets": [
+    {
+      "id": "knight",
+      "name": "Knight",
+      "slots": {
+        "helmet": "plate_helm",
+        "chest": "plate_chest",
+        "trousers": "plate_legs"
+      },
+      "tools": {
+        "sword": {"handed": "one"},
+        "shield": {"handed": "one"}
+      }
+    },
+    {
+      "id": "mage",
+      "name": "Mage",
+      "slots": {
+        "helmet": "cloth_hood",
+        "chest": "cloth_robe",
+        "trousers": "cloth_skirt"
+      },
+      "tools": {
+        "staff": {"handed": "two"}
+      }
+    },
+    {
+      "id": "archer",
+      "name": "Archer",
+      "slots": {
+        "helmet": "leather_helm",
+        "chest": "leather_chest",
+        "trousers": "leather_legs"
+      },
+      "tools": {
+        "bow": {"handed": "two"}
+      }
+    },
+    {
+      "id": "miner",
+      "name": "Miner",
+      "slots": {
+        "helmet": "prospector_helm",
+        "chest": "prospector_jacket",
+        "trousers": "prospector_legs",
+        "boots": "prospector_boots"
+      },
+      "tools": {
+        "pickaxe": {"handed": "one"}
+      }
+    },
+    {
+      "id": "lumberjack",
+      "name": "Lumberjack",
+      "slots": {
+        "helmet": "forester_cap",
+        "chest": "forester_shirt",
+        "trousers": "forester_trousers"
+      },
+      "tools": {
+        "axe": {"handed": "two"}
+      }
+    }
+  ]
+}
