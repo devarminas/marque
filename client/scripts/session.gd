@@ -238,8 +238,7 @@ var _npcs := {}
 var _use_from := -1
 ## Selected living remote player id, or 0 when none. **M6c.**
 var _selected_player_id := 0
-## Casts on the wire waiting for mana success or cast refuse. **M6h.**
-var _pending_casts: Array = []
+var _casts_awaiting_mana: Array = []
 var _last_move_dx := 0.0
 var _last_move_dz := 0.0
 var _last_move_sent_msec := 0
@@ -530,25 +529,19 @@ func request_cast(ability_id: String) -> void:
 		push_warning("session: cast %s dropped, the socket is not open" % ability_id)
 		return
 	if target_id < 1:
-		_enqueue_pending_cast(ability_id, 0)
+		await_mana_for_cast(ability_id, 0)
 		_net.send_cast(ability_id, 0)
 		return
-	_enqueue_pending_cast(ability_id, target_id)
+	await_mana_for_cast(ability_id, target_id)
 	_net.send_cast(ability_id, target_id)
 
 
-## Records a cast that left on the wire. Headless tests use this when no socket
-## is open; live play goes through [method request_cast]. **M6h.**
-func note_cast_sent(ability_id: String, target_id: int) -> void:
-	_enqueue_pending_cast(ability_id, target_id)
+func await_mana_for_cast(ability_id: String, target_id: int) -> void:
+	_casts_awaiting_mana.append({"ability": ability_id, "target": target_id})
 
 
-func pending_cast_count() -> int:
-	return _pending_casts.size()
-
-
-func _enqueue_pending_cast(ability_id: String, target_id: int) -> void:
-	_pending_casts.append({"ability": ability_id, "target": target_id})
+func casts_awaiting_mana_count() -> int:
+	return _casts_awaiting_mana.size()
 
 
 func _on_hotbar_ability(ability_id: String) -> void:
@@ -1105,15 +1098,15 @@ func _on_path_assigned(
 
 ## The server refused something this client sent. For a log, not for branching.
 func _on_server_error(re: String, message: String) -> void:
-	if re == "cast" and not _pending_casts.is_empty():
-		_pending_casts.pop_front()
+	if re == "cast" and not _casts_awaiting_mana.is_empty():
+		_casts_awaiting_mana.pop_front()
 	push_warning('session: server refused "%s": %s' % [re, message])
 
 
 func _on_disconnected(code: int, reason: String) -> void:
 	_connection_over = true
 	_liveness_deadline_msec = 0
-	_pending_casts.clear()
+	_casts_awaiting_mana.clear()
 	var resume := not _logout_requested and not _base_url.is_empty()
 	if resume:
 		push_warning(
@@ -1305,12 +1298,12 @@ func _on_mana_changed(id: int, mana: int, max_mana: int) -> void:
 	if id == _you:
 		prior = mana_for(_you).x
 	_apply_mana(id, mana, max_mana)
-	if id == _you and prior >= 0 and mana < prior and not _pending_casts.is_empty():
-		_resolve_pending_cast_success()
+	if id == _you and prior >= 0 and mana < prior and not _casts_awaiting_mana.is_empty():
+		_resolve_cast_on_mana_spend()
 
 
-func _resolve_pending_cast_success() -> void:
-	var pending: Dictionary = _pending_casts.pop_front()
+func _resolve_cast_on_mana_spend() -> void:
+	var pending: Dictionary = _casts_awaiting_mana.pop_front()
 	var ability_id := String(pending.get("ability", ""))
 	var target_id := int(pending.get("target", 0))
 	_play_cast_effect_on_target(target_id, ability_id)

@@ -73,14 +73,14 @@ func _feed_welcome_with_npcs() -> void:
 
 func _test_success_plays_on_target() -> void:
 	_effects.clear()
-	_session.note_cast_sent("fireball", 1000002)
-	_check(_session.pending_cast_count() == 1, "pending cast recorded before mana")
+	_session.await_mana_for_cast("fireball", 1000002)
+	_check(_session.casts_awaiting_mana_count() == 1, "pending cast recorded before mana")
 	_net.ingest_text_frame('{"mana":{"id":3,"mana":80,"max_mana":100}}')
 	_check(_effects.size() == 1, "mana drop plays one cast effect")
 	if _effects.size() == 1:
 		_check(_effects[0]["target"] == 1000002, "effect targets the fireball dummy")
 		_check(_effects[0]["ability"] == "fireball", "effect names fireball")
-	_check(_session.pending_cast_count() == 0, "pending cleared after success")
+	_check(_session.casts_awaiting_mana_count() == 0, "pending cleared after success")
 	var npcs: Dictionary = _session.get("_npcs")
 	var hostile: NpcDummyScript = npcs.get(1000002)
 	_check(hostile != null, "hostile dummy exists")
@@ -97,11 +97,11 @@ func _test_success_plays_on_target() -> void:
 
 func _test_refuse_plays_nothing() -> void:
 	_effects.clear()
-	_session.note_cast_sent("heal", 1000001)
-	_check(_session.pending_cast_count() == 1, "pending cast before refuse")
+	_session.await_mana_for_cast("heal", 1000001)
+	_check(_session.casts_awaiting_mana_count() == 1, "pending cast before refuse")
 	_net.ingest_text_frame('{"error":{"re":"cast","msg":"target out of range"}}')
 	_check(_effects.size() == 0, "refused cast plays no effect")
-	_check(_session.pending_cast_count() == 0, "refuse clears pending")
+	_check(_session.casts_awaiting_mana_count() == 0, "refuse clears pending")
 	_net.ingest_text_frame('{"mana":{"id":3,"mana":70,"max_mana":100}}')
 	_check(_effects.size() == 0, "mana after refuse without pending plays nothing")
 

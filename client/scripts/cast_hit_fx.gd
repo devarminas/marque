@@ -1,8 +1,5 @@
 extends RefCounted
 
-## Placeholder cast impact on a target body. Runtime-only mesh; not authored in
-## a scene because the flash exists only while a cast is resolving. **M6h.**
-
 
 static func color_for_ui(name: String) -> Color:
 	match name:
