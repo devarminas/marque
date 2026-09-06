@@ -49,7 +49,9 @@ func _ready() -> void:
 	await get_tree().process_frame
 
 	_test_success_plays_on_target()
+	_test_self_target_plays_on_local()
 	_test_refuse_plays_nothing()
+	_test_missing_host_emits_nothing()
 	_test_caster_mana_without_pending_plays_nothing()
 
 	print(
@@ -95,6 +97,23 @@ func _test_success_plays_on_target() -> void:
 			)
 
 
+func _test_self_target_plays_on_local() -> void:
+	_effects.clear()
+	var you := _session.own_id()
+	_session.await_mana_for_cast("heal", you)
+	_net.ingest_text_frame('{"mana":{"id":3,"mana":60,"max_mana":100}}')
+	_check(_effects.size() == 1, "self heal plays one cast effect")
+	if _effects.size() == 1:
+		_check(_effects[0]["target"] == you, "self heal targets own id")
+	var local_avatar: Node3D = _session.get("_local")
+	_check(local_avatar != null, "local avatar exists")
+	if local_avatar != null:
+		_check(
+			local_avatar.get_node_or_null("CastHitFx") != null,
+			"flash parents under local avatar for self target",
+		)
+
+
 func _test_refuse_plays_nothing() -> void:
 	_effects.clear()
 	_session.await_mana_for_cast("heal", 1000001)
@@ -102,13 +121,21 @@ func _test_refuse_plays_nothing() -> void:
 	_net.ingest_text_frame('{"error":{"re":"cast","msg":"target out of range"}}')
 	_check(_effects.size() == 0, "refused cast plays no effect")
 	_check(_session.casts_awaiting_mana_count() == 0, "refuse clears pending")
-	_net.ingest_text_frame('{"mana":{"id":3,"mana":70,"max_mana":100}}')
+	_net.ingest_text_frame('{"mana":{"id":3,"mana":50,"max_mana":100}}')
 	_check(_effects.size() == 0, "mana after refuse without pending plays nothing")
+
+
+func _test_missing_host_emits_nothing() -> void:
+	_effects.clear()
+	_session.await_mana_for_cast("fireball", 999999)
+	_net.ingest_text_frame('{"mana":{"id":3,"mana":40,"max_mana":100}}')
+	_check(_effects.size() == 0, "missing target host emits no cast_effect_played")
+	_check(_session.casts_awaiting_mana_count() == 0, "missing host still clears queue")
 
 
 func _test_caster_mana_without_pending_plays_nothing() -> void:
 	_effects.clear()
-	_net.ingest_text_frame('{"mana":{"id":3,"mana":60,"max_mana":100}}')
+	_net.ingest_text_frame('{"mana":{"id":3,"mana":30,"max_mana":100}}')
 	_check(_effects.size() == 0, "unsolicited mana drop plays no cast effect")
 
 

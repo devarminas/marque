@@ -1901,11 +1901,15 @@ Heal vs fireball share one flash mesh; tint follows `ui.color` from `shared/abil
 (green / red). The flash is parented under the **target**, never the caster unless the
 target is self.
 
+Only the casting client plays the flash. Other players never see it: the cue is the caster's
+own `mana` restatement, and there is no world-visible cast-impact frame.
+
 ### Deliberately absent (cast effect). **M6h**
 
 - No projectile travel, animation sets, or sound.
 - No optimistic flash before the server's mana success restatement.
 - No dedicated `cast_effect` wire message.
+- No observer / bystander flash (casters only).
 
 ## Practice dummies. **M6e**
 
