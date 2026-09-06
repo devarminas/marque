@@ -137,7 +137,8 @@ func run(
 			RESTATE_TIMEOUT_MSEC,
 		):
 			return _fail("respawn never restored HP %d with overlay hidden" % MAX_HP)
-		_session.request_move_to(POST_MOVE_XZ.x, POST_MOVE_XZ.y)
+		if not await _left_click_ground_xz(POST_MOVE_XZ):
+			return 1
 		print("DEMO postmove %f %f" % [POST_MOVE_XZ.x, POST_MOVE_XZ.y])
 		var post_deadline := Time.get_ticks_msec() + 1200
 		while Time.get_ticks_msec() < post_deadline:
@@ -184,7 +185,8 @@ func _wait_for_scenario() -> int:
 
 
 func _relocate_out_of_range() -> bool:
-	_session.request_move_to(RELOCATE_XZ.x, RELOCATE_XZ.y)
+	if not await _left_click_ground_xz(RELOCATE_XZ):
+		return false
 	print("DEMO relocate %f %f" % [RELOCATE_XZ.x, RELOCATE_XZ.y])
 	if not await _wait_until(
 		func() -> bool:
@@ -333,6 +335,34 @@ func _screen_position_of_avatar(avatar: PlayerAvatarScript) -> Variant:
 		return null
 	print("DEMO avatarscreen %f %f %f %f" % [screen.x, screen.y, rect.size.x, rect.size.y])
 	return screen
+
+
+## Unprojects [param xz] onto the ground plane and left-clicks through the picker.
+func _left_click_ground_xz(xz: Vector2) -> bool:
+	var camera := _root.get_viewport().get_camera_3d()
+	if camera == null:
+		_fail("the scene has no active camera to project from")
+		return false
+	var world := Vector3(xz.x, 0.0, xz.y)
+	if camera.is_position_behind(world):
+		_fail("ground (%f, %f) is behind the camera" % [xz.x, xz.y])
+		return false
+	var screen := camera.unproject_position(world)
+	var rect := _root.get_viewport().get_visible_rect()
+	if not rect.has_point(screen):
+		_fail("ground (%f, %f) projects to (%f, %f), outside the viewport" % [xz.x, xz.y, screen.x, screen.y])
+		return false
+	var hotbar := _root.get_node_or_null("UI/Hotbar") as CanvasItem
+	var hotbar_was := false
+	if hotbar != null:
+		hotbar_was = hotbar.visible
+		hotbar.visible = false
+	_left_click_at(screen)
+	await _tree.process_frame
+	await _tree.physics_frame
+	if hotbar != null:
+		hotbar.visible = hotbar_was
+	return true
 
 
 func _left_click_at(position: Vector2) -> void:

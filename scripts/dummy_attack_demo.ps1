@@ -108,11 +108,15 @@ try {
     $refuseOk = $false
     $attackOk = $false
     $npcCount = 0
+    $hostileTarget = $null
     if (Test-Path $clientOut) {
         foreach ($line in Get-Content $clientOut) {
             if ($line -match '^DEMO npc ') { $npcCount++ }
             if ($line -match '^DEMO refuse ') { $refuseOk = $true }
-            if ($line -match '^DEMO attackok ') { $attackOk = $true }
+            if ($line -match '^DEMO attackok (\d+) ') {
+                $attackOk = $true
+                $hostileTarget = [long]$Matches[1]
+            }
             if ($line -match '^DEMO done\s*$') { $done = $true }
             if ($line -match '^DEMO FAIL ') { Add-Failure $line.Trim() }
         }
@@ -130,14 +134,25 @@ try {
             if (-not $line.StartsWith("GAMELOG ")) { continue }
             $ev = ($line.Substring(8) | ConvertFrom-Json)
             if ($ev.ev -eq "npc_spawned") { $spawned++ }
-            if ($ev.ev -eq "attack") { $attacks++ }
-            if ($ev.ev -eq "attack_hit") { $hits++ }
+            if ($ev.ev -eq "attack") {
+                $attacks++
+                if ($null -ne $hostileTarget -and [long]$ev.target -ne $hostileTarget) {
+                    Add-Failure "attack target=$($ev.target), want $hostileTarget"
+                }
+            }
+            if ($ev.ev -eq "attack_hit") {
+                $hits++
+                if ($null -ne $hostileTarget -and [long]$ev.target -ne $hostileTarget) {
+                    Add-Failure "attack_hit target=$($ev.target), want $hostileTarget"
+                }
+            }
             if ($ev.ev -eq "attack_rejected") {
                 Add-Failure "unexpected attack_rejected on the happy path: $line"
             }
         }
     }
     if ($spawned -lt 2) { Add-Failure "npc_spawned=$spawned, want >= 2" }
+    if ($null -eq $hostileTarget) { Add-Failure "missing DEMO attackok target id" }
     if ($attacks -lt 1) { Add-Failure "attack=$attacks, want >= 1" }
     if ($hits -lt 1) { Add-Failure "attack_hit=$hits, want >= 1" }
 

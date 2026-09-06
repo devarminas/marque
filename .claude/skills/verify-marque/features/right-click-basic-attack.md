@@ -20,7 +20,7 @@ pending melee loop. Left-click stays select-only. Friendly dummies refuse.
 - Right-click the green (friendly) practice dummy: ring selects them; no melee.
 - Left-click still only selects.
 
-## Driving it
+## Driving it with scripts/dummy_attack_demo.ps1
 
 Preconditions:
 
@@ -37,8 +37,8 @@ Evidence for the dummy demo lands in `-OutDir` (default
 
 ## Gotchas
 
-- **Left-click is not attack.** After M6c, combat demos must right-click (or call
-  `request_attack`).
+- **Right-click also orbits.** Until camera orbit moves off right-press, a drag begun on a
+  body still engages. See PROTOCOL M6f deliberate absences.
 - **Friendly refuse is client-first.** The client keeps the intent off the wire;
   the server still rejects a fabricated `attack` on a friendly NPC.
 - **Remote players are PvP.** There is no player-faction gate; only NPC

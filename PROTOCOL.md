@@ -1620,7 +1620,9 @@ The server answers with `error` naming `attack`, and sets no pending attack, whe
 - `player` is the attacker's own id (`self`)
 - the target's current HP is 0 (`target_dead`)
 - the attacker is dead (`dead`)
-- `player` names a live NPC whose `faction` is not `hostile` (`wrong_target`) — **M6e** / **M6f**
+- `player` names an NPC whose `faction` is not `hostile` (`wrong_target`) — **M6e** /
+  **M6f**. Faction is checked before death on NPCs, so a dead non-hostile also answers
+  `wrong_target` rather than `target_dead`.
 
 A suspended target is still in the world and may be engaged; suspension is not death.
 
@@ -1811,6 +1813,9 @@ that actor when the body is living and selectable.
 - No ability JSON for basic attack; damage stays the M5a constant until a later unit.
 - No weapon scaling (ARM-89).
 - No player-faction system beyond PvP (every remote player is a valid attack target).
+- No split between orbit and attack on the right button. `CameraRig` still starts an orbit on
+  right-press while `GroundPicker` engages; a right-drag begun over a body sends `attack`.
+  Middle-drag or a drag threshold is the revisitable fix (RuneScape parks orbit on middle).
 
 ## Deliberately absent
 

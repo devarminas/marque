@@ -2,7 +2,6 @@ extends RefCounted
 
 const SessionScript := preload("res://scripts/session.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
-const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 
 const JOIN_TIMEOUT_MSEC := 20000
 const HIT_WAIT_MSEC := 30000
@@ -87,9 +86,6 @@ func _right_click_npc(npc_id: int) -> bool:
 		return false
 	var world_pos := body.global_position + Vector3(0, CLICK_HEIGHT, 0)
 	var screen := camera.unproject_position(world_pos)
-	var picker := _root.get_node_or_null("GroundPicker") as GroundPickerScript
-	if picker == null:
-		return false
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_RIGHT
 	press.pressed = true
