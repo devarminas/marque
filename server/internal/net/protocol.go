@@ -130,7 +130,7 @@ type ServerMessage interface{ isServerMessage() }
 
 // Welcome is the first message a client receives: You and Session name the
 // receiver, LastSeq is the highest seq accepted from it, and Players, Items,
-// and Nodes are the world as of Tick (PROTOCOL.md, "welcome").
+// Nodes, and Npcs are the world as of Tick (PROTOCOL.md, "welcome").
 type Welcome struct {
 	You            PlayerID      `json:"you"`
 	Session        string        `json:"session"`
@@ -359,8 +359,8 @@ type serverEnvelope struct {
 }
 
 // Encode renders one server message as a single WebSocket text frame payload.
-// It fails only on a value JSON cannot represent, such as a non-finite
-// coordinate.
+// It fails on an unhandled message type, or on a handled one whose values JSON
+// cannot represent, such as a non-finite coordinate.
 func Encode(m ServerMessage) ([]byte, error) {
 	var env serverEnvelope
 	switch v := m.(type) {
