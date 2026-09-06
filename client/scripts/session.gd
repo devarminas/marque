@@ -35,11 +35,10 @@ extends Node
 ## [/codeblock]
 ##
 ## There is deliberately no default endpoint and no environment-variable
-## fallback. `main.tscn` is instanced by three different test scenes, and a
-## scene that dials a socket the moment it is instanced would have every one of
-## them join the world behind the suite's back. Revisitable the moment there is
-## a launcher or a connect screen; M0 has neither, and STANDING-ORDERS.md
-## forbids adding one.
+## fallback. `main.tscn` is instanced by different test scenes, and a scene
+## that dials a socket the moment it is instanced would have every one of
+## them join the world behind the suite's back. The endpoint always comes
+## from the caller: a demo launcher, a test, or the editor's export variables.
 ##
 ## [b]Three registries, and they share nothing.[/b] Players live in
 ## [member _avatars], ground items in [member _items], and resource nodes in
@@ -148,8 +147,9 @@ signal cast_effect_played(target_id: int, ability_id: String)
 signal selection_changed(player_id: int)
 
 ## Emitted whenever a click on an occupied inventory slot is forwarded as a
-## `drop`. **M1.** Left-click no longer drops; callers use [method request_drop]
-## when they mean drop without a pending use selection.
+## `drop`. A first press selects the slot for use instead; see
+## [signal use_requested]. Callers that mean drop without a pending use
+## selection call [method request_drop] directly.
 ##
 ## [param slot] is a slot index, never an item id (`PROTOCOL.md`, `drop`).
 signal drop_requested(slot: int)
@@ -703,8 +703,8 @@ func _input(event: InputEvent) -> void:
 ## Applied by rebuilding rather than by patching: `welcome` is the complete
 ## description of the world as of its tick, so anything this session believed
 ## beforehand is stale by definition. Rebuilding is also what makes a second
-## `welcome` — which M0 never sends, and which M2's reconnect will — land
-## correctly instead of leaving a ghost behind.
+## `welcome` — reconnect sends one — land correctly instead of leaving a
+## ghost behind.
 ##
 ## [b]No path is waited for.[/b] Every listed player gets a body at the position
 ## `welcome` states, and a walker that has no path yet. A player standing still
@@ -1535,9 +1535,9 @@ func _forget_npc(id: int) -> void:
 ##
 ## Called only from [method _on_welcomed]. A `welcome` is the whole world
 ## restated, so it frees every item body as well as every player body: anything
-## believed beforehand is stale by definition (PROTOCOL.md, `welcome`). M0 never
-## sends a second `welcome` and M2's reconnect will, which is why this is written
-## and tested now rather than discovered then.
+## believed beforehand is stale by definition (PROTOCOL.md, `welcome`). A second
+## `welcome` arrives on reconnect, and this is what makes it land as a rebuild
+## rather than a ghost.
 func _forget_everyone() -> void:
 	_casts_awaiting_mana.clear()
 	for id: int in _avatars.keys():
