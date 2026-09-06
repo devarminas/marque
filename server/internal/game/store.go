@@ -58,14 +58,14 @@ var WornSlots = []mnet.EquipSlot{
 // one entry here; every slot it names must already be in WornSlots.
 // Handedness is the exclusivity mechanism (PROTOCOL.md, "Handedness", M7b).
 var kindSlotsOf = map[string][]mnet.EquipSlot{
-		KindAxe:             {SlotRightHand},
-		KindSword:           {SlotRightHand},
-		KindStaff:           {SlotLeftHand, SlotRightHand},
-		KindBow:             {SlotLeftHand, SlotRightHand},
-		KindLumberjackAxe:   {SlotLeftHand, SlotRightHand},
-		KindPickaxe:         {SlotRightHand},
-		KindProspectorBoots: {SlotFeet},
-	}
+	KindAxe:             {SlotRightHand},
+	KindSword:           {SlotRightHand},
+	KindStaff:           {SlotLeftHand, SlotRightHand},
+	KindBow:             {SlotLeftHand, SlotRightHand},
+	KindLumberjackAxe:   {SlotLeftHand, SlotRightHand},
+	KindPickaxe:         {SlotRightHand},
+	KindProspectorBoots: {SlotFeet},
+}
 
 // DefaultJoinKit is what a joining player is given, in the order it is placed:
 // one axe. Gathering produces logs, not an axe, so the kit does not earn one
