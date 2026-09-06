@@ -1,6 +1,7 @@
 package game
 
 import (
+	"strings"
 	"testing"
 
 	mnet "github.com/devarminas/marque/server/internal/net"
@@ -61,6 +62,27 @@ func TestDummiesDoNotWander(t *testing.T) {
 		if n.pos != before[id] {
 			t.Fatalf("npc %d moved from %v to %v", id, before[id], n.pos)
 		}
+	}
+}
+
+func TestPlayerJoinNeverEntersNpcIDBand(t *testing.T) {
+	// Player ids share the PlayerID space with npc ids. Resolver order
+	// (npcs then players) is what names a dummy rather than a real player,
+	// which only holds while player ids stay below the band. The band must
+	// be enforced on the joining side, not implicit in seeding order.
+	pw := newProbeWorld(t)
+	pw.w.nextID = practiceNpcIDBand - 1
+	conn := pw.dial("")
+
+	if got := len(pw.w.order); got != 0 {
+		t.Fatalf("player joined at band boundary: %d in order", got)
+	}
+	if _, ok := pw.w.byConn[conn]; ok {
+		t.Fatal("refused join kept its conn bound")
+	}
+	logs := pw.logs.String()
+	if !strings.Contains(logs, "join_refused") {
+		t.Fatalf("join_refused not logged: %s", logs)
 	}
 }
 
