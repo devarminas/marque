@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/devarminas/marque/server/internal/abilitydef"
+	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/game"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
@@ -95,10 +96,16 @@ func run() error {
 		return err
 	}
 
+	classes, err := classdef.LoadAll()
+	if err != nil {
+		return err
+	}
+
 	log := gamelog.New(os.Stdout, *enableLog)
 	hub := mnet.NewHub()
 	world := game.NewWorld(hub, log, game.NewMemoryStore(), game.ResumeGraceTicks, game.DefaultJoinKit)
 	world.SetAbilities(abilities)
+	world.SetClasses(classes)
 
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
@@ -122,6 +129,8 @@ func run() error {
 		"worn_slots":        game.WornSlots,
 		"abilities":         abilities.Len(),
 		"abilities_path":    path,
+		"classes":           classes.ClassLen(),
+		"skills":            classes.SkillLen(),
 	})
 
 	for _, seed := range seeds {

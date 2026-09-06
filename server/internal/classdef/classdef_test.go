@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
 func sharedPath(t *testing.T, rel string) string {
@@ -173,5 +175,172 @@ func TestResolveSkillsPathFindsShared(t *testing.T) {
 	}
 	if gotAbs != want {
 		t.Fatalf("ResolveSkillsPath=%q want %q", gotAbs, want)
+	}
+}
+
+func TestLoadSharedClasses(t *testing.T) {
+	cat, err := LoadClasses(sharedPath(t, ClassesRelPath))
+	if err != nil {
+		t.Fatalf("LoadClasses: %v", err)
+	}
+	if cat.ClassLen() != 5 {
+		t.Fatalf("want 5 classes, got %d (%v)", cat.ClassLen(), cat.ClassIDs())
+	}
+	for _, id := range []string{"knight", "mage", "archer", "miner", "lumberjack"} {
+		if _, ok := cat.GetClass(id); !ok {
+			t.Fatalf("missing class %q", id)
+		}
+	}
+	knight, _ := cat.GetClass("knight")
+	if knight.Skill != "combat" {
+		t.Fatalf("knight skill %q, want combat", knight.Skill)
+	}
+	if knight.Requires["right hand"] != "sword" || knight.Requires["left hand"] != "shield" {
+		t.Fatalf("knight requires %v, want sword+shield in the hands", knight.Requires)
+	}
+}
+
+func fullWorn(t *testing.T, cat *Catalog, id string) map[string]string {
+	t.Helper()
+	cl, ok := cat.GetClass(id)
+	if !ok {
+		t.Fatalf("no class %q", id)
+	}
+	worn := make(map[string]string, len(cl.Requires))
+	for slot, kind := range cl.Requires {
+		worn[slot] = kind
+	}
+	return worn
+}
+
+func TestClassOfFullSetIsActive(t *testing.T) {
+	cat, err := LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	for _, id := range []string{"knight", "mage", "archer", "miner", "lumberjack"} {
+		res := ClassOf(fullWorn(t, cat, id), cat)
+		if res.Class == nil {
+			t.Fatalf("%s: full set did not activate", id)
+		}
+		if res.Class.ID != id {
+			t.Fatalf("%s: activated %q", id, res.Class.ID)
+		}
+		if len(res.Missing) != 0 {
+			t.Fatalf("%s: full set reports missing %v", id, res.Missing)
+		}
+	}
+}
+
+func TestClassOfPartialIsInactiveNamesMissing(t *testing.T) {
+	cat, err := LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	knight, ok := cat.GetClass("knight")
+	if !ok {
+		t.Fatal("missing knight class")
+	}
+	_ = knight
+	worn := fullWorn(t, cat, "knight")
+	delete(worn, "right hand")
+
+	res := ClassOf(worn, cat)
+	if res.Class != nil {
+		t.Fatalf("knight without its sword is active as %q, want inactive", res.Class.ID)
+	}
+	if res.Missing["right hand"] != "sword" {
+		t.Fatalf("missing %v, want the right hand to need a sword", res.Missing)
+	}
+	if len(res.Missing) != 1 {
+		t.Fatalf("missing %v, want exactly the sword", res.Missing)
+	}
+	if res0 := ClassOf(nil, cat); res0.Class != nil {
+		t.Fatalf("empty worn set activated %q", res0.Class.ID)
+	}
+}
+
+func TestClassOfOnlyOneAtATime(t *testing.T) {
+	cat, err := LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	worn := fullWorn(t, cat, "knight")
+	delete(worn, "right hand")
+	worn["feet"] = "prospector_boots"
+	res := ClassOf(worn, cat)
+	if res.Class != nil {
+		t.Fatalf("a mixed set activated %q, want no class at once", res.Class.ID)
+	}
+	lj := fullWorn(t, cat, "lumberjack")
+	lj["feet"] = "prospector_boots"
+	res2 := ClassOf(lj, cat)
+	if res2.Class == nil || res2.Class.ID != "lumberjack" {
+		t.Fatalf("full lumberjack with spare boots resolved to %+v, want lumberjack", res2.Class)
+	}
+}
+
+func TestSkillLevelIsAPureFunctionOfXP(t *testing.T) {
+	cat, err := LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	mining, _ := cat.GetSkill("mining")
+	if mining.MaxLevel != 99 {
+		t.Fatalf("mining max_level %d, want 99", mining.MaxLevel)
+	}
+	cases := []struct {
+		xp   int64
+		want int
+	}{
+		{0, 1},
+		{XPPerLevel - 1, 1},
+		{XPPerLevel, 2},
+		{2 * XPPerLevel, 3},
+		{int64(mining.MaxLevel-1) * XPPerLevel, mining.MaxLevel},
+		{int64(mining.MaxLevel) * XPPerLevel, mining.MaxLevel},
+		{10 * XPPerLevel * XPPerLevel, mining.MaxLevel},
+	}
+	for _, c := range cases {
+		if got := SkillLevel(c.xp, mining.MaxLevel); got != c.want {
+			t.Fatalf("SkillLevel(%d, %d)=%d, want %d", c.xp, mining.MaxLevel, got, c.want)
+		}
+	}
+	prev := 0
+	for xp := int64(0); xp < 5*XPPerLevel; xp += 17 {
+		if lv := SkillLevel(xp, mining.MaxLevel); lv < prev {
+			t.Fatalf("SkillLevel(%d)=%d fell below %d", xp, lv, prev)
+		} else {
+			prev = lv
+		}
+	}
+	if got := cat.LevelFor("mining", XPPerLevel); got != 2 {
+		t.Fatalf("LevelFor(mining, %d)=%d, want 2", XPPerLevel, got)
+	}
+	if got := cat.LevelFor("no_such_skill", XPPerLevel); got != 2 {
+		t.Fatalf("unknown skill LevelFor=%d, want the shared default", got)
+	}
+}
+
+func TestWireMissingSplitsSlotsAndTools(t *testing.T) {
+	slots, tools := WireMissing(map[string]string{
+		"helmet":     "plate_helm",
+		"right hand": "sword",
+	}, []mnet.EquipSlot{"helmet", "left hand", "chest", "right hand", "feet", "trousers"})
+	if len(slots) != 2 || len(tools) != 0 {
+		t.Fatalf("WireMissing(slots+tool-slot)=%v,%v, want both in Slots", slots, tools)
+	}
+	slots, tools = WireMissing(map[string]string{
+		"helmet": "plate_helm",
+		"feet":   "prospector_boots",
+	}, []mnet.EquipSlot{"helmet", "left hand", "chest", "right hand", "feet", "trousers"})
+	if len(slots) != 2 || len(tools) != 0 {
+		t.Fatalf("WireMissing(slots)=%v,%v, want two slots and no tools", slots, tools)
+	}
+	if slots[0].Slot != "helmet" || slots[1].Slot != "feet" {
+		t.Fatalf("WireMissing ordered %v, want helmet then feet by WornSlots order", slots)
+	}
+	if s, tt := WireMissing(nil, nil); len(s) != 0 || len(tt) != 0 {
+		t.Fatalf("WireMissing(nil)=%v,%v, want empty slices", s, tt)
 	}
 }

@@ -25,11 +25,16 @@ client panel is M3b onward and nothing under an **M3a** marker describes it.
 
 **M7 is in progress.** **M7b** is the 1H/2H server equip model and is shipped with this
 file: one- and two-handed tools, six worn slot names including `feet`, and the nine wearable
-kinds. A marker reading plain **M7** is reserved. Class logic is M7c and nothing under an
-**M7b** marker describes it.
+kinds. **M7c** is the server half of class derivation, skill XP, and the gather class gate, and
+is shipped with this file: five classes in `shared/classes.json`, the `class` and `skills`
+restatements, `ClassOf` from worn equipment with missing-piece reporting, per-skill XP with a
+level function, and gather gated on the active class's skill rather than a hardcoded tool kind.
+A marker reading plain **M7** is reserved. Class logic is M7c and nothing under an **M7b**
+marker describes it.
 
 **M4 is in progress.** **M4a** is the server half of resource nodes and gathering and is shipped
-with this file: the third entity family, `gather`, node restatement frames, axe gate, deplete
+with this file: the third entity family, `gather`, node restatement frames, class gate (M7c;
+was axe gate in M4a), deplete
 and respawn, and contested first-completer-wins. **M4c** is the server half of one craft recipe
 and is shipped with this file: the `use` intent and logs→sticks. A marker reading plain **M4**
 is reserved. The client draw of nodes is a later unit and nothing under an **M4a** or **M4c**
@@ -678,9 +683,9 @@ nothing, and because unknown kinds are how content is added without a client rel
 
 ### `node_spawn` / `node_despawn` / `node_state`. **M4a**
 
-    {"node_spawn":{"id":1,"kind":"tree","x":5.0,"z":0.0,"state":"full"}}
+    {"node_spawn":{"id":1,"kind":"tree","skill":"woodcutting","x":5.0,"z":0.0,"state":"full"}}
     {"node_despawn":{"id":1}}
-    {"node_state":{"id":1,"kind":"tree","x":5.0,"z":0.0,"state":"depleted"}}
+    {"node_state":{"id":1,"kind":"tree","skill":"woodcutting","x":5.0,"z":0.0,"state":"depleted"}}
 
 Resource nodes are a third entity family beside players and ground items. Wire ids are integers
 from their own sequence, like item ids. `state` is `full` or `depleted`.
@@ -692,8 +697,10 @@ client can treat nodes the way it treats items under the same envelope rules.
 
 `node_state` is the ordinary live update: broadcast to everyone when a node's `state` changes
 (deplete or respawn). It carries the full node record, not a patch field, so a client that
-missed nothing still replaces what it held for that id. A client that does not know a node
-`kind` renders it magenta and keeps going, the same rule as `item_spawn`.
+missed nothing still replaces what it held for that id. **M7c** adds optional `skill` on node
+records: the skill id a gather on that node requires when the active class's skill must match.
+A client that does not know a node `kind` renders it magenta and keeps going, the same rule as
+`item_spawn`.
 
 ### `inventory`. **M1**
 
@@ -767,9 +774,43 @@ present with a null or empty `kind`, so a fresh player's `equipment` is
 above states at length. A fresh player's `equipment` is the ordinary case of an empty `slots`,
 so this is the frame where that rule is exercised on every single join.
 
-The first `equipment` is sent inside the atomic `welcome` step, **after** the first `inventory`,
-which makes it the last frame of the join. Thereafter one is sent to a player whenever that
-player's worn equipment changes, and never otherwise.
+The first `equipment` is sent inside the atomic `welcome` step, **after** the first `inventory`.
+**M7c** adds `class` and `skills` immediately after `equipment`, which makes `skills` the last
+frame of the join. Thereafter one `equipment` is sent to a player whenever that player's worn
+equipment changes, and never otherwise.
+
+### `class`. **M7c**
+
+    {"class":{"player":1,"class":"lumberjack"}}
+    {"class":{"player":1,"class":"","missing":{"slots":[{"slot":"helmet","kind":"forester_cap"}],"tools":[]}}}
+
+Sent to **one player only**, never broadcast. A restatement of which class that player's worn
+equipment composes, derived on read from worn slots and `shared/classes.json`. **No class is
+stored on the player.** `class` is the active class id when every `requires` entry for one
+class is worn with the named kind, or `""` when none is complete.
+
+When `class` is empty and a closest partial class exists, `missing` names what it still needs.
+`missing.slots` lists worn-slot needs in `equipment.worn` order; each entry carries the slot
+name and the kind that must sit there. `missing.tools` lists tool kinds required in slots that
+are not worn-slot names (empty when every need maps to a worn slot). Both lists are `[]` when
+empty and never `null`.
+
+The first `class` is sent inside the atomic `welcome` step, after `equipment`. Thereafter one
+is sent to a player whenever that player's worn equipment changes (`equip`, `unequip`), and
+never otherwise.
+
+### `skills`. **M7c**
+
+    {"skills":{"player":1,"skills":[{"id":"combat","xp":0,"level":1},{"id":"magic","xp":0,"level":1},{"id":"mining","xp":0,"level":1},{"id":"ranged","xp":0,"level":1},{"id":"woodcutting","xp":120,"level":2}]}}
+
+Sent to **one player only**, never broadcast. A full restatement of every skill in
+`shared/skills.json`, in id order. Each entry carries accrued `xp` and a `level` derived from
+`xp` by a pure server function (`level = 1 + xp / XPPerLevel`, capped at the skill's
+`max_level`). **Skill XP persists across unequip** that ends a class; it is never subtracted.
+
+The first `skills` is sent inside the atomic `welcome` step, after `class`, and is the last
+frame of the join. Thereafter one is sent to a player when that player's XP in any skill
+changes, and never otherwise. **M7c** grants XP only on a completed gather (see *Gathering*).
 
 ### `error`
 
@@ -1115,7 +1156,7 @@ free bag slot when a gather resolves.
 Named constants, revisitable:
 
 - `GatherRange = 0.5` (resolution only, never path assignment; same doctrine as `PickupRange`)
-- `GatherDurationTicks = 3` (consecutive in-range ticks with axe worn before yield)
+- `GatherDurationTicks = 3` (consecutive in-range ticks with an active matching class before yield)
 - `NodeRespawnTicks = 20` (ticks a depleted node stays depleted before returning to full)
 
 ### `gather` is pending, then duration
@@ -1124,17 +1165,19 @@ Named constants, revisitable:
   construction, same broadcast, same degenerate rules as pickup. A degenerate gather by a
   stationary player already in range is allowed: no path, pending stays, duration counts on
   later ticks.
-- **Gather requires worn `right hand == axe` at receipt.** Otherwise the server refuses with
-  `error` naming `gather`, the node is unchanged, and GAMELOG records `gather_rejected`. Join
-  still seeds an axe into the bag (M3); the player must `equip` it before a successful gather.
+- **Gather requires an active class whose skill matches the node's skill at receipt.** The
+  server derives the active class from worn equipment (`ClassOf`); the class's single `skill`
+  must equal the node's `skill`. Otherwise the server refuses with `error` naming `gather`, the
+  node is unchanged, and GAMELOG records `gather_rejected` with reason `needs_class`.
 - **After arrival in range**, the pending gather stays pending for `GatherDurationTicks` ticks
-  of continuous presence in range with the axe still worn, then resolves: grant one `logs`,
-  deplete the node, broadcast `node_state`, send `inventory`, GAMELOG success. Yield must not
-  happen on the first in-range tick when the duration is greater than zero.
-- **Leaving range, losing the axe, or `move_to` cancels** the pending gather (clear pending; no
-  yield). A second `gather` replaces the first. A player has at most one pending gather.
-  **A player has at most one pending action among pickup, gather, and attack.** Starting one
-  clears the others.
+  of continuous presence in range with the matching class still active, then resolves: grant one
+  `logs`, grant `SkillXPGather` XP to the node's skill, deplete the node, broadcast
+  `node_state`, send `inventory` and `skills`, GAMELOG success. Yield must not happen on the
+  first in-range tick when the duration is greater than zero.
+- **Leaving range, losing the active class, or `move_to` cancels** the pending gather (clear
+  pending; no yield). A second `gather` replaces the first. A player has at most one pending
+  gather. **A player has at most one pending action among pickup, gather, and attack.** Starting
+  one clears the others.
 - **A depleted node does not accept new gathers** until respawn. After `NodeRespawnTicks` it
   returns to full: GAMELOG plus `node_state`.
 
@@ -1154,12 +1197,23 @@ any other pending gather for that node then refuses/empties with no second `logs
 | `gather_rejected` | `player`, `reason`, `detail`, `re` | a `gather` refused on receipt |
 | `gather_resolved` | `player`, `node`, `kind`, `slot` | one completed gather (yielded `logs`) |
 | `gather_lost` | `player`, `node` | pending gather ended because the node was no longer gatherable |
-| `gather_cancelled` | `player`, `node` | pending gather cleared (left range, lost axe, or replaced) |
+| `gather_cancelled` | `player`, `node` | pending gather cleared (left range, lost active class, or replaced) |
 | `gather_no_room` | `player`, `node` | gather reached resolution with a full bag |
 | `node_depleted` | `node` | a node became depleted |
 | `node_respawned` | `node` | a depleted node returned to full |
 
-`gather_rejected.reason` is one of `unknown_node`, `node_depleted`, or `needs_axe`.
+`gather_rejected.reason` is one of `unknown_node`, `node_depleted`, or `needs_class`.
+
+### Log vocabulary. **M7c**
+
+| Event | Fields | When |
+|---|---|---|
+| `class` | `player`, `class` | a `class` restatement was sent (equip or unequip) |
+| `skill_xp` | `player`, `skill`, `xp`, `level` | a completed gather granted XP |
+
+**M7c tunables:** `SkillXPGather = 10` (XP per completed gather), `XPPerLevel = 100` (XP per
+level step in the level function). Combat, magic, and ranged XP accrual are not wired in this
+cut; only gather grants XP.
 
 ## Crafting. **M4c**
 

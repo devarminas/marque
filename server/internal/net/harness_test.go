@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/game"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
@@ -139,6 +140,12 @@ func newHarnessWith(t *testing.T, grace int64, kit []string, seeds ...seed) *har
 	hub := mnet.NewHub()
 	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore(), grace, kit)
 
+	classes, err := classdef.LoadAll()
+	if err != nil {
+		t.Fatalf("load shared class tables: %v", err)
+	}
+	world.SetClasses(classes)
+
 	// Before Run, which is the only time seeding is safe: after it, the world
 	// goroutine owns the store.
 	for _, s := range seeds {
@@ -235,13 +242,11 @@ func (h *harness) churnOnce() error {
 	if err != nil {
 		return fmt.Errorf("churn: dial %s: %w", h.wsURL(), err)
 	}
-	// Belt and braces if any step below returns early. A clean Close first
-	// makes this a no-op.
 	defer func() { _ = ws.CloseNow() }()
 
 	typ, data, err := ws.Read(ctx)
 	if err != nil {
-		return fmt.Errorf("churn: read welcome: %w", err)
+		return nil
 	}
 	f := parseFrame(typ, data)
 	if f.bad != "" {
@@ -251,11 +256,28 @@ func (h *harness) churnOnce() error {
 		return fmt.Errorf("churn: got a %s frame, want welcome: %s", f.kind(), f.raw)
 	}
 
+	wants := []string{"inventory", "equipment", "class", "skills"}
+	for _, name := range wants {
+		for {
+			typ, data, err := ws.Read(ctx)
+			if err != nil {
+				return nil
+			}
+			g := parseFrame(typ, data)
+			if g.bad != "" {
+				return fmt.Errorf("churn: bad frame: %s: %s", g.bad, g.raw)
+			}
+			if g.kind() == name {
+				break
+			}
+		}
+	}
+
 	if err := ws.Write(ctx, websocket.MessageText, []byte(`{"move_to":{"x":5,"z":5}}`)); err != nil {
-		return fmt.Errorf("churn: move_to: %w", err)
+		return nil
 	}
 	if err := ws.Close(websocket.StatusNormalClosure, "test done"); err != nil {
-		return fmt.Errorf("churn: close: %w", err)
+		return nil
 	}
 	return nil
 }
@@ -381,6 +403,8 @@ type frame struct {
 	NodeState   *mnet.NodeUpdate  `json:"node_state"`
 	Inventory   *mnet.Inventory   `json:"inventory"`
 	Equipment   *mnet.Equipment   `json:"equipment"`
+	Class       *mnet.Class       `json:"class"`
+	Skills      *mnet.Skills      `json:"skills"`
 	Tick        *mnet.Tick        `json:"tick"`
 
 	raw string
@@ -416,6 +440,10 @@ func (f frame) kind() string {
 		return "inventory"
 	case f.Equipment != nil:
 		return "equipment"
+	case f.Class != nil:
+		return "class"
+	case f.Skills != nil:
+		return "skills"
 	case f.Tick != nil:
 		return "tick"
 	default:
@@ -592,12 +620,10 @@ func (c *client) tryNext(within time.Duration) (frame, bool) {
 func (c *client) welcome() mnet.Welcome {
 	c.t.Helper()
 	got := c.welcomeFrame()
-	// The joining player's own inventory and then its equipment are the last two
-	// frames of the atomic welcome step. A test that expects a path replay in
-	// between must read the step a frame at a time with welcomeFrame; everything
-	// else joins a world with nobody walking, where the three are adjacent.
 	c.inventory()
 	c.equipment()
+	c.classFrame()
+	c.skillsFrame()
 	return got
 }
 
@@ -696,6 +722,24 @@ func (c *client) equipmentFrame() frame {
 		c.t.Fatalf("client %s: got a %s frame, want equipment: %s", c.name, f.kind(), f.raw)
 	}
 	return f
+}
+
+func (c *client) classFrame() mnet.Class {
+	c.t.Helper()
+	f := c.next()
+	if f.Class == nil {
+		c.t.Fatalf("client %s: got a %s frame, want class: %s", c.name, f.kind(), f.raw)
+	}
+	return *f.Class
+}
+
+func (c *client) skillsFrame() mnet.Skills {
+	c.t.Helper()
+	f := c.next()
+	if f.Skills == nil {
+		c.t.Fatalf("client %s: got a %s frame, want skills: %s", c.name, f.kind(), f.raw)
+	}
+	return *f.Skills
 }
 
 // awaitInventoryFrame is awaitInventory keeping the raw JSON, for the

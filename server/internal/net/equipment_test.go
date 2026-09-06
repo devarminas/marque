@@ -147,6 +147,19 @@ func TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty(t *testing.T) {
 	}
 	assertNoNulls(t, "equipment", f.raw)
 
+	if got := alice.classFrame(); got.Class != "" {
+		t.Fatalf("a fresh player's class frame reports %q, want none", got.Class)
+	}
+	skills := alice.skillsFrame()
+	if len(skills.Skills) != 5 {
+		t.Fatalf("a fresh player's skills frame lists %d skills, want 5", len(skills.Skills))
+	}
+	for _, sk := range skills.Skills {
+		if sk.XP != 0 || sk.Level != 1 {
+			t.Fatalf("fresh skill %q reports xp=%d level=%d, want 0 and 1", sk.ID, sk.XP, sk.Level)
+		}
+	}
+
 	// The step ends here. An equipment frame that arrived before the inventory,
 	// or a second one, would be a join step nobody specified.
 	alice.expectSilence()
@@ -173,14 +186,14 @@ func TestEquippingAnAxeIsOneMoveFromBagToWeapon(t *testing.T) {
 
 	frames := alice.collect(silenceWindow)
 	kinds := countKinds(frames)
-	if kinds["inventory"] != 1 || kinds["equipment"] != 1 {
-		t.Fatalf("one equip sent %v, want exactly one inventory and one equipment: both containers changed, so both are restated once", kinds)
+	if kinds["inventory"] != 1 || kinds["equipment"] != 1 || kinds["class"] != 1 {
+		t.Fatalf("one equip sent %v, want exactly one inventory, one equipment and one class: the containers changed and the class derives from them, so all three are restated once", kinds)
 	}
 	if kinds["item_spawn"] != 0 {
 		t.Fatalf("one equip sent %d item_spawn frames; an equip never puts anything on the ground", kinds["item_spawn"])
 	}
-	if len(frames) != 2 {
-		t.Fatalf("one equip sent %d frames (%v), want only the two restatements", len(frames), kinds)
+	if len(frames) != 3 {
+		t.Fatalf("one equip sent %d frames (%v), want only the three restatements", len(frames), kinds)
 	}
 
 	var held mnet.Inventory
@@ -250,8 +263,8 @@ func TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot(t *testing.T) {
 
 	frames := alice.collect(silenceWindow)
 	kinds := countKinds(frames)
-	if kinds["inventory"] != 1 || kinds["equipment"] != 1 || len(frames) != 2 {
-		t.Fatalf("one unequip sent %v, want exactly one inventory and one equipment and nothing else", kinds)
+	if kinds["inventory"] != 1 || kinds["equipment"] != 1 || kinds["class"] != 1 || len(frames) != 3 {
+		t.Fatalf("one unequip sent %v, want exactly one inventory, one equipment and one class and nothing else", kinds)
 	}
 
 	var held mnet.Inventory
@@ -543,8 +556,8 @@ func TestEquippingOntoAWornAxeSwapsThroughTheVacatedSlot(t *testing.T) {
 	h.awaitEvents(game.EvEquip, 2)
 
 	frames := alice.collect(silenceWindow)
-	if kinds := countKinds(frames); kinds["inventory"] != 1 || kinds["equipment"] != 1 || len(frames) != 2 {
-		t.Fatalf("a swap sent %v, want one inventory and one equipment", kinds)
+	if kinds := countKinds(frames); kinds["inventory"] != 1 || kinds["equipment"] != 1 || kinds["class"] != 1 || len(frames) != 3 {
+		t.Fatalf("a swap sent %v, want one inventory, one equipment and one class", kinds)
 	}
 
 	var held mnet.Inventory

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/devarminas/marque/server/internal/abilitydef"
+	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
@@ -140,6 +141,8 @@ const (
 
 	EvNodeRespawned = "node_respawned"
 
+	EvSkillXP = "skill_xp"
+
 	EvUse = "use"
 
 	EvUseRejected = "use_rejected"
@@ -169,6 +172,8 @@ const (
 	EvCastRejected = "cast_rejected"
 
 	EvCastEffect = "cast_effect"
+
+	EvClass = "class"
 )
 
 // Transport is the world's view of the network: a stream of connection events.
@@ -212,6 +217,8 @@ type player struct {
 	hp   int
 	mana int
 
+	skillXP map[string]int64
+
 	lastSeq mnet.Seq
 
 	expiresTick int64
@@ -240,6 +247,8 @@ type World struct {
 	joinKit []string
 
 	abilities *abilitydef.Catalog
+
+	classes *classdef.Catalog
 
 	players map[mnet.PlayerID]*player
 
@@ -289,6 +298,10 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 // SetAbilities installs the shared ability catalog used by cast. Nil rejects every cast.
 func (w *World) SetAbilities(c *abilitydef.Catalog) {
 	w.abilities = c
+}
+
+func (w *World) SetClasses(c *classdef.Catalog) {
+	w.classes = c
 }
 
 // Run drives the world until ctx is cancelled. It must be called on exactly one
@@ -497,6 +510,8 @@ func (w *World) sendJoinStep(p *player) {
 
 	w.sendInventory(p)
 	w.sendEquipment(p)
+	w.sendClass(p)
+	w.sendSkills(p)
 }
 
 func suspends(reason string) bool {

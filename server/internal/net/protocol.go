@@ -89,10 +89,11 @@ type ItemState struct {
 }
 
 // NodeState is one resource node, as it appears inside welcome and node frames
-// (PROTOCOL.md, "Gathering", M4a).
+// (PROTOCOL.md, "Gathering", M4a / M7c).
 type NodeState struct {
 	ID    NodeID  `json:"id"`
 	Kind  string  `json:"kind"`
+	Skill string  `json:"skill,omitempty"`
 	X     float64 `json:"x"`
 	Z     float64 `json:"z"`
 	State string  `json:"state"`
@@ -208,6 +209,45 @@ type Equipment struct {
 	Slots []EquipmentSlot `json:"slots"`
 }
 
+// NamedSlot is one worn slot that must hold one kind, as carried in a class
+// frame's missing list (PROTOCOL.md, "class", M7c). Slot is the worn-slot
+// name; Kind is the item kind the class needs there.
+type NamedSlot struct {
+	Slot string `json:"slot"`
+	Kind string `json:"kind"`
+}
+
+// ClassMissing names what keeps a class from being active. Slots lists the
+// worn slots that must hold a kind, in WornSlots order; Tools lists the tool
+// kinds a complete-but-tool-less class needs. Both are present only when
+// Class is empty and a closest partial class exists.
+type ClassMissing struct {
+	Slots []NamedSlot `json:"slots,omitempty"`
+	Tools []string    `json:"tools,omitempty"`
+}
+
+// Class restates one player's active class, derived from worn equipment
+// (PROTOCOL.md, "class", M7c). Class is "" when no class is active, in which
+// case Missing explains what is needed.
+type Class struct {
+	Player  PlayerID     `json:"player"`
+	Class   string       `json:"class"`
+	Missing ClassMissing `json:"missing,omitempty"`
+}
+
+// SkillXP is one skill's restated XP and derived level (PROTOCOL.md, "skills", M7c).
+type SkillXP struct {
+	ID    string `json:"id"`
+	XP    int64  `json:"xp"`
+	Level int    `json:"level"`
+}
+
+// Skills restates every skill one player holds, sent to that player only.
+type Skills struct {
+	Player PlayerID  `json:"player"`
+	Skills []SkillXP `json:"skills"`
+}
+
 // Tick is the server's clock heartbeat, broadcast every heartbeat_ticks ticks.
 // T is the tick being stepped.
 type Tick struct {
@@ -240,6 +280,8 @@ func (NodeDespawn) isServerMessage() {}
 func (NodeUpdate) isServerMessage()  {}
 func (Inventory) isServerMessage()   {}
 func (Equipment) isServerMessage()   {}
+func (Class) isServerMessage()       {}
+func (Skills) isServerMessage()      {}
 func (Tick) isServerMessage()        {}
 func (HP) isServerMessage()          {}
 func (Mana) isServerMessage()        {}
@@ -353,6 +395,8 @@ type serverEnvelope struct {
 	NodeState   *NodeUpdate  `json:"node_state,omitempty"`
 	Inventory   *Inventory   `json:"inventory,omitempty"`
 	Equipment   *Equipment   `json:"equipment,omitempty"`
+	Class       *Class       `json:"class,omitempty"`
+	Skills      *Skills      `json:"skills,omitempty"`
 	Tick        *Tick        `json:"tick,omitempty"`
 	HP          *HP          `json:"hp,omitempty"`
 	Mana        *Mana        `json:"mana,omitempty"`
@@ -388,6 +432,10 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.Inventory = &v
 	case Equipment:
 		env.Equipment = &v
+	case Class:
+		env.Class = &v
+	case Skills:
+		env.Skills = &v
 	case Tick:
 		env.Tick = &v
 	case HP:
@@ -449,8 +497,9 @@ const (
 	ReasonUnknownNode RejectReason = "unknown_node"
 	// ReasonNodeDepleted: a gather naming a live node that is not full.
 	ReasonNodeDepleted RejectReason = "node_depleted"
-	// ReasonNeedsAxe: a gather without worn weapon == axe (PROTOCOL.md, M4a).
-	ReasonNeedsAxe RejectReason = "needs_axe"
+	// ReasonNeedsClass: a gather without an active class whose skill matches the
+	// node's skill (PROTOCOL.md, "Classes and skill XP", M7c).
+	ReasonNeedsClass RejectReason = "needs_class"
 	// ReasonNoRecipe: a use whose slots or kinds do not match the one craft
 	// recipe (PROTOCOL.md, "Crafting").
 	ReasonNoRecipe RejectReason = "no_recipe"

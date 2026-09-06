@@ -56,6 +56,7 @@ func (w *World) equip(p *player, msg mnet.Equip, seq mnet.Seq) {
 
 	w.sendInventory(p)
 	w.sendEquipment(p)
+	w.sendClass(p)
 }
 
 func (w *World) unequip(p *player, msg mnet.Unequip, seq mnet.Seq) {
@@ -98,10 +99,8 @@ func (w *World) unequip(p *player, msg mnet.Unequip, seq mnet.Seq) {
 
 	w.sendInventory(p)
 	w.sendEquipment(p)
+	w.sendClass(p)
 }
-
-// seedJoinKit gives a joining player its starting items. It runs before the
-// welcome step, so the first inventory the client sees already carries them.
 func (w *World) seedJoinKit(p *player) {
 	for _, kind := range w.joinKit {
 		slot, err := w.items.SpawnInventoryItem(p.id, kind)

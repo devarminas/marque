@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
@@ -20,12 +21,25 @@ const (
 	KindLogs = "logs"
 )
 
+// SkillXPGather is the XP one completed gather grants to the node's skill.
+// Tuning: ARM-122.
+const SkillXPGather = 10
+
 type resourceNode struct {
 	id        mnet.NodeID
 	kind      string
+	skill     string
 	x, z      float64
 	depleted  bool
 	respawnAt int64
+}
+
+func nodeSkill(kind string) string {
+	switch kind {
+	case KindTree:
+		return "woodcutting"
+	}
+	return ""
 }
 
 func (n *resourceNode) wireState() string {
@@ -39,6 +53,7 @@ func (n *resourceNode) wire() mnet.NodeState {
 	return mnet.NodeState{
 		ID:    n.id,
 		Kind:  n.kind,
+		Skill: n.skill,
 		X:     n.x,
 		Z:     n.z,
 		State: n.wireState(),
@@ -54,10 +69,11 @@ func (w *World) SeedResourceNode(kind string, x, z float64) error {
 	}
 	w.nextNodeID++
 	n := &resourceNode{
-		id:   w.nextNodeID,
-		kind: kind,
-		x:    x,
-		z:    z,
+		id:    w.nextNodeID,
+		kind:  kind,
+		skill: nodeSkill(kind),
+		x:     x,
+		z:     z,
 	}
 	w.nodes[n.id] = n
 	w.nodeOrder = append(w.nodeOrder, n.id)
@@ -97,10 +113,10 @@ func (w *World) gather(p *player, msg mnet.Gather, seq mnet.Seq) {
 		})
 		return
 	}
-	if !w.wearingAxe(p) {
+	if !w.classGatherGate(p, n) {
 		w.refuse(p, &mnet.RejectError{
-			Reason:      mnet.ReasonNeedsAxe,
-			Detail:      "gather requires a worn axe",
+			Reason:      mnet.ReasonNeedsClass,
+			Detail:      "gather requires an active class whose skill matches this node",
 			Re:          mnet.MsgGather,
 			Disposition: mnet.ReplyError,
 		})
@@ -122,13 +138,24 @@ func (w *World) gather(p *player, msg mnet.Gather, seq mnet.Seq) {
 	w.assignPath(p, points)
 }
 
-func (w *World) wearingAxe(p *player) bool {
-	for _, worn := range w.items.Worn(p.id) {
-		if worn.Slot == SlotRightHand && worn.Kind == KindAxe {
-			return true
-		}
+func (w *World) classGatherGate(p *player, n *resourceNode) bool {
+	if w.classes == nil || n.skill == "" {
+		return false
 	}
-	return false
+	res := classdef.ClassOf(w.wornKinds(p), w.classes)
+	if res.Class == nil || res.Class.Skill != n.skill {
+		return false
+	}
+	return true
+}
+
+func (w *World) wornKinds(p *player) map[string]string {
+	worn := w.items.Worn(p.id)
+	out := make(map[string]string, len(worn))
+	for _, ws := range worn {
+		out[string(ws.Slot)] = ws.Kind
+	}
+	return out
 }
 
 func (w *World) resolveGather(p *player) {
@@ -147,7 +174,7 @@ func (w *World) resolveGather(p *player) {
 		}
 		return
 	}
-	if !w.wearingAxe(p) {
+	if !w.classGatherGate(p, n) {
 		w.cancelGather(p)
 		return
 	}
@@ -174,8 +201,30 @@ func (w *World) resolveGather(p *player) {
 	fields["slot"] = slot.Index
 	w.log.Event(w.tick, EvGatherResolved, fields)
 
+	w.grantSkillXP(p, n.skill)
 	w.depleteNode(n, p)
 	w.sendInventory(p)
+}
+
+func (w *World) grantSkillXP(p *player, skill string) {
+	if skill == "" || w.classes == nil {
+		return
+	}
+	if _, ok := w.classes.GetSkill(skill); !ok {
+		return
+	}
+	if p.skillXP == nil {
+		p.skillXP = make(map[string]int64)
+	}
+	xp := p.skillXP[skill] + SkillXPGather
+	p.skillXP[skill] = xp
+	w.log.Event(w.tick, EvSkillXP, gamelog.Fields{
+		"player": p.id,
+		"skill":  skill,
+		"xp":     xp,
+		"level":  w.classes.LevelFor(skill, xp),
+	})
+	w.sendSkills(p)
 }
 
 func (w *World) depleteNode(n *resourceNode, winner *player) {
