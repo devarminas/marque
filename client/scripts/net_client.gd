@@ -300,6 +300,14 @@ func send_move_to(x: float, z: float, seq: int = 0) -> Error:
 	return _send(move_to_frame(x, z, _intent_seq(seq)))
 
 
+## Sends `move`: sticky world-space walk direction. **M6g.**
+##
+## [param dx] and [param dz] are ground-plane world axes, not camera space.
+## Zero clears the server's sticky steer.
+func send_move(dx: float, dz: float, seq: int = 0) -> Error:
+	return _send(move_frame(dx, dz, _intent_seq(seq)))
+
+
 ## Sends `pickup`: a request to take a ground item. **M1.**
 ##
 ## `item` is an item id, never a player id (`PROTOCOL.md`, "Entity naming").
@@ -380,6 +388,10 @@ func take_seq() -> int:
 ## form. A number of at least 1 is written onto the body.
 static func move_to_frame(x: float, z: float, seq: int = 0) -> Dictionary:
 	return {"move_to": _intent_body({"x": x, "z": z}, seq)}
+
+
+static func move_frame(dx: float, dz: float, seq: int = 0) -> Dictionary:
+	return {"move": _intent_body({"dx": dx, "dz": dz}, seq)}
 
 
 static func pickup_frame(item_id: int, seq: int = 0) -> Dictionary:

@@ -815,6 +815,12 @@ func _test_intent_frames() -> void:
 		% JSON.stringify(NetClientScript.move_to_frame(42.3, 17.8)),
 	)
 	_check(
+		JSON.stringify(NetClientScript.move_frame(0.0, -1.0))
+		== '{"move":{"dx":0.0,"dz":-1.0}}',
+		"move carries world dx/dz, got %s"
+		% JSON.stringify(NetClientScript.move_frame(0.0, -1.0)),
+	)
+	_check(
 		JSON.stringify(NetClientScript.equip_frame(3)) == '{"equip":{"slot":3}}',
 		'equip frames as {"equip":{"slot":3}}, got %s'
 		% JSON.stringify(NetClientScript.equip_frame(3)),

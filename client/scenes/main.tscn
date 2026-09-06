@@ -448,7 +448,7 @@ layout_mode = 2
 [node name="Slot2" parent="UI/Hotbar/Bar/Slots" instance=ExtResource("14_hotbar_slot")]
 layout_mode = 2
 
-[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "death_overlay", "hotbar")]
+[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "death_overlay", "hotbar", "camera_rig")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
@@ -462,6 +462,7 @@ equipment_panel = NodePath("../UI/RightDock")
 hp_hud = NodePath("../UI/HpHud")
 death_overlay = NodePath("../UI/DeathOverlay")
 hotbar = NodePath("../UI/Hotbar")
+camera_rig = NodePath("../CameraRig")
 
 [node name="Net" type="Node" parent="Session"]
 script = ExtResource("7_net_client")

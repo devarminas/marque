@@ -57,6 +57,7 @@ type EquipSlot string
 // of an error's "re" field.
 const (
 	MsgMoveTo  = "move_to"
+	MsgMove    = "move"
 	MsgPickup  = "pickup"
 	MsgDrop    = "drop"
 	MsgEquip   = "equip"
@@ -256,6 +257,13 @@ type MoveTo struct {
 	Z float64 `json:"z"`
 }
 
+// Move is a sticky world-space walk direction (PROTOCOL.md, "move", M6g).
+// Zero after normalisation clears the steer.
+type Move struct {
+	DX float64 `json:"dx"`
+	DZ float64 `json:"dz"`
+}
+
 // Pickup is a request to take the ground item with id Item.
 type Pickup struct {
 	Item ItemID `json:"item"`
@@ -309,6 +317,7 @@ type Cast struct {
 }
 
 func (MoveTo) isClientMessage()  {}
+func (Move) isClientMessage()    {}
 func (Pickup) isClientMessage()  {}
 func (Drop) isClientMessage()    {}
 func (Equip) isClientMessage()   {}
@@ -320,6 +329,7 @@ func (Respawn) isClientMessage() {}
 func (Cast) isClientMessage()    {}
 
 func (MoveTo) Name() string  { return MsgMoveTo }
+func (Move) Name() string    { return MsgMove }
 func (Pickup) Name() string  { return MsgPickup }
 func (Drop) Name() string    { return MsgDrop }
 func (Equip) Name() string   { return MsgEquip }
@@ -525,6 +535,11 @@ type moveToWire struct {
 	Z *float64 `json:"z"`
 }
 
+type moveWire struct {
+	DX *float64 `json:"dx"`
+	DZ *float64 `json:"dz"`
+}
+
 type pickupWire struct {
 	Item *ItemID `json:"item"`
 }
@@ -588,6 +603,8 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 		switch key {
 		case MsgMoveTo:
 			decodeBody = decodeMoveTo
+		case MsgMove:
+			decodeBody = decodeMove
 		case MsgPickup:
 			decodeBody = decodePickup
 		case MsgDrop:
@@ -660,6 +677,20 @@ func decodeMoveTo(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonNonFinite, MsgMoveTo, "move_to coordinates must be finite")
 	}
 	return MoveTo{X: *wire.X, Z: *wire.Z}, nil
+}
+
+func decodeMove(payload []byte) (ClientMessage, error) {
+	var wire moveWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgMove, "move: %v", err)
+	}
+	if wire.DX == nil || wire.DZ == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgMove, "move needs both dx and dz")
+	}
+	if !finite(*wire.DX) || !finite(*wire.DZ) {
+		return nil, rejectIntent(ReasonNonFinite, MsgMove, "move components must be finite")
+	}
+	return Move{DX: *wire.DX, DZ: *wire.DZ}, nil
 }
 
 func decodePickup(payload []byte) (ClientMessage, error) {

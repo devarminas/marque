@@ -76,5 +76,7 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
 - [Right-click basic attack](./right-click-basic-attack.md) — M6f: right-click
   hostile engages pending melee and selects; friendly dummy refuses; left-click
   stays select-only.
+- [WASD direction move](./wasd-move.md) — M6g: server-authoritative `move`
+  intents, sticky steer, short path segments; click-to-move remains.
 - [Server liveness](./heartbeat-liveness.md) — the M2c milestone: heartbeat ticks,
   the three-interval liveness window, and the loud abandon of a silent server.
