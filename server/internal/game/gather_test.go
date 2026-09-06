@@ -3,6 +3,7 @@ package game
 import (
 	"testing"
 
+	"github.com/devarminas/marque/server/internal/classdef"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
@@ -14,7 +15,7 @@ func TestGatherRangeCoversTheSpotUnderfoot(t *testing.T) {
 
 func TestGatherFromOutOfRangeAssignsPathAndPending(t *testing.T) {
 	pw := newGatherProbe(t)
-	alice := pw.joinWithAxe()
+	alice := pw.joinWithLumberjack()
 	node := pw.seedTree()
 
 	pw.gather(alice, node.id)
@@ -41,7 +42,7 @@ func TestGatherFromOutOfRangeAssignsPathAndPending(t *testing.T) {
 
 func TestGatherWalkThenYieldsAfterDuration(t *testing.T) {
 	pw := newGatherProbe(t)
-	alice := pw.joinWithAxe()
+	alice := pw.joinWithLumberjack()
 	node := pw.seedTree()
 
 	pw.gather(alice, node.id)
@@ -70,7 +71,7 @@ func TestGatherWalkThenYieldsAfterDuration(t *testing.T) {
 
 func TestGatherLeavingRangeAfterProgressCancels(t *testing.T) {
 	pw := newGatherProbe(t)
-	alice := pw.joinWithAxe()
+	alice := pw.joinWithLumberjack()
 	node := pw.seedTree()
 	alice.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
 	pw.gather(alice, node.id)
@@ -89,9 +90,9 @@ func TestGatherLeavingRangeAfterProgressCancels(t *testing.T) {
 	}
 }
 
-func TestGatherYieldsAfterDurationWithAxe(t *testing.T) {
+func TestGatherYieldsAfterDurationWithLumberjack(t *testing.T) {
 	pw := newGatherProbe(t)
-	alice := pw.joinWithAxe()
+	alice := pw.joinWithLumberjack()
 	node := pw.seedTree()
 	alice.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
 
@@ -131,7 +132,7 @@ func TestGatherYieldsAfterDurationWithAxe(t *testing.T) {
 	}
 }
 
-func TestGatherWithoutAxeIsRefused(t *testing.T) {
+func TestGatherWithoutAClassIsRefused(t *testing.T) {
 	pw := newGatherProbe(t)
 	alice := pw.joinBare()
 	node := pw.seedTree()
@@ -152,15 +153,65 @@ func TestGatherWithoutAxeIsRefused(t *testing.T) {
 	if len(rejected) != 1 {
 		t.Fatalf("logged %d %s, want 1", len(rejected), EvGatherRejected)
 	}
-	if rejected[0]["reason"] != string(mnet.ReasonNeedsAxe) {
-		t.Fatalf("reason=%v, want %s", rejected[0]["reason"], mnet.ReasonNeedsAxe)
+	if rejected[0]["reason"] != string(mnet.ReasonNeedsClass) {
+		t.Fatalf("reason=%v, want %s", rejected[0]["reason"], mnet.ReasonNeedsClass)
 	}
+}
+
+func TestGatherGrantsWoodcuttingXP(t *testing.T) {
+	pw := newGatherProbe(t)
+	alice := pw.joinWithLumberjack()
+	node := pw.seedTree()
+	alice.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
+
+	pw.gather(alice, node.id)
+	for range GatherDurationTicks {
+		pw.w.step()
+	}
+
+	if got := alice.skillXP["woodcutting"]; got != SkillXPGather {
+		t.Fatalf("woodcutting xp=%d, want %d", got, SkillXPGather)
+	}
+	if got := pw.events(EvSkillXP); len(got) != 1 {
+		t.Fatalf("logged %d %s, want 1", len(got), EvSkillXP)
+	}
+	if got := pw.events(EvSkillXP)[0]["skill"]; got != "woodcutting" {
+		t.Fatalf("skill_xp skill=%v, want woodcutting", got)
+	}
+	_ = node
+}
+
+func TestSkillXPPersistsAcrossUnequip(t *testing.T) {
+	pw := newGatherProbe(t)
+	alice := pw.joinWithLumberjack()
+	node := pw.seedTree()
+	alice.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
+
+	pw.gather(alice, node.id)
+	for range GatherDurationTicks {
+		pw.w.step()
+	}
+	if alice.skillXP["woodcutting"] != SkillXPGather {
+		t.Fatalf("pre-unequip xp=%d, want %d", alice.skillXP["woodcutting"], SkillXPGather)
+	}
+
+	ms := pw.w.items.(*memStore)
+	ms.held[alice.id].worn = map[mnet.EquipSlot]string{}
+
+	res := classdef.ClassOf(pw.w.wornKinds(alice), pw.w.classes)
+	if res.Class != nil {
+		t.Fatalf("stripped player still active as %q", res.Class.ID)
+	}
+	if alice.skillXP["woodcutting"] != SkillXPGather {
+		t.Fatalf("post-unequip xp=%d, want %d unchanged", alice.skillXP["woodcutting"], SkillXPGather)
+	}
+	_ = node
 }
 
 func TestContestedGatherYieldsOnce(t *testing.T) {
 	pw := newGatherProbe(t)
-	alice := pw.joinWithAxe()
-	bob := pw.joinWithAxe()
+	alice := pw.joinWithLumberjack()
+	bob := pw.joinWithLumberjack()
 	node := pw.seedTree()
 	alice.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
 	bob.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
@@ -190,7 +241,7 @@ func TestContestedGatherYieldsOnce(t *testing.T) {
 
 func TestDepletedNodeRespawnsAfterNodeRespawnTicks(t *testing.T) {
 	pw := newGatherProbe(t)
-	alice := pw.joinWithAxe()
+	alice := pw.joinWithLumberjack()
 	node := pw.seedTree()
 	alice.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
 	pw.gather(alice, node.id)
@@ -218,7 +269,7 @@ func TestDepletedNodeRespawnsAfterNodeRespawnTicks(t *testing.T) {
 
 func TestMoveToCancelsPendingGather(t *testing.T) {
 	pw := newGatherProbe(t)
-	alice := pw.joinWithAxe()
+	alice := pw.joinWithLumberjack()
 	node := pw.seedTree()
 	alice.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
 	pw.gather(alice, node.id)
@@ -248,6 +299,11 @@ func newGatherProbe(t *testing.T) *gatherProbe {
 	t.Helper()
 	pw := newProbeWorld(t)
 	pw.w.joinKit = DefaultJoinKit
+	classes, err := classdef.LoadAll()
+	if err != nil {
+		t.Fatalf("load shared class tables: %v", err)
+	}
+	pw.w.SetClasses(classes)
 	return &gatherProbe{probeWorld: pw}
 }
 
@@ -269,14 +325,24 @@ func (pw *gatherProbe) joinBare() *player {
 	return pw.w.order[len(pw.w.order)-1]
 }
 
-func (pw *gatherProbe) joinWithAxe() *player {
+func (pw *gatherProbe) equipLumberjack(p *player) *player {
 	pw.t.Helper()
-	pw.dial("")
-	p := pw.w.order[len(pw.w.order)-1]
-	if _, err := pw.w.items.EquipInventorySlot(p.id, 0); err != nil {
-		pw.t.Fatalf("equip axe: %v", err)
+	ms := pw.w.items.(*memStore)
+	held := ms.held[p.id]
+	held.worn = map[mnet.EquipSlot]string{
+		SlotHelmet:    "forester_cap",
+		SlotChest:     "forester_shirt",
+		SlotTrousers:  "forester_trousers",
+		SlotLeftHand:  KindLumberjackAxe,
+		SlotRightHand: KindLumberjackAxe,
 	}
 	return p
+}
+
+func (pw *gatherProbe) joinWithLumberjack() *player {
+	pw.t.Helper()
+	p := pw.joinBare()
+	return pw.equipLumberjack(p)
 }
 
 func (pw *gatherProbe) gather(p *player, node mnet.NodeID) {

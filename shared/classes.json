@@ -1,0 +1,64 @@
+{
+  "classes": [
+    {
+      "id": "knight",
+      "name": "Knight",
+      "skill": "combat",
+      "requires": {
+        "helmet": "plate_helm",
+        "chest": "plate_chest",
+        "trousers": "plate_legs",
+        "right hand": "sword",
+        "left hand": "shield"
+      }
+    },
+    {
+      "id": "mage",
+      "name": "Mage",
+      "skill": "magic",
+      "requires": {
+        "helmet": "cloth_hood",
+        "chest": "cloth_robe",
+        "trousers": "cloth_skirt",
+        "left hand": "staff",
+        "right hand": "staff"
+      }
+    },
+    {
+      "id": "archer",
+      "name": "Archer",
+      "skill": "ranged",
+      "requires": {
+        "helmet": "leather_helm",
+        "chest": "leather_chest",
+        "trousers": "leather_legs",
+        "left hand": "bow",
+        "right hand": "bow"
+      }
+    },
+    {
+      "id": "miner",
+      "name": "Miner",
+      "skill": "mining",
+      "requires": {
+        "helmet": "prospector_helm",
+        "chest": "prospector_jacket",
+        "trousers": "prospector_legs",
+        "feet": "prospector_boots",
+        "right hand": "pickaxe"
+      }
+    },
+    {
+      "id": "lumberjack",
+      "name": "Lumberjack",
+      "skill": "woodcutting",
+      "requires": {
+        "helmet": "forester_cap",
+        "chest": "forester_shirt",
+        "trousers": "forester_trousers",
+        "left hand": "lumberjack axe",
+        "right hand": "lumberjack axe"
+      }
+    }
+  ]
+}

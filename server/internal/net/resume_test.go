@@ -42,18 +42,13 @@ const unknownToken = "ffffffffffffffffffffffffffffffff"
 // is the difference between testing the grace and testing around it.
 const waitInsideTheGrace = 4 * game.TickDuration
 
-// joinStep is one connection's whole atomic welcome step: the welcome, the path
-// replays, the inventory, and the equipment that ends it.
-//
-// It exists because a resuming client's step is the one place a path for the
-// receiving player's own id legitimately appears, and because a test cannot
-// assume how many frames the step holds: any player mid-walk puts one more in
-// it, including the resuming player itself.
 type joinStep struct {
 	welcome   mnet.Welcome
 	paths     []mnet.Path
 	inventory mnet.Inventory
 	equipment mnet.Equipment
+	class     mnet.Class
+	skills    mnet.Skills
 }
 
 // pathFor returns the replayed path for one player, and whether the step
@@ -67,9 +62,6 @@ func (s joinStep) pathFor(id mnet.PlayerID) (mnet.Path, bool) {
 	return mnet.Path{}, false
 }
 
-// readJoinStep consumes the step in order, insisting on the shape PROTOCOL.md's
-// "Ordering and the join race" fixes: welcome first, then path replays, then the
-// inventory, then the equipment that ends it.
 func readJoinStep(c *client) joinStep {
 	c.t.Helper()
 
@@ -83,6 +75,16 @@ func readJoinStep(c *client) joinStep {
 				c.t.Fatalf("client %s: equipment arrived before the inventory, which the join step sends first: %s", c.name, f.raw)
 			}
 			step.equipment = *f.Equipment
+			if cl := c.next(); cl.Class != nil {
+				step.class = *cl.Class
+			} else {
+				c.t.Fatalf("client %s: got a %s frame, want class after equipment: %s", c.name, cl.kind(), cl.raw)
+			}
+			if sk := c.next(); sk.Skills != nil {
+				step.skills = *sk.Skills
+			} else {
+				c.t.Fatalf("client %s: got a %s frame, want skills after class: %s", c.name, sk.kind(), sk.raw)
+			}
 			return step
 		case f.Inventory != nil:
 			step.inventory = *f.Inventory

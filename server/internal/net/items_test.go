@@ -22,9 +22,6 @@ import (
 // not to dominate the suite.
 const farItem = 10.0
 
-// TestWelcomeCarriesTheWorldAndThenTheInventory pins the join step's shape: the
-// world's items ride in welcome beside its players, and the joining player's
-// own inventory is a separate message, last.
 func TestWelcomeCarriesTheWorldAndThenTheInventory(t *testing.T) {
 	h := newHarness(t, acornAt(3, -2), acornAt(-4, 5))
 
@@ -57,10 +54,15 @@ func TestWelcomeCarriesTheWorldAndThenTheInventory(t *testing.T) {
 		t.Fatalf("a fresh player starts holding %+v, want nothing", inv.Slots)
 	}
 
-	// M3a's equipment ends the step. Nothing after it, which is what makes the
-	// step's shape an assertion rather than a description.
 	if worn := alice.equipment(); len(worn.Slots) != 0 {
 		t.Fatalf("a fresh player starts wearing %+v, want nothing", worn.Slots)
+	}
+
+	if got := alice.classFrame(); got.Class != "" {
+		t.Fatalf("a fresh player's class frame reports %q, want none", got.Class)
+	}
+	if skills := alice.skillsFrame(); len(skills.Skills) == 0 {
+		t.Fatal("a fresh player's skills frame lists no skills")
 	}
 
 	alice.expectSilence()
