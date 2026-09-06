@@ -107,12 +107,16 @@ try {
     $done = $false
     $healOk = $false
     $fireOk = $false
+    $healFx = $false
+    $fireFx = $false
     $npcCount = 0
     if (Test-Path $clientOut) {
         foreach ($line in Get-Content $clientOut) {
             if ($line -match '^DEMO npc ') { $npcCount++ }
             if ($line -match '^DEMO healok ') { $healOk = $true }
             if ($line -match '^DEMO fireballok ') { $fireOk = $true }
+            if ($line -match '^DEMO castfx \d+ heal\s*$') { $healFx = $true }
+            if ($line -match '^DEMO castfx \d+ fireball\s*$') { $fireFx = $true }
             if ($line -match '^DEMO done\s*$') { $done = $true }
             if ($line -match '^DEMO FAIL ') { Add-Failure $line.Trim() }
         }
@@ -120,6 +124,8 @@ try {
     if ($npcCount -lt 2) { Add-Failure "DEMO npc lines=$npcCount, want >= 2" }
     if (-not $healOk) { Add-Failure "missing DEMO healok" }
     if (-not $fireOk) { Add-Failure "missing DEMO fireballok" }
+    if (-not $healFx) { Add-Failure "missing DEMO castfx heal" }
+    if (-not $fireFx) { Add-Failure "missing DEMO castfx fireball" }
     if (-not $done) { Add-Failure "missing DEMO done" }
 
     $healEffect = 0

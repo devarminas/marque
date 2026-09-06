@@ -65,6 +65,7 @@ const HpHudScript := preload("res://scripts/hp_hud.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const HotbarScript := preload("res://scripts/hotbar.gd")
 const AbilityDefs := preload("res://scripts/ability_defs.gd")
+const CastHitFx := preload("res://scripts/cast_hit_fx.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 
 ## Command-line flag naming the websocket URL, as `--server <url>` after the
@@ -139,6 +140,9 @@ signal attack_refused(player_id: int, reason: String)
 
 ## Emitted whenever a hotbar slot is forwarded as `cast`. **M6d.**
 signal cast_requested(ability_id: String, target_id: int)
+
+## Emitted when a cast success restatement plays VFX on the target. **M6h.**
+signal cast_effect_played(target_id: int, ability_id: String)
 
 ## Emitted when the client tab-target changes. [param player_id] is 0 when cleared. **M6c.**
 signal selection_changed(player_id: int)
@@ -234,6 +238,7 @@ var _npcs := {}
 var _use_from := -1
 ## Selected living remote player id, or 0 when none. **M6c.**
 var _selected_player_id := 0
+var _casts_awaiting_mana: Array = []
 var _last_move_dx := 0.0
 var _last_move_dz := 0.0
 var _last_move_sent_msec := 0
@@ -524,9 +529,21 @@ func request_cast(ability_id: String) -> void:
 		push_warning("session: cast %s dropped, the socket is not open" % ability_id)
 		return
 	if target_id < 1:
-		_net.send_cast(ability_id, 0)
+		await_mana_for_cast(ability_id, 0)
+		if _net.send_cast(ability_id, 0) != OK:
+			_casts_awaiting_mana.pop_back()
 		return
-	_net.send_cast(ability_id, target_id)
+	await_mana_for_cast(ability_id, target_id)
+	if _net.send_cast(ability_id, target_id) != OK:
+		_casts_awaiting_mana.pop_back()
+
+
+func await_mana_for_cast(ability_id: String, target_id: int) -> void:
+	_casts_awaiting_mana.append({"ability": ability_id, "target": target_id})
+
+
+func casts_awaiting_mana_count() -> int:
+	return _casts_awaiting_mana.size()
 
 
 func _on_hotbar_ability(ability_id: String) -> void:
@@ -1083,12 +1100,15 @@ func _on_path_assigned(
 
 ## The server refused something this client sent. For a log, not for branching.
 func _on_server_error(re: String, message: String) -> void:
+	if re == "cast" and not _casts_awaiting_mana.is_empty():
+		_casts_awaiting_mana.pop_front()
 	push_warning('session: server refused "%s": %s' % [re, message])
 
 
 func _on_disconnected(code: int, reason: String) -> void:
 	_connection_over = true
 	_liveness_deadline_msec = 0
+	_casts_awaiting_mana.clear()
 	var resume := not _logout_requested and not _base_url.is_empty()
 	if resume:
 		push_warning(
@@ -1276,7 +1296,40 @@ func _on_hp_changed(id: int, hp: int, max_hp: int) -> void:
 
 
 func _on_mana_changed(id: int, mana: int, max_mana: int) -> void:
+	var prior := -1
+	if id == _you:
+		prior = mana_for(_you).x
 	_apply_mana(id, mana, max_mana)
+	if id == _you and prior >= 0 and mana < prior and not _casts_awaiting_mana.is_empty():
+		_resolve_cast_on_mana_spend()
+
+
+func _resolve_cast_on_mana_spend() -> void:
+	var pending: Dictionary = _casts_awaiting_mana.pop_front()
+	var ability_id := String(pending.get("ability", ""))
+	var target_id := int(pending.get("target", 0))
+	_play_cast_effect_on_target(target_id, ability_id)
+
+
+func _play_cast_effect_on_target(target_id: int, ability_id: String) -> void:
+	var host: Node3D = _avatars.get(target_id)
+	if host == null:
+		host = _npcs.get(target_id)
+	var color := CastHitFx.color_for_ui(_ability_ui_color(ability_id))
+	if host != null:
+		CastHitFx.play(host, color)
+	cast_effect_played.emit(target_id, ability_id)
+
+
+func _ability_ui_color(ability_id: String) -> String:
+	var catalog: Dictionary = AbilityDefs._empty_catalog()
+	if _hotbar != null:
+		catalog = _hotbar.catalog()
+	var ability: Variant = AbilityDefs.get_ability(catalog, ability_id)
+	if typeof(ability) != TYPE_DICTIONARY:
+		return ""
+	var ui: Dictionary = ability.get("ui", {})
+	return String(ui.get("color", ""))
 
 
 func _on_respawn_requested() -> void:
@@ -1486,6 +1539,7 @@ func _forget_npc(id: int) -> void:
 ## sends a second `welcome` and M2's reconnect will, which is why this is written
 ## and tested now rather than discovered then.
 func _forget_everyone() -> void:
+	_casts_awaiting_mana.clear()
 	for id: int in _avatars.keys():
 		_forget(id)
 	for id: int in _items.keys():
