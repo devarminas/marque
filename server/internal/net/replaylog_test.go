@@ -1,17 +1,7 @@
 package net_test
 
-// The event log's side of the join replay.
-//
-// PROTOCOL.md's "welcome" section says a joining client is sent one re-anchored
-// path per player mid-walk. These tests assert the log records that, with the
-// values the joiner was actually sent rather than the values of the assignment
-// the walk started from. Without them the log cannot reconstruct what a
-// newcomer was told: the numbers are re-derivable by re-simulating the walk,
-// but nothing would mark that re-simulation as necessary.
-//
-// They live beside the frame-level tests in hub_test.go, driven by the same
-// real server and real clients, because a replay only exists as a consequence
-// of a real join.
+// The event log's side of the join replay. PROTOCOL.md's "welcome" section
+// says a joining client is sent one re-anchored path per player mid-walk.
 
 import (
 	"testing"
@@ -21,17 +11,8 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// walkDest is far enough away that a walker is still walking for the whole of
-// any test here. At WalkSpeed it is several seconds of travel.
 const walkDest = 30.0
 
-// TestJoinReplayLogsTheReAnchoredPath is the assertion the unit exists for: the
-// logged replay carries the joiner's numbers, not the original walk's.
-//
-// Asserting only that some event appeared would pass against a log that echoed
-// the original path_assigned, which is exactly the reconstruction that would be
-// wrong. So both re-anchored fields are compared against the frame the joiner
-// received and against the assignment they differ from.
 func TestJoinReplayLogsTheReAnchoredPath(t *testing.T) {
 	h := newHarness(t)
 
@@ -42,8 +23,8 @@ func TestJoinReplayLogsTheReAnchoredPath(t *testing.T) {
 	assigned := h.awaitEvents(game.EvPathAssigned, 1)[0]
 	alice.path()
 
-	// Ticks have to pass, or "re-anchored" and "verbatim" would agree and the
-	// test would prove nothing.
+	// Ticks must pass, or "re-anchored" and "verbatim" agree and the test
+	// proves nothing.
 	time.Sleep(4 * game.TickDuration)
 
 	bob := h.dial("bob")
@@ -67,14 +48,13 @@ func TestJoinReplayLogsTheReAnchoredPath(t *testing.T) {
 		t.Errorf("%s logs speed %v, want %v", game.EvPathReplayed, got, game.WalkSpeed)
 	}
 
-	// The tick the replay was logged at is the join tick, so a reader can line
-	// the event up with the welcome that preceded it.
+	// Logged at the join tick, so a reader can line the event up with the
+	// welcome that preceded it.
 	if got := logNumber(t, replay, "t"); got != float64(bobWelcome.Tick) {
 		t.Errorf("%s logged at tick %v, want the tick bob was welcomed at (%d)",
 			game.EvPathReplayed, got, bobWelcome.Tick)
 	}
 
-	// start_tick: the joiner's, which is later than the assignment's.
 	assignedStart := logNumber(t, assigned, "start_tick")
 	replayStart := logNumber(t, replay, "start_tick")
 	if replayStart != float64(inFlight.StartTick) {
@@ -86,7 +66,6 @@ func TestJoinReplayLogsTheReAnchoredPath(t *testing.T) {
 			game.EvPathReplayed, replayStart, assignedStart)
 	}
 
-	// points[0]: where alice is now, which is not where the walk began.
 	assignedPoints := logPoints(t, assigned, "points")
 	replayPoints := logPoints(t, replay, "points")
 	if len(replayPoints) == 0 {
@@ -106,9 +85,6 @@ func TestJoinReplayLogsTheReAnchoredPath(t *testing.T) {
 	}
 }
 
-// TestJoinReplayLogsOncePerWalker covers the loop rather than one pass through
-// it. Two players mid-walk when a third joins means two replayed frames, so the
-// log must carry two events and not one summary of the burst.
 func TestJoinReplayLogsOncePerWalker(t *testing.T) {
 	h := newHarness(t)
 
@@ -153,13 +129,10 @@ func TestJoinReplayLogsOncePerWalker(t *testing.T) {
 	}
 }
 
-// TestHaltedPlayerLogsNoReplay is the negative case PROTOCOL.md spells out: a
-// halted player is not mid-walk, so a joiner is sent no path for them and the
-// log must not claim otherwise.
-//
-// The check is safe to make the moment carol's welcome has arrived. Welcome and
-// its replays are composed in one step on the world goroutine, so a replay that
-// was going to be logged was logged before that welcome was enqueued.
+// The negative case PROTOCOL.md spells out: a halted player is not mid-walk,
+// so a joiner gets no path for them. The check is safe the moment carol's
+// welcome has arrived: welcome and its replays are composed in one step on the
+// world goroutine, so any replay was logged before that welcome was enqueued.
 func TestHaltedPlayerLogsNoReplay(t *testing.T) {
 	h := newHarness(t)
 
@@ -169,8 +142,8 @@ func TestHaltedPlayerLogsNoReplay(t *testing.T) {
 	bob.welcome()
 	alice.spawn() // bob joining
 
-	// Nobody joins between the walk and the halt, so a replay logged in this
-	// test can only have come from carol.
+	// Nobody joins between the walk and the halt, so any replay can only have
+	// come from carol.
 	halt := haltMidWalk(t, alice)
 	bob.drain()
 

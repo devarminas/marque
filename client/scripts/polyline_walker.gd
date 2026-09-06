@@ -13,14 +13,7 @@ extends RefCounted
 ## "Coordinates").
 ##
 ## Typed by [code]preload[/code] rather than by a [code]class_name[/code], per
-## NOTES.md, "Godot authoring traps":
-##
-## [codeblock]
-## const PolylineWalker := preload("res://scripts/polyline_walker.gd")
-## var walker := PolylineWalker.new(welcome_tick_ms)
-## walker.set_path(points, start_tick, speed)
-## var here := walker.position_at_tick(clock.estimated_tick())
-## [/codeblock]
+## NOTES.md, "Godot authoring traps".
 
 const _MSEC_PER_SEC := 1000.0
 

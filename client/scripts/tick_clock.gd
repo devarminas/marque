@@ -18,13 +18,7 @@ extends RefCounted
 ## That is why this class has no [method Node._process] and is not a [Node].
 ##
 ## Typed by [code]preload[/code] rather than by a [code]class_name[/code], per
-## NOTES.md, "Godot authoring traps":
-##
-## [codeblock]
-## const TickClock := preload("res://scripts/tick_clock.gd")
-## var clock := TickClock.new()
-## clock.anchor(welcome_tick, welcome_tick_ms)
-## [/codeblock]
+## NOTES.md, "Godot authoring traps".
 
 ## Returned by [method estimated_tick] before [method anchor] has been called.
 ##

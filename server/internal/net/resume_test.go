@@ -1,11 +1,6 @@
 package net_test
 
-// A player outliving its socket, driven through real WebSocket clients against
-// a real server.
-//
-// The file's reason to exist is TestAResumedPlayerIsTheSamePlayer; everything
-// around it exists so that when a resume fails, something smaller has already
-// failed and said which half broke. PROTOCOL.md, "The session token" and "When
+// A player outliving its socket. PROTOCOL.md, "The session token" and "When
 // the connection dies", is the contract.
 
 import (
@@ -18,37 +13,24 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// sessionToken is the shape PROTOCOL.md fixes: 32 lowercase hex characters and
-// nothing else. Anchored, so a token with anything appended fails here rather
-// than somewhere further downstream.
+// The shape PROTOCOL.md fixes: 32 lowercase hex characters.
 var sessionToken = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
-// shortGrace is the resume grace for the one test that waits one out. Four
-// ticks is 600ms: long enough that nothing expires by accident between a
-// destroy and an assertion about it, and short enough to sit through.
+// Resume grace in ticks for the one test that waits one out: long enough not
+// to expire by accident, short enough to sit through.
 const shortGrace = 4
 
-// unknownToken is well-formed and names nobody. It is spelled out rather than
-// derived from a real one, because a token this server issued and then retired
-// is a different case and has its own tests.
+// Well-formed and names nobody. Spelled out rather than derived from a real
+// token: an issued-then-retired token is a different case with its own tests.
 const unknownToken = "ffffffffffffffffffffffffffffffff"
 
-// waitInsideTheGrace lets several ticks of the grace pass before a resume.
-//
-// Without it a test resumes within a tick of the suspension and proves only
-// that state survives a socket death, which a grace of one tick would also
-// satisfy. M2a's second verifier found exactly that: the two tests below still
-// passed under a one-tick grace. Sleeping here makes them fail under one, which
-// is the difference between testing the grace and testing around it.
+// Lets several ticks of the grace pass before a resume. Resuming within a tick
+// of the suspension proves only that state survives a socket death; sleeping
+// here makes the tests fail under a one-tick grace.
 const waitInsideTheGrace = 4 * game.TickDuration
 
-// joinStep is one connection's whole atomic welcome step: the welcome, the path
-// replays, the inventory, and the equipment that ends it.
-//
-// It exists because a resuming client's step is the one place a path for the
-// receiving player's own id legitimately appears, and because a test cannot
-// assume how many frames the step holds: any player mid-walk puts one more in
-// it, including the resuming player itself.
+// A test cannot assume how many frames the join step holds: any player
+// mid-walk puts one more path in it, including the resuming player's own.
 type joinStep struct {
 	welcome   mnet.Welcome
 	paths     []mnet.Path
@@ -99,9 +81,6 @@ func readJoinStep(c *client) joinStep {
 	}
 }
 
-// TestEveryPlayerGetsItsOwnSessionToken is acceptance 1, and everything below it
-// is vacuous without it: a constant or an empty token would make every resume in
-// this file succeed for the wrong reason.
 func TestEveryPlayerGetsItsOwnSessionToken(t *testing.T) {
 	h := newHarness(t)
 
@@ -118,13 +97,6 @@ func TestEveryPlayerGetsItsOwnSessionToken(t *testing.T) {
 	}
 }
 
-// TestAResumedPlayerIsTheSamePlayer is acceptance 2 and this unit's milestone
-// sentence.
-//
-// Three claims at once, and all three are needed. The resuming connection is
-// handed the same identity. The observer is told nothing, because nothing about
-// the world changed for it. And the log says the body was suspended and resumed
-// rather than retired and rebuilt.
 func TestAResumedPlayerIsTheSamePlayer(t *testing.T) {
 	h := newHarness(t)
 
@@ -132,15 +104,11 @@ func TestAResumedPlayerIsTheSamePlayer(t *testing.T) {
 	first := alice.welcome()
 	bob := h.dial("bob")
 	bob.welcome()
-	// Bob's arrival, on Alice's stream. Read so that what follows is measured
-	// against an empty one.
 	alice.spawn()
 
 	alice.destroy()
 	h.awaitEvents(game.EvPlayerSuspended, 1)
 
-	// The observer's half, and it is the half a player would actually notice:
-	// no despawn, so the capsule never blinks out.
 	bob.expectSilence()
 
 	resumed := h.dialResume("alice-again", first.Session)
@@ -152,8 +120,6 @@ func TestAResumedPlayerIsTheSamePlayer(t *testing.T) {
 	if second.Session != first.Session {
 		t.Fatalf("resume reissued session %q, want the same token across every resume (%q)", second.Session, first.Session)
 	}
-	// No spawn either: everybody already has that body, and a second one would
-	// be a duplicate avatar.
 	bob.expectSilence()
 
 	suspended := h.awaitEvents(game.EvPlayerSuspended, 1)
@@ -170,8 +136,7 @@ func TestAResumedPlayerIsTheSamePlayer(t *testing.T) {
 	if expired := h.eventsNamed(game.EvPlayerExpired); len(expired) != 0 {
 		t.Fatalf("the body expired inside its own grace: %+v", expired)
 	}
-	// The socket really did die, and its latched reason is what decided the
-	// suspension, so both lines have to be there.
+	// The socket died, and its latched reason is what decided the suspension.
 	if got := h.awaitEvents(game.EvDisconnected, 1)[0]["reason"]; got != mnet.DisconnectPeerGone {
 		t.Fatalf("an abrupt death logged reason %v, want %q", got, mnet.DisconnectPeerGone)
 	}
@@ -182,20 +147,11 @@ func TestAResumedPlayerIsTheSamePlayer(t *testing.T) {
 // TestNoSessionTokenIsLoggedAnywhere, which is what fixes it between the two.
 const tokenScanGrace = 20
 
-// TestNoSessionTokenIsLoggedAnywhere holds the rule that keeps a token out of
-// every place an event log gets pasted.
-//
-// It scans every field of every line rather than the five events a resume
-// writes, because the rule is about the log and not about those five: a token
-// added to any other line later is caught here without anybody remembering to
-// come back and look.
-//
-// It drives all six paths a token can take through the server -- a fresh join,
-// a suspension, a resume, an unknown token, a refusal, and an expiry -- because
-// the scan can only catch a leak on a path the run actually walked. It covered
-// four of the six until M2a's second verifier pointed out that refuse and
-// expire were not among them, which is exactly the shape of hole this test
-// exists to not have.
+// Scans every field of every line, not just the resume events: the rule is
+// about the log, so a token added to any other line later is caught without
+// anybody remembering to come back and look. The run drives all six paths a
+// token can take (join, suspend, resume, unknown, refuse, expire), because a
+// scan can only catch a leak on a path it actually walked.
 func TestNoSessionTokenIsLoggedAnywhere(t *testing.T) {
 	h := newHarnessWithGrace(t, tokenScanGrace, acornAt(1, 0))
 
@@ -205,7 +161,6 @@ func TestNoSessionTokenIsLoggedAnywhere(t *testing.T) {
 	alice.pickup(first.Items[0].ID)
 	alice.awaitInventory()
 
-	// Suspend, then resume.
 	alice.destroy()
 	h.awaitEvents(game.EvPlayerSuspended, 1)
 	resumed := h.dialResume("alice-again", first.Session)
@@ -230,8 +185,7 @@ func TestNoSessionTokenIsLoggedAnywhere(t *testing.T) {
 	bob.destroy()
 	h.awaitEvents(game.EvPlayerExpired, 1)
 
-	// Every event name the six paths can produce has now been written at least
-	// once, so a token in any of them is in the log this scans.
+	// Every event name the six paths can produce is now in the log.
 	for _, name := range []string{
 		game.EvConnected, game.EvDisconnected, game.EvPlayerSuspended,
 		game.EvPlayerResumed, game.EvResumeRefused, game.EvResumeUnknown,
@@ -253,14 +207,9 @@ func TestNoSessionTokenIsLoggedAnywhere(t *testing.T) {
 	}
 }
 
-// TestEveryResumeEventNamesTheConnectionItIsAbout holds the field sets
-// PROTOCOL.md's log-vocabulary table fixes.
-//
-// The remote address is the only thing a refusal or an unknown token has to
-// say: there is no player to name, because no player was created. So an empty
-// or missing remote makes those two lines say nothing at all, and a player id
-// on them would file a connection the world turned away under the id of a
-// player who is connected and unaffected.
+// Holds the field sets PROTOCOL.md's log-vocabulary table fixes. A refusal or
+// an unknown token has no player to name, so a player id on those lines would
+// file the connection under an uninvolved player's id.
 func TestEveryResumeEventNamesTheConnectionItIsAbout(t *testing.T) {
 	h := newHarness(t)
 
@@ -300,9 +249,6 @@ func TestEveryResumeEventNamesTheConnectionItIsAbout(t *testing.T) {
 	}
 }
 
-// remoteOf reads an event's remote address, insisting it is a host and a port
-// rather than merely a non-empty string. A remote that does not parse is a
-// field that looks present to a reader and is useless to one.
 func remoteOf(t *testing.T, ev map[string]any) string {
 	t.Helper()
 
@@ -319,8 +265,6 @@ func remoteOf(t *testing.T, ev map[string]any) string {
 	}
 	return remote
 }
-// TestAResumedPlayerKeepsItsInventory is acceptance 3. An inventory that dies
-// with the socket is what makes reconnect worthless.
 func TestAResumedPlayerKeepsItsInventory(t *testing.T) {
 	h := newHarness(t, acornAt(1, 0))
 
@@ -351,11 +295,9 @@ func TestAResumedPlayerKeepsItsInventory(t *testing.T) {
 	}
 }
 
-// TestAResumedWalkerIsToldWhereItsOwnBodyIs is acceptance 4.
-//
-// The walk does not stop when the socket dies, so by the time the client is
-// back its body has moved. Without a replay for its own id the resumed client
-// draws itself where it was when it left and slides for the rest of the walk.
+	// The walk does not stop when the socket dies: without a replay for its own
+	// id the resumed client draws itself where it left and slides the rest of
+	// the way.
 func TestAResumedWalkerIsToldWhereItsOwnBodyIs(t *testing.T) {
 	// Far enough that the walk is still running well after the reconnect: a
 	// hundred units at three units a second is thirty-three seconds of it.
@@ -402,12 +344,6 @@ func TestAResumedWalkerIsToldWhereItsOwnBodyIs(t *testing.T) {
 	}
 }
 
-// TestAnExpiredPlayerIsGoneForGood is acceptance 5: the grace is a grace and
-// not a lease on the world forever.
-//
-// Three different bugs are ruled out here. A ghost that never leaves. A stale
-// token that resurrects a retired player. And an expiry that logs itself while
-// quietly keeping the body.
 func TestAnExpiredPlayerIsGoneForGood(t *testing.T) {
 	h := newHarnessWithGrace(t, shortGrace)
 
@@ -427,8 +363,7 @@ func TestAnExpiredPlayerIsGoneForGood(t *testing.T) {
 		t.Fatalf("bob saw a despawn for player %d, want alice (%d)", gone.ID, first.You)
 	}
 
-	// The same token, now naming nothing. It is a fresh join, and the client can
-	// tell because both halves of its identity came back different.
+	// The same token, now naming nothing: a fresh join.
 	second := readJoinStep(h.dialResume("alice-again", first.Session)).welcome
 	if second.You == first.You {
 		t.Fatalf("a token for an expired player was resumed as player %d; the id must not come back", second.You)
@@ -442,11 +377,6 @@ func TestAnExpiredPlayerIsGoneForGood(t *testing.T) {
 	}
 }
 
-// TestACleanLogoutDoesNotLinger is acceptance 6. RuneScape takes you out of the
-// world the moment you log out, and a clean close is a logout.
-//
-// The whole of the suspend rule is the latched reason, so this is what shows
-// the split is a split rather than "every death now suspends".
 func TestACleanLogoutDoesNotLinger(t *testing.T) {
 	h := newHarness(t)
 
@@ -476,11 +406,6 @@ func TestACleanLogoutDoesNotLinger(t *testing.T) {
 	h.awaitEvents(game.EvResumeUnknown, 1)
 }
 
-// TestATokenWhosePlayerIsConnectedIsRefused is acceptance 7.
-//
-// Refused and not superseded, so there are two claims: the newcomer is told no
-// and goes away, and the connection that already holds the player is untouched
-// by the attempt.
 func TestATokenWhosePlayerIsConnectedIsRefused(t *testing.T) {
 	h := newHarness(t)
 
@@ -497,11 +422,9 @@ func TestATokenWhosePlayerIsConnectedIsRefused(t *testing.T) {
 	}
 	intruder.expectClosed()
 
-	// Alice is untouched: still connected, still herself, still answered. This
-	// round trip is also what makes the three negative assertions below sound.
-	// The intruder's socket is already closed, so the hub emitted its
-	// disconnect into the ordered event channel before this move_to was
-	// written; a path coming back proves the world has drained past it.
+	// This round trip also makes the three negative assertions below sound: the
+	// intruder's disconnect reached the ordered event channel before this
+	// move_to was written, so a path back proves the world has drained past it.
 	alice.moveTo(5, 5)
 	if got := alice.path().ID; got != first.You {
 		t.Fatalf("alice's move produced a path for player %d, want %d", got, first.You)
@@ -514,22 +437,16 @@ func TestATokenWhosePlayerIsConnectedIsRefused(t *testing.T) {
 	if resumed := h.eventsNamed(game.EvPlayerResumed); len(resumed) != 0 {
 		t.Fatalf("a refused connection was recorded as a resume: %+v", resumed)
 	}
-	// The world never admitted it, so it has no player to log its death
-	// against, and a reader counting client_disconnected to ask how many
-	// players left must not be handed it.
+	// A reader counting client_disconnected to ask how many players left must
+	// not be handed a refused connection.
 	if left := h.eventsNamed(game.EvDisconnected); len(left) != 0 {
 		t.Fatalf("a refused connection produced %+v", left)
 	}
 }
 
-// TestASuspendedPlayerFinishesWhatItStarted holds the half of the suspend rule
-// that is about the world rather than about identity: the body keeps its
-// appointment.
-//
-// Not one of the numbered acceptance items. It is here because "the walk
-// finishes, a pending pickup resolves into the kept inventory" is the sentence
-// that separates a suspended player from a frozen one, and nothing else in this
-// file would fail if the tick loop quietly skipped them.
+	// Separates a suspended player from a frozen one: the walk finishes and a
+	// pending pickup resolves into the kept inventory, and nothing else in this
+	// file would fail if the tick loop quietly skipped them.
 func TestASuspendedPlayerFinishesWhatItStarted(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0))
 

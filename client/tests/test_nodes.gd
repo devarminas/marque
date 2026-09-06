@@ -1,6 +1,5 @@
 extends Node3D
 
-## Resource node registry and bodies, driven by scripted frames. **M4b.**
 
 const MainScene := preload("res://scenes/main.tscn")
 const SessionScript := preload("res://scripts/session.gd")

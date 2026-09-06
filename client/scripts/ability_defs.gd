@@ -1,11 +1,6 @@
 extends RefCounted
 
-## Never instantiated. Typed by [code]preload[/code]:
-##
-## [codeblock]
-## const AbilityDefs := preload("res://scripts/ability_defs.gd")
-## var cat := AbilityDefs.load_default()
-## [/codeblock]
+## Never instantiated. Typed by [code]preload[/code].
 
 const REL_PATH := "shared/abilities.json"
 

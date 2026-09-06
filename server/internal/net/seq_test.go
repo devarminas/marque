@@ -1,12 +1,6 @@
 package net_test
 
-// Sequence numbers and the dedupe they buy, driven through real WebSocket
-// clients against a real server. PROTOCOL.md, "Sequence numbers", is the
-// contract.
-//
-// The unit exists so that a client which retries an intent it is unsure landed
-// does not pay for the retry twice, and the tests are written from that side:
-// what a duplicate must not spawn, must not answer, and must not log.
+// PROTOCOL.md, "Sequence numbers", is the contract.
 
 import (
 	"fmt"
@@ -17,10 +11,6 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// TestADuplicateDropSpawnsOneItem is the unit's reason to exist. A drop is the
-// one intent whose retry is unambiguously destructive: applied twice it takes a
-// second slot and puts a second body in the world, and no restatement the
-// client receives afterwards would say which of the two it asked for.
 func TestADuplicateDropSpawnsOneItem(t *testing.T) {
 	h := newHarness(t, acornAt(underfoot, 0))
 
@@ -38,8 +28,6 @@ func TestADuplicateDropSpawnsOneItem(t *testing.T) {
 	alice.sendRaw(retried)
 	alice.sendRaw(retried)
 
-	// Counted as a whole set rather than one frame at a time: every claim here
-	// is about what did not arrive, and no positive assertion can show that.
 	var spawns, inventories int
 	for _, f := range alice.collect(silenceWindow) {
 		switch {
@@ -85,9 +73,6 @@ func TestADuplicateDropSpawnsOneItem(t *testing.T) {
 	}
 }
 
-// TestAResumedPlayerRemembersItsSequenceNumber is what makes last_seq a
-// property of the player rather than of the socket. A mark that reset on
-// reconnect would dedupe nothing across the one failure retries exist for.
 func TestAResumedPlayerRemembersItsSequenceNumber(t *testing.T) {
 	h := newHarness(t, acornAt(underfoot, 0))
 
@@ -131,10 +116,6 @@ func TestAResumedPlayerRemembersItsSequenceNumber(t *testing.T) {
 	}
 }
 
-// TestALowerSequenceNumberIsDroppedAndAGapIsAccepted pins the mark as a
-// high-water mark rather than a set of what has been seen. A gap is accepted
-// because nothing here can express "4 through 9 are still coming", and nothing
-// needs it to: the client is the only thing that knows what it skipped.
 func TestALowerSequenceNumberIsDroppedAndAGapIsAccepted(t *testing.T) {
 	h := newHarness(t)
 
@@ -162,10 +143,6 @@ func TestALowerSequenceNumberIsDroppedAndAGapIsAccepted(t *testing.T) {
 	}
 }
 
-// TestAnUnsequencedIntentAfterASequencedOneIsApplied is the compatibility
-// claim, and it is the one that decides whether this unit can ship before the
-// client sends any numbers at all. Absent is unsequenced, never a seq of zero,
-// and it neither advances the mark nor is measured against it.
 func TestAnUnsequencedIntentAfterASequencedOneIsApplied(t *testing.T) {
 	h := newHarness(t)
 
@@ -192,8 +169,6 @@ func TestAnUnsequencedIntentAfterASequencedOneIsApplied(t *testing.T) {
 	}
 }
 
-// TestAMalformedSequenceNumberIsRefusedAndTheConnectionSurvives stages the four
-// shapes a client can get wrong, zero among them deliberately.
 func TestAMalformedSequenceNumberIsRefusedAndTheConnectionSurvives(t *testing.T) {
 	h := newHarness(t)
 
@@ -230,10 +205,6 @@ func TestAMalformedSequenceNumberIsRefusedAndTheConnectionSurvives(t *testing.T)
 	}
 }
 
-// TestARefusedIntentStillConsumesItsSequenceNumber is the case the protocol
-// argues at length and the one a reader is most likely to get backwards. The
-// alternative makes last_seq depend on whether the server liked the body, and a
-// number the client cannot predict from what it sent restates nothing.
 func TestARefusedIntentStillConsumesItsSequenceNumber(t *testing.T) {
 	h := newHarness(t)
 

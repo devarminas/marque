@@ -122,12 +122,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ---------------------------------------------------------------------------
 # The server's own constants, restated. Every one of them is read back out of
 # the run's `server_started` line rather than trusted from here; these are the
 # expected values, and a mismatch is a failure rather than a silent recalibration
 # against whatever the binary happened to be built with.
-# ---------------------------------------------------------------------------
 $ExpectedTickMS = 150
 $ExpectedWalkSpeed = 3.0
 $ExpectedInventorySize = 28
@@ -215,14 +213,12 @@ function Get-Distance([double] $ax, [double] $az, [double] $bx, [double] $bz) {
     return [math]::Sqrt([math]::Pow($ax - $bx, 2) + [math]::Pow($az - $bz, 2))
 }
 
-# ---------------------------------------------------------------------------
 # Reading a client's stdout.
 #
 # The client prints and this script judges. Nothing below infers anything the
 # client did not say: a capture that drew no item bodies is a `DEMO items N 0`
 # line, not the absence of `DEMO item` lines, so a print loop that broke is
 # distinguishable from a world that legitimately held nothing.
-# ---------------------------------------------------------------------------
 
 function Read-ClientReport([string] $path) {
     $report = @{
@@ -291,10 +287,8 @@ function Read-ClientReport([string] $path) {
     return $report
 }
 
-# ---------------------------------------------------------------------------
 # Reading the server's NDJSON event log. One object per "GAMELOG "-prefixed
 # line; anything else on that stream is runtime noise.
-# ---------------------------------------------------------------------------
 
 function Read-GameLog([string] $path) {
     $events = New-Object System.Collections.Generic.List[object]
@@ -378,7 +372,6 @@ function Test-Walk($events, [int] $player, $path, [string] $label, [double] $per
     return $arrived
 }
 
-# ---------------------------------------------------------------------------
 
 try {
     # A stale PNG satisfies every check this script makes on a frame (it exists,
@@ -504,9 +497,7 @@ try {
         $client.Report = Read-ClientReport $client.Stdout
     }
 
-    # ------------------------------------------------------------------
     # Structure. Nothing behavioural yet: this is only "both clients ran".
-    # ------------------------------------------------------------------
     foreach ($client in $running) {
         $label = $client.Label
         $report = $client.Report
@@ -571,12 +562,10 @@ try {
             "which side of a tick boundary they are on and neither one's aim can be trusted.")
     }
 
-    # ------------------------------------------------------------------
     # Layer one: what the server believes. The milestone sentence lives here
     # and nowhere else. "Exactly one client gets the item" is a purely
     # server-side fact; every pixel in this run is compatible with the server
     # having given it to both, to neither, or to somebody who is not playing.
-    # ------------------------------------------------------------------
     $events = Read-GameLog $serverOut
     Write-Host "==> GAMELOG: $($events.Count) event(s) in $serverOut"
     if ($events.Count -eq 0) {
@@ -696,7 +685,6 @@ try {
         }
     }
 
-    # ------------------------------------------------------------------
     # A same-tick race, not a sequence.
     #
     # Both players spawn at the origin and walk at one speed, so two players
@@ -704,7 +692,6 @@ try {
     # only if their paths were assigned on the same tick. That is the number
     # that decides whether this run was a dead heat or a queue, and it is
     # printed whether or not it holds.
-    # ------------------------------------------------------------------
     $contestPaths = @{}
     foreach ($player in $intentTicks.Keys) {
         $tick = $intentTicks[$player]
@@ -779,7 +766,6 @@ try {
         }
     }
 
-    # ------------------------------------------------------------------
     # Where the loser stopped.
     #
     # Every other assertion here about the loser is about what it did not
@@ -799,7 +785,6 @@ try {
     # condemned a tick later, one step further along its own walk. Either way,
     # asserting the loser reached the item's coordinates would fail every
     # healthy run.
-    # ------------------------------------------------------------------
     if ($loser -ge 1 -and $lost.Count -eq 1 -and $seedItem -ge 1) {
         $lossTick = [int]$lost[0].t
         # Not a pipe. Select-Events returns its List through `return , $hits` to
@@ -837,14 +822,12 @@ try {
         $null = Test-Walk $events $winner $contestPaths[$winner] "the walk to the item" $perTick
     }
 
-    # ------------------------------------------------------------------
     # The drop, and the coordinate gap it closes.
     #
     # The winner walked somewhere it chose and dropped the item there. Nothing
     # in this repository has ever asserted item_spawned's x or z, so this is
     # where the log's account of where an item is gets checked against an
     # independent account of where its dropper stood.
-    # ------------------------------------------------------------------
     $moves = Select-Events $events "move_to"
     Write-Host "==> server: $($moves.Count) move_to intent(s) in the whole run"
     if ($moves.Count -ne 1) {
@@ -940,14 +923,12 @@ try {
             "seed and the drop")
     }
 
-    # ------------------------------------------------------------------
     # Layer two: what each client saw. "By observation" is what the milestone
     # says, and a server-side ledger nobody was shown is not an observation.
     #
     # A client removes an item body only on receiving item_despawn and fills a
     # slot only on receiving inventory, so these three captures are this run's
     # proof that both frames reached both clients.
-    # ------------------------------------------------------------------
     # $winner is -1 when the contest did not resolve to one player, which is
     # exactly the sabotage this script exists to catch. Every message below then
     # has to say that rather than print the sentinel, or a reader chasing a real
@@ -1021,10 +1002,8 @@ try {
         }
     }
 
-    # ------------------------------------------------------------------
     # Layer three: the two tied together. Displacement and a ledger each say
     # something happened; this says they are describing the same thing.
-    # ------------------------------------------------------------------
     if ($null -ne $dropSpawn) {
         $droppedId = [int]$dropSpawn.item
         foreach ($client in $running) {

@@ -28,17 +28,6 @@ extends StaticBody3D
 ## shares no code with [code]player_avatar.gd[/code] so that nothing can key the
 ## two together by accident.
 ##
-## Usage from the session:
-##
-## [codeblock]
-## const GroundItemScene := preload("res://scenes/ground_item.tscn")
-##
-## var body := GroundItemScene.instantiate()
-## body.configure(item_id, "acorn")   # unknown kinds render magenta
-## ground_items.add_child(body)       # /root/Main/GroundItems
-## body.place_at(x, z)
-## [/codeblock]
-##
 ## Typed by [code]preload[/code] rather than by global [code]class_name[/code],
 ## per NOTES.md, "Godot authoring traps".
 

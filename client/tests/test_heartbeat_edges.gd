@@ -1,14 +1,5 @@
 extends Node3D
 
-## The heartbeat's effect on a session, at its edges. **M2c.** Fed frames into
-## `main.tscn`, no server, same shape as [code]test_heartbeat.gd[/code].
-##
-## It is the only place that measures what a correction costs: every mid-walk
-## body derives its position from the clock, so a re-anchor moves the world.
-##
-## Three clients, because several of these are about a session's state surviving
-## something, and reusing one would let an earlier test's leftovers decide a
-## later test's result.
 
 const MainScene := preload("res://scenes/main.tscn")
 const SessionScript := preload("res://scripts/session.gd")
@@ -18,8 +9,6 @@ const Assertions := preload("res://tests/assertions.gd")
 
 const TICK_MS := 150
 
-## Frame cap held for this suite's duration, for the reason
-## [code]test_heartbeat.gd[/code] gives. Restored when the suite ends.
 const MAX_FPS := 10
 
 
@@ -61,8 +50,6 @@ class Client:
 	func estimate() -> int:
 		return session.tick_clock().estimated_tick()
 
-	## [param heartbeat] is spliced in verbatim: [code]'"heartbeat_ticks":2,'[/code]
-	## or [code]""[/code] for a server that names no field at all.
 	func welcome(tick: int, heartbeat: String) -> void:
 		feed(
 			'{"welcome":{"you":1,"tick_ms":%d,"tick":%d,%s"players":[{"id":1,"x":0.0,"z":0.0}]}}'
@@ -77,7 +64,6 @@ var _finished := false
 var _restore_max_fps := 0
 
 
-## Suite contract, polled by `run_tests.gd`. Reports; never quits.
 func is_finished() -> bool:
 	return _finished
 
@@ -98,8 +84,6 @@ func _ready() -> void:
 	var b := _build("B")
 	var c := _build("C")
 
-	# main.tscn's Session resolves its exported node paths in _ready, and a
-	# suite that asserts before that reads nulls that look like scene bugs.
 	await get_tree().process_frame
 	await get_tree().process_frame
 
@@ -138,7 +122,6 @@ func _test_backward_then_forward(a: Client) -> void:
 	a.corrections.clear()
 
 
-## What a correction costs, in units of world movement (`PROTOCOL.md`, "Clock").
 func _test_re_anchor_moves_a_walker(a: Client) -> void:
 	var avatar: PlayerAvatarScript = a.session.avatar_for(1)
 	if not _check(avatar != null, "the local avatar exists after welcome"):
@@ -196,7 +179,6 @@ func _test_storm(a: Client) -> void:
 	_check(a.session.is_liveness_armed(), "liveness still armed after the storm")
 
 
-## The `t` values that reach the session but must not reach the anchor.
 func _test_odd_t_values(a: Client) -> void:
 	var before := a.estimate()
 	a.corrections.clear()
@@ -239,9 +221,6 @@ func _test_explicit_zero_and_second_welcome(c: Client) -> void:
 	_check(c.session.has_joined() and c.session.own_id() == 1, "and the session is still joined as 1")
 
 
-## Two windows of different lengths, opened by `welcome` alone and waited out
-## together: C's shorter one proves the timer is rebuilt from the new
-## `heartbeat_ticks` rather than kept from the old.
 func _test_welcome_only_silence_and_rewelcomed_window(b: Client, c: Client) -> void:
 	var b_opened := Time.get_ticks_msec()
 	b.welcome(300, '"heartbeat_ticks":2,')

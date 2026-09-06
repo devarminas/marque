@@ -1,10 +1,6 @@
 package net_test
 
-// Ground items, inventories, and the contested pickup, driven through real
-// WebSocket clients against a real server. The file's reason to exist is
-// TestTwoClientsRacingForOneItemLeaveExactlyOneHolder; everything above it
-// exists so that when the race fails, something smaller has already failed and
-// said why.
+// Ground items, inventories, and the contested pickup.
 
 import (
 	"math"
@@ -16,15 +12,8 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// farItem is a seed position far enough from the spawn point that a pickup has
-// to walk for several ticks to reach it. Ten units is twenty-two ticks of
-// walking, which is long enough to observe a client mid-walk and short enough
-// not to dominate the suite.
 const farItem = 10.0
 
-// TestWelcomeCarriesTheWorldAndThenTheInventory pins the join step's shape: the
-// world's items ride in welcome beside its players, and the joining player's
-// own inventory is a separate message, last.
 func TestWelcomeCarriesTheWorldAndThenTheInventory(t *testing.T) {
 	h := newHarness(t, acornAt(3, -2), acornAt(-4, 5))
 
@@ -66,9 +55,6 @@ func TestWelcomeCarriesTheWorldAndThenTheInventory(t *testing.T) {
 	alice.expectSilence()
 }
 
-// TestAnEmptyWorldStillCarriesTheKeys keeps M0's behaviour with no -item flags
-// and states what an empty array looks like on the wire, which is neither null
-// nor an absent key.
 func TestAnEmptyWorldStillCarriesTheKeys(t *testing.T) {
 	h := newHarness(t)
 
@@ -87,9 +73,6 @@ func TestAnEmptyWorldStillCarriesTheKeys(t *testing.T) {
 	}
 }
 
-// TestPickupWalksThenTakes is RuneScape's answer to clicking an item, in one
-// test: a path to the item, then the take, then the world and the player are
-// both told.
 func TestPickupWalksThenTakes(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0))
 
@@ -137,18 +120,11 @@ func TestPickupWalksThenTakes(t *testing.T) {
 	alice.expectSilence()
 }
 
-// TestPickupOfTheItemUnderfootAssignsNoPath is the one place a pickup differs
-// from a move_to at the same coordinates. A move_to that resolves to where the
-// player is already standing is answered "already there"; a pickup has something
-// left to do, so it is not an error, no path is assigned, nothing is broadcast,
-// and the take happens on the next tick.
-//
-// The two cases are the whole of "underfoot", which is whatever MinPathLength
-// calls the same spot. The second is the one that couples the two constants: no
-// path is assigned, so nothing ever closes the gap that is left, and the take
-// depends on PickupRange being at least MinPathLength. That is the only coupling
-// PickupRange has left, it runs on a five-hundred-fold margin rather than the
-// deleted carve-out's hundredth of a unit, and this is where it is held.
+// A pickup differs from a move_to at the same coordinates: "underfoot" is not
+// an error, no path is assigned, and the take happens on the next tick. The
+// second case holds the one coupling PickupRange still has with MinPathLength:
+// no path is assigned, so nothing else closes the gap, and the take depends on
+// PickupRange being at least MinPathLength.
 func TestPickupOfTheItemUnderfootAssignsNoPath(t *testing.T) {
 	cases := []struct {
 		name string
@@ -168,7 +144,7 @@ func TestPickupOfTheItemUnderfootAssignsNoPath(t *testing.T) {
 
 			alice.pickup(item)
 
-			// The next frame is the despawn: no path, and no error either.
+			// The next frame is the despawn: no path, no error, nothing before it.
 			f := alice.next()
 			if f.ItemDespawn == nil {
 				t.Fatalf("got a %s frame, want item_despawn with nothing before it: %s", f.kind(), f.raw)
@@ -185,13 +161,9 @@ func TestPickupOfTheItemUnderfootAssignsNoPath(t *testing.T) {
 	}
 }
 
-// TestPickupWithinRangeStillWalksToTheItem pins the carve-out that PROTOCOL.md
-// deleted. PickupRange decides when the tick loop hands the item over; it is
-// never a distance at which the server declines to walk the player.
-//
-// The walk is a quarter of a world unit and ends the same tick it started, which
-// is the point: the path exists, it is broadcast, and no rule anywhere compares
-// the distance against PickupRange before assigning it.
+// PickupRange decides when the tick loop hands the item over; it is never a
+// distance at which the server declines to walk the player. The walk ends the
+// same tick it started, which is the point: the path exists and is broadcast.
 func TestPickupWithinRangeStillWalksToTheItem(t *testing.T) {
 	const near = game.PickupRange / 2
 	h := newHarness(t, acornAt(near, 0))
@@ -214,10 +186,8 @@ func TestPickupWithinRangeStillWalksToTheItem(t *testing.T) {
 	}
 }
 
-// TestPickupOfAnItemThatIsNotThereIsAnsweredOnce covers a fabricated id and a
-// stale one with the same assertion, because the server answers them
-// identically on purpose: telling a client which ids exist is telling it about
-// items it cannot see.
+// A fabricated id and a stale id are answered identically on purpose: telling a
+// client which ids exist is telling it about items it cannot see.
 func TestPickupOfAnItemThatIsNotThereIsAnsweredOnce(t *testing.T) {
 	h := newHarness(t, acornAt(game.PickupRange/2, 0))
 
@@ -255,8 +225,6 @@ func TestPickupOfAnItemThatIsNotThereIsAnsweredOnce(t *testing.T) {
 	}
 }
 
-// TestASecondPickupReplacesTheFirst. A player has at most one pending pickup,
-// so the second click wins and the first item is left alone.
 func TestASecondPickupReplacesTheFirst(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0), acornAt(-game.PickupRange/2, 0))
 
@@ -283,16 +251,11 @@ func TestASecondPickupReplacesTheFirst(t *testing.T) {
 	}
 }
 
-// TestAPickupWhileWalkingAwayFromANearItemStillTakesIt is the property the
-// deleted carve-out violated, and the reason PROTOCOL.md deleted it rather than
-// adding a second rule underneath it.
-//
-// The old clause said a player already inside PickupRange is assigned no path.
-// For a player standing still that is right. For a player already walking it is
-// broken: the walk they were on is never replaced, it carries them out of range
-// on the next tick, and the pending pickup then never resolves for the rest of
-// the session. A pickup is now a move_to at the item's position with no distance
-// carve-out at all, so what she gets is an ordinary walk back to it.
+// The property the deleted carve-out violated, and why PROTOCOL.md deleted it
+// rather than adding a second rule: for a player already walking, "inside
+// PickupRange means no path" leaves the old walk in place, it carries her out
+// of range on the next tick, and the pickup never resolves. A pickup is now a
+// move_to at the item's position, no carve-out.
 func TestAPickupWhileWalkingAwayFromANearItemStillTakesIt(t *testing.T) {
 	// The item sits a fraction of PickupRange from the staging point, so she is
 	// well inside the range that used to suppress her path, and stays inside it
@@ -337,8 +300,6 @@ func TestAPickupWhileWalkingAwayFromANearItemStillTakesIt(t *testing.T) {
 	alice.expectSilence()
 }
 
-// TestMoveToCancelsAPendingPickup. Clicking the ground says you wanted
-// something else, so walking over the item afterwards takes nothing.
 func TestMoveToCancelsAPendingPickup(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0))
 
@@ -363,14 +324,8 @@ func TestMoveToCancelsAPendingPickup(t *testing.T) {
 	}
 }
 
-// TestTwoClientsRacingForOneItemLeaveExactlyOneHolder is the unit's reason to
-// exist: two real clients, one item, and a server that hands it to exactly one
-// of them.
-//
-// The winner is asserted by name rather than as a disjunction. Join order
-// decides a contest, alice joined first, so alice wins; a test that accepted
-// either answer would pass against a server that picked at random, which is the
-// one thing this milestone must rule out.
+// The winner is asserted by name, not as a disjunction: join order decides a
+// contest, alice joined first, so alice wins.
 func TestTwoClientsRacingForOneItemLeaveExactlyOneHolder(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0))
 
@@ -424,10 +379,8 @@ func TestTwoClientsRacingForOneItemLeaveExactlyOneHolder(t *testing.T) {
 	}
 }
 
-// TestTheLoserIsHaltedAndToldWhy is the other side of the contest. Walking on
-// to an empty patch of ground would be the server lying about the world, so the
-// loser gets a one-element halt path, broadcast like any other path, and an
-// error naming pickup.
+// Walking on to an empty patch of ground would be the server lying about the
+// world, so the loser gets a one-element halt path and an error naming pickup.
 func TestTheLoserIsHaltedAndToldWhy(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0))
 
@@ -447,22 +400,11 @@ func TestTheLoserIsHaltedAndToldWhy(t *testing.T) {
 	if len(halt.Points) != 1 {
 		t.Fatalf("halt path has %d points, want 1: %+v", len(halt.Points), halt.Points)
 	}
-	// Where the halt is, compared against where bob actually is.
-	//
-	// The server is asked for bob's position through a channel that has nothing
-	// to do with the halt: a client joining now is handed a snapshot of the
-	// world composed from world state, and bob, being halted, never moves again,
-	// so the two must name the same point exactly.
-	//
-	// This used to assert an interval instead -- somewhere between the spawn
-	// point and the item, inclusive at the item's own coordinate -- and nothing
-	// compared the halt against bob at all. A verifier halted the loser at the
-	// item's coordinates, which is a well-formed one-element path that teleports
-	// bob onto the empty patch of ground where the item vanished, the exact lie
-	// losePickup exists to prevent, and the whole suite stayed green. An
-	// interval cannot catch that class, because every wrong point inside it is
-	// still inside it; the player's own position can, because there is only one
-	// right answer.
+	// Where the halt is, compared against where bob actually is: asked for
+	// through a fresh join's snapshot, a channel with nothing to do with the
+	// halt, and bob being halted never moves again. An interval assertion
+	// cannot catch a well-formed halt to a wrong point (every wrong point
+	// inside it is still inside it); the player's own position can.
 	carol := h.dial("carol")
 	bobNow := positionOf(t, carol.welcomeFrame(), bobWelcome.You)
 	if halt.Points[0].X() != bobNow.X || halt.Points[0].Z() != bobNow.Z {
@@ -487,14 +429,9 @@ func TestTheLoserIsHaltedAndToldWhy(t *testing.T) {
 	bob.expectSilence()
 }
 
-// TestBothRacersArriveOnTheSameTick is what makes the contest a contest rather
-// than a sequence. Two players from one spawn point, walking at one speed to
-// one item, are equidistant, so same-tick arrival is the ordinary case.
-//
-// The two intents have to be processed inside one tick for that to hold, so the
-// test starts them just after a tick boundary rather than hoping. The
-// boundary is observed through the log: an arrived event is written during
-// step, so seeing one means a tick has just run.
+// Two players from one spawn point are equidistant, so same-tick arrival is the
+// ordinary case, not luck. The staging walk exists to start both intents just
+// after one tick boundary, observed through the log's arrived event.
 func TestBothRacersArriveOnTheSameTick(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0))
 
@@ -541,9 +478,6 @@ func TestBothRacersArriveOnTheSameTick(t *testing.T) {
 	}
 }
 
-// TestAFullInventoryLeavesTheItemOnTheGround. The player stops where they are,
-// the item does not move, and no halt path is sent, because arriving is what
-// ended the walk.
 func TestAFullInventoryLeavesTheItemOnTheGround(t *testing.T) {
 	if testing.Short() {
 		t.Skip("fills 28 slots one tick at a time")
@@ -593,9 +527,8 @@ func TestAFullInventoryLeavesTheItemOnTheGround(t *testing.T) {
 	}
 }
 
-// TestItemDespawnReachesThePlayerWhoCausedIt is path's broadcast rule, not
-// spawn's. A picker who did not hear the despawn would have to remove the body
-// on its own authority, which is a client deciding what the world contains.
+	// path's broadcast rule, not spawn's: a picker who did not hear the despawn
+	// would have to remove the body on its own authority.
 func TestItemDespawnReachesThePlayerWhoCausedIt(t *testing.T) {
 	h := newHarness(t, acornAt(game.PickupRange/2, 0))
 
@@ -617,10 +550,8 @@ func TestItemDespawnReachesThePlayerWhoCausedIt(t *testing.T) {
 	}
 }
 
-// TestTheEventLogRecordsEveryItemStateChange is the acceptance the log has to
-// meet on its own: an item entering the world, an intent arriving, a resolution
-// and a refusal each have a name of their own, and the fields two of them share
-// are spelled the same way.
+// The acceptance the log has to meet on its own: each item state change has a
+// name of its own, and the fields two events share are spelled the same way.
 func TestTheEventLogRecordsEveryItemStateChange(t *testing.T) {
 	h := newHarness(t, acornAt(game.PickupRange/2, 0))
 
@@ -641,7 +572,6 @@ func TestTheEventLogRecordsEveryItemStateChange(t *testing.T) {
 	if got := spawned[0]["item"]; got != float64(item) {
 		t.Errorf("%s names item %v, want %d", game.EvItemSpawned, got, item)
 	}
-	// The shared helper is what keeps these spellings identical across events.
 	for _, ev := range []map[string]any{intents[0], resolved[0]} {
 		if got := ev["item"]; got != float64(item) {
 			t.Errorf("%v names item %v, want %d", ev["ev"], got, item)
@@ -667,8 +597,8 @@ func TestTheEventLogRecordsEveryItemStateChange(t *testing.T) {
 	}
 }
 
-// TestAMalformedPickupIsRefusedWithoutClosing keeps pickup on the same footing
-// as move_to: a broken body is a broken frame, not a broken client.
+// Keeps pickup on the same footing as move_to: a broken body is a broken frame,
+// not a broken client.
 func TestAMalformedPickupIsRefusedWithoutClosing(t *testing.T) {
 	h := newHarness(t, acornAt(game.PickupRange/2, 0))
 
@@ -704,9 +634,8 @@ func TestAMalformedPickupIsRefusedWithoutClosing(t *testing.T) {
 	}
 }
 
-// TestPickupSurvivesTheClientLeavingMidWalk. A disconnect while a pickup is
-// pending must not leave the world holding a pointer to a departed player, and
-// the item must stay where it is.
+// A disconnect while a pickup is pending must not leave the world holding a
+// pointer to a departed player, and the item must stay where it is.
 func TestPickupSurvivesTheClientLeavingMidWalk(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0))
 

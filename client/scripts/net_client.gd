@@ -7,16 +7,7 @@ extends Node
 ## plain value, and what a caller builds from that is the caller's business.
 ##
 ## [b]Not an autoload.[/b] Instantiate it, [method Node.add_child] it so it gets
-## a frame, and connect the signals:
-##
-## [codeblock]
-## const NetClient := preload("res://scripts/net_client.gd")
-##
-## var net := NetClient.new()
-## add_child(net)
-## net.welcomed.connect(_on_welcomed)
-## net.connect_to_server("ws://127.0.0.1:8080/ws")
-## [/codeblock]
+## a frame, and connect the signals.
 ##
 ## Typed by [code]preload[/code] rather than a global [code]class_name[/code]:
 ## global class names resolve through a cache only the editor scan writes, and

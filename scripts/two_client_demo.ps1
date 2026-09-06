@@ -570,7 +570,6 @@ try {
         }
     }
 
-    # ------------------------------------------------------------------
     # Layer two: what the server believes.
     #
     # Every assertion above reads a client. Clients interpolate the polylines
@@ -579,7 +578,6 @@ try {
     # printed its OK marker with displacements byte-identical to a healthy run.
     # The event log is the only evidence in this run that a frozen server
     # cannot produce.
-    # ------------------------------------------------------------------
     $events = Read-GameLog $serverOut
     Write-Host "==> GAMELOG: $($events.Count) event(s) in $serverOut"
     if ($events.Count -eq 0) {

@@ -10,19 +10,6 @@ extends Node3D
 ## This node is the only place in the movement path that touches the visual
 ## tree. It reads a position out of a [code]polyline_walker.gd[/code] and writes
 ## it to a transform. The walker never reaches the other way (CLAUDE.md).
-##
-## Usage from the wiring unit:
-##
-## [codeblock]
-## const PlayerAvatarScene := preload("res://scenes/player_avatar.tscn")
-##
-## var avatar := PlayerAvatarScene.instantiate()
-## avatar.configure(player_id, welcome_tick_ms)
-## avatar.clock = tick_clock          # optional; see the member's docs
-## remote_players.add_child(avatar)   # /root/Main/RemotePlayers
-## avatar.teleport_to(spawn_x, spawn_z)
-## avatar.follow_path(points, start_tick, speed)
-## [/codeblock]
 
 const PolylineWalker := preload("res://scripts/polyline_walker.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")

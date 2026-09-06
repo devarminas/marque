@@ -17,12 +17,7 @@ extends RefCounted
 ## in the bag. That is a bug nobody would think to look for.
 ##
 ## Never instantiated. Typed by [code]preload[/code], per NOTES.md, "Godot
-## authoring traps":
-##
-## [codeblock]
-## const ItemKinds := preload("res://scripts/item_kinds.gd")
-## if ItemKinds.is_known(kind): ...
-## [/codeblock]
+## authoring traps".
 
 ## Every kind this client can draw.
 const KNOWN: PackedStringArray = ["acorn", "axe"]

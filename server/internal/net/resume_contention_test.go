@@ -2,9 +2,6 @@ package net_test
 
 // Resume under contention: a token claimed twice, a player suspended and
 // resumed more than once, and a suspended body losing a race it was walking to.
-//
-// Written by M2a's second verifier and adopted verbatim; the assertions are
-// theirs. Against the real harness.
 
 import (
 	"sync"

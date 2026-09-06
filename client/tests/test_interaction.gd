@@ -1,27 +1,5 @@
 extends Node3D
 
-## What a click means, and what the inventory panel draws. **M1d.**
-##
-## [b]No server.[/b] Every frame here is handed to `main.tscn`'s own decoder
-## through `net_client.gd`'s public [code]ingest_text_frame[/code], and every
-## click is a real [InputEventMouseButton] pushed through a real viewport. So
-## this suite is green before M1's Go half answers a `pickup`, and it stays
-## green independently of it. That is what makes the client half of M1
-## verifiable on its own.
-##
-## The thing under test is `main.tscn` itself, so every assertion is about the
-## scene the game ships rather than a rig assembled for the occasion.
-##
-## [b]Two assertions here are the unit's actual claim[/b], and they are written
-## as each other's negative: a click on an item produces a `pickup` and no
-## `move_to`, and a click on bare ground produces a `move_to` and no `pickup`.
-## Either one alone passes for a client that always sends the same intent.
-##
-## [b]What this suite cannot prove.[/b] It observes the intents `session.gd`
-## emits, not bytes leaving a socket, because there is no socket. The wire form
-## of both intents is asserted against `net_client.gd`'s public static frame
-## builders, which is the same seam M1c used. End-to-end `pickup` needs M1a's
-## server and end-to-end `drop` needs M1b's, and both belong to M1e.
 
 const MainScene := preload("res://scenes/main.tscn")
 const SessionScript := preload("res://scripts/session.gd")
@@ -35,9 +13,6 @@ const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
-## The scripted world the screenshot is captured from. Driven here as well so
-## that a break in the `--feed` path fails a test run rather than waiting for
-## the next time somebody looks at a PNG. **M1c left this uncovered.**
 const FEED_FIXTURE := "res://tests/fixtures/screenshot_world.ndjson"
 const FEED_FIXTURE_FRAMES := 2
 const FEED_FIXTURE_ITEMS := 2
@@ -45,58 +20,27 @@ const FEED_FIXTURE_PLAYERS := 1
 const FEED_FIXTURE_SLOTS := 28
 const FEED_FIXTURE_OCCUPIED := 3
 
-## RuneScape's number, and the one the fixtures below state on the wire. Named
-## here so that "the panel drew what the frame said" cannot accidentally become
-## "the panel drew what the test hardcoded": the sizes actually asserted are
-## read back from the frames, and one of them is deliberately not this.
 const WIRE_SIZE := 28
 
-## A size no inventory in this game has, sent to prove the panel draws the grid
-## the wire describes rather than a grid it was built with.
 const ODD_SIZE := 6
 
-## Where the item under the test camera lies. Off the origin so that a bug that
-## always answers (0, 0) cannot pass.
 const ITEM_GROUND := Vector2(5.0, 8.0)
 
-## Where the resource node under the gather-click camera lies. Off the item so
-## the two click targets cannot steal each other.
 const NODE_GROUND := Vector2(-4.0, 6.0)
 
-## Where the remote player under the select-click camera lies. Off item and node.
 const REMOTE_GROUND := Vector2(6.0, -5.0)
 
-## The item id the click resolves to, and the player id sharing its number.
-## Item ids and player ids are separate spaces (PROTOCOL.md, "Identity"), so a
-## world holding both is the case that catches a client keying them together.
 const ITEM_ID := 3
 const PLAYER_ID := 3
 const NODE_ID := 3
 const REMOTE_PLAYER_ID := 7
 
-## Camera height for the click tests. High enough that the whole viewport is
-## ground, so a click that misses the item lands on the ground rather than the
-## sky.
 const CAMERA_HEIGHT := 20.0
 
-## How far from screen centre a cursor has to be to be beside the item rather
-## than on it, as a fraction of the viewport's [b]height[/b].
-##
-## A fraction and not a pixel count, because the headless viewport is 64x64 and
-## the shipped window is 1280x720: a constant in pixels is several world units
-## in one and off the edge of the world in the other. The camera keeps its
-## vertical field of view, so a fraction of the height is the same angle at
-## either size. At [constant CAMERA_HEIGHT] this lands about 5.8 units away,
-## and the item is half a unit wide.
 const OFFSET_FRACTION := 0.25
 
-## Tolerance for a coordinate that should be exact.
 const EXACT_EPSILON := 0.01
 
-## Green is Pickup, magenta is missing-asset, gray is inert (NOTES.md, "Color as
-## semantics"). Compared channel by channel within this, which is wide enough to
-## survive a tweak to the exact shade and narrow enough that no two of the three
-## can pass for each other.
 const CHANNEL_EPSILON := 0.25
 
 @onready var _world: Node3D = $World
@@ -113,7 +57,6 @@ var _dock: EquipmentPanelScript = null
 var _grid: GridContainer = null
 var _items_container: Node3D = null
 
-## Every intent the session emitted since the last [method _watch] call.
 var _move_to_intents := PackedVector2Array()
 var _pickup_intents := PackedInt32Array()
 var _gather_intents := PackedInt32Array()
@@ -125,7 +68,6 @@ var _nodes_container: Node3D = null
 var _remotes_container: Node3D = null
 
 
-## Suite contract, polled by `run_tests.gd`. Reports; never quits.
 func is_finished() -> bool:
 	return _finished
 
@@ -153,8 +95,6 @@ func _ready() -> void:
 	_nodes_container = _root.get_node("ResourceNodes") as Node3D
 	_remotes_container = _root.get_node("RemotePlayers") as Node3D
 
-	# The rig chases its target every frame and would undo the camera placement
-	# the click tests depend on. Switched off rather than fought.
 	var rig := _root.get_node("CameraRig") as Node3D
 	if rig != null:
 		rig.set_process(false)
@@ -171,9 +111,6 @@ func _ready() -> void:
 		func(slot: int, on: int) -> void: _use_intents.append(Vector2i(slot, on))
 	)
 
-	# main.tscn's Session resolves its exported node paths in _ready, and a
-	# suite that asserts before that reads nulls that look like scene bugs. The
-	# physics space also has to have stepped before any ray can hit anything.
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().physics_frame
@@ -225,14 +162,8 @@ func _ready() -> void:
 	_finished = true
 
 
-# --------------------------------------------------------------------------
-# The panel.
-# --------------------------------------------------------------------------
 
 
-## CLAUDE.md, "Scene authoring": inventory lives under the right dock in
-## `main.tscn`. A `_ready` that built them would be a scene edit written in the
-## wrong language.
 func _test_the_panel_is_authored() -> void:
 	_check(_dock != null, "main.tscn authors UI/RightDock running equipment_panel.gd")
 	_check(_panel != null, "with a nested inventory panel running inventory_panel.gd")
@@ -274,8 +205,6 @@ func _test_the_panel_is_authored() -> void:
 		)
 
 
-## `inventory` with an empty `slots` still draws the whole grid: `size` is how
-## many slots exist and `slots` is only what is in them (PROTOCOL.md).
 func _test_an_empty_inventory_draws_every_slot() -> void:
 	await _feed('{"inventory":{"size":%d,"slots":[]}}' % WIRE_SIZE)
 	_check(
@@ -300,7 +229,6 @@ func _test_an_empty_inventory_draws_every_slot() -> void:
 	)
 
 
-## One occupied slot, drawn green, with every other slot still empty.
 func _test_one_occupied_slot() -> void:
 	await _feed(
 		'{"inventory":{"size":%d,"slots":[{"slot":1,"kind":"acorn"}]}}' % WIRE_SIZE
@@ -328,8 +256,6 @@ func _test_one_occupied_slot() -> void:
 	)
 
 
-## `size` occupied slots: the maximum the contract allows, and the case where
-## sparse and dense agree.
 func _test_a_full_inventory() -> void:
 	await _feed(_inventory_frame(WIRE_SIZE, WIRE_SIZE))
 	_check(
@@ -343,9 +269,6 @@ func _test_a_full_inventory() -> void:
 	)
 
 
-## `inventory` is a full restatement, never a patch (PROTOCOL.md), so a second
-## one replaces the first rather than merging with it. Fed straight after the
-## full inventory above, so a panel that patched would still show 28.
 func _test_a_second_inventory_replaces_the_first_wholesale() -> void:
 	await _feed(
 		'{"inventory":{"size":%d,"slots":[{"slot":5,"kind":"acorn"}]}}' % WIRE_SIZE
@@ -362,7 +285,6 @@ func _test_a_second_inventory_replaces_the_first_wholesale() -> void:
 	)
 
 
-## Slot 0 and slot `size - 1`: the two indices an off-by-one gets wrong.
 func _test_both_ends_of_the_range() -> void:
 	var last := WIRE_SIZE - 1
 	await _feed(
@@ -379,8 +301,6 @@ func _test_both_ends_of_the_range() -> void:
 	_check(_panel.slot_at(-1) == null, "and no slot -1")
 
 
-## `size` is on the wire so the client draws the grid it is told to draw rather
-## than hardcoding a second copy of RuneScape's 28 (PROTOCOL.md, `inventory`).
 func _test_the_grid_size_comes_from_the_wire() -> void:
 	await _feed(_inventory_frame(ODD_SIZE, 1))
 	_check(
@@ -397,9 +317,6 @@ func _test_the_grid_size_comes_from_the_wire() -> void:
 	_check(_grid.get_child_count() == 0, "and clears the grid rather than drawing empty chrome")
 
 
-## An item kind this client has no art for still shows something, and it screams
-## (NOTES.md, "Color as semantics"). This is the path that has to work when a
-## server learns a second kind before this client does.
 func _test_an_unknown_kind_is_magenta() -> void:
 	await _feed(
 		'{"inventory":{"size":%d,"slots":[{"slot":2,"kind":"acorn"},'
@@ -423,8 +340,6 @@ func _test_an_unknown_kind_is_magenta() -> void:
 	_check(not stranger.disabled, "and is still droppable, because the server knows what it is")
 
 
-## `welcome` restates the world and the inventory is not part of it: it arrives
-## as its own message inside the same atomic step (PROTOCOL.md, `welcome`).
 func _test_welcome_empties_the_panel() -> void:
 	await _feed(_welcome_frame())
 	_check(
@@ -439,16 +354,9 @@ func _test_welcome_empties_the_panel() -> void:
 	)
 
 
-# --------------------------------------------------------------------------
-# The click.
-# --------------------------------------------------------------------------
 
 
-## A world holding player %d and item %d at once, with the camera looking
-## straight down at the item.
 func _build_the_click_world() -> void:
-	# Inventory unit tests above feed a full bag into a closed dock. Keep the
-	# dock closed for world clicks; an open right dock covers the beside-cursor.
 	_dock.visible = false
 	var toggle := _root.get_node_or_null("UI/InventoryToggle") as CanvasItem
 	if toggle != null:
@@ -467,15 +375,10 @@ func _build_the_click_world() -> void:
 		"and player %d, which is a different thing with the same number" % PLAYER_ID,
 	)
 	_look_straight_down_at(ITEM_GROUND)
-	# The body was added this frame; the physics space has to step before any
-	# ray can find it, and a query before that looks exactly like a broken one.
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 
 
-## One ray, both layers, nearest surface wins. Asserted through the picker's own
-## resolver before any click is pushed, so a failure here says "the raycast is
-## wrong" rather than "something in the click path is wrong".
 func _test_the_picker_separates_an_item_from_the_ground() -> void:
 	var centre := _viewport_centre()
 	var on_item := _picker.pick(centre)
@@ -494,8 +397,6 @@ func _test_the_picker_separates_an_item_from_the_ground() -> void:
 		"a cursor beside it resolves to the ground, got target %d" % beside["target"],
 	)
 
-	# The same cursor, asked the other question: pick_ground() queries the
-	# ground layer alone, so it answers with the ground underneath the item.
 	var underneath = _picker.pick_ground(centre)
 	_check(underneath != null, "and the ground under the item is still reachable")
 	if underneath != null:
@@ -506,8 +407,6 @@ func _test_the_picker_separates_an_item_from_the_ground() -> void:
 		)
 
 
-## [b]The unit's claim, half one.[/b] Fails if a click on an item produced a
-## `move_to`.
 func _test_a_click_on_an_item_is_a_pickup_and_not_a_move() -> void:
 	_watch()
 	await _left_click(_viewport_centre())
@@ -533,8 +432,6 @@ func _test_a_click_on_an_item_is_a_pickup_and_not_a_move() -> void:
 	)
 
 
-## [b]The unit's claim, half two.[/b] Fails if a click on bare ground produced a
-## `pickup`.
 func _test_a_click_on_bare_ground_is_a_move_and_not_a_pickup() -> void:
 	_check(not _dock.visible, "the dock stays closed so a beside-cursor can reach the ground")
 	var cursor := _viewport_centre() + _beside_offset()
@@ -567,8 +464,6 @@ func _test_a_click_on_bare_ground_is_a_move_and_not_a_pickup() -> void:
 	)
 
 
-## The client is a cache with zero authority (CLAUDE.md), so a pickup click
-## changes nothing locally. The body leaves when `item_despawn` says it did.
 func _test_a_pickup_click_changes_nothing_locally() -> void:
 	_watch()
 	await _left_click(_viewport_centre())
@@ -593,9 +488,6 @@ func _test_a_pickup_click_changes_nothing_locally() -> void:
 	)
 
 
-## An id the server never named never reaches the wire. The body below is a real
-## `ground_item.tscn` with a real id painted on it and no registry entry, which
-## is exactly what a client that read the id off the node would happily send.
 func _test_an_unregistered_body_is_never_picked_up() -> void:
 	var stray := GroundItemScene.instantiate() as GroundItemScript
 	stray.name = "StrayItem"
@@ -633,9 +525,6 @@ func _test_an_unregistered_body_is_never_picked_up() -> void:
 	stray.queue_free()
 
 
-## The exact bytes both intents put on the wire, against PROTOCOL.md. Asserted
-## from `net_client.gd`'s public static builders, which is the only way to check
-## a sender before the server that answers it exists.
 func _test_the_intents_match_the_protocol_byte_for_byte() -> void:
 	_check(
 		JSON.stringify(NetClientScript.pickup_frame(7)) == '{"pickup":{"item":7}}',
@@ -672,7 +561,6 @@ func _test_the_intents_match_the_protocol_byte_for_byte() -> void:
 	)
 
 
-## A world holding a resource node under the camera. **M4b.**
 func _build_the_node_click_world() -> void:
 	_dock.visible = false
 	var toggle := _root.get_node_or_null("UI/InventoryToggle") as CanvasItem
@@ -763,7 +651,6 @@ func _test_a_click_on_an_item_still_picks_up_beside_a_node() -> void:
 	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
 
 
-## A world holding this client and a remote player under the camera. **M5b.**
 func _build_the_player_click_world() -> void:
 	_dock.visible = false
 	var toggle := _root.get_node_or_null("UI/InventoryToggle") as CanvasItem
@@ -932,20 +819,8 @@ func _test_a_right_click_on_a_remote_player_is_an_attack() -> void:
 	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
 
 
-# --------------------------------------------------------------------------
-# The use-on.
-# --------------------------------------------------------------------------
 
 
-## Two real clicks on occupied slots become one `use` naming those indices.
-##
-## [b]The slots clicked are the last ones[/b], for a reason that is about the test
-## environment and not about the game: the headless viewport is 64x64 while the
-## shipped window is 1280x720, and a 28-slot panel anchored to the bottom-right
-## corner has only its last cell inside a 64x64 rect. A [Control] does receive a
-## press outside the viewport — M1k probed that and an off-screen slot consumed
-## one — but it fires no [signal BaseButton.pressed] when it does, so the last
-## cell is the one a real click can reach here.
 func _test_clicking_an_occupied_slot_uses_it() -> void:
 	var last := WIRE_SIZE - 1
 	_dock.visible = true
@@ -984,8 +859,6 @@ func _test_clicking_an_occupied_slot_uses_it() -> void:
 		% [small, small - 2, small - 1]
 	)
 	_watch()
-	# Off-screen slots do not fire Button.pressed in the 64x64 harness, so the
-	# cross-slot case drives the same session path the panel's signal uses.
 	_panel.slot_activated.emit(small - 2)
 	_panel.slot_activated.emit(small - 1)
 	_check(
@@ -1002,7 +875,6 @@ func _test_clicking_an_occupied_slot_uses_it() -> void:
 	)
 
 
-## Escape mid-selection clears the pending use and sends nothing.
 func _test_cancel_clears_use_selection() -> void:
 	var last := WIRE_SIZE - 1
 	await _feed(
@@ -1033,11 +905,6 @@ func _test_cancel_clears_use_selection() -> void:
 	_check(_use_intents.is_empty(), "without sending use")
 
 
-## An empty slot names nothing to use, and the server would refuse an intent
-## that said otherwise.
-##
-## Driven on a small inventory so the empty cell sits inside the 64x64 harness
-## viewport (the same layout constraint as the occupied-slot click above).
 func _test_clicking_an_empty_slot_uses_nothing() -> void:
 	_dock.visible = true
 	await _feed('{"inventory":{"size":4,"slots":[]}}')
@@ -1060,28 +927,10 @@ func _test_clicking_an_empty_slot_uses_nothing() -> void:
 	_check(_use_intents.is_empty(), "as is a negative use slot")
 
 
-## [b]The M1k claim.[/b] A click on the panel's chrome sends nothing at all.
-##
-## The shipped panel used to behave three ways depending on where you hit it:
-## an occupied slot dropped, an empty slot ate the click, and the chrome walked
-## your character, because everything but the slots was
-## [constant Control.MOUSE_FILTER_IGNORE] so the world showed through. Only the
-## first was designed. RuneScape's sidebar is opaque, so all three collapse into
-## one rule and this is the test of it.
-##
-## [b]Both inventory states, and the empty one is the load-bearing case.[/b]
-## Every player joins holding nothing, so an inventory of 28 empty slots is what
-## the panel spends most of its life drawing, and Linear ARM-40 names that
-## state as the exposure. An earlier version of this test fed one occupied slot
-## and nothing else, which left the join state untested: a panel that turned
-## opaque only while the player carried something passed the whole suite and
-## walked the player when clicked at join. That build is a real sabotage, not a
-## hypothetical, and it is what this second case exists to catch.
 func _test_clicking_the_panel_chrome_reaches_nothing() -> void:
 	await _feed(_inventory_frame(WIRE_SIZE, 1))
 	await _check_the_chrome_is_a_wall("carrying one item")
 
-	# The state every player is in the moment they join.
 	await _feed(_inventory_frame(WIRE_SIZE, 0))
 	_check(
 		_panel.occupied_slot_count() == 0,
@@ -1091,19 +940,8 @@ func _test_clicking_the_panel_chrome_reaches_nothing() -> void:
 	await _check_the_chrome_is_a_wall("holding nothing, as at join")
 
 
-## Clicks the panel's chrome and asserts the click reached nothing.
-##
-## [b]The counterfactual is asserted, not assumed.[/b] "No `move_to`" is also
-## what a click into empty space produces, so the ground under the chrome point
-## is resolved with the picker first. The picker answers a ray, not the GUI, so
-## it reports what the click [i]would[/i] have hit — and then the click hits the
-## panel instead.
 func _check_the_chrome_is_a_wall(state: String) -> void:
 	_dock.visible = true
-	# A rebuilt grid has not sorted its children yet, and a widget with no rect
-	# is a rect that every point misses. Rendering first also means the filter
-	# is judged by what a real click does rather than by reading the property,
-	# which is what `_test_the_panel_is_authored` does before any frame runs.
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_check(_dock.visible, "the full-size dock is drawn (%s)" % state)
@@ -1136,14 +974,6 @@ func _check_the_chrome_is_a_wall(state: String) -> void:
 	)
 
 
-## A point inside the panel's drawn rect, inside the viewport, and on no slot
-## widget, or null when the panel draws no such point.
-##
-## Derived rather than written down, because the panel's size comes from the
-## theme and the slot metrics. A literal would go stale the first time either
-## moved, and it would go stale [i]silently[/i]: a point that had drifted onto a
-## slot still sends no `move_to`, so the assertion above it would keep passing
-## while testing something else entirely.
 func _panel_chrome_point(panel_rect: Rect2, screen: Rect2) -> Variant:
 	var slots: Array[Rect2] = []
 	for index in _panel.slot_count():
@@ -1165,17 +995,8 @@ func _panel_chrome_point(panel_rect: Rect2, screen: Rect2) -> Variant:
 	return null
 
 
-# --------------------------------------------------------------------------
-# The scripted feed.
-# --------------------------------------------------------------------------
 
 
-## `main.gd`'s `--feed` path, driven by an automated test for the first time.
-##
-## M1c added the flag so a screenshot could show a world with items in it and
-## left nothing driving it, which means a regression there surfaces only the
-## next time a human opens a PNG. This feeds the very fixture the screenshot is
-## captured from and asserts on the frame count and on the world it produced.
 func _test_the_scripted_feed_still_builds_a_world() -> void:
 	var feeder := MainScene.instantiate() as Node3D
 	feeder.name = "FeedClient"
@@ -1218,19 +1039,13 @@ func _test_the_scripted_feed_still_builds_a_world() -> void:
 	feeder.queue_free()
 
 
-# --------------------------------------------------------------------------
-# Driving.
-# --------------------------------------------------------------------------
 
 
-## Hands one frame to the client's own decoder and lets it land.
 func _feed(text: String) -> void:
 	_net.ingest_text_frame(text)
 	await get_tree().process_frame
 
 
-## Forgets every intent seen so far, so the next assertion counts only what the
-## next click produced.
 func _watch() -> void:
 	_move_to_intents.clear()
 	_pickup_intents.clear()
@@ -1241,7 +1056,6 @@ func _watch() -> void:
 	_use_intents.clear()
 
 
-## Pushes a real left click at a viewport position and lets it be handled.
 func _left_click(screen_position: Vector2) -> void:
 	var viewport := _camera.get_viewport()
 	var press := InputEventMouseButton.new()
@@ -1252,7 +1066,6 @@ func _left_click(screen_position: Vector2) -> void:
 	await get_tree().process_frame
 
 
-## Pushes a real right click at a viewport position and lets it be handled.
 func _right_click(screen_position: Vector2) -> void:
 	var viewport := _camera.get_viewport()
 	var press := InputEventMouseButton.new()
@@ -1263,11 +1076,7 @@ func _right_click(screen_position: Vector2) -> void:
 	await get_tree().process_frame
 
 
-## Presses and releases the left button over one slot widget. Both halves are
-## needed: a [Button] fires on release by default.
 func _click_slot(index: int) -> void:
-	# A rebuilt grid has not sorted its children yet, and a widget with no rect
-	# is a click at (0, 0) that hits nothing.
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var slot := _panel.slot_at(index)
@@ -1277,9 +1086,6 @@ func _click_slot(index: int) -> void:
 	var viewport := slot.get_viewport()
 	var rect := slot.get_global_rect()
 	var centre := rect.get_center()
-	# A slot that has drifted off the viewport edge still consumes the press and
-	# still fires no `pressed`, so it produces no drop and looks exactly like
-	# broken wiring (NOTES.md, "Godot authoring traps"). Say which it is.
 	_check(
 		rect.has_area() and viewport.get_visible_rect().has_point(centre),
 		"and slot %d is laid out somewhere clickable (%s in a %s viewport)"
@@ -1300,8 +1106,6 @@ func _click_slot(index: int) -> void:
 	await get_tree().process_frame
 
 
-## Puts the camera directly above [param ground] looking straight down, so
-## screen centre is that point and a click there is unambiguous.
 func _look_straight_down_at(ground: Vector2) -> void:
 	_camera.global_transform = Transform3D(
 		Basis(Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0)),
@@ -1313,14 +1117,10 @@ func _viewport_centre() -> Vector2:
 	return _camera.get_viewport().get_visible_rect().size * 0.5
 
 
-## A cursor offset that is beside the item rather than on it, at whatever size
-## this viewport happens to be. See [constant OFFSET_FRACTION].
 func _beside_offset() -> Vector2:
 	return Vector2(_camera.get_viewport().get_visible_rect().size.y * OFFSET_FRACTION, 0.0)
 
 
-## An `inventory` frame of [param size] slots with the first [param occupied] of
-## them holding an acorn.
 static func _inventory_frame(size: int, occupied: int) -> String:
 	var slots := PackedStringArray()
 	for index in occupied:
@@ -1328,7 +1128,6 @@ static func _inventory_frame(size: int, occupied: int) -> String:
 	return '{"inventory":{"size":%d,"slots":[%s]}}' % [size, ",".join(slots)]
 
 
-## A `welcome` naming this client as player [constant PLAYER_ID] and no items.
 static func _welcome_frame() -> String:
 	return (
 		'{"welcome":{"you":%d,"tick_ms":150,"tick":900,"players":[{"id":%d,"x":0.0,"z":0.0}],'
@@ -1337,9 +1136,6 @@ static func _welcome_frame() -> String:
 	)
 
 
-## True when two colours match channel by channel. `%s` and never `%v` for a
-## [Color]: `%v` takes vector types only, fails at runtime, and leaves the
-## template unformatted so the failure message degrades to noise (NOTES.md).
 func _is_color(actual: Color, expected: Color) -> bool:
 	return (
 		absf(actual.r - expected.r) <= CHANNEL_EPSILON
