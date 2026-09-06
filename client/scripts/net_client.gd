@@ -80,11 +80,11 @@ signal tick_received(t: int)
 ## listener. Emission here is synchronous and in that order, so it does not.
 ##
 ## Emitted on every `welcome`: one carrying items, one carrying an empty `items`
-## array, one from a pre-M1 server with no `items` key at all, and one whose
-## `items` is `null` because a server marshalled an empty slice badly. The last
-## three mean the same thing — the world has no ground items — and a listener
-## that only heard about items when there were some could never clear the ones
-## it already had. Only the `null` one logs; see [method _is_null_list].
+## array, and one whose `items` is `null` because a server marshalled an empty
+## slice badly. The last two mean the same thing — the world has no ground
+## items — and a listener that only heard about items when there were some
+## could never clear the ones it already had. Only the `null` one logs; see
+## [method _is_null_list].
 ##
 ## The three arrays are index aligned.
 signal welcome_items(
@@ -377,7 +377,7 @@ func take_seq() -> int:
 	return n
 
 
-## The three client-to-server frames, as the dictionaries [method _send] would
+## The client-to-server frames, as the dictionaries [method _send] would
 ## encode.
 ##
 ## Public and static so that a test can assert on the exact bytes a call would
@@ -617,8 +617,7 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 			manas.append(mana_hit.x)
 			max_manas.append(mana_hit.y)
 
-	# M1. `items` is absent from every pre-M1 server and that is not an error:
-	# no items on the wire and no items in the world are the same statement.
+	# `items` is an opt-out-free list: absent and empty are the same statement.
 	# Parsed before anything is emitted, so a malformed `items` drops the whole
 	# frame rather than applying half of it — this file's rule is that one bad
 	# frame is dropped entire, and a `welcome` that landed its players and lost
@@ -876,7 +875,7 @@ func _on_inventory(body: Dictionary, text: String) -> void:
 		return
 	var raw: Variant = body.get("slots")
 	# `null` means empty and is logged. An absent `slots` is still missing: no
-	# sender legitimately omits it, `inventory` has no pre-M1 form to be
+	# sender legitimately omits it, `inventory` has no legacy form to be
 	# compatible with, and the guard on `has` is what keeps the two apart —
 	# `Dictionary.get` hands back the null rather than its default.
 	if body.has("slots") and _is_null_list(raw, "inventory.slots", text):
@@ -1137,9 +1136,8 @@ func _send(message: Dictionary) -> Error:
 ## nothing wrong on either side. `PROTOCOL.md`, `inventory`, binds both halves:
 ## a sender never emits `null` for a list, and a receiver treats it as an absent
 ## key, meaning empty, and logs. That is the same call this file already makes
-## about a malformed frame — the server is this client's only peer and M0 has no
-## reconnect, so strictness costs the whole session and leniency costs a log line
-## naming somebody else's defect.
+## about a malformed frame: one bad frame is dropped entire, so leniency costs
+## only a log line naming somebody else's defect.
 ##
 ## It buys nothing else. Every non-array that is not `null` returns false here
 ## and the caller refuses it exactly as before.

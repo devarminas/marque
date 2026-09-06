@@ -73,6 +73,8 @@ const (
 
 	EvPlayerExpired = "player_expired"
 
+	EvJoinRefused = "join_refused"
+
 	// EvResumeRefused names only the remote address; no player exists for it.
 	EvResumeRefused = "resume_refused"
 
@@ -431,6 +433,14 @@ func (w *World) resumePlayer(p *player, conn *mnet.Conn) {
 }
 
 func (w *World) addPlayer(conn *mnet.Conn) {
+	if w.nextID+1 >= practiceNpcIDBand {
+		w.log.Event(w.tick, EvJoinRefused, gamelog.Fields{
+			"remote": conn.Remote(),
+			"reason": "player id space exhausted",
+		})
+		conn.CloseAfterFlush(mnet.DisconnectRefused)
+		return
+	}
 	w.nextID++
 	p := &player{
 		id:      w.nextID,

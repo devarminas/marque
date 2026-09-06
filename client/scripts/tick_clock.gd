@@ -67,8 +67,8 @@ func _init(now_usec_source: Callable = Callable()) -> void:
 ## Records the anchor: server tick [param anchor_tick] was current at the
 ## monotonic instant of this call, and one tick lasts [param tick_ms].
 ##
-## Calling it again re-anchors. That is the intended path for a reconnect and,
-## from M2, for a drift-correcting heartbeat.
+## Calling it again re-anchors. That is the intended path for a reconnect and
+## for the drift-correcting heartbeat.
 func anchor(anchor_tick: int, tick_ms: int) -> void:
 	if anchor_tick < 0:
 		push_error("TickClock.anchor: anchor_tick must be >= 0, got %d" % anchor_tick)

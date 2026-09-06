@@ -261,3 +261,103 @@ func mustParseAbilities(t *testing.T, raw string) *abilitydef.Catalog {
 	}
 	return cat
 }
+
+const suicideAbilityJSON = `{
+  "abilities": [
+    {
+      "id": "heal",
+      "name": "Heal",
+      "mana_cost": 20,
+      "cooldown_ticks": 10,
+      "range": 8,
+      "target": "friendly",
+      "effect": {"kind": "heal", "amount": 25},
+      "ui": {"hotbar_slot": 1, "color": "green"}
+    },
+    {
+      "id": "fireball",
+      "name": "Fireball",
+      "mana_cost": 35,
+      "cooldown_ticks": 8,
+      "range": 8,
+      "target": "hostile",
+      "effect": {"kind": "damage", "amount": 40},
+      "ui": {"hotbar_slot": 2, "color": "red"}
+    },
+    {
+      "id": "friendly_blast",
+      "name": "Friendly Blast",
+      "mana_cost": 5,
+      "cooldown_ticks": 8,
+      "range": 8,
+      "target": "friendly",
+      "effect": {"kind": "damage", "amount": 10},
+      "ui": {"hotbar_slot": 4, "color": "purple"}
+    }
+  ]
+}`
+
+func TestSelfKillRunsDeathCleanup(t *testing.T) {
+	pw := newProbeWorld(t)
+	pw.w.SetAbilities(mustParseAbilities(t, suicideAbilityJSON))
+	alice := pw.join()
+
+	alice.hp = 10
+	alice.gatherNode = nodeOrderFirst(pw.w)
+	alice.attackTarget = 0
+
+	pw.w.cast(alice, mnet.Cast{Ability: "friendly_blast", Player: alice.id}, 1)
+
+	if alice.hp != 0 {
+		t.Fatalf("hp=%d, want 0", alice.hp)
+	}
+	if got := pw.events(EvDeath); len(got) != 1 {
+		t.Fatalf("logged %d death, want 1", len(got))
+	}
+	if alice.gatherNode != 0 {
+		t.Fatalf("dead player still gathering node %d", alice.gatherNode)
+	}
+	if alice.attackTarget != 0 {
+		t.Fatalf("dead player still attacking %d", alice.attackTarget)
+	}
+}
+
+func TestFriendlyCastKillsSelfTarget(t *testing.T) {
+	pw := newProbeWorld(t)
+	pw.w.SetAbilities(mustParseAbilities(t, suicideAbilityJSON))
+	alice := pw.join()
+	bob := pw.join()
+	bob.pos = Point{X: 1, Z: 0}
+	bob.hp = MaxHP
+
+	pw.w.attack(bob, mnet.Attack{Player: alice.id}, 1)
+	if bob.attackTarget == 0 {
+		t.Fatal("bob never started attacking alice")
+	}
+
+	alice.hp = 10
+	pw.w.cast(alice, mnet.Cast{Ability: "friendly_blast", Player: alice.id}, 1)
+
+	if alice.hp != 0 || bob.attackTarget != 0 {
+		t.Fatalf("self-kill cleanup: hp=%d bob.attackTarget=%d", alice.hp, bob.attackTarget)
+	}
+}
+
+func TestAbilityCatalogRejectsDamageOnSelf(t *testing.T) {
+	custom := `{
+  "abilities":[{
+    "id":"seppuku","name":"Seppuku","mana_cost":5,"cooldown_ticks":0,"range":0,
+    "target":"self","effect":{"kind":"damage","amount":1}
+  }]
+}`
+	if _, err := abilitydef.Parse([]byte(custom)); err == nil {
+		t.Fatal("catalog accepted a damage ability targeting self")
+	}
+}
+
+func nodeOrderFirst(w *World) mnet.NodeID {
+	for _, id := range w.nodeOrder {
+		return id
+	}
+	return 0
+}

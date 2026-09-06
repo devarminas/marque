@@ -68,8 +68,8 @@ var kindSlotsOf = map[string][]mnet.EquipSlot{
 	}
 
 // DefaultJoinKit is what a joining player is given, in the order it is placed:
-// one axe, so a client can reach equip before gathering exists to earn one.
-// Revisitable the moment gathering can produce one. Tuning: ARM-81.
+// one axe. Gathering produces logs, not an axe, so the kit does not earn one
+// back. Tuning: ARM-81.
 var DefaultJoinKit = []string{KindAxe}
 
 var (

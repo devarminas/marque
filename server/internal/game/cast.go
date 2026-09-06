@@ -125,7 +125,7 @@ func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
 		return
 	}
 	w.broadcastHP(target.plyr)
-	if ability.Effect.Kind == abilitydef.EffectDamage && target.plyr.dead() && target.plyr != p {
+	if ability.Effect.Kind == abilitydef.EffectDamage && target.plyr.dead() {
 		w.kill(target.plyr, p)
 	}
 }

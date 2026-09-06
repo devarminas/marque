@@ -196,7 +196,7 @@ func _point_at_distance(distance: float) -> Vector2:
 		var along := (distance - _arc[index - 1]) / segment_length
 		return _points[index - 1].lerp(_points[index], along)
 
-	# Unreachable: distance < total_length() means some _arc[index] exceeds it.
+	# The distance clamp guarantees an arc entry past it exists here.
 	return _points[last_index]
 
 
