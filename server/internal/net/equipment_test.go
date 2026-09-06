@@ -65,7 +65,7 @@ func TestDefaultJoinKitIsOneAxe(t *testing.T) {
 		t.Fatalf("DefaultJoinKit is %v, want exactly one %q", game.DefaultJoinKit, game.KindAxe)
 	}
 	wantWorn := []mnet.EquipSlot{
-		game.SlotHelmet, game.SlotLeftHand, game.SlotChest, game.SlotRightHand, game.SlotTrousers,
+		game.SlotHelmet, game.SlotLeftHand, game.SlotChest, game.SlotRightHand, game.SlotFeet, game.SlotTrousers,
 	}
 	if len(game.WornSlots) != len(wantWorn) {
 		t.Fatalf("WornSlots is %v, want %v", game.WornSlots, wantWorn)
@@ -142,7 +142,7 @@ func TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty(t *testing.T) {
 	if !strings.Contains(f.raw, `"slots":[]`) {
 		t.Errorf("an empty equipment encodes as %s, want it to carry \"slots\":[]", f.raw)
 	}
-	if !strings.Contains(f.raw, `"worn":["helmet","left hand","chest","right hand","trousers"]`) {
+	if !strings.Contains(f.raw, `"worn":["helmet","left hand","chest","right hand","feet","trousers"]`) {
 		t.Errorf("equipment encodes as %s, want \"worn\" to be an array of names", f.raw)
 	}
 	assertNoNulls(t, "equipment", f.raw)
@@ -693,4 +693,29 @@ func TestASequencedEquipIsDedupedAndLogsItsSeq(t *testing.T) {
 	// A duplicate is not answered at all, so there is no second restatement and
 	// no error.
 	alice.expectSilence()
+}
+
+// TestATwoHandedEquipRestatesBothHands is the wire half of AC1: the equipment
+// restatement after a 2H equip shows the kind in both hand slots, so a client
+// that draws fixed chrome for those names sees the truth without merging
+// anything itself.
+func TestATwoHandedEquipRestatesBothHands(t *testing.T) {
+	h := newHarnessWithKit(t, []string{game.KindStaff})
+
+	alice := h.dial("alice")
+	alice.welcome()
+	alice.drain()
+
+	alice.sendRaw(`{"equip":{"slot":0}}`)
+	h.awaitEvents(game.EvEquip, 1)
+
+	alice.awaitInventory()
+	eq := alice.equipment()
+	seen := make(map[mnet.EquipSlot]string)
+	for _, s := range eq.Slots {
+		seen[s.Slot] = s.Kind
+	}
+	if seen[game.SlotLeftHand] != game.KindStaff || seen[game.SlotRightHand] != game.KindStaff {
+		t.Fatalf("the restatement shows %v, want %q in both hand slots", seen, game.KindStaff)
+	}
 }
