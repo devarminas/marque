@@ -530,10 +530,12 @@ func request_cast(ability_id: String) -> void:
 		return
 	if target_id < 1:
 		await_mana_for_cast(ability_id, 0)
-		_net.send_cast(ability_id, 0)
+		if _net.send_cast(ability_id, 0) != OK:
+			_casts_awaiting_mana.pop_back()
 		return
 	await_mana_for_cast(ability_id, target_id)
-	_net.send_cast(ability_id, target_id)
+	if _net.send_cast(ability_id, target_id) != OK:
+		_casts_awaiting_mana.pop_back()
 
 
 func await_mana_for_cast(ability_id: String, target_id: int) -> void:
