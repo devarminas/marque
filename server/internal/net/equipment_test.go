@@ -65,7 +65,7 @@ func TestDefaultJoinKitIsOneAxe(t *testing.T) {
 		t.Fatalf("DefaultJoinKit is %v, want exactly one %q", game.DefaultJoinKit, game.KindAxe)
 	}
 	wantWorn := []mnet.EquipSlot{
-		game.SlotHelmet, game.SlotLeftHand, game.SlotChest, game.SlotRightHand, game.SlotTrousers,
+		game.SlotHelmet, game.SlotLeftHand, game.SlotChest, game.SlotRightHand, game.SlotFeet, game.SlotTrousers,
 	}
 	if len(game.WornSlots) != len(wantWorn) {
 		t.Fatalf("WornSlots is %v, want %v", game.WornSlots, wantWorn)
@@ -142,7 +142,7 @@ func TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty(t *testing.T) {
 	if !strings.Contains(f.raw, `"slots":[]`) {
 		t.Errorf("an empty equipment encodes as %s, want it to carry \"slots\":[]", f.raw)
 	}
-	if !strings.Contains(f.raw, `"worn":["helmet","left hand","chest","right hand","trousers"]`) {
+	if !strings.Contains(f.raw, `"worn":["helmet","left hand","chest","right hand","feet","trousers"]`) {
 		t.Errorf("equipment encodes as %s, want \"worn\" to be an array of names", f.raw)
 	}
 	assertNoNulls(t, "equipment", f.raw)

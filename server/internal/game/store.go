@@ -16,6 +16,20 @@ const (
 	KindAcorn = "acorn"
 	// KindAxe is M3a's equippable kind, and the only one. Tuning: ARM-81.
 	KindAxe = "axe"
+	// KindSword is the knight's one-handed tool. M7b.
+	KindSword = "sword"
+	// KindStaff is the mage's two-handed tool. M7b.
+	KindStaff = "staff"
+	// KindBow is the archer's two-handed tool. M7b.
+	KindBow = "bow"
+	// KindLumberjackAxe is the lumberjack's two-handed tool, a distinct kind
+	// from the one-handed KindAxe. M7b.
+	KindLumberjackAxe = "lumberjack axe"
+	// KindPickaxe is the miner's one-handed tool. M7b.
+	KindPickaxe = "pickaxe"
+	// KindProspectorBoots is the prospector's footwear, and the reason the
+	// feet slot exists. M7b.
+	KindProspectorBoots = "prospector boots"
 )
 
 // Worn slot names on the wire (PROTOCOL.md, "Worn slots"). Exact strings,
@@ -25,6 +39,7 @@ const (
 	SlotLeftHand  mnet.EquipSlot = "left hand"
 	SlotChest     mnet.EquipSlot = "chest"
 	SlotRightHand mnet.EquipSlot = "right hand"
+	SlotFeet      mnet.EquipSlot = "feet"
 	SlotTrousers  mnet.EquipSlot = "trousers"
 )
 
@@ -33,16 +48,24 @@ const (
 // of it. Read-only. Draw order on the client is scene-authored; this order is
 // the wire restatement order.
 var WornSlots = []mnet.EquipSlot{
-	SlotHelmet, SlotLeftHand, SlotChest, SlotRightHand, SlotTrousers,
+	SlotHelmet, SlotLeftHand, SlotChest, SlotRightHand, SlotFeet, SlotTrousers,
 }
 
-// wornSlotOf says which worn slot a kind belongs in. A kind absent from the
+// kindSlotsOf says which worn slots a kind occupies, one-handed kinds a single
+// slot and two-handed kinds the left and right hands. A kind absent from the
 // table cannot be worn, which is how acorn is refused: a lookup that misses,
 // not a rule naming the kinds that are not wearable. Adding a wearable kind is
-// one line here; the slot must already be in WornSlots.
-var wornSlotOf = map[string]mnet.EquipSlot{
-	KindAxe: SlotRightHand,
-}
+// one entry here; every slot it names must already be in WornSlots.
+// Handedness is the exclusivity mechanism (PROTOCOL.md, "Handedness", M7b).
+var kindSlotsOf = map[string][]mnet.EquipSlot{
+		KindAxe:             {SlotRightHand},
+		KindSword:           {SlotRightHand},
+		KindStaff:           {SlotLeftHand, SlotRightHand},
+		KindBow:             {SlotLeftHand, SlotRightHand},
+		KindLumberjackAxe:   {SlotLeftHand, SlotRightHand},
+		KindPickaxe:         {SlotRightHand},
+		KindProspectorBoots: {SlotFeet},
+	}
 
 // DefaultJoinKit is what a joining player is given, in the order it is placed:
 // one axe, so a client can reach equip before gathering exists to earn one.
@@ -158,13 +181,18 @@ type Store interface {
 	SpawnInventoryItem(player mnet.PlayerID, kind string) (Slot, error)
 
 	// EquipInventorySlot moves whatever is in one of a player's bag slots into
-	// the worn slot its kind belongs in, completely or not at all. An occupied
-	// worn slot swaps: what was worn lands in the bag slot just vacated. Fails
-	// with ErrNoSuchPlayer, ErrNoSuchSlot, ErrEmptySlot, or ErrNotEquippable.
+	// the worn slot or slots its kind belongs in, completely or not at all. A
+	// one-handed kind occupies one slot; a two-handed kind occupies both hand
+	// slots. An occupied worn slot swaps: what was worn lands in the bag slot
+	// just vacated, and a two-handed equip displaces both hands into that one
+	// bag slot. Fails with ErrNoSuchPlayer, ErrNoSuchSlot, ErrEmptySlot, or
+	// ErrNotEquippable.
 	EquipInventorySlot(player mnet.PlayerID, slot int) (Equipped, error)
 
 	// UnequipWornSlot moves whatever is in one of a player's worn slots into the
-	// lowest free slot of their inventory, completely or not at all. Fails with
+	// lowest free slot of their inventory, completely or not at all. Unequipping
+	// either hand of a two-handed kind clears both hands into the lowest free
+	// slot as one move, because the kind is worn across both. Fails with
 	// ErrNoSuchPlayer, ErrNoSuchWornSlot, ErrEmptyWornSlot, or ErrInventoryFull.
 	UnequipWornSlot(player mnet.PlayerID, slot mnet.EquipSlot) (Unequipped, error)
 
@@ -327,19 +355,40 @@ func (s *memStore) EquipInventorySlot(player mnet.PlayerID, slot int) (Equipped,
 	if kind == "" {
 		return Equipped{}, fmt.Errorf("equip slot %d for player %d: %w", slot, player, ErrEmptySlot)
 	}
-	worn, wearable := wornSlotOf[kind]
+	worn, wearable := kindSlotsOf[kind]
 	if !wearable {
 		return Equipped{}, fmt.Errorf("equip %q from slot %d for player %d: %w", kind, slot, player, ErrNotEquippable)
 	}
 
 	// The exchange, and the reason this is one method rather than a get and a
 	// put. Whatever was worn takes the bag slot the new item is leaving, so a
-	// swap needs no free slot and cannot fail for want of one.
-	displaced := held.worn[worn]
-	held.worn[worn] = kind
+	// swap needs no free slot and cannot fail for want of one. A two-handed
+	// kind displaces both hands with the right-hand item surviving into the
+	// bag slot and the left-hand one lost to the swap, exactly as PROTOCOL.md's
+	// "Handedness" describes.
+	//
+	// Handedness couples the hand slots into one exchange: the worn state ends
+	// where the displaced kind was and starts where the new kind goes. Clear
+	// the slots the displaced kind held, then write the new kind into the
+	// slots it takes. A one-handed kind over a two-handed one frees the hand
+	// the two-handed one vacated; a two-handed kind over a one-handed one
+	// fills the second hand; an offhand is left alone unless the displaced
+	// kind held it.
+	primary := worn[len(worn)-1]
+	displaced := held.worn[primary]
 	held.bag[slot] = displaced
+	if displaced != "" {
+		if prev, known := kindSlotsOf[displaced]; known {
+			for _, w := range prev {
+				delete(held.worn, w)
+			}
+		}
+	}
+	for _, w := range worn {
+		held.worn[w] = kind
+	}
 
-	return Equipped{Worn: worn, Kind: kind, Bag: slot, Displaced: displaced}, nil
+	return Equipped{Worn: worn[0], Kind: kind, Bag: slot, Displaced: displaced}, nil
 }
 
 func (s *memStore) UnequipWornSlot(player mnet.PlayerID, slot mnet.EquipSlot) (Unequipped, error) {
@@ -354,12 +403,25 @@ func (s *memStore) UnequipWornSlot(player mnet.PlayerID, slot mnet.EquipSlot) (U
 	if kind == "" {
 		return Unequipped{}, fmt.Errorf("unequip %q for player %d: %w", slot, player, ErrEmptyWornSlot)
 	}
+
+	// A two-handed kind is worn across both hands, so taking either hand off
+	// clears both into the lowest free bag slot as one move; a hand cannot keep
+	// half of it. One-handed kinds clear the one slot they occupy. The kind
+	// came from a worn slot, so equip has installed it and it is in the table;
+	// a miss here is an invariant break, not a refusal.
+	worn, known := kindSlotsOf[kind]
+	if !known {
+		panic(fmt.Sprintf("game: unequip %q, a worn kind that is in no kind table", kind))
+	}
+
 	index, room := held.free()
 	if !room {
 		return Unequipped{}, fmt.Errorf("unequip %q for player %d: %w", slot, player, ErrInventoryFull)
 	}
 
-	delete(held.worn, slot)
+	for _, w := range worn {
+		delete(held.worn, w)
+	}
 	held.bag[index] = kind
 
 	return Unequipped{Worn: slot, Kind: kind, Bag: index}, nil

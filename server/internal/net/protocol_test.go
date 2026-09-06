@@ -80,10 +80,10 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 		{
 			name: "equipment",
 			msg: mnet.Equipment{
-				Worn:  []mnet.EquipSlot{"helmet", "left hand", "chest", "right hand", "trousers"},
+				Worn:  []mnet.EquipSlot{"helmet", "left hand", "chest", "right hand", "feet", "trousers"},
 				Slots: []mnet.EquipmentSlot{{Slot: "right hand", Kind: "axe"}},
 			},
-			want: `{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}`,
+			want: `{"equipment":{"worn":["helmet","left hand","chest","right hand","feet","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}`,
 		},
 		{
 			// A worn slot's name is a string on the wire and the only "slot"
@@ -91,10 +91,10 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			// is spelled "worn".
 			name: "empty equipment",
 			msg: mnet.Equipment{
-				Worn:  []mnet.EquipSlot{"helmet", "left hand", "chest", "right hand", "trousers"},
+				Worn:  []mnet.EquipSlot{"helmet", "left hand", "chest", "right hand", "feet", "trousers"},
 				Slots: []mnet.EquipmentSlot{},
 			},
-			want: `{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}`,
+			want: `{"equipment":{"worn":["helmet","left hand","chest","right hand","feet","trousers"],"slots":[]}}`,
 		},
 		{
 			name: "spawn",
