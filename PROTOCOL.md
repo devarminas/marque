@@ -294,6 +294,33 @@ the truth. Revisitable.
 
 A request to walk to a point. The server decides whether it is legal and what path results.
 
+### `move`. **M6g**
+
+    {"move":{"dx":0.0,"dz":-1.0}}
+
+A request to walk in a ground-plane direction. `dx` and `dz` are **world-space** axis
+components, not camera space and not a destination. The client converts camera-relative
+WASD into world axes before sending; the server never learns the camera exists.
+
+- **Non-zero after normalisation** is a sticky steer: the server keeps that unit direction
+  until a later intent replaces it. Each tick it integrates at `WalkSpeed`, clamps to world
+  bounds, and broadcasts a short `path` segment (waypoints only; no pose message).
+- **Zero (both components finite and length below the steer epsilon)** clears the sticky
+  steer and halts at the current position with the ordinary one-point halt `path`.
+- **Non-finite components** are refused (`non_finite`), same doctrine as `move_to`
+  coordinates.
+- **Last intent wins with `move_to`.** A `move` clears any click-path and any sticky steer
+  from a prior `move`. A `move_to` clears sticky steer and assigns its click-path. Pickup,
+  gather, and attack clear sticky steer the same way they replace a click-path.
+- **Cancel parity with `move_to`.** A non-zero `move` clears pending pickup and gather, and
+  cancels a pending attack with `attack_cancelled.cause` of `move`.
+- **Dead players refuse `move`**, same ordinary-intent list as `move_to`.
+- Clients may throttle repeats (about one send per tick is enough). Holding a key is not a
+  reason to claim a world position on the wire.
+
+Click-to-move remains. WASD and ground clicks are concurrent; whichever intent arrived last
+owns the player's motion.
+
 ### `pickup`. **M1**
 
     {"pickup":{"item":7}}
@@ -1542,13 +1569,13 @@ pickup and gather's pending action, not an instantaneous one-shot.
   no distance at which the server declines to engage a living target it knows.
 - **A player has at most one pending attack.** A second `attack` replaces the first (retarget).
   Starting an attack clears a pending pickup and a pending gather. Starting a pickup or gather
-  clears a pending attack. A `move_to` clears a pending attack, because clicking the ground is
-  telling the server you wanted something else. Those three pending families stay mutually
-  exclusive: a player holds at most one of them.
-- **Engage is continuous until cancelled.** Cancellation is exactly: a `move_to`, a new
-  conflicting intent (another `attack`, or a `pickup` / `gather`), the attacker's death, or the
-  target's death (or the target leaving the world). Leaving `AttackRange` does **not** cancel;
-  it resumes the chase.
+  clears a pending attack. A `move_to` or a non-zero `move` clears a pending attack, because
+  walking away is telling the server you wanted something else. Those three pending families
+  stay mutually exclusive: a player holds at most one of them.
+- **Engage is continuous until cancelled.** Cancellation is exactly: a `move_to`, a non-zero
+  `move`, a new conflicting intent (another `attack`, or a `pickup` / `gather`), the attacker's
+  death, or the target's death (or the target leaving the world). Leaving `AttackRange` does
+  **not** cancel; it resumes the chase.
 - **No auto-retaliate in M5a.** Being hit does not invent an `attack` pending on the target.
   The target engages only by sending its own `attack`. Revisitable the first time a fight feels
   one-sided for lack of it.
@@ -1592,7 +1619,7 @@ death. The server broadcasts the `hp` restatement that carried `hp: 0`, clears t
 pending pickup, gather, and attack, and clears every other player's pending attack that named
 them.
 
-**A dead player refuses every ordinary intent**: `move_to`, `pickup`, `drop`, `equip`,
+**A dead player refuses every ordinary intent**: `move_to`, `move`, `pickup`, `drop`, `equip`,
 `unequip`, `gather`, `use`, and `attack`. Each refusal is one `error` naming that intent and a
 GAMELOG rejection with reason `dead`. The bag and worn slots are untouched. **`respawn` is the
 only intent a dead player may have applied.**
@@ -1656,9 +1683,10 @@ restatement are broadcasts (or join-scoped world restatements). Private restatem
 `wrong_target`.
 `respawn_rejected.reason` is `not_dead`.
 
-`attack_cancelled.cause` is one of `move_to`, `pickup`, `gather`, `replaced`, or
+`attack_cancelled.cause` is one of `move_to`, `move`, `pickup`, `gather`, `replaced`, or
 `attacker_died`. `replaced` means a new `attack` superseded the old one. Target death uses
-`attack_lost`, not `attack_cancelled`.
+`attack_lost`, not `attack_cancelled`. `move` is WASD / direction steer (**M6g**); `move_to`
+remains ground-click cancel.
 
 `seq` rides on `attack` and on successful `respawn` when the frame carried one and is omitted
 when it did not, which is *Sequence numbers*' rule extended to these two. The `_rejected`

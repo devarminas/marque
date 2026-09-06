@@ -225,6 +225,25 @@ func TestDecodeMoveTo(t *testing.T) {
 	}
 }
 
+func TestDecodeMove(t *testing.T) {
+	t.Parallel()
+
+	msg, seq, err := mnet.Decode([]byte(`{"move":{"dx":0.5,"dz":-0.5,"seq":3}}`))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	got, ok := msg.(mnet.Move)
+	if !ok {
+		t.Fatalf("Decode returned %T, want Move", msg)
+	}
+	if got.DX != 0.5 || got.DZ != -0.5 {
+		t.Fatalf("Decode gave %+v", got)
+	}
+	if seq != 3 {
+		t.Fatalf("seq=%d, want 3", seq)
+	}
+}
+
 // TestDecodeNamesEveryMessageAfterItsWireKey pins the pairing Event.Name and
 // every "re" field rest on. A message whose Name disagreed with the key it
 // decoded from would file its duplicates under another message's name.
@@ -233,6 +252,7 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 
 	cases := []struct{ key, frame string }{
 		{mnet.MsgMoveTo, `{"move_to":{"x":1,"z":2}}`},
+		{mnet.MsgMove, `{"move":{"dx":0,"dz":-1}}`},
 		{mnet.MsgPickup, `{"pickup":{"item":7}}`},
 		{mnet.MsgDrop, `{"drop":{"slot":3}}`},
 		{mnet.MsgEquip, `{"equip":{"slot":3}}`},

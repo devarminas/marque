@@ -196,6 +196,9 @@ type player struct {
 
 	remaining []Point
 
+	steerDX float64
+	steerDZ float64
+
 	pending mnet.ItemID
 
 	gatherNode     mnet.NodeID
@@ -339,6 +342,10 @@ func (w *World) step() {
 	distance := WalkSpeed * TickDuration.Seconds()
 
 	for _, p := range w.order {
+		if p.steering() {
+			w.stepSteer(p, distance)
+			continue
+		}
 		if !p.walking() {
 			continue
 		}
@@ -590,6 +597,11 @@ func (w *World) handleFrame(ev mnet.Event) {
 			return
 		}
 		w.moveTo(p, msg, ev.Seq)
+	case mnet.Move:
+		if w.refuseIfDead(p, mnet.MsgMove) {
+			return
+		}
+		w.move(p, msg, ev.Seq)
 	case mnet.Pickup:
 		if w.refuseIfDead(p, mnet.MsgPickup) {
 			return
@@ -657,6 +669,8 @@ func rejectionEvent(re string) string {
 	switch re {
 	case mnet.MsgMoveTo, "":
 		return EvMoveToRejected
+	case mnet.MsgMove:
+		return EvMoveRejected
 	case mnet.MsgPickup:
 		return EvPickupRejected
 	case mnet.MsgDrop:
@@ -713,6 +727,7 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo, seq mnet.Seq) {
 	p.pending = 0
 	w.cancelGather(p)
 	w.cancelAttack(p, CauseMoveTo)
+	p.clearSteer()
 	w.assignPath(p, points)
 }
 

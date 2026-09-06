@@ -11,6 +11,7 @@ const (
 	AttackPeriodTicks  = 4
 	AttackRange        = 1.5
 	CauseMoveTo        = "move_to"
+	CauseMove          = "move"
 	CausePickup        = "pickup"
 	CauseGather        = "gather"
 	CauseReplaced      = "replaced"
@@ -99,6 +100,7 @@ func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, 
 	w.cancelAttack(p, CauseReplaced)
 	p.pending = 0
 	w.cancelGather(p)
+	p.clearSteer()
 	p.attackTarget = targetID
 	p.attackProgress = 0
 	w.log.Event(w.tick, EvAttack, withSeq(playerTargetFields(p.id, targetID), seq))
@@ -128,6 +130,7 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 	p.mana = MaxMana
 	p.pos = Point{X: spawnX, Z: spawnZ}
 	p.remaining = nil
+	p.clearSteer()
 	w.assignPath(p, []Point{p.pos})
 	w.broadcastHP(p)
 	w.broadcastMana(p)

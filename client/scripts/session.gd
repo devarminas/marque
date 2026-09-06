@@ -80,6 +80,8 @@ const RECONNECT_BACKOFF_START_MSEC := 500
 ## Cap of the doubling backoff (`PROTOCOL.md`, "Clock").
 const RECONNECT_BACKOFF_CAP_MSEC := 5000
 
+const MOVE_INTENT_PERIOD_MSEC := 100
+
 ## Emitted once `welcome` has been applied: the clock is anchored, this client
 ## knows its own id, and every player the server listed has a body.
 signal joined(you: int)
@@ -113,6 +115,9 @@ signal identity_lost(was: int, now: int)
 ## server. Proving the click actually moves the player needs a server and is a
 ## different test.
 signal move_to_requested(x: float, z: float)
+
+## Emitted whenever a WASD chord is forwarded as `move`. **M6g.**
+signal move_requested(dx: float, dz: float)
 
 ## Emitted whenever a click on an item is forwarded as a `pickup`. **M1.**
 ##
@@ -188,6 +193,7 @@ signal respawn_requested()
 @export var hp_hud: Node
 @export var death_overlay: Node
 @export var hotbar: Node
+@export var camera_rig: Node
 
 var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
@@ -228,6 +234,10 @@ var _npcs := {}
 var _use_from := -1
 ## Selected living remote player id, or 0 when none. **M6c.**
 var _selected_player_id := 0
+var _last_move_dx := 0.0
+var _last_move_dz := 0.0
+var _last_move_sent_msec := 0
+var _move_held := false
 
 
 func _ready() -> void:
@@ -423,6 +433,17 @@ func request_move_to(x: float, z: float) -> void:
 		push_warning("session: click at (%f, %f) dropped, the socket is not open" % [x, z])
 		return
 	_net.send_move_to(x, z)
+
+
+## Sends `move` for a world-space ground direction. **M6g.**
+##
+## Zero clears sticky steer on the server.
+func request_move(dx: float, dz: float) -> void:
+	move_requested.emit(dx, dz)
+	if _net == null or not _net.is_open():
+		push_warning("session: move (%f, %f) dropped, the socket is not open" % [dx, dz])
+		return
+	_net.send_move(dx, dz)
 
 
 ## Sends `pickup` for a ground item, as a click on that item's body would. **M1.**
@@ -874,6 +895,7 @@ func _claim_expired_window() -> int:
 
 func _process(_delta: float) -> void:
 	_maybe_reconnect()
+	_poll_move_intent()
 	var window := _claim_expired_window()
 	if window == 0:
 		return
@@ -885,6 +907,53 @@ func _process(_delta: float) -> void:
 	)
 	server_unresponsive.emit(window)
 	_net.abandon()
+
+
+func _poll_move_intent() -> void:
+	if _net == null or not _net.is_open() or not _clock.is_anchored():
+		return
+
+	var local_x := 0.0
+	var local_z := 0.0
+	if Input.is_action_pressed("move_left"):
+		local_x -= 1.0
+	if Input.is_action_pressed("move_right"):
+		local_x += 1.0
+	if Input.is_action_pressed("move_forward"):
+		local_z -= 1.0
+	if Input.is_action_pressed("move_back"):
+		local_z += 1.0
+
+	var dx := 0.0
+	var dz := 0.0
+	if local_x != 0.0 or local_z != 0.0:
+		var yaw_rad := 0.0
+		if camera_rig != null and camera_rig.has_method("get_yaw_degrees"):
+			yaw_rad = deg_to_rad(float(camera_rig.call("get_yaw_degrees")))
+		var forward := Vector2(-sin(yaw_rad), -cos(yaw_rad))
+		var right := Vector2(cos(yaw_rad), -sin(yaw_rad))
+		var world := right * local_x + forward * local_z
+		dx = world.x
+		dz = world.y
+
+	var holding := dx != 0.0 or dz != 0.0
+	if not holding and not _move_held:
+		return
+	var changed := (
+		not is_equal_approx(dx, _last_move_dx) or not is_equal_approx(dz, _last_move_dz)
+	)
+	var now := Time.get_ticks_msec()
+	var due := now - _last_move_sent_msec >= MOVE_INTENT_PERIOD_MSEC
+	if changed or due or (not holding and _move_held):
+		_send_move_chord(dx, dz)
+
+
+func _send_move_chord(dx: float, dz: float) -> void:
+	request_move(dx, dz)
+	_last_move_dx = dx
+	_last_move_dz = dz
+	_last_move_sent_msec = Time.get_ticks_msec()
+	_move_held = dx != 0.0 or dz != 0.0
 
 
 ## `item_spawn`. **M1.** Idempotent: an item id already known is replaced, never
