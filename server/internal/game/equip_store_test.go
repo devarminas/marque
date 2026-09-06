@@ -702,9 +702,6 @@ func TestACannotEquipATwoHandedToolWhenOnlyOneHandCouldBeFree(t *testing.T) {
 	if _, err := s.EquipInventorySlot(1, 0); err != nil {
 		t.Fatalf("equipping the sword: %v", err)
 	}
-	// The bag has room (two items, 28 slots), but a half-apply that filled the
-	// left hand first and left the right hand would leave the staff in one hand
-	// only. The test pins that a 2H equip is all-or-nothing.
 	done, err := s.EquipInventorySlot(1, 1)
 	if err != nil {
 		t.Fatalf("equipping the staff: %v", err)

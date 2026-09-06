@@ -14,7 +14,7 @@ const InventorySize = 28
 // Item kinds. Kinds are opaque strings on the wire.
 const (
 	KindAcorn = "acorn"
-	// KindAxe is M3a's equippable kind, now one of nine wearable kinds. Tuning: ARM-81.
+	// KindAxe is M3a's equippable kind. Tuning: ARM-81.
 	KindAxe = "axe"
 	// KindSword is the knight's one-handed tool. M7b.
 	KindSword = "sword"
@@ -368,12 +368,10 @@ func (s *memStore) EquipInventorySlot(player mnet.PlayerID, slot int) (Equipped,
 	// "Handedness" describes.
 	//
 	// Handedness couples the hand slots into one exchange: the worn state ends
-	// where the displaced kind was and starts where the new kind goes. Clear
-	// the slots the displaced kind held, then write the new kind into the
-	// slots it takes. A one-handed kind over a two-handed one frees the hand
-	// the two-handed one vacated; a two-handed kind over a one-handed one
-	// fills the second hand; an offhand is left alone unless the displaced
-	// kind held it.
+	// where the displaced kind was and starts where the new kind goes. A
+	// one-handed kind over a two-handed one frees the hand the two-handed one
+	// vacated; a two-handed kind over a one-handed one fills the second hand;
+	// an offhand is left alone unless the displaced kind held it.
 	primary := worn[len(worn)-1]
 	displaced := held.worn[primary]
 	held.bag[slot] = displaced
