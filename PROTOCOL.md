@@ -1767,6 +1767,26 @@ The client never predicts HP or mana from the cast.
 - No cooldown enforcement, no VFX, no full 12-slot fill.
 - No client-authored damage, heal, or mana fields on `cast`.
 
+## Cast effect on target. **M6h**
+
+The client does not invent a new wire frame for impact VFX. A successful cast already
+spends mana and restates `mana` for the caster; a refused cast sends `error` with
+`re:"cast"` and spends nothing. The client queues each outbound `cast` and:
+
+1. On caster `mana` that drops below the prior known value, plays a placeholder flash on
+   the queued target entity (player avatar or NPC dummy) and clears the queue head.
+2. On `error` with `re:"cast"`, drops the queue head with no flash.
+
+Heal vs fireball share one flash mesh; tint follows `ui.color` from `shared/abilities.json`
+(green / red). The flash is parented under the **target**, never the caster unless the
+target is self.
+
+### Deliberately absent (cast effect). **M6h**
+
+- No projectile travel, animation sets, or sound.
+- No optimistic flash before the server's mana success restatement.
+- No dedicated `cast_effect` wire message.
+
 ## Practice dummies. **M6e**
 
 The server seeds exactly two stationary NPCs when it starts: one `faction: "friendly"` and one
