@@ -99,6 +99,8 @@ shape = SubResource("BoxShape3D_ground")
 
 [node name="RemotePlayers" type="Node3D" parent="."]
 
+[node name="Npcs" type="Node3D" parent="."]
+
 [node name="GroundItems" type="Node3D" parent="."]
 
 [node name="ResourceNodes" type="Node3D" parent="."]
@@ -446,13 +448,14 @@ layout_mode = 2
 [node name="Slot2" parent="UI/Hotbar/Bar/Slots" instance=ExtResource("14_hotbar_slot")]
 layout_mode = 2
 
-[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "death_overlay", "hotbar")]
+[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "death_overlay", "hotbar")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
 remote_players = NodePath("../RemotePlayers")
 ground_items = NodePath("../GroundItems")
 resource_nodes = NodePath("../ResourceNodes")
+npcs = NodePath("../Npcs")
 ground_picker = NodePath("../GroundPicker")
 inventory_panel = NodePath("../UI/RightDock/Margin/Rows/InventoryPanel")
 equipment_panel = NodePath("../UI/RightDock")

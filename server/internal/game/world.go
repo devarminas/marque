@@ -238,6 +238,10 @@ type World struct {
 
 	players map[mnet.PlayerID]*player
 
+	npcs       map[mnet.PlayerID]*npc
+	npcOrder   []mnet.PlayerID
+	nextNpcID mnet.PlayerID
+
 	byConn map[*mnet.Conn]*player
 
 	bySession map[string]*player
@@ -268,6 +272,7 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		log:         log,
 		items:       store,
 		nodes:       make(map[mnet.NodeID]*resourceNode),
+		npcs:        make(map[mnet.PlayerID]*npc),
 		resumeGrace: resumeGrace,
 		joinKit:     joinKit,
 		players:     make(map[mnet.PlayerID]*player),
@@ -459,6 +464,7 @@ func (w *World) sendJoinStep(p *player) {
 		Players:        states,
 		Items:          w.groundItemStates(),
 		Nodes:          w.nodeStates(),
+		Npcs:           w.npcStates(),
 	})
 
 	for _, other := range w.order {

@@ -42,6 +42,7 @@ const PickupDemoScript := preload("res://scripts/pickup_demo.gd")
 const EquipDemoScript := preload("res://scripts/equip_demo.gd")
 const GatherCraftDemoScript := preload("res://scripts/gather_craft_demo.gd")
 const CombatDemoScript := preload("res://scripts/combat_demo.gd")
+const DummyCastDemoScript := preload("res://scripts/dummy_cast_demo.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
 
@@ -114,6 +115,7 @@ const EQUIP_SHOTS_FLAG := "--equip-shots"
 const GATHER_CRAFT_SHOTS_FLAG := "--gather-craft-shots"
 
 const COMBAT_SHOTS_FLAG := "--combat-shots"
+const DUMMY_CAST_FLAG := "--dummy-cast"
 const COMBAT_ROLE_FLAG := "--combat-role"
 
 ## How many phases the demo runs. One per client.
@@ -182,6 +184,9 @@ func _ready() -> void:
 		return
 	if COMBAT_SHOTS_FLAG in args:
 		await _run_combat_demo(args)
+		return
+	if DUMMY_CAST_FLAG in args:
+		await _run_dummy_cast_demo()
 		return
 	if SHOTS_FLAG in args:
 		await _run_demo(args)
@@ -351,6 +356,17 @@ func _run_combat_demo(args: Array) -> void:
 
 	var demo := CombatDemoScript.new()
 	var code: int = await demo.run(self, session, death, hp_hud, prefix, role)
+	get_tree().quit(code)
+
+
+func _run_dummy_cast_demo() -> void:
+	var session := get_node_or_null("Session") as SessionScript
+	if session == null:
+		push_error("main.tscn is missing Session")
+		get_tree().quit(1)
+		return
+	var demo := DummyCastDemoScript.new()
+	var code: int = await demo.run(self, session)
 	get_tree().quit(code)
 
 

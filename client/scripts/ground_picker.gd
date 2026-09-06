@@ -43,6 +43,7 @@ enum Target {
 const GroundItemScript := preload("res://scripts/ground_item.gd")
 const ResourceNodeScript := preload("res://scripts/resource_node.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
+const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 
 @export var camera: Camera3D
 @export var ray_length := 4096.0
@@ -121,14 +122,14 @@ func pick(screen_position: Vector2) -> Dictionary:
 			"player": null,
 		}
 
-	var avatar := _avatar_from_collider(hit["collider"])
-	if avatar != null:
+	var selectable := _selectable_from_collider(hit["collider"])
+	if selectable != null:
 		return {
 			"target": Target.PLAYER,
 			"ground": Vector2.ZERO,
 			"item": null,
 			"node": null,
-			"player": avatar,
+			"player": selectable,
 		}
 
 	var point: Vector3 = hit["position"]
@@ -146,7 +147,7 @@ func pick(screen_position: Vector2) -> Dictionary:
 		return miss
 	if _is_on_mask(hit["collider"], player_collision_mask):
 		push_error(
-			"GroundPicker: %s is on the player collision layer but is not a player avatar"
+			"GroundPicker: %s is on the player collision layer but is not a selectable body"
 			% [hit["collider"]]
 		)
 		return miss
@@ -184,14 +185,20 @@ func _cast(screen_position: Vector2, collision_mask: int) -> Dictionary:
 	return space_state.intersect_ray(query)
 
 
-func _avatar_from_collider(collider: Object) -> PlayerAvatarScript:
+func _selectable_from_collider(collider: Object) -> Node3D:
 	var avatar := collider as PlayerAvatarScript
 	if avatar != null:
 		return avatar
+	var dummy := collider as NpcDummyScript
+	if dummy != null:
+		return dummy
 	var node := collider as Node
 	if node == null:
 		return null
-	return node.get_parent() as PlayerAvatarScript
+	var parent_avatar := node.get_parent() as PlayerAvatarScript
+	if parent_avatar != null:
+		return parent_avatar
+	return node.get_parent() as NpcDummyScript
 
 
 func _is_on_mask(collider: Object, mask: int) -> bool:

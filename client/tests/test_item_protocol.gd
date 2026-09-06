@@ -38,6 +38,7 @@ class Recorder:
 		net.welcomed.connect(_on_welcomed)
 		net.welcome_items.connect(_on_welcome_items)
 		net.welcome_nodes.connect(_on_welcome_nodes)
+		net.welcome_npcs.connect(_on_welcome_npcs)
 		net.item_spawned.connect(_on_item_spawned)
 		net.item_despawned.connect(_on_item_despawned)
 		net.node_spawned.connect(_on_node_spawned)
@@ -119,6 +120,24 @@ class Recorder:
 			"states": node_states,
 		})
 
+	func _on_welcome_npcs(
+		npc_ids: PackedInt64Array,
+		npc_kinds: PackedStringArray,
+		npc_factions: PackedStringArray,
+		npc_positions: PackedVector2Array,
+		npc_hps: PackedInt32Array,
+		npc_max_hps: PackedInt32Array,
+	) -> void:
+		events.append({
+			"signal": "welcome_npcs",
+			"ids": npc_ids,
+			"kinds": npc_kinds,
+			"factions": npc_factions,
+			"positions": npc_positions,
+			"hps": npc_hps,
+			"max_hps": npc_max_hps,
+		})
+
 	func _on_item_spawned(id: int, kind: String, item_position: Vector2) -> void:
 		events.append({
 			"signal": "item_spawned", "id": id, "kind": kind, "position": item_position
@@ -188,6 +207,7 @@ func run(assertions: RefCounted) -> void:
 	_test_welcome_carries_items()
 	_test_welcome_without_items()
 	_test_welcome_carries_nodes()
+	_test_welcome_carries_npcs()
 	_test_node_spawn_state_and_despawn()
 	_test_item_spawn_and_despawn()
 	_test_inventory()
@@ -213,7 +233,7 @@ func _test_welcome_carries_items() -> void:
 	)
 
 	_check(
-		recorder.names() == ["welcomed", "welcome_items", "welcome_nodes"],
+		recorder.names() == ["welcomed", "welcome_items", "welcome_nodes", "welcome_npcs"],
 		"welcome emits welcomed, welcome_items, then welcome_nodes, got %s" % [recorder.names()],
 	)
 	var items := recorder.of("welcome_items")
@@ -260,7 +280,7 @@ func _test_welcome_without_items() -> void:
 		'{"welcome":{"you":2,"tick_ms":150,"tick":11,"players":[{"id":2,"x":1.0,"z":1.0}]}}'
 	)
 	_check(
-		recorder.names() == ["welcomed", "welcome_items", "welcome_nodes"],
+		recorder.names() == ["welcomed", "welcome_items", "welcome_nodes", "welcome_npcs"],
 		"a welcome with no items key is still a complete welcome, got %s" % [recorder.names()],
 	)
 	var absent := recorder.of("welcome_items")
@@ -305,6 +325,37 @@ func _test_welcome_carries_nodes() -> void:
 		and listed["positions"][1] == Vector2(-3.0, 4.0),
 		"and their ground positions, got %s" % [Array(listed["positions"])],
 	)
+	recorder.release()
+
+
+func _test_welcome_carries_npcs() -> void:
+	var recorder := Recorder.new()
+	recorder.feed(
+		'{"welcome":{"you":3,"tick_ms":150,"tick":10,'
+		+ '"players":[{"id":3,"x":0.0,"z":0.0}],'
+		+ '"npcs":['
+		+ '{"id":1000001,"kind":"dummy","faction":"friendly","x":-3.0,"z":0.0,"hp":100,"max_hp":100},'
+		+ '{"id":1000002,"kind":"dummy","faction":"hostile","x":3.0,"z":0.0,"hp":80,"max_hp":100}'
+		+ "]}}"
+	)
+	var npcs := recorder.of("welcome_npcs")
+	if not _check(npcs.size() == 1, "one welcome_npcs per welcome"):
+		recorder.release()
+		return
+	var listed: Dictionary = npcs[0]
+	_check(
+		Array(listed["ids"]) == [1000001, 1000002],
+		"both listed npcs arrive, got %s" % [Array(listed["ids"])],
+	)
+	_check(
+		Array(listed["factions"]) == ["friendly", "hostile"],
+		"with their factions, got %s" % [Array(listed["factions"])],
+	)
+	_check(
+		Array(listed["kinds"]) == ["dummy", "dummy"],
+		"and kinds, got %s" % [Array(listed["kinds"])],
+	)
+	_check(Array(listed["hps"]) == [100, 80], "and hit points, got %s" % [Array(listed["hps"])])
 	recorder.release()
 
 
@@ -483,10 +534,11 @@ func _test_a_null_list_means_empty() -> void:
 	# cannot pass the comparison above.
 	_check(
 		nulled == [
-			["welcomed", "welcome_items", "welcome_nodes"],
+			["welcomed", "welcome_items", "welcome_nodes", "welcome_npcs"],
 			["welcomed", 1, 5, [1]],
 			["welcome_items", [], [], []],
 			["welcome_nodes", [], [], [], []],
+			["welcome_npcs", [], [], [], [], [], []],
 		],
 		"a welcome whose items are null still joins the client, got %s" % [nulled],
 	)
@@ -583,6 +635,16 @@ func _replay(frame: String) -> Array:
 					Array(event["kinds"]),
 					Array(event["positions"]),
 					Array(event["states"]),
+				])
+			"welcome_npcs":
+				out.append([
+					"welcome_npcs",
+					Array(event["ids"]),
+					Array(event["kinds"]),
+					Array(event["factions"]),
+					Array(event["positions"]),
+					Array(event["hps"]),
+					Array(event["max_hps"]),
 				])
 			"inventory_changed":
 				out.append([
