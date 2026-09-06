@@ -395,4 +395,10 @@ management, Postgres behind `Store`.
 Left-click on another living player selects them (yellow ring under the feet). Selection does
 not send `attack`. Escape clears the selection (after any pending inventory use-on). A ground
 click moves and leaves the selection alone. Self and corpses are not selectable as hostile
-targets. Right-click still engages attack until M6f.
+targets.
+
+### Right-click basic attack (M6f)
+
+Right-click on a hostile (remote player or enemy practice dummy) sets selection to the clicked
+actor and sends `attack`. Friendly dummies are selected but refused (no pending attack).
+Left-click stays select-only.

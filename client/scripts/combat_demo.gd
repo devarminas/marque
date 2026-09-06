@@ -28,8 +28,8 @@ const SPIN_USEC := 20000
 const AVATAR_CLICK_HEIGHT := 0.8
 const KILL_WAIT_MSEC := 90000
 const SEPARATE_WAIT_MSEC := 30000
-const RELOCATE_FRACTION := Vector2(0.78, 0.72)
-const POST_MOVE_FRACTION := Vector2(0.35, 0.72)
+const RELOCATE_XZ := Vector2(0.0, -6.0)
+const POST_MOVE_XZ := Vector2(-4.0, -6.0)
 
 var _tree: SceneTree
 var _root: Node
@@ -137,8 +137,8 @@ func run(
 			RESTATE_TIMEOUT_MSEC,
 		):
 			return _fail("respawn never restored HP %d with overlay hidden" % MAX_HP)
-		_click_ground_fraction(POST_MOVE_FRACTION)
-		print("DEMO postmove %f %f" % [POST_MOVE_FRACTION.x, POST_MOVE_FRACTION.y])
+		_session.request_move_to(POST_MOVE_XZ.x, POST_MOVE_XZ.y)
+		print("DEMO postmove %f %f" % [POST_MOVE_XZ.x, POST_MOVE_XZ.y])
 		var post_deadline := Time.get_ticks_msec() + 1200
 		while Time.get_ticks_msec() < post_deadline:
 			await _tree.process_frame
@@ -184,8 +184,8 @@ func _wait_for_scenario() -> int:
 
 
 func _relocate_out_of_range() -> bool:
-	_click_ground_fraction(RELOCATE_FRACTION)
-	print("DEMO relocate %f %f" % [RELOCATE_FRACTION.x, RELOCATE_FRACTION.y])
+	_session.request_move_to(RELOCATE_XZ.x, RELOCATE_XZ.y)
+	print("DEMO relocate %f %f" % [RELOCATE_XZ.x, RELOCATE_XZ.y])
 	if not await _wait_until(
 		func() -> bool:
 			return _distance_to_target() > MIN_SEPARATION,
@@ -209,7 +209,7 @@ func _click_target_avatar() -> bool:
 	if screen_pos == null:
 		return false
 	var screen: Vector2 = screen_pos
-	_click_at(screen)
+	_right_click_at(screen)
 	print(
 		"DEMO attackclick %d %d %f %f"
 		% [_session.tick_clock().estimated_tick(), _target_id, screen.x, screen.y]
@@ -222,7 +222,7 @@ func _click_respawn() -> bool:
 		_fail("death overlay has no respawn button")
 		return false
 	var button: Button = _death.respawn_button
-	_click_at(button.get_global_rect().get_center())
+	_left_click_at(button.get_global_rect().get_center())
 	print("DEMO respawnclick")
 	await _tree.process_frame
 	return true
@@ -335,16 +335,19 @@ func _screen_position_of_avatar(avatar: PlayerAvatarScript) -> Variant:
 	return screen
 
 
-func _click_ground_fraction(fraction: Vector2) -> void:
-	var viewport := _root.get_viewport()
-	_click_at(viewport.get_visible_rect().size * fraction)
+func _left_click_at(position: Vector2) -> void:
+	_click_at(position, MOUSE_BUTTON_LEFT)
 
 
-func _click_at(position: Vector2) -> void:
+func _right_click_at(position: Vector2) -> void:
+	_click_at(position, MOUSE_BUTTON_RIGHT)
+
+
+func _click_at(position: Vector2, button_index: MouseButton) -> void:
 	var viewport := _root.get_viewport()
 	for pressed: bool in [true, false]:
 		var event := InputEventMouseButton.new()
-		event.button_index = MOUSE_BUTTON_RIGHT
+		event.button_index = button_index
 		event.pressed = pressed
 		event.position = position
 		viewport.push_input(event)

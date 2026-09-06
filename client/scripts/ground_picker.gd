@@ -29,7 +29,7 @@ signal node_clicked(resource_node: Node3D)
 ## Emitted on a left click whose ray meets a player body first. **M6c.**
 signal player_clicked(avatar: Node3D)
 
-## Emitted on a right click whose ray meets a player body first. **M5b.**
+## Emitted on a right click whose ray meets a selectable body first. **M6f.**
 signal player_attack_clicked(avatar: Node3D)
 
 enum Target {

@@ -126,8 +126,11 @@ signal pickup_requested(item_id: int)
 ## Emitted whenever a click on a resource node is forwarded as a `gather`. **M4b.**
 signal gather_requested(node_id: int)
 
-## Emitted whenever a right-click on another player is forwarded as an `attack`. **M5b.**
+## Emitted whenever a right-click on a hostile is forwarded as an `attack`. **M6f.**
 signal attack_requested(player_id: int)
+
+## Emitted when a right-click refuses to attack (friendly dummy). **M6f.**
+signal attack_refused(player_id: int, reason: String)
 
 ## Emitted whenever a hotbar slot is forwarded as `cast`. **M6d.**
 signal cast_requested(ability_id: String, target_id: int)
@@ -468,11 +471,7 @@ func request_gather(node_id: int) -> void:
 	_net.send_gather(node_id)
 
 
-## Sends `attack` for another player, as a click on that player's body would. **M5b.**
-##
-## Self and unknown ids are refused here so a click on this client's own body
-## never becomes an `attack`. The server also refuses `self`; this keeps the
-## intent off the wire entirely for the local case.
+## Sends `attack` for a hostile actor, as a right-click on that body would. **M6f.**
 func request_attack(player_id: int) -> void:
 	if player_id == _you:
 		return
@@ -483,7 +482,8 @@ func request_attack(player_id: int) -> void:
 		return
 	var dummy: NpcDummyScript = _npcs.get(player_id)
 	if dummy != null and dummy.faction != NpcDummyScript.FactionHostile:
-		push_warning("session: attack ignored for non-hostile npc %d" % player_id)
+		attack_refused.emit(player_id, "wrong_target")
+		push_warning("session: attack refused for non-hostile npc %d" % player_id)
 		return
 	attack_requested.emit(player_id)
 	if _net == null or not _net.is_open():
@@ -1134,6 +1134,7 @@ func _on_player_attack_clicked(body: Node3D) -> void:
 				% avatar.name
 			)
 			return
+		select_player(id)
 		request_attack(id)
 		return
 	var dummy := body as NpcDummyScript
@@ -1147,6 +1148,7 @@ func _on_player_attack_clicked(body: Node3D) -> void:
 			% dummy.name
 		)
 		return
+	select_player(npc_id)
 	request_attack(npc_id)
 
 

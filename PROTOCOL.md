@@ -42,7 +42,9 @@ and its restatement. **M6c** is client tab targeting: left-click selects a livin
 with local chrome and does not send `attack`; Escape clears the selection; ground clicks move
 without clearing it. **M6d** is center hotbar chrome and server cast resolution from that JSON
 (mana spend, heal/damage, refusals). **M6e** is practice dummy NPCs (one friendly, one hostile),
-seeded into the world, selectable, and valid cast/attack targets by faction. VFX polish is later.
+seeded into the world, selectable, and valid cast/attack targets by faction. **M6f** is
+right-click basic attack: right-click on a hostile (player or enemy dummy) sends `attack` and
+also sets selection; left-click stays select-only; friendly dummies refuse. VFX polish is later.
 A marker reading plain **M6** is reserved.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
@@ -1618,6 +1620,7 @@ The server answers with `error` naming `attack`, and sets no pending attack, whe
 - `player` is the attacker's own id (`self`)
 - the target's current HP is 0 (`target_dead`)
 - the attacker is dead (`dead`)
+- `player` names a live NPC whose `faction` is not `hostile` (`wrong_target`) — **M6e** / **M6f**
 
 A suspended target is still in the world and may be engaged; suspension is not death.
 
@@ -1649,7 +1652,8 @@ restatement are broadcasts (or join-scoped world restatements). Private restatem
 | `respawn` | `player`, `seq` | one completed respawn |
 | `respawn_rejected` | `player`, `reason`, `detail`, `re` | a `respawn` refused on receipt |
 
-`attack_rejected.reason` is one of `unknown_player`, `self`, `target_dead`, or `dead`.
+`attack_rejected.reason` is one of `unknown_player`, `self`, `target_dead`, `dead`, or
+`wrong_target`.
 `respawn_rejected.reason` is `not_dead`.
 
 `attack_cancelled.cause` is one of `move_to`, `pickup`, `gather`, `replaced`, or
@@ -1775,9 +1779,10 @@ Selection is client UX only. No `target` intent and no server mirror.
 - **Ground click** sends `move_to` only. Selection persists.
 - **Escape** (`ui_cancel`) clears the selection after it has cleared any pending inventory
   use-on selection.
-- **Right-click** on a remote player still sends `attack` until M6f binds attack to a context
-  menu. That is a temporary carry of M5b engage, not a claim that right-click is the final
-  attack affordance.
+- **Right-click** on a living remote player or practice dummy sets selection to that actor and,
+  when the target is hostile (any remote player, or an NPC with `faction: "hostile"`), sends
+  `attack`. A friendly dummy is selected and refused locally / as `wrong_target` on the server;
+  no pending attack starts. Left-click never sends `attack`. See **M6f**.
 
 ### Deliberately absent (tab targeting). **M6c**
 
@@ -1786,6 +1791,26 @@ Selection is client UX only. No `target` intent and no server mirror.
 - No Tab-key cycle yet (revisitable with M6 hotbar).
 
 Practice dummy selection is **M6e**, not M6c.
+
+## Right-click basic attack. **M6f**
+
+Right-click is the basic-attack affordance. It uses the clicked actor as the `attack.player`
+target (not merely the prior tab selection). The same click also sets the local selection to
+that actor when the body is living and selectable.
+
+- **Hostile player or enemy dummy:** client sends `attack` naming that id; server pending melee
+  loop is unchanged from M5a (range walk-in, period, constant damage, death).
+- **Friendly dummy:** client emits a local refuse and does not send `attack`; if an `attack`
+  still arrives, the server answers `error` / `attack_rejected` with `wrong_target`.
+- **Self:** never selected as a damage target and never becomes an `attack`.
+- **Left-click:** select only (**M6c**). Must not start a pending attack.
+
+### Deliberately absent (right-click attack). **M6f**
+
+- No context menu. Right-click engages immediately.
+- No ability JSON for basic attack; damage stays the M5a constant until a later unit.
+- No weapon scaling (ARM-89).
+- No player-faction system beyond PvP (every remote player is a valid attack target).
 
 ## Deliberately absent
 

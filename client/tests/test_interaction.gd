@@ -914,6 +914,7 @@ func _test_a_right_click_on_a_remote_player_is_an_attack() -> void:
 	_look_straight_down_at(REMOTE_GROUND)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
+	_session.clear_selection()
 	_watch()
 	await _right_click(_viewport_centre())
 	_check(
@@ -923,6 +924,10 @@ func _test_a_right_click_on_a_remote_player_is_an_attack() -> void:
 	_check(
 		_attack_intents.size() == 1 and _attack_intents[0] == REMOTE_PLAYER_ID,
 		"naming player %d, got %s" % [REMOTE_PLAYER_ID, _attack_intents],
+	)
+	_check(
+		_session.selected_player_id() == REMOTE_PLAYER_ID,
+		"and selects the clicked target, got %d" % _session.selected_player_id(),
 	)
 	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
 
