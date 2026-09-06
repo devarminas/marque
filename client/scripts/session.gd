@@ -1539,6 +1539,7 @@ func _forget_npc(id: int) -> void:
 ## sends a second `welcome` and M2's reconnect will, which is why this is written
 ## and tested now rather than discovered then.
 func _forget_everyone() -> void:
+	_casts_awaiting_mana.clear()
 	for id: int in _avatars.keys():
 		_forget(id)
 	for id: int in _items.keys():
