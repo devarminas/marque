@@ -14,7 +14,7 @@ const InventorySize = 28
 // Item kinds. Kinds are opaque strings on the wire.
 const (
 	KindAcorn = "acorn"
-	// KindAxe is M3a's equippable kind, and the only one. Tuning: ARM-81.
+	// KindAxe is M3a's equippable kind, now one of nine wearable kinds. Tuning: ARM-81.
 	KindAxe = "axe"
 	// KindSword is the knight's one-handed tool. M7b.
 	KindSword = "sword"
