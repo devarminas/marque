@@ -67,9 +67,6 @@ const TREE_FREE_SUITES: Array = [
 ## to connect, and a missed signal would look exactly like a hung suite.
 const SCENE_SUITES: Array = [
 	{"name": "world and camera", "scene": "res://tests/test_world.tscn"},
-	# ARM-130's regression suite: what WASD holding puts on the wire. It
-	# instances main.tscn with the net node stubbed, pushes real keys, and
-	# connects to nothing, like the suites below.
 	{"name": "move chord", "scene": "res://tests/test_move_chord.tscn"},
 	{"name": "player avatar", "scene": "res://tests/test_avatar.tscn"},
 	# M1's item registry and bodies. It instances main.tscn and feeds it
@@ -125,10 +122,8 @@ const STARTUP_GRACE_FRAMES := 10
 ## Raised from 600 for the wiring suite, whose live half walks a real avatar
 ## across real seconds behind a 30 fps cap: a healthy full run against a live
 ## server measured around 550 frames, which left no room to tell a slow machine
-## from a hung one. Raised from 850 for the move-chord suite (ARM-130) and M7's
-## growing live halves: interop's healthy full run now brushes 850 itself, and
-## the watchdog fired on a run whose 1139 assertions had all passed. The
-## [code]--quit-after[/code] it sits under moved with it.
+## from a hung one. Raised from 850 for the move-chord suite (ARM-130):
+## interop's healthy full run now brushes 850 itself.
 const WATCHDOG_FRAMES := 1000
 
 var _frames := 0

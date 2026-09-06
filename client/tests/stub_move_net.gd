@@ -1,11 +1,6 @@
 extends "res://scripts/net_client.gd"
 
-## Test double standing in for the session's net node.
-##
-## Reports itself open without a socket, so the session's intent paths run
-## headless, and records every `move` chord it is asked to send. Frame
-## decoding is inherited unchanged, so a test feeds it the same text frames
-## a server would.
+## Records every move chord; decode paths are inherited unchanged.
 
 var move_chords: Array[Vector2] = []
 

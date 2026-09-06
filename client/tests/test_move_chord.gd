@@ -1,10 +1,8 @@
 extends Node3D
 
 ## What holding WASD puts on the wire: the camera-relative chord. **ARM-130.**
-## Nothing before this suite asserted W and S against the camera rather than
-## against a trig formula, and the inversion shipped green in M6g: W walked
-## toward the camera while A and D walked correctly, because the session
-## negated the chord it already calls forward.
+## Asserts WASD chords against the rig's live view direction, not a trig
+## formula, because the trig assertion stayed green through the M6g inversion.
 ##
 ## The client under test is [code]main.tscn[/code], instanced here rather than
 ## authored into the suite's scene so that the session's net node can be
@@ -19,13 +17,12 @@ const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const StubNet := preload("res://tests/stub_move_net.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
-## A one-player world at the origin, as [code]test_heartbeat.gd[/code]'s.
 const WELCOME := '{"welcome":{"you":1,"tick_ms":150,"tick":100,"players":[{"id":1,"x":0.0,"z":0.0}]}}'
 
-## Yaw the rig is authored with in [code]main.tscn[/code].
+## Authored rig yaw in [code]main.tscn[/code].
 const AUTHORED_YAW_DEGREES := 30.0
 
-## The authored rig, camera behind on rig +Z at 30 degrees, gives these.
+## Rig at 30° yaw, basis.z on +Z.
 const CHORD_W := Vector2(-0.5, -0.8660254)
 const CHORD_S := Vector2(0.5, 0.8660254)
 const CHORD_A := Vector2(-0.8660254, 0.5)
@@ -43,17 +40,14 @@ const CHORD_IDLE := Vector2.ZERO
 ## Chord comparison slack, absorbing float32 transform round-tripping.
 const EPSILON := 0.001
 
-## Dot-product floor for "the chord points where the camera looks". Nearly 1:
-## a chord right by 90 degrees reads at 0, opposite by 180 degrees at -1.
+## Dot floor for chord-along-view; 0 is perpendicular, -1 is opposite.
 const VIEW_DOT_MIN := 0.9
 
-## Degrees to orbit past the authored 30 so W is the protocol's own example
-## chord. 85.7142857 mouse pixels at the authored
+## 85.7142857 mouse pixels at the authored
 ## [code]orbit_degrees_per_pixel = 0.35[/code] is exactly 30 degrees.
 const ORBIT_PIXELS_TO_ZERO := 85.7142857
 
-## Frames the input singleton and the session's per-frame poll need to see a
-## press and its chord.
+## Frames for the input pipeline to see a press.
 const SETTLE_FRAMES := 3
 
 var _assertions := Assertions.new()
@@ -62,7 +56,6 @@ var _stub: StubNet
 var _finished := false
 
 
-## Suite contract, polled by `run_tests.gd`. Reports; never quits.
 func is_finished() -> bool:
 	return _finished
 
@@ -112,12 +105,6 @@ func _ready() -> void:
 	_finished = true
 
 
-## One case: press [param key] (plus [param extra] keys), read what the session
-## sent while held, release, and drop the release's own chord.
-##
-## The poll repeats a held chord, and a second send after its 100 ms throttle
-## is legitimate, so the robust shape is "every new chord is the expected one",
-## never "exactly one".
 func _press_and_read(key: Key, expected: Vector2, extra: Array = []) -> void:
 	var keys: Array = [key]
 	keys.append_array(extra)
@@ -143,8 +130,8 @@ func _press_and_read(key: Key, expected: Vector2, extra: Array = []) -> void:
 		_check_chord_versus_camera(key, new_chords[0])
 	for k: Key in keys:
 		_set_key(k, false)
-	# The poll that sees the release runs later in the same frame, so the
-	# snapshot has to be taken in the same block as the release itself.
+	# The release's chord lands in this block's frame; snapshot before the
+	# await or the count races the poll.
 	var before_release := _stub.move_chords.size()
 	await get_tree().process_frame
 	var after_release := _stub.move_chords.size()
@@ -189,8 +176,8 @@ func _check_chord_versus_camera(key: Key, chord: Vector2) -> void:
 		)
 
 
-## The press must latch the action state the session reads, or every chord
-## below is empty and the bug under test is indistinguishable from dead input.
+## Distinguishes a sign inversion from dead input: without this, every
+## chord below fails identically.
 func _check_latched(keys: Array) -> void:
 	var actions := {
 		KEY_W: "move_forward",
@@ -206,8 +193,6 @@ func _check_latched(keys: Array) -> void:
 		)
 
 
-## Keys go through the real input pipeline at physical keycodes, so the
-## authored InputMap does the mapping a keyboard does.
 func _set_key(keycode: Key, pressed: bool) -> void:
 	var event := InputEventKey.new()
 	event.physical_keycode = keycode
