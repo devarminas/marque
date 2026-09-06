@@ -23,6 +23,11 @@ server half of equipment and is shipped with this file: worn slots, `equip`, `un
 `equipment` restatement, and the kind `axe`. A marker reading plain **M3** is reserved. The
 client panel is M3b onward and nothing under an **M3a** marker describes it.
 
+**M7 is in progress.** **M7b** is the 1H/2H server equip model and is shipped with this
+file: one- and two-handed tools, six worn slot names including `feet`, and the nine wearable
+kinds. A marker reading plain **M7** is reserved. Class logic is M7c and nothing under an
+**M7b** marker describes it.
+
 **M4 is in progress.** **M4a** is the server half of resource nodes and gathering and is shipped
 with this file: the third entity family, `gather`, node restatement frames, axe gate, deplete
 and respawn, and contested first-completer-wins. **M4c** is the server half of one craft recipe
@@ -732,9 +737,9 @@ The first `inventory` is sent inside the atomic `welcome` step, after `welcome` 
 path replays. Thereafter one is sent to a player whenever that player's inventory changes, and
 never otherwise.
 
-### `equipment`. **M3a**
+### `equipment`. **M3a** / **M7b**
 
-    {"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}
+    {"equipment":{"worn":["helmet","left hand","chest","right hand","feet","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}
 
 Sent to **one player only**, never broadcast. A full restatement of that player's worn
 equipment, on `inventory`'s doctrine and for its reason: a restatement cannot drift, and a
@@ -749,13 +754,13 @@ Both restatements go out on an `equip` or an `unequip`, because both containers 
 `worn` is the **closed, ordered list of worn slot names this server has**. It is
 `inventory.size`'s analogue and it is on the wire for `size`'s reason exactly: the client learns
 the closed name set from the server rather than inventing one. The wire order is the
-restatement order; the client's draw layout is scene-authored. This server ships five names:
-`helmet`, `left hand`, `chest`, `right hand`, `trousers`.
+restatement order; the client's draw layout is scene-authored. This server ships six names:
+`helmet`, `left hand`, `chest`, `right hand`, `feet`, `trousers`.
 
 `slots` lists **only occupied slots**, each carrying its own slot name, exactly as
 `inventory.slots` carries its own index. An empty worn slot is absent from the list rather than
 present with a null or empty `kind`, so a fresh player's `equipment` is
-`{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}`. Every name in
+`{"worn":["helmet","left hand","chest","right hand","feet","trousers"],"slots":[]}`. Every name in
 `slots` is one of the names in `worn`; nothing else can appear there.
 
 **Both lists are `[]` when empty and never `null`**, which is the rule the `inventory` section
@@ -938,7 +943,7 @@ That is RuneScape's shape and it is taken without further argument. The alternat
 and rejected was a second indexed container, which would have made "which container is slot 3
 in" a question every intent had to answer.
 
-**This server ships five slot names:** `helmet`, `left hand`, `chest`, `right hand`,
+**This server ships six slot names:** `helmet`, `left hand`, `chest`, `right hand`, `feet`,
 `trousers`. The names ride on the wire in `equipment.worn`, so a client never holds a second
 copy of the closed set as authority. The client authors fixed chrome for those names; it does
 not grow worn widgets from the restatement list.
@@ -949,12 +954,39 @@ is a lookup that misses, not a special case naming the kinds that are not wearab
 is never told the mapping and never needs it, because `equip` names a bag slot and the server
 resolves the destination.
 
-### `kind axe`. **M3a**
+### Handedness. **M7b**
+
+**A kind is one-handed or two-handed, names the slot or slots it occupies, and the server owns
+both facts from one table.** Handedness is the exclusivity mechanism, and it couples the hand
+slots into one exchange: a two-handed kind occupies `left hand` and `right hand` at once, and a
+one-handed kind occupies exactly one of them. Handedness and slot come from the same table, so
+they cannot disagree.
+
+- **`axe`, `lumberjack axe`, `pickaxe`, `sword` are one-handed, and each occupies `right hand`.**
+- **`staff`, `bow`, `lumberjack axe` (two-handed axe) are two-handed, and occupy `left hand` and
+  `right hand`.**
+
+The two axes differ: the lumberjack axe is a distinct kind from the one-handed `axe`, and it is
+the two-handed one. `kind` names the item; handedness is a property of the kind. **A kind cannot
+be both one- and two-handed.**
+
+**The hand slots couple into one exchange, exactly as a swap couples the bag and one worn slot.**
+When a two-handed kind goes on, whatever was in `left hand` and `right hand` comes off in the
+same move. When a two-handed kind comes off, it clears both hands in the same move. A kind's
+handedness is the whole reason a slot is left alone: nothing displaces a hand it does not occupy.
+
+### `kind axe`. **M3a** → **M7b**
 
 One new kind, `axe`, joining M1's `acorn`. It is the only equippable kind in M3a and it exists so
 that equipment has something to carry before gathering exists to earn one. **A client that does
 not know it renders it magenta and keeps going**, which is the *item_spawn* rule and not a new
-one.
+one. **M7b makes `axe` one of nine wearable kinds; it is no longer the only one.**
+
+**M7b adds the wearable kinds the classes will hold.** `sword` (knight), `staff` (mage), `bow`
+(archer), `lumberjack axe` (lumberjack), `pickaxe` (miner), and `prospector boots` (prospector).
+Handedness and slot per *Handedness*. The kind table names them; whichever class draws them
+later is M7c ahead. A class that will draw these arrives in M7c; **no class logic is described
+or shipped under an **M7b** marker.**
 
 ### The join kit
 
@@ -977,8 +1009,16 @@ worn slot in the same step on the state-owning goroutine, which is the transacti
 neither. The player is then sent one `inventory` and one `equipment`, both full restatements,
 because both containers changed.
 
+**A two-handed equip is one transaction across both hands in the same step.** The new kind lands
+in `left hand` and `right hand`, and whatever each hand held lands in the bag slot the new kind
+left. There is no point at which the two-handed kind occupies one hand and not the other. The
+player is then sent one `inventory` and one `equipment`, exactly as a one-handed equip does.
+
 **Equipping onto an occupied worn slot swaps.** Whatever was worn lands in the bag slot the new
-item just left. RuneScape is the tiebreaker and it swaps, and the swap is also the simpler rule:
+item just left. For a two-handed kind the swap displaces **both** hands into the same bag slot:
+the left-hand item lands in the slot, then the right-hand item lands in the slot, so the
+right-hand one is the `displaced` that survives and the left-hand one is lost to the swap.
+RuneScape is the tiebreaker and it swaps, and the swap is also the simpler rule:
 it makes `equip` total over "a bag slot holding an equippable kind", so there is no room question
 to answer and no refusal to specify. A rule with one fewer case is a rule with one fewer place to
 be wrong, which is *Pickup*'s lesson applied here.
@@ -998,9 +1038,11 @@ In every case the bag and the worn slots are exactly as they were.
 
 ### `unequip`
 
-`unequip` is `equip`'s reverse transaction and it is immediate for the same reason. The kind
+`unequip` is `equip`'s reverse transaction and it is immediate for the same reason. **The kind
 leaves its worn slot and lands in the **lowest free bag slot**, which is RuneScape's rule and
-the same one `pickup` fills a slot by. Both restatements go out again.
+the same one `pickup` fills a slot by. Both restatements go out again. **A two-handed unequip
+clears both hand slots in the same move**, because the kind is worn across both and neither can
+keep half of it; the bag receives all of the kind once.
 
 **A full bag refuses the unequip, and the worn slot keeps the item.** This is the one refusal
 worth arguing about, because the alternative is dropping the item at the player's feet, and that
@@ -1008,6 +1050,9 @@ would be the server destroying value the player did not ask it to risk: a ground
 protocol has no owner, no drop timer and no per-player visibility (*Deliberately absent*), so
 anybody standing there takes it. **Nothing is ever silently dropped and nothing is ever lost.**
 The player is told `inventory is full` and keeps wearing the item, which is what RuneScape does.
+A full bag refuses a two-handed unequip too, and `left hand` and `right hand` both keep their
+half of the item, which is what "the worn slot keeps the item" means for a kind worn across two
+slots.
 
 Refused, each with one `error` naming `unequip`:
 
@@ -1044,9 +1089,11 @@ thing worth reading back is what happened.
 
 `equip.slot` is the bag index the item came from, and `unequip.slot` is the bag index it went
 to. `displaced` is the kind a swap put back into that bag slot and is **omitted when the worn
-slot was free**, so its presence is the whole record that a swap happened. `seq` rides on the
-two completions when the frame carried one and is omitted when it did not, which is *Sequence
-numbers*' rule for `move_to`, `pickup` and `drop` extended to these two.
+slot was free**, so its presence is the whole record that a swap happened. For a two-handed
+equip onto occupied hands, `displaced` is the kind that survives in the bag slot: the
+right-hand item, which is the last of the two to land there. `seq` rides on the two completions
+when the frame carried one and is omitted when it did not, which is *Sequence numbers*' rule for
+`move_to`, `pickup` and `drop` extended to these two.
 
 The two `_rejected` events carry `refuse`'s ordinary field set, exactly as `pickup_rejected` and
 `drop_rejected` do. `reason` is one of `no_such_slot`, `empty_slot`, `not_equippable`,
@@ -1528,8 +1575,8 @@ a GDScript client will get it subtly wrong.
   `Vector2.y` component holds world **Z**. This has caught people already.
 - **M3a's two intents address different spaces with different types.** `equip.slot` is a bag
   index and must be written as a JSON integer literal, per the `seq` rule above.
-  `unequip.worn` is a slot **name**, a string, and the closed set is the five names in
-  `equipment.worn` (`helmet`, `left hand`, `chest`, `right hand`, `trousers`). A client
+  `unequip.worn` is a slot **name**, a string, and the closed set is the six names in
+  `equipment.worn` (`helmet`, `left hand`, `chest`, `right hand`, `feet`, `trousers`). A client
   that sends `{"unequip":{"slot":0}}` has confused the two and gets a `missing_field` refusal
   naming `unequip`.
 - **`equipment.slots[].slot` is a string, not a number**, for the same reason. It is the only
