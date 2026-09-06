@@ -99,3 +99,27 @@ func (w *World) npcStates() []mnet.NpcState {
 func (w *World) broadcastNPCHP(n *npc) {
 	w.broadcast(mnet.HP{ID: n.id, HP: n.hp, MaxHP: MaxHP}, nil)
 }
+
+// SetNPCHitPointsByFaction sets HP on the first seeded NPC of faction.
+func (w *World) SetNPCHitPointsByFaction(faction string, hp int) error {
+	if faction != FactionFriendly && faction != FactionHostile {
+		return fmt.Errorf("set npc hp: unknown faction %q", faction)
+	}
+	if hp < 0 || hp > MaxHP {
+		return fmt.Errorf("set npc hp: hp %d out of range [0,%d]", hp, MaxHP)
+	}
+	for _, id := range w.npcOrder {
+		n, ok := w.npcs[id]
+		if !ok || n.faction != faction {
+			continue
+		}
+		n.hp = hp
+		w.log.Event(w.tick, "npc_hp_seed", gamelog.Fields{
+			"npc":     n.id,
+			"faction": n.faction,
+			"hp":      n.hp,
+		})
+		return nil
+	}
+	return fmt.Errorf("set npc hp: no %s dummy seeded", faction)
+}

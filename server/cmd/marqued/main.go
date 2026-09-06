@@ -77,6 +77,7 @@ func run() error {
 	addr := flag.String("addr", "127.0.0.1:8080", "host:port to listen on")
 	enableLog := flag.Bool("gamelog", true, "write the NDJSON event log to stdout")
 	abilitiesPath := flag.String("abilities", "", "path to shared/abilities.json (default: search from cwd, or MARQUE_ABILITIES)")
+	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
 	var seeds itemSeeds
 	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world.")
 	flag.Parse()
@@ -133,6 +134,11 @@ func run() error {
 	}
 	if err := world.SeedPracticeDummies(); err != nil {
 		return err
+	}
+	if *friendlyHP > 0 {
+		if err := world.SetNPCHitPointsByFaction(game.FactionFriendly, *friendlyHP); err != nil {
+			return err
+		}
 	}
 
 	signalCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

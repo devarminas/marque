@@ -30,6 +30,10 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/equip_demo.ps1` | `EQUIP DEMO OK` |
 | `scripts/gather_craft_demo.ps1` | `GATHER CRAFT DEMO OK` |
 | `scripts/combat_demo.ps1` | `COMBAT DEMO OK` |
+| `scripts/dummy_cast_demo.ps1` | `DUMMY CAST DEMO OK` |
+| `scripts/dummy_attack_demo.ps1` | `DUMMY ATTACK DEMO OK` |
+| `scripts/wasd_demo.ps1` | `WASD DEMO OK` |
+| `scripts/tab_combat_demo.ps1` | `TAB COMBAT DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
 | each scripted client | `DEMO done` on its stdout |
