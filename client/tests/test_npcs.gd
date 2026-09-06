@@ -14,6 +14,8 @@ var _root: Node3D = null
 var _session: SessionScript = null
 var _net: NetClientScript = null
 var _casts: Array = []
+var _attacks: PackedInt32Array = PackedInt32Array()
+var _attack_refuses: Array = []
 
 
 func is_finished() -> bool:
@@ -29,7 +31,7 @@ func get_assertion_count() -> int:
 
 
 func _ready() -> void:
-	print("== npcs: welcome, select, cast faction targets ==")
+	print("== npcs: welcome, select, cast faction targets, attack refuse ==")
 
 	_root = MainScene.instantiate() as Node3D
 	_root.name = "NpcClient"
@@ -39,6 +41,11 @@ func _ready() -> void:
 	_session.cast_requested.connect(
 		func(ability_id: String, target_id: int) -> void:
 			_casts.append({"ability": ability_id, "player": target_id})
+	)
+	_session.attack_requested.connect(func(id: int) -> void: _attacks.append(id))
+	_session.attack_refused.connect(
+		func(id: int, reason: String) -> void:
+			_attack_refuses.append({"player": id, "reason": reason})
 	)
 
 	await get_tree().process_frame
@@ -50,6 +57,7 @@ func _ready() -> void:
 
 	_test_bodies_and_select()
 	_test_cast_targets()
+	_test_attack_targets()
 
 	_finished = true
 
@@ -107,6 +115,28 @@ func _test_cast_targets() -> void:
 	_check(_casts.size() == 1, "fireball emits one cast")
 	if _casts.size() == 1:
 		_check(_casts[0]["player"] == 1000002, "fireball targets hostile selection")
+
+
+func _test_attack_targets() -> void:
+	_attacks.clear()
+	_attack_refuses.clear()
+	_session.request_attack(1000001)
+	_check(_attacks.is_empty(), "friendly dummy never becomes an attack intent")
+	_check(
+		_attack_refuses.size() == 1
+		and _attack_refuses[0]["player"] == 1000001
+		and _attack_refuses[0]["reason"] == "wrong_target",
+		"friendly refuse emits attack_refused wrong_target, got %s" % [_attack_refuses],
+	)
+
+	_attacks.clear()
+	_attack_refuses.clear()
+	_session.request_attack(1000002)
+	_check(
+		_attacks.size() == 1 and _attacks[0] == 1000002,
+		"hostile dummy becomes one attack naming 1000002, got %s" % [_attacks],
+	)
+	_check(_attack_refuses.is_empty(), "hostile dummy does not refuse")
 
 
 func _check(cond: bool, msg: String) -> void:

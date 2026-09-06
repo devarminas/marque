@@ -72,6 +72,9 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
   act again.
 - [Tab targeting](./tab-targeting.md) — M6c: left-click selects a living remote
   player with ring chrome and no auto-attack; Escape clears; ground keeps
-  selection; right-click still engages until M6f.
+  selection.
+- [Right-click basic attack](./right-click-basic-attack.md) — M6f: right-click
+  hostile engages pending melee and selects; friendly dummy refuses; left-click
+  stays select-only.
 - [Server liveness](./heartbeat-liveness.md) — the M2c milestone: heartbeat ticks,
   the three-interval liveness window, and the loud abandon of a silent server.

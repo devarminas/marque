@@ -11,14 +11,14 @@ selection.
 - `ground-keeps-selection` — ground click issues `move_to`; selection persists.
 - `escape-clears` — Escape (`ui_cancel`) clears selection after use-on cancel.
 - `no-self-select` — left-click self does not select and does not attack.
-- `right-click-attack` — right-click remote still engages `attack` until M6f.
+- `right-click-attack` — right-click remote engages `attack` and selects (M6f).
 
 ## How to get to it (user POV)
 
 - Left-click another player: yellow ring under their feet, no auto-attack.
 - Click the ground: you walk; the ring stays.
 - Press Escape: the ring goes away.
-- Right-click them to engage (temporary until M6f).
+- Right-click them to engage basic attack (M6f).
 
 ## Driving it with headless tests
 

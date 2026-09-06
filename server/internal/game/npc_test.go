@@ -129,6 +129,58 @@ func TestCastHealHelpsFriendlyDummyOnly(t *testing.T) {
 	}
 }
 
+func TestAttackFriendlyDummyRefused(t *testing.T) {
+	pw := newProbeWorld(t)
+	if err := pw.w.SeedPracticeDummies(); err != nil {
+		t.Fatal(err)
+	}
+	alice := pw.join()
+	friendly := pw.w.npcByFaction(FactionFriendly)
+	beforeHP := friendly.hp
+
+	pw.w.attack(alice, mnet.Attack{Player: friendly.id}, 1)
+	if alice.attackTarget != 0 {
+		t.Fatalf("attackTarget=%d, want 0", alice.attackTarget)
+	}
+	if friendly.hp != beforeHP {
+		t.Fatalf("friendly hp=%d, want %d", friendly.hp, beforeHP)
+	}
+	if got := pw.events(EvAttack); len(got) != 0 {
+		t.Fatalf("attack events=%v, want none", got)
+	}
+	got := pw.events(EvAttackRejected)
+	if len(got) != 1 || got[0]["reason"] != string(mnet.ReasonWrongTarget) {
+		t.Fatalf("attack_rejected=%v, want wrong_target", got)
+	}
+}
+
+func TestAttackHostileDummyEngagesAndHits(t *testing.T) {
+	pw := newProbeWorld(t)
+	if err := pw.w.SeedPracticeDummies(); err != nil {
+		t.Fatal(err)
+	}
+	alice := pw.join()
+	hostile := pw.w.npcByFaction(FactionHostile)
+	alice.pos = hostile.pos
+
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 1)
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("attackTarget=%d, want %d", alice.attackTarget, hostile.id)
+	}
+	if got := pw.events(EvAttack); len(got) != 1 {
+		t.Fatalf("attack events=%v, want one", got)
+	}
+	for range AttackPeriodTicks {
+		pw.w.step()
+	}
+	if hostile.hp != MaxHP-AttackDamage {
+		t.Fatalf("hostile hp=%d, want %d", hostile.hp, MaxHP-AttackDamage)
+	}
+	if got := pw.events(EvAttackHit); len(got) != 1 {
+		t.Fatalf("attack_hit=%v, want one", got)
+	}
+}
+
 func (w *World) npcByFaction(faction string) *npc {
 	for _, id := range w.npcOrder {
 		n := w.npcs[id]
