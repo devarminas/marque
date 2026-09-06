@@ -1,0 +1,29 @@
+{
+  "skills": [
+    {
+      "id": "mining",
+      "name": "Mining",
+      "max_level": 99
+    },
+    {
+      "id": "woodcutting",
+      "name": "Woodcutting",
+      "max_level": 99
+    },
+    {
+      "id": "combat",
+      "name": "Combat",
+      "max_level": 99
+    },
+    {
+      "id": "magic",
+      "name": "Magic",
+      "max_level": 99
+    },
+    {
+      "id": "ranged",
+      "name": "Ranged",
+      "max_level": 99
+    }
+  ]
+}
