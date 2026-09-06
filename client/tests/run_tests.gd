@@ -3,7 +3,7 @@ extends SceneTree
 ## Headless entry point, per NOTES.md, "Headless testing":
 ##
 ## [codeblock]
-## godot --headless --path client --script res://tests/run_tests.gd --quit-after 900
+## godot --headless --path client --script res://tests/run_tests.gd --quit-after 1200
 ## [/codeblock]
 ##
 ## Two kinds of suite run here, in this order.
@@ -67,6 +67,10 @@ const TREE_FREE_SUITES: Array = [
 ## to connect, and a missed signal would look exactly like a hung suite.
 const SCENE_SUITES: Array = [
 	{"name": "world and camera", "scene": "res://tests/test_world.tscn"},
+	# ARM-130's regression suite: what WASD holding puts on the wire. It
+	# instances main.tscn with the net node stubbed, pushes real keys, and
+	# connects to nothing, like the suites below.
+	{"name": "move chord", "scene": "res://tests/test_move_chord.tscn"},
 	{"name": "player avatar", "scene": "res://tests/test_avatar.tscn"},
 	# M1's item registry and bodies. It instances main.tscn and feeds it
 	# scripted frames, so it never connects to anything and is safe anywhere
@@ -112,7 +116,7 @@ const STARTUP_GRACE_FRAMES := 10
 
 ## Upper bound on the whole run. A stuck-run detector, not a performance budget.
 ##
-## Deliberately below the [code]--quit-after 900[/code] in the documented
+## Deliberately below the [code]--quit-after 1200[/code] in the documented
 ## command. [code]--quit-after[/code] exits 0, so a watchdog above it would let a
 ## hung run report success — the exact false pass this runner exists to catch.
 ## That relationship is the invariant; the number itself only has to sit above
@@ -120,9 +124,12 @@ const STARTUP_GRACE_FRAMES := 10
 ##
 ## Raised from 600 for the wiring suite, whose live half walks a real avatar
 ## across real seconds behind a 30 fps cap: a healthy full run against a live
-## server measures around 550 frames, which left no room to tell a slow machine
-## from a hung one.
-const WATCHDOG_FRAMES := 850
+## server measured around 550 frames, which left no room to tell a slow machine
+## from a hung one. Raised from 850 for the move-chord suite (ARM-130) and M7's
+## growing live halves: interop's healthy full run now brushes 850 itself, and
+## the watchdog fired on a run whose 1139 assertions had all passed. The
+## [code]--quit-after[/code] it sits under moved with it.
+const WATCHDOG_FRAMES := 1000
 
 var _frames := 0
 var _suite_frames := 0
