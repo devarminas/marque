@@ -110,6 +110,9 @@ func validate(a Ability) error {
 	default:
 		return fmt.Errorf("%q: unknown effect.kind %q", a.ID, a.Effect.Kind)
 	}
+	if a.Target == TargetSelf && a.Effect.Kind == EffectDamage {
+		return fmt.Errorf("%q: a self-targeted ability cannot damage its caster", a.ID)
+	}
 	if a.Effect.Amount < 0 {
 		return fmt.Errorf("%q: effect.amount must be >= 0", a.ID)
 	}
