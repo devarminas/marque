@@ -175,7 +175,6 @@ func _ready() -> void:
 	if _picker == null:
 		push_error("Session.ground_picker must point at a node running ground_picker.gd")
 	else:
-		_picker.ground_clicked.connect(_on_ground_clicked)
 		_picker.item_clicked.connect(_on_item_clicked)
 		_picker.node_clicked.connect(_on_node_clicked)
 		_picker.player_clicked.connect(_on_player_clicked)
@@ -306,7 +305,7 @@ func known_node_ids() -> Array:
 func request_move_to(x: float, z: float) -> void:
 	move_to_requested.emit(x, z)
 	if _net == null or not _net.is_open():
-		push_warning("session: click at (%f, %f) dropped, the socket is not open" % [x, z])
+		push_warning("session: move_to (%f, %f) dropped, the socket is not open" % [x, z])
 		return
 	_net.send_move_to(x, z)
 
@@ -903,10 +902,6 @@ func _maybe_reconnect() -> void:
 	var status := _net.connect_to_server(url)
 	if status != OK:
 		_schedule_reconnect()
-
-
-func _on_ground_clicked(x: float, z: float) -> void:
-	request_move_to(x, z)
 
 
 func _on_item_clicked(body: Node3D) -> void:
