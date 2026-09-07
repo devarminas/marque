@@ -12,6 +12,7 @@
 [ext_resource type="PackedScene" path="res://scenes/worn_slot.tscn" id="10_worn_slot"]
 [ext_resource type="Script" path="res://scripts/hp_hud.gd" id="11_hp_hud"]
 [ext_resource type="Script" path="res://scripts/class_hud.gd" id="15_class_hud"]
+[ext_resource type="Script" path="res://scripts/class_debug.gd" id="16_class_debug"]
 [ext_resource type="Script" path="res://scripts/death_overlay.gd" id="12_death_overlay"]
 [ext_resource type="Script" path="res://scripts/hotbar.gd" id="13_hotbar"]
 [ext_resource type="PackedScene" path="res://scenes/hotbar_slot.tscn" id="14_hotbar_slot"]
@@ -303,6 +304,32 @@ theme_override_constants/shadow_offset_y = 1
 theme_override_font_sizes/font_size = 12
 text = ""
 
+[node name="ClassDebug" type="Control" parent="UI" node_paths=PackedStringArray("debug_label")]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 16.0
+offset_top = 56.0
+offset_right = 320.0
+offset_bottom = 76.0
+mouse_filter = 2
+script = ExtResource("16_class_debug")
+debug_label = NodePath("DebugLabel")
+
+[node name="DebugLabel" type="Label" parent="UI/ClassDebug"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.64, 0.68, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 11
+text = "None"
+
 [node name="HpHud" type="Control" parent="UI" node_paths=PackedStringArray("hp_bar", "hp_label", "mana_bar", "mana_label")]
 anchors_preset = 2
 anchor_top = 1.0
@@ -493,7 +520,7 @@ layout_mode = 2
 [node name="Slot2" parent="UI/Hotbar/Bar/Slots" instance=ExtResource("14_hotbar_slot")]
 layout_mode = 2
 
-[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "class_hud", "death_overlay", "hotbar", "camera_rig")]
+[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "class_hud", "class_debug", "death_overlay", "hotbar", "camera_rig")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
@@ -506,6 +533,7 @@ inventory_panel = NodePath("../UI/RightDock/Margin/Rows/InventoryPanel")
 equipment_panel = NodePath("../UI/RightDock")
 hp_hud = NodePath("../UI/HpHud")
 class_hud = NodePath("../UI/ClassHud")
+class_debug = NodePath("../UI/ClassDebug")
 death_overlay = NodePath("../UI/DeathOverlay")
 hotbar = NodePath("../UI/Hotbar")
 camera_rig = NodePath("../CameraRig")

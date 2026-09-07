@@ -62,6 +62,7 @@ const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
 const ClassHudScript := preload("res://scripts/class_hud.gd")
+const ClassDebugScript := preload("res://scripts/class_debug.gd")
 const ClassDefs := preload("res://scripts/class_defs.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const HotbarScript := preload("res://scripts/hotbar.gd")
@@ -198,6 +199,7 @@ signal respawn_requested()
 @export var equipment_panel: Node
 @export var hp_hud: Node
 @export var class_hud: Node
+@export var class_debug: Node
 @export var death_overlay: Node
 @export var hotbar: Node
 @export var camera_rig: Node
@@ -208,7 +210,9 @@ var _panel: InventoryPanelScript = null
 var _equipment: EquipmentPanelScript = null
 var _hp_hud: HpHudScript = null
 var _class_hud: ClassHudScript = null
+var _class_debug: ClassDebugScript = null
 var _classes: Dictionary = {}
+var _skill_levels := {}
 var _active_class_id := ""
 var _death_overlay: DeathOverlayScript = null
 var _hotbar: HotbarScript = null
@@ -289,6 +293,7 @@ func _ready() -> void:
 	_net.inventory_changed.connect(_on_inventory_changed)
 	_net.equipment_changed.connect(_on_equipment_changed)
 	_net.class_changed.connect(_on_class_changed)
+	_net.skills_changed.connect(_on_skills_changed)
 	_net.hp_changed.connect(_on_hp_changed)
 	_net.mana_changed.connect(_on_mana_changed)
 	_net.server_error.connect(_on_server_error)
@@ -326,6 +331,10 @@ func _ready() -> void:
 	_class_hud = class_hud as ClassHudScript
 	if _class_hud == null:
 		push_error("Session.class_hud must point at a node running class_hud.gd")
+
+	_class_debug = class_debug as ClassDebugScript
+	if _class_debug == null:
+		push_error("Session.class_debug must point at a node running class_debug.gd")
 
 	_death_overlay = death_overlay as DeathOverlayScript
 	if _death_overlay == null:
@@ -1316,6 +1325,19 @@ func _on_class_changed(
 	_apply_class(class_id, missing_slot_names, missing_slot_kinds, missing_tools)
 
 
+func _on_skills_changed(
+	player: int, skill_ids: PackedStringArray, levels: PackedInt32Array
+) -> void:
+	if player != _you:
+		return
+	_skill_levels.clear()
+	for index in skill_ids.size():
+		if index >= levels.size():
+			break
+		_skill_levels[skill_ids[index]] = levels[index]
+	_refresh_class_debug()
+
+
 func _on_hp_changed(id: int, hp: int, max_hp: int) -> void:
 	_apply_hit_points(id, hp, max_hp)
 
@@ -1627,8 +1649,10 @@ func _clear_hit_points() -> void:
 
 func _clear_class_state() -> void:
 	_active_class_id = ""
+	_skill_levels.clear()
 	if _class_hud != null:
 		_class_hud.clear()
+	_refresh_class_debug()
 
 
 func _apply_class(
@@ -1646,6 +1670,14 @@ func _apply_class(
 		display = ClassDefs.class_display_name(_classes, class_id)
 	var hint := _format_class_missing_hint(missing_slot_names, missing_slot_kinds, missing_tools)
 	_class_hud.apply(display, hint)
+	_refresh_class_debug()
+
+
+func _refresh_class_debug() -> void:
+	if _class_debug == null:
+		return
+	var formatted := ClassDebugScript.format(_active_class_id, _classes, _skill_levels)
+	_class_debug.apply(formatted)
 
 
 static func _format_class_missing_hint(
@@ -1663,6 +1695,10 @@ static func _format_class_missing_hint(
 
 func active_class_id() -> String:
 	return _active_class_id
+
+
+func active_class_debug_text() -> String:
+	return "" if _class_debug == null else _class_debug.text
 
 
 func hit_points_for(id: int) -> Vector2i:
