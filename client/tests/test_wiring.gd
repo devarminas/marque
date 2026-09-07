@@ -17,6 +17,7 @@ const Assertions := preload("res://tests/assertions.gd")
 
 const EXACT_EPSILON := 0.002
 const SEGMENT_EPSILON := 0.01
+const RIG_SETTLED_EPSILON := 0.01
 
 const CLOCK_SKEW_TOLERANCE := 0.95
 
@@ -404,8 +405,14 @@ func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
 		return
 	var at: Vector2 = chrome
 
-	for _frame in 20:
-		await get_tree().process_frame
+	if not await _wait_until(
+		func() -> bool: return (
+			client.rig.global_position.distance_to(client.rig.target.global_position)
+			<= RIG_SETTLED_EPSILON
+		),
+		"the rig to settle onto the player, so the ground under the chrome point stops drifting",
+	):
+		return
 
 	var under: Variant = client.picker.pick_ground(at)
 	_check(under != null, "there is ground under the chrome point %v to stand an item on" % at)
