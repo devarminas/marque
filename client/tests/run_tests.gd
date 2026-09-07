@@ -41,7 +41,6 @@ const Assertions := preload("res://tests/assertions.gd")
 
 const STARTUP_GRACE_FRAMES := 10
 
-# Raised from 850 for the move-chord suite (ARM-130).
 const WATCHDOG_FRAMES := 1250
 
 var _frames := 0
