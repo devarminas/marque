@@ -3,10 +3,6 @@ package net_test
 // M3a's acceptance: worn slots, equip and unequip, and the equipment
 // restatement, driven through real sockets against a world configured the way
 // the shipped server configures itself.
-//
-// Every test here uses newHarnessWithKit with []string{game.KindSword}, so the sword
-// under test is the one a real player joins holding rather than one the test
-// arranged for itself.
 
 import (
 	"strings"
@@ -57,9 +53,6 @@ func countKinds(frames []frame) map[string]int {
 	return kinds
 }
 
-// TestDefaultJoinKitIsEmpty pins the lean join kit after M7f: no seeded axe.
-// Equipment tests below pass an explicit sword kit when they need something
-// wearable in the bag.
 func TestDefaultJoinKitIsEmpty(t *testing.T) {
 	if len(game.DefaultJoinKit) != 0 {
 		t.Fatalf("DefaultJoinKit is %v, want empty", game.DefaultJoinKit)

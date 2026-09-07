@@ -49,8 +49,7 @@ var WornSlots = []mnet.EquipSlot{
 	SlotHelmet, SlotLeftHand, SlotChest, SlotRightHand, SlotFeet, SlotTrousers,
 }
 
-// DefaultJoinKit is what a joining player is given. Empty after M7f: class gear
-// is not seeded at join.
+// DefaultJoinKit is empty: class gear is not seeded at join.
 var DefaultJoinKit []string
 
 var (
@@ -222,9 +221,8 @@ type memStore struct {
 	held map[mnet.PlayerID]*playerItems
 }
 
-// NewMemoryStore returns an empty in-memory Store that trusts wearables for
-// equip/unequip lookups. Nil or empty means nothing is equippable. Item ids
-// start at 1.
+// NewMemoryStore returns an empty Store. Nil or empty wearables means nothing
+// is equippable. Item ids start at 1.
 func NewMemoryStore(wearables map[string][]mnet.EquipSlot) Store {
 	return &memStore{
 		wearables: wearables,

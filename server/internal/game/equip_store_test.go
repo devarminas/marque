@@ -751,8 +751,6 @@ func equipKinds(t *testing.T, s Store, player mnet.PlayerID, kinds []string) {
 	}
 }
 
-// TestEquipFullMinerViaStore proves miner class gear is sets-wearable and
-// reaches the worn map only through EquipInventorySlot.
 func TestEquipFullMinerViaStore(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -778,8 +776,6 @@ func TestEquipFullMinerViaStore(t *testing.T) {
 	}
 }
 
-// TestEquipFullLumberjackViaStore proves lumberjack class gear is sets-wearable
-// and reaches the worn map only through EquipInventorySlot.
 func TestEquipFullLumberjackViaStore(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)

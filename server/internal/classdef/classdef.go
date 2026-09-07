@@ -532,10 +532,8 @@ func putWearable(out map[string][]mnet.EquipSlot, kind string, slots []mnet.Equi
 	return nil
 }
 
-// Wearables derives kind → worn slots from the catalog's sets. Boots remap to
-// feet; one-handed tools use Tool.Slot; two-handed tools occupy both hands.
-// Duplicate kinds must agree. Every classes.json require kind must appear in
-// the map (fail closed). Does not invent wearables from classes alone.
+// Wearables builds kind → worn slots from sets only. Every classes.json
+// require kind must appear (fail closed); missing requires are not invented.
 func (c *Catalog) Wearables() (map[string][]mnet.EquipSlot, error) {
 	if c == nil {
 		return nil, fmt.Errorf("classdef: nil catalog")
@@ -573,8 +571,6 @@ func (c *Catalog) Wearables() (map[string][]mnet.EquipSlot, error) {
 	return out, nil
 }
 
-// ValidateClassWearables reports an error if any class Requires kind is absent
-// from wearables.
 func ValidateClassWearables(c *Catalog, wearables map[string][]mnet.EquipSlot) error {
 	if c == nil {
 		return fmt.Errorf("classdef: nil catalog")
