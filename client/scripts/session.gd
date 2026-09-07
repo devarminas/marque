@@ -61,6 +61,8 @@ const NpcDummyScene := preload("res://scenes/npc_dummy.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
+const ClassHudScript := preload("res://scripts/class_hud.gd")
+const ClassDefs := preload("res://scripts/class_defs.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const HotbarScript := preload("res://scripts/hotbar.gd")
 const AbilityDefs := preload("res://scripts/ability_defs.gd")
@@ -195,6 +197,7 @@ signal respawn_requested()
 ## The [code]equipment_panel.gd[/code] node the `equipment` message drives.
 @export var equipment_panel: Node
 @export var hp_hud: Node
+@export var class_hud: Node
 @export var death_overlay: Node
 @export var hotbar: Node
 @export var camera_rig: Node
@@ -204,6 +207,9 @@ var _picker: GroundPickerScript = null
 var _panel: InventoryPanelScript = null
 var _equipment: EquipmentPanelScript = null
 var _hp_hud: HpHudScript = null
+var _class_hud: ClassHudScript = null
+var _classes: Dictionary = {}
+var _active_class_id := ""
 var _death_overlay: DeathOverlayScript = null
 var _hotbar: HotbarScript = null
 var _hp := {}
@@ -282,6 +288,7 @@ func _ready() -> void:
 	_net.node_state_changed.connect(_on_node_state_changed)
 	_net.inventory_changed.connect(_on_inventory_changed)
 	_net.equipment_changed.connect(_on_equipment_changed)
+	_net.class_changed.connect(_on_class_changed)
 	_net.hp_changed.connect(_on_hp_changed)
 	_net.mana_changed.connect(_on_mana_changed)
 	_net.server_error.connect(_on_server_error)
@@ -314,6 +321,11 @@ func _ready() -> void:
 	_hp_hud = hp_hud as HpHudScript
 	if _hp_hud == null:
 		push_error("Session.hp_hud must point at a node running hp_hud.gd")
+
+	_classes = ClassDefs.load_classes()
+	_class_hud = class_hud as ClassHudScript
+	if _class_hud == null:
+		push_error("Session.class_hud must point at a node running class_hud.gd")
 
 	_death_overlay = death_overlay as DeathOverlayScript
 	if _death_overlay == null:
@@ -729,6 +741,7 @@ func _on_welcomed(
 
 	_forget_everyone()
 	_clear_hit_points()
+	_clear_class_state()
 	# The inventory is not part of `welcome` — it is private to one player and
 	# arrives as its own message inside the same atomic step (PROTOCOL.md,
 	# `welcome`) — so the panel is emptied here and refilled a frame later by
@@ -1291,6 +1304,18 @@ func _on_equipment_changed(
 	_equipment.apply(worn_names, slot_names, slot_kinds)
 
 
+func _on_class_changed(
+	player: int,
+	class_id: String,
+	missing_slot_names: PackedStringArray,
+	missing_slot_kinds: PackedStringArray,
+	missing_tools: PackedStringArray,
+) -> void:
+	if player != _you:
+		return
+	_apply_class(class_id, missing_slot_names, missing_slot_kinds, missing_tools)
+
+
 func _on_hp_changed(id: int, hp: int, max_hp: int) -> void:
 	_apply_hit_points(id, hp, max_hp)
 
@@ -1598,6 +1623,46 @@ func _clear_hit_points() -> void:
 		_hp_hud.clear()
 	if _death_overlay != null:
 		_death_overlay.visible = false
+
+
+func _clear_class_state() -> void:
+	_active_class_id = ""
+	if _class_hud != null:
+		_class_hud.clear()
+
+
+func _apply_class(
+	class_id: String,
+	missing_slot_names: PackedStringArray,
+	missing_slot_kinds: PackedStringArray,
+	missing_tools: PackedStringArray,
+) -> void:
+	_active_class_id = class_id
+	if _class_hud == null:
+		push_error("session: class arrived with no hud to draw it")
+		return
+	var display := ""
+	if not class_id.is_empty():
+		display = ClassDefs.class_display_name(_classes, class_id)
+	var hint := _format_class_missing_hint(missing_slot_names, missing_slot_kinds, missing_tools)
+	_class_hud.apply(display, hint)
+
+
+static func _format_class_missing_hint(
+	slot_names: PackedStringArray, slot_kinds: PackedStringArray, tools: PackedStringArray
+) -> String:
+	var parts: PackedStringArray = []
+	for index in slot_names.size():
+		if index >= slot_kinds.size():
+			break
+		parts.append("%s (%s)" % [slot_names[index], slot_kinds[index]])
+	for tool in tools:
+		parts.append(String(tool))
+	return ", ".join(parts)
+
+
+func active_class_id() -> String:
+	return _active_class_id
 
 
 func hit_points_for(id: int) -> Vector2i:
