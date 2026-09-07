@@ -251,6 +251,66 @@ follows the player's position; it never drives it.
 - Exact orbit speed, zoom limits, pitch clamp, and follow damping are feel, not architecture.
   They are Linear issues labelled `Follow-up` until a human can sit down and tune them.
 
+## Cursor hints
+
+The cursor advertises what a click will do before the player commits to it. One node,
+`Main/CursorHint`, owns the shape. Nothing else in the client calls a cursor API, and a suite
+proves that by scanning the source of every script under `res://scripts`.
+
+| Under the cursor | Frame |
+|---|---|
+| Nothing, empty ground, UI chrome, an item, a friendly dummy, your own avatar | `pointer_b.png` |
+| A hostile `npc_dummy.gd`, or another player's avatar | `tool_sword_a.png` |
+| A `resource_node.gd` | `tool_axe.png` |
+
+A tree gets the tool, not a generic hand, because RuneScape hints a tree with the tool. A
+friendly dummy is not a sword: `PROTOCOL.md` has the server refuse an attack on one, so a sword
+there would promise what the server denies. Your own avatar is not a sword for the same reason,
+and `Session.select_player` already refuses it.
+
+**Hotspots are the first opaque pixel of each glyph in top-down then left-to-right scan order.**
+`pointer_b` `(10, 8)`, `tool_sword_a` `(4, 4)`, `tool_axe` `(13, 3)`. The rule is mechanical and
+it lands on the drawn tip of all three. It is deliberately not the image centre: a cursor whose
+hotspot is the centre picks the wrong thing at the edge of a target and reads as a bug.
+
+**Chrome is a rect walk over the `UI` layer, not `Viewport.gui_get_hovered_control()`.** The
+engine's hit test looks like the right answer, because it is the same test that routes the next
+click, and two independent design candidates both reached for it. Two things sink it here.
+
+`Hotbar` and `ErrorHud` are `MOUSE_FILTER_IGNORE` at the root, so the engine reports no hovered
+control over chrome the player can plainly see, and a sword would be drawn over the interface.
+And `hotbar.gd::_input` rect-tests its own slots and calls `set_input_as_handled()` while those
+slots are `IGNORE`, so the engine also reports no hovered control over a widget that does eat the
+click. That second one only bites in the shipped client: `hotbar.gd` returns early when
+`get_visible_rect().size.x < 200.0`, so at the headless 64x64 viewport the hotbar consumes
+nothing and no suite can reproduce it.
+
+So the rule is any `Control` descendant of the `UI` `CanvasLayer` that `is_visible_in_tree()` and
+whose `get_global_rect()` contains the pointer. It derives from the scene, so a new HUD needs no
+registration, and it needs no answer to whether Godot refreshes hover for a pointer that has not
+moved.
+
+The cost is ARM-158: a click on the `Hotbar` or `ErrorHud` background, and on the always-visible
+`ClassDebug` strip, still reaches the world while the cursor shows the pointer. The fix is
+`mouse_filter` in the scene, which is a click-behaviour change, not a cursor change.
+
+**The cursor re-derives on mouse motion, and otherwise only when a cheap check says the last
+answer expired.** A ray every frame under a motionless mouse is waste; never re-deriving leaves a
+sword on a hostile that died. The invalidation set is the chrome verdict, the watched body's
+`is_instance_valid` and `is_inside_tree`, the watched body's `global_transform`, and the camera's
+`global_transform`, all compared exactly rather than approximately. `Session._forget_npc` does
+`remove_child` then `queue_free`, so a despawn trips the liveness check on the next frame.
+
+That set still cannot see a body arriving under a motionless cursor, or a `faction` flipping
+without movement. A scene-authored `CursorHint/Recheck` `Timer` bounds those to its `wait_time`
+instead of leaving them stuck, the way `ErrorHud/Linger` bounds the error toast.
+
+**At the headless 64x64 viewport the visible `Hotbar` covers the viewport centre** (its rect is
+`(-32, -8) 128x60`) and `InventoryToggle` covers centre plus `(16, 0)`. A suite that hovers the
+centre expecting bare world gets the chrome answer until it hides the hotbar, and one looking for
+empty ground beside a body must offset left, not right. Same scarcity that moved
+`test_wiring.gd`'s `CLICK_AT`.
+
 ## Color as semantics, not decoration
 
 **Lit materials, fixed palette.** This said "flat unlit" and that was wrong for a 3D orbiting
