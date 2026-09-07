@@ -3,6 +3,7 @@ package game
 import (
 	"path/filepath"
 	"runtime"
+	"sort"
 	"testing"
 
 	"github.com/devarminas/marque/server/internal/classdef"
@@ -58,8 +59,6 @@ func TestClassKitSeedsUniqueKindsAndPositions(t *testing.T) {
 		positions[key] = s.Kind
 	}
 
-	// Sorted set ids: archer, knight, lumberjack, mage, miner.
-	// First kind of archer (leather_chest via sorted slot keys) at origin.
 	if seeds[0].X != ClassKitSeedOriginX || seeds[0].Z != ClassKitSeedOriginZ {
 		t.Fatalf("first seed at (%v,%v), want origin (%v,%v)",
 			seeds[0].X, seeds[0].Z, ClassKitSeedOriginX, ClassKitSeedOriginZ)
@@ -67,23 +66,38 @@ func TestClassKitSeedsUniqueKindsAndPositions(t *testing.T) {
 	if d := seeds[1].X - seeds[0].X; d != ClassKitSeedSpacingX {
 		t.Fatalf("X spacing %v, want %v", d, ClassKitSeedSpacingX)
 	}
+	if ClassKitSeedSpacingX <= 2*PickupRange || ClassKitSeedSpacingZ <= 2*PickupRange {
+		t.Fatalf("seed spacing X=%v Z=%v must exceed 2*PickupRange=%v",
+			ClassKitSeedSpacingX, ClassKitSeedSpacingZ, 2*PickupRange)
+	}
 
-	var knightRowZ float64
-	foundKnight := false
-	for _, s := range seeds {
-		if s.Kind == KindSword {
-			foundKnight = true
-			knightRowZ = s.Z
+	setIDs := cat.SetIDs()
+	sort.Strings(setIDs)
+	knightRow := -1
+	for i, id := range setIDs {
+		if id == "knight" {
+			knightRow = i
 			break
 		}
 	}
-	if !foundKnight {
+	if knightRow < 0 {
+		t.Fatal("missing knight set")
+	}
+	var swordZ float64
+	foundSword := false
+	for _, s := range seeds {
+		if s.Kind == KindSword {
+			foundSword = true
+			swordZ = s.Z
+			break
+		}
+	}
+	if !foundSword {
 		t.Fatal("missing sword seed")
 	}
-	// knight is the second sorted set id (after archer), so Z = origin + 1*spacing.
-	wantZ := ClassKitSeedOriginZ + ClassKitSeedSpacingZ
-	if knightRowZ != wantZ {
-		t.Fatalf("sword Z=%v, want knight row %v", knightRowZ, wantZ)
+	wantZ := ClassKitSeedOriginZ + float64(knightRow)*ClassKitSeedSpacingZ
+	if swordZ != wantZ {
+		t.Fatalf("sword Z=%v, want knight row %v (set index %d)", swordZ, wantZ, knightRow)
 	}
 }
 

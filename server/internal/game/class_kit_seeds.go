@@ -6,18 +6,13 @@ import (
 	"github.com/devarminas/marque/server/internal/classdef"
 )
 
-// Class kit ground-seed layout (M7g). Origin near spawn; one Z row per set id
-// (sorted); kinds within a set spaced along X. Spacing keeps items outside
-// each other's pickup radius so a player can take one without standing on two.
 const (
 	ClassKitSeedOriginX  = 1.0
 	ClassKitSeedOriginZ  = 2.0
-	ClassKitSeedSpacingX = 1.5
-	ClassKitSeedSpacingZ = 2.0
+	ClassKitSeedSpacingX = 3 * PickupRange
+	ClassKitSeedSpacingZ = 4 * PickupRange
 )
 
-// ClassKitSeed is one unique wearable kind from the catalog sets, placed for
-// the -seed-class-kits demo affordance.
 type ClassKitSeed struct {
 	Kind string
 	X, Z float64
