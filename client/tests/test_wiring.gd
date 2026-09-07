@@ -17,11 +17,14 @@ const Assertions := preload("res://tests/assertions.gd")
 
 const EXACT_EPSILON := 0.002
 const SEGMENT_EPSILON := 0.01
+const RIG_SETTLED_EPSILON := 0.01
 
 const CLOCK_SKEW_TOLERANCE := 0.95
 
 const CLICK_AT := Vector2(0.30, 0.88)
 const MIN_WALK_DISTANCE := 3.0
+
+const CHROME_ITEM_ID := 11
 
 const SAMPLE_GAP_MSEC := 600
 const FIRST_SAMPLE_MSEC := 400
@@ -54,7 +57,8 @@ class Client:
 	var equipment: EquipmentPanelScript
 
 	var paths: Array[Dictionary] = []
-	var clicks: Array[Vector2] = []
+	var move_tos: Array[Vector2] = []
+	var pickups: Array[int] = []
 	var joins := 0
 	var inventories := 0
 	var reconnect_delays: Array[int] = []
@@ -76,6 +80,7 @@ class Client:
 		root.name = "Client" + label
 		session.joined.connect(_on_joined)
 		session.move_to_requested.connect(_on_move_to_requested)
+		session.pickup_requested.connect(_on_pickup_requested)
 		session.reconnect_scheduled.connect(_on_reconnect_scheduled)
 		session.resumed.connect(_on_resumed)
 		session.identity_lost.connect(_on_identity_lost)
@@ -100,7 +105,10 @@ class Client:
 		inventories += 1
 
 	func _on_move_to_requested(x: float, z: float) -> void:
-		clicks.append(Vector2(x, z))
+		move_tos.append(Vector2(x, z))
+
+	func _on_pickup_requested(item_id: int) -> void:
+		pickups.append(item_id)
 
 	func _on_path_assigned(
 		id: int, start_tick: int, points: PackedVector2Array, speed: float
@@ -194,7 +202,7 @@ func _test_appliers_without_a_server() -> void:
 	await _test_a_halted_player_is_placed_and_never_waited_for(client)
 	await _test_the_scripted_click_misses_the_opaque_panel(client)
 	await _test_the_scripted_click_misses_an_open_equipment_panel(client)
-	await _test_a_click_becomes_an_intent(client)
+	await _test_a_left_click_on_bare_ground_becomes_no_intent(client)
 	await _test_a_dead_url_backs_off_without_freeing_bodies(client)
 	await _test_a_refused_url_backs_off_without_freeing_bodies(client)
 
@@ -396,36 +404,82 @@ func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
 	if chrome == null:
 		return
 	var at: Vector2 = chrome
-	client.clicks.clear()
+
+	if not await _wait_until(
+		func() -> bool: return (
+			client.rig.global_position.distance_to(client.rig.target.global_position)
+			<= RIG_SETTLED_EPSILON
+		),
+		"the rig to settle onto the player, so the ground under the chrome point stops drifting",
+	):
+		return
+
+	var under: Variant = client.picker.pick_ground(at)
+	_check(under != null, "there is ground under the chrome point %v to stand an item on" % at)
+	if under == null:
+		return
+	var here: Vector2 = under
+	client.feed(
+		'{"item_spawn":{"id":%d,"kind":"acorn","x":%f,"z":%f}}'
+		% [CHROME_ITEM_ID, here.x, here.y]
+	)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var resolved := client.picker.pick(at)
+	_check(
+		resolved["target"] == GroundPickerScript.Target.ITEM,
+		"and item %d stands on it, so a click that got through would pick it up, got target %d"
+		% [CHROME_ITEM_ID, resolved["target"]],
+	)
+
+	client.pickups.clear()
 	_push_left_click(viewport, at)
 	await get_tree().process_frame
 	_check(
-		client.clicks.is_empty(),
-		"a click on the dock's chrome at %v walks nobody, got %s" % [at, client.clicks],
+		client.pickups.is_empty(),
+		"but a click on the dock's chrome at %v reaches nothing, got %s" % [at, client.pickups],
 	)
+
+	client.equipment.visible = false
+	await get_tree().process_frame
+	client.pickups.clear()
+	_push_left_click(viewport, at)
+	await get_tree().process_frame
+	_check(
+		client.pickups.size() == 1 and client.pickups[0] == CHROME_ITEM_ID,
+		"while the very same click with the dock hidden picks item %d up, got %s"
+		% [CHROME_ITEM_ID, client.pickups],
+	)
+
+	client.equipment.visible = true
+	await get_tree().process_frame
+	client.feed('{"item_despawn":{"id":%d}}' % CHROME_ITEM_ID)
 
 
 static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> Variant:
-	var slots: Array[Rect2] = []
+	var controls: Array[Rect2] = []
 	for index in client.panel.slot_count():
 		var slot := client.panel.slot_at(index)
 		if slot != null:
-			slots.append(slot.get_global_rect())
+			controls.append(slot.get_global_rect())
 	for worn in ["helmet", "left hand", "chest", "right hand", "trousers"]:
 		var worn_slot := client.equipment.slot_at(worn)
 		if worn_slot != null:
-			slots.append(worn_slot.get_global_rect())
+			controls.append(worn_slot.get_global_rect())
+	var toggle := client.root.get_node_or_null("UI/InventoryToggle") as Control
+	if toggle != null and toggle.visible:
+		controls.append(toggle.get_global_rect())
 
 	for inset: Vector2 in [Vector2(4, 4), Vector2(4, 20), Vector2(20, 4), Vector2(20, 20)]:
 		var candidate := panel_rect.end - inset
 		if not screen.has_point(candidate) or not panel_rect.has_point(candidate):
 			continue
-		var on_slot := false
-		for rect in slots:
+		var on_control := false
+		for rect in controls:
 			if rect.has_point(candidate):
-				on_slot = true
+				on_control = true
 				break
-		if not on_slot:
+		if not on_control:
 			return candidate
 	return null
 
@@ -453,33 +507,28 @@ func _test_the_scripted_click_misses_an_open_equipment_panel(client: Client) -> 
 	_check(not client.equipment.visible, "and it closes again for the tests below")
 
 
-func _test_a_click_becomes_an_intent(client: Client) -> void:
+func _test_a_left_click_on_bare_ground_becomes_no_intent(client: Client) -> void:
 	var viewport := client.camera.get_viewport()
 	var screen_position := viewport.get_visible_rect().size * CLICK_AT
-	var expected: Variant = client.picker.pick_ground(screen_position)
-	_check(expected != null, "the scripted click position resolves to a ground point")
-	if expected == null:
-		return
+	var resolved := client.picker.pick(screen_position)
+	_check(
+		resolved["target"] == GroundPickerScript.Target.GROUND,
+		"the scripted click position resolves to bare ground, got target %d" % resolved["target"],
+	)
+	var wanted: Vector2 = resolved["ground"]
+	_check(
+		wanted.length() > MIN_WALK_DISTANCE,
+		"and lies %f units from the spawn point, which must exceed %f"
+		% [wanted.length(), MIN_WALK_DISTANCE],
+	)
 
-	client.clicks.clear()
+	client.move_tos.clear()
 	_push_left_click(viewport, screen_position)
 	await get_tree().process_frame
 
 	_check(
-		client.clicks.size() == 1,
-		"one click produces one move_to intent, got %d" % client.clicks.size(),
-	)
-	if client.clicks.size() != 1:
-		return
-	var wanted: Vector2 = expected
-	_check(
-		client.clicks[0].distance_to(wanted) < EXACT_EPSILON,
-		"the intent carries the picked ground point %v, got %v" % [wanted, client.clicks[0]],
-	)
-	_check(
-		wanted.length() > MIN_WALK_DISTANCE,
-		"the scripted click is %f units from the spawn point, which must exceed %f"
-		% [wanted.length(), MIN_WALK_DISTANCE],
+		client.move_tos.is_empty(),
+		"but a left click there produces no move_to, got %s" % [client.move_tos],
 	)
 
 
@@ -621,14 +670,14 @@ func _run_live(url: String) -> void:
 		return
 	var origin: Vector2 = origin_variant
 
-	print("== A clicks the ground ==")
-	var destination_variant: Variant = await _click_ground(a)
+	print("== A is sent to a ground point ==")
+	var destination_variant: Variant = await _send_to_the_scripted_point(a)
 	if destination_variant == null:
 		return
 	var destination: Vector2 = destination_variant
 	_check(
 		origin.distance_to(destination) > MIN_WALK_DISTANCE,
-		"the scripted click is a real walk: %f units from %v to %v"
+		"the scripted destination is a real walk: %f units from %v to %v"
 		% [origin.distance_to(destination), origin, destination],
 	)
 
@@ -692,7 +741,7 @@ func _run_live(url: String) -> void:
 			% [late_here, live_here, late_here.distance_to(live_here)],
 		)
 
-	print("== A arrives where A clicked ==")
+	print("== A arrives where A was sent ==")
 	var arrived: bool = await _wait_until(
 		func() -> bool: return _is_idle(a, a_id) and _is_idle(b, a_id) and _is_idle(c, a_id),
 		"every client to see A finish walking",
@@ -700,9 +749,9 @@ func _run_live(url: String) -> void:
 	if not arrived:
 		return
 	await get_tree().process_frame
-	_check_live_ground(b, a_id, destination, EXACT_EPSILON, "B draws A at the clicked point")
+	_check_live_ground(b, a_id, destination, EXACT_EPSILON, "B draws A at the requested point")
 	_check_live_ground(
-		a, a_id, destination, EXACT_EPSILON, "and A's own body stands on the point A clicked"
+		a, a_id, destination, EXACT_EPSILON, "and A's own body stands on the point A asked for"
 	)
 	_check_live_ground(c, a_id, destination, EXACT_EPSILON, "and so does the late joiner's")
 
@@ -862,34 +911,26 @@ func _join(url: String, label: String) -> Client:
 	return client
 
 
-func _click_ground(client: Client) -> Variant:
+func _send_to_the_scripted_point(client: Client) -> Variant:
 	var viewport := client.camera.get_viewport()
 	var screen_position := viewport.get_visible_rect().size * CLICK_AT
 	var picked: Variant = client.picker.pick_ground(screen_position)
-	_check(picked != null, "the scripted click position resolves to a ground point")
+	_check(picked != null, "the scripted destination resolves to a ground point")
 	if picked == null:
 		return null
+	var destination: Vector2 = picked
 
-	client.clicks.clear()
-	client.picker.set_process_unhandled_input(true)
-	_push_left_click(viewport, screen_position)
+	client.move_tos.clear()
+	client.session.request_move_to(destination.x, destination.y)
 	await get_tree().process_frame
-	client.picker.set_process_unhandled_input(false)
 
 	_check(
-		client.clicks.size() == 1,
-		"the click produced one intent, got %d" % client.clicks.size(),
+		client.move_tos.size() == 1,
+		"the request produced one move_to intent, got %d" % client.move_tos.size(),
 	)
-	for other in _live_clients:
-		if other == client:
-			continue
-		_check(
-			other.clicks.is_empty(),
-			"client %s did not also react to the click" % other.label,
-		)
-	if client.clicks.size() != 1:
+	if client.move_tos.size() != 1:
 		return null
-	return client.clicks[0]
+	return client.move_tos[0]
 
 
 func _is_idle(client: Client, id: int) -> bool:

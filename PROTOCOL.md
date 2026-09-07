@@ -50,8 +50,8 @@ and the death/respawn UI are later units and nothing under an **M5a** marker des
 **M6 is closed by observation under M6i.** **M6a** is the shared ability content table and the `cast` ability-id
 field on the wire. Ability stats live in `shared/abilities.json` only. **M6b** is the mana pool
 and its restatement. **M6c** is client tab targeting: left-click selects a living remote player
-with local chrome and does not send `attack`; Escape clears the selection; ground clicks move
-without clearing it. **M6d** is center hotbar chrome and server cast resolution from that JSON
+with local chrome and does not send `attack`; Escape clears the selection. **M6d** is center
+hotbar chrome and server cast resolution from that JSON
 (mana spend, heal/damage, refusals). **M6e** is practice dummy NPCs (one friendly, one hostile),
 seeded into the world, selectable, and valid cast/attack targets by faction. **M6f** is
 right-click basic attack: right-click on a hostile (player or enemy dummy) sends `attack` and
@@ -331,8 +331,10 @@ WASD into world axes before sending; the server never learns the camera exists.
 - Clients may throttle repeats (about one send per tick is enough). Holding a key is not a
   reason to claim a world position on the wire.
 
-Click-to-move remains. WASD and ground clicks are concurrent; whichever intent arrived last
-owns the player's motion.
+WASD is the only movement gesture. The client stopped sending `move_to` from a left click on
+bare ground (ARM-145), so nothing in the UI races the sticky steer. `move_to` stays on the wire
+unchanged, the server still accepts it, and the last-intent-wins rule above still governs one
+that arrives from a demo or a scripted client.
 
 ### `pickup`. **M1**
 
@@ -1927,7 +1929,7 @@ Selection is client UX only. No `target` intent and no server mirror.
   M6c.
 - **HP 0** bodies cannot be newly selected. A selected player that reaches HP 0 clears the
   selection.
-- **Ground click** sends `move_to` only. Selection persists.
+- **Ground click** sends nothing and leaves the selection alone. Movement is WASD (ARM-145).
 - **Escape** (`ui_cancel`) clears the selection after it has cleared any pending inventory
   use-on selection.
 - **Right-click** on a living remote player or practice dummy sets selection to that actor and,

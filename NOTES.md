@@ -293,7 +293,7 @@ The game is a database with a game attached; Go has the ecosystem for that (pgx)
   the only writer.
 - Shared data (items, recipes, XP tables, map) = JSON in one folder, read by both. One source of truth, two languages.
 
-## Movement — client sends click, server returns polyline
+## Movement. The client sends an intent, the server returns a polyline
 
 ```
 → {"move_to":{"x":42.3,"z":17.8}}
@@ -311,9 +311,10 @@ bridges you can walk under. It does not today.
 - Pathfinding lives only on the server (`CLAUDE.md`), because a client pathfinder is a second
   copy that diverges.
 - Client walks the polyline and interpolates → smooth movement regardless of tick rate.
-- Cost is one round trip before the character moves. Reads as normal for click-to-move.
+- Cost is one round trip before the character moves. That was written for click-to-move, which
+  the client no longer has (ARM-145); WASD pays the same round trip.
 - Send waypoints, not per-tick positions.
-- Server validates the destination is reachable. Reject unreachable clicks, don't silently snap to nearest.
+- Server validates the destination is reachable. Reject unreachable destinations, don't silently snap to nearest.
 - Optional later: client paths cosmetically with Godot's `NavigationServer` for instant response, reconciles when server path lands. Only if the round trip feels bad.
 
 ### Navmesh pipeline
@@ -394,8 +395,8 @@ management, Postgres behind `Store`.
 
 Left-click on another living player selects them (yellow ring under the feet). Selection does
 not send `attack`. Escape clears the selection (after any pending inventory use-on). A ground
-click moves and leaves the selection alone. Self and corpses are not selectable as hostile
-targets.
+click does nothing at all and leaves the selection alone (ARM-145). Self and corpses are not
+selectable as hostile targets.
 
 ### Right-click basic attack (M6f)
 

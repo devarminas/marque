@@ -1,9 +1,6 @@
 class_name GroundPicker
 extends Node
 
-
-signal ground_clicked(x: float, z: float)
-
 signal item_clicked(item: Node3D)
 
 signal node_clicked(resource_node: Node3D)
@@ -52,9 +49,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			node_clicked.emit(picked["node"])
 		Target.PLAYER:
 			player_clicked.emit(picked["player"])
-		Target.GROUND:
-			var ground: Vector2 = picked["ground"]
-			ground_clicked.emit(ground.x, ground.y)
 		_:
 			pass
 

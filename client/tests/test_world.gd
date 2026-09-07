@@ -14,7 +14,7 @@ const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 @onready var _picker: GroundPickerScript = $World/GroundPicker
 
 var _failures: Array[String] = []
-var _clicked_coordinates: Array[Vector2] = []
+var _picker_signals: Array[String] = []
 var _assertion_count := 0
 var _finished := false
 
@@ -45,7 +45,7 @@ func _ready() -> void:
 	_test_zoom_clamp_holds_at_both_ends()
 	print("== ground pick ==")
 	_test_ground_pick_at_known_transform()
-	await _test_left_click_emits_ground_clicked()
+	await _test_a_left_click_on_bare_ground_emits_no_signal()
 	_test_ray_at_sky_returns_no_hit()
 
 	_finished = true
@@ -188,12 +188,21 @@ func _test_ground_pick_at_known_transform() -> void:
 		)
 
 
-func _test_left_click_emits_ground_clicked() -> void:
-	_picker.ground_clicked.connect(_on_ground_clicked)
-	_clicked_coordinates.clear()
-
+func _test_a_left_click_on_bare_ground_emits_no_signal() -> void:
 	var viewport := _camera.get_viewport()
 	var centre := viewport.get_visible_rect().size * 0.5
+
+	var resolved := _picker.pick(centre)
+	_check(
+		resolved["target"] == GroundPickerScript.Target.GROUND,
+		"the ray at screen centre meets bare ground, got target %d" % resolved["target"],
+	)
+
+	_picker.item_clicked.connect(_on_picker_signal.bind("item_clicked"))
+	_picker.node_clicked.connect(_on_picker_signal.bind("node_clicked"))
+	_picker.player_clicked.connect(_on_picker_signal.bind("player_clicked"))
+	_picker.player_attack_clicked.connect(_on_picker_signal.bind("player_attack_clicked"))
+	_picker_signals.clear()
 
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
@@ -202,18 +211,11 @@ func _test_left_click_emits_ground_clicked() -> void:
 	viewport.push_input(press)
 	await get_tree().process_frame
 
-	_picker.ground_clicked.disconnect(_on_ground_clicked)
 	_check(
-		_clicked_coordinates.size() == 1,
-		"one left click emits ground_clicked once (got %d)" % _clicked_coordinates.size(),
+		_picker_signals.is_empty(),
+		"a left click on bare ground emits none of the picker's signals, got %s"
+		% [_picker_signals],
 	)
-	if _clicked_coordinates.size() == 1:
-		var coordinate := _clicked_coordinates[0]
-		_check(
-			absf(coordinate.x - 5.0) < POSITION_EPSILON
-			and absf(coordinate.y - 8.0) < POSITION_EPSILON,
-			"ground_clicked carries (5, 8), got (%f, %f)" % [coordinate.x, coordinate.y],
-		)
 
 
 func _test_ray_at_sky_returns_no_hit() -> void:
@@ -225,8 +227,8 @@ func _test_ray_at_sky_returns_no_hit() -> void:
 	_check(sky == null, "a ray at the sky returns null, got %s" % [sky])
 
 
-func _on_ground_clicked(x: float, z: float) -> void:
-	_clicked_coordinates.append(Vector2(x, z))
+func _on_picker_signal(_body: Node3D, signal_name: String) -> void:
+	_picker_signals.append(signal_name)
 
 
 func _check(condition: bool, message: String) -> void:

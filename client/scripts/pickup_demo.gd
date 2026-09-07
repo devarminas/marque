@@ -5,6 +5,7 @@ const SessionScript := preload("res://scripts/session.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const GroundItemScript := preload("res://scripts/ground_item.gd")
+const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 
 const SCREENSHOT_WARMUP_FRAMES := 15
@@ -137,16 +138,26 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 		_fail("the clock stalled before the walk away")
 		return false
 
-	var viewport := _root.get_viewport()
-	var target := viewport.get_visible_rect().size * _drop_click
-	if _panel.visible and _panel.get_global_rect().has_point(target):
+	var picker := _root.get_node_or_null("GroundPicker") as GroundPickerScript
+	if picker == null:
+		_fail("main.tscn has no GroundPicker to resolve the drop-walk destination with")
+		return false
+
+	var pixel := _root.get_viewport().get_visible_rect().size * _drop_click
+	var found: Variant = picker.pick_ground(pixel)
+	if found == null:
 		_fail(
-			"the drop-walk click at (%f, %f) lands on the inventory panel %s"
-			% [target.x, target.y, _panel.get_global_rect()]
+			"the drop-walk fraction puts the destination at (%f, %f), where no ray meets the "
+			% [pixel.x, pixel.y]
+			+ "ground; the winner would drop the item where it already stands"
 		)
 		return false
-	print("DEMO groundclick %d %f %f" % [_session.tick_clock().estimated_tick(), target.x, target.y])
-	_click_at(target)
+
+	var destination: Vector2 = found
+	print("DEMO walkaway %d %f %f %f %f" % [
+		_session.tick_clock().estimated_tick(), pixel.x, pixel.y, destination.x, destination.y
+	])
+	_session.request_move_to(destination.x, destination.y)
 
 	if not await _await_arrival(click_tick + WALK_AWAY_DEADLINE_TICKS):
 		_fail(

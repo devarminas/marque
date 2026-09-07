@@ -35,6 +35,8 @@ const PLAYER_ID := 3
 const NODE_ID := 3
 const REMOTE_PLAYER_ID := 7
 
+const CHROME_ITEM_ID := 11
+
 const CAMERA_HEIGHT := 20.0
 
 const OFFSET_FRACTION := 0.25
@@ -128,23 +130,23 @@ func _ready() -> void:
 
 	await _build_the_click_world()
 	_test_the_picker_separates_an_item_from_the_ground()
-	await _test_a_click_on_an_item_is_a_pickup_and_not_a_move()
-	await _test_a_click_on_bare_ground_is_a_move_and_not_a_pickup()
+	await _test_a_click_on_an_item_is_a_pickup_and_nothing_else()
+	await _test_a_click_on_bare_ground_beside_an_item_sends_nothing()
 	await _test_a_pickup_click_changes_nothing_locally()
 	await _test_an_unregistered_body_is_never_picked_up()
 	_test_the_intents_match_the_protocol_byte_for_byte()
 
 	await _build_the_node_click_world()
 	_test_the_picker_separates_a_node_from_the_ground()
-	await _test_a_click_on_a_node_is_a_gather_and_not_a_move()
-	await _test_a_click_on_bare_ground_is_a_move_and_not_a_gather()
+	await _test_a_click_on_a_node_is_a_gather_and_nothing_else()
+	await _test_a_click_on_bare_ground_beside_a_node_sends_nothing()
 	await _test_a_click_on_an_item_still_picks_up_beside_a_node()
 
 	await _build_the_player_click_world()
 	_test_the_picker_separates_a_player_from_the_ground()
 	await _test_a_click_on_a_remote_player_selects_and_does_not_attack()
 	await _test_a_click_on_self_is_not_a_selection()
-	await _test_a_ground_click_moves_and_keeps_selection()
+	await _test_a_ground_click_leaves_the_selection_alone()
 	await _test_escape_clears_player_selection()
 	await _test_a_right_click_on_a_remote_player_is_an_attack()
 
@@ -403,7 +405,7 @@ func _test_the_picker_separates_an_item_from_the_ground() -> void:
 		)
 
 
-func _test_a_click_on_an_item_is_a_pickup_and_not_a_move() -> void:
+func _test_a_click_on_an_item_is_a_pickup_and_nothing_else() -> void:
 	_watch()
 	await _left_click(_viewport_centre())
 	_check(
@@ -415,10 +417,6 @@ func _test_a_click_on_an_item_is_a_pickup_and_not_a_move() -> void:
 		"naming item %d, got %s" % [ITEM_ID, _pickup_intents],
 	)
 	_check(
-		_move_to_intents.is_empty(),
-		"and no move_to, got %s" % [_move_to_intents],
-	)
-	_check(
 		_gather_intents.is_empty(),
 		"and no gather, got %s" % [_gather_intents],
 	)
@@ -428,24 +426,21 @@ func _test_a_click_on_an_item_is_a_pickup_and_not_a_move() -> void:
 	)
 
 
-func _test_a_click_on_bare_ground_is_a_move_and_not_a_pickup() -> void:
+func _test_a_click_on_bare_ground_beside_an_item_sends_nothing() -> void:
 	_check(not _dock.visible, "the dock stays closed so a beside-cursor can reach the ground")
 	var cursor := _viewport_centre() + _beside_offset()
-	var expected = _picker.pick_ground(cursor)
-	_check(expected != null, "the bare-ground cursor resolves to a ground point")
+	var beside := _picker.pick(cursor)
+	_check(
+		beside["target"] == GroundPickerScript.Target.GROUND,
+		"the beside-cursor resolves to bare ground, got target %d" % beside["target"],
+	)
 
 	_watch()
 	await _left_click(cursor)
 	_check(
-		_move_to_intents.size() == 1,
-		"a click on bare ground sends one move_to, got %d" % _move_to_intents.size(),
+		_move_to_intents.is_empty(),
+		"a click on bare ground sends no move_to, got %s" % [_move_to_intents],
 	)
-	if _move_to_intents.size() == 1 and expected != null:
-		var here: Vector2 = expected
-		_check(
-			_move_to_intents[0].distance_to(here) < EXACT_EPSILON,
-			"carrying the point the ray landed on, %v, got %v" % [here, _move_to_intents[0]],
-		)
 	_check(
 		_pickup_intents.is_empty(),
 		"and no pickup, got %s" % [_pickup_intents],
@@ -504,10 +499,6 @@ func _test_an_unregistered_body_is_never_picked_up() -> void:
 	_check(
 		_pickup_intents.is_empty(),
 		"but a body with no registry entry sends no pickup, got %s" % [_pickup_intents],
-	)
-	_check(
-		_move_to_intents.is_empty(),
-		"and does not fall through to a move_to either, got %s" % [_move_to_intents],
 	)
 
 	_watch()
@@ -595,7 +586,7 @@ func _test_the_picker_separates_a_node_from_the_ground() -> void:
 	)
 
 
-func _test_a_click_on_a_node_is_a_gather_and_not_a_move() -> void:
+func _test_a_click_on_a_node_is_a_gather_and_nothing_else() -> void:
 	_watch()
 	await _left_click(_viewport_centre())
 	_check(
@@ -606,21 +597,23 @@ func _test_a_click_on_a_node_is_a_gather_and_not_a_move() -> void:
 		_gather_intents.size() == 1 and _gather_intents[0] == NODE_ID,
 		"naming node %d, got %s" % [NODE_ID, _gather_intents],
 	)
-	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
 	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
 
 
-func _test_a_click_on_bare_ground_is_a_move_and_not_a_gather() -> void:
+func _test_a_click_on_bare_ground_beside_a_node_sends_nothing() -> void:
 	var cursor := _viewport_centre() + _beside_offset()
-	var expected = _picker.pick_ground(cursor)
-	_check(expected != null, "the bare-ground cursor resolves to a ground point")
+	var beside := _picker.pick(cursor)
+	_check(
+		beside["target"] == GroundPickerScript.Target.GROUND,
+		"the beside-cursor resolves to bare ground, got target %d" % beside["target"],
+	)
 
 	_watch()
 	await _left_click(cursor)
 	_check(
-		_move_to_intents.size() == 1,
-		"a click on bare ground sends one move_to, got %d" % _move_to_intents.size(),
+		_move_to_intents.is_empty(),
+		"a click on bare ground sends no move_to, got %s" % [_move_to_intents],
 	)
 	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
@@ -643,7 +636,6 @@ func _test_a_click_on_an_item_still_picks_up_beside_a_node() -> void:
 		"a click on an item still sends pickup, got %s" % [_pickup_intents],
 	)
 	_check(_gather_intents.is_empty(), "and gather does not steal it, got %s" % [_gather_intents])
-	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
 	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
 
 
@@ -703,7 +695,6 @@ func _test_a_click_on_a_remote_player_selects_and_does_not_attack() -> void:
 	var remote: PlayerAvatarScript = _session.avatar_for(REMOTE_PLAYER_ID)
 	_check(remote != null and remote.is_selected(), "with the selection ring visible")
 	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
-	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
 	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
 
@@ -732,7 +723,6 @@ func _test_a_click_on_self_is_not_a_selection() -> void:
 	)
 	_check(_selection_events.is_empty(), "and emits no selection_changed")
 	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
-	_check(_move_to_intents.is_empty(), "and no move_to either, got %s" % [_move_to_intents])
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
 	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
 
@@ -741,7 +731,7 @@ func _test_a_click_on_self_is_not_a_selection() -> void:
 	await get_tree().physics_frame
 
 
-func _test_a_ground_click_moves_and_keeps_selection() -> void:
+func _test_a_ground_click_leaves_the_selection_alone() -> void:
 	_watch()
 	await _left_click(_viewport_centre())
 	_check(
@@ -750,20 +740,24 @@ func _test_a_ground_click_moves_and_keeps_selection() -> void:
 	)
 
 	var cursor := _viewport_centre() + _beside_offset()
-	var expected = _picker.pick_ground(cursor)
-	_check(expected != null, "the bare-ground cursor resolves to a ground point")
+	var beside := _picker.pick(cursor)
+	_check(
+		beside["target"] == GroundPickerScript.Target.GROUND,
+		"the beside-cursor resolves to bare ground, got target %d" % beside["target"],
+	)
 
 	_watch()
 	await _left_click(cursor)
 	_check(
-		_move_to_intents.size() == 1,
-		"a click on bare ground sends one move_to, got %d" % _move_to_intents.size(),
-	)
-	_check(
 		_session.selected_player_id() == REMOTE_PLAYER_ID,
-		"and selection persists, got %d" % _session.selected_player_id(),
+		"and a click on that ground leaves the selection standing, got %d"
+		% _session.selected_player_id(),
 	)
 	_check(_selection_events.is_empty(), "with no selection_changed")
+	_check(
+		_move_to_intents.is_empty(),
+		"and no move_to, got %s" % [_move_to_intents],
+	)
 	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
 	_check(_gather_intents.is_empty(), "and no gather, got %s" % [_gather_intents])
@@ -812,7 +806,6 @@ func _test_a_right_click_on_a_remote_player_is_an_attack() -> void:
 		_session.selected_player_id() == REMOTE_PLAYER_ID,
 		"and selects the clicked target, got %d" % _session.selected_player_id(),
 	)
-	_check(_move_to_intents.is_empty(), "and no move_to, got %s" % [_move_to_intents])
 
 
 func _test_clicking_an_occupied_slot_uses_it() -> void:
@@ -909,10 +902,6 @@ func _test_clicking_an_empty_slot_uses_nothing() -> void:
 		"clicking an empty slot sends no use and no drop, got use %s drop %s"
 		% [_use_intents, _drop_intents],
 	)
-	_check(
-		_move_to_intents.is_empty() and _pickup_intents.is_empty(),
-		"and does not fall through to the world behind it",
-	)
 
 	_watch()
 	_session.request_drop(-1)
@@ -949,23 +938,49 @@ func _check_the_chrome_is_a_wall(state: String) -> void:
 	if chrome == null:
 		return
 	var at: Vector2 = chrome
+
+	var under: Variant = _picker.pick_ground(at)
+	_check(under != null, "there is ground under %v to stand an item on (%s)" % [at, state])
+	if under == null:
+		return
+	var here: Vector2 = under
+	await _feed(
+		'{"item_spawn":{"id":%d,"kind":"acorn","x":%f,"z":%f}}'
+		% [CHROME_ITEM_ID, here.x, here.y]
+	)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var resolved := _picker.pick(at)
 	_check(
-		_picker.pick_ground(at) != null,
-		"there is ground under %v, so a click that got through would walk the player (%s)"
-		% [at, state],
+		resolved["target"] == GroundPickerScript.Target.ITEM,
+		"and item %d stands on it, so a click that got through would pick it up (%s), got target %d"
+		% [CHROME_ITEM_ID, state, resolved["target"]],
 	)
 
 	_watch()
 	await _left_click(at)
 	_check(
-		_move_to_intents.is_empty(),
-		"but a click on the panel's chrome at %v sends no move_to (%s), got %s"
-		% [at, state, _move_to_intents],
+		_pickup_intents.is_empty(),
+		"but a click on the panel's chrome at %v sends no pickup (%s), got %s"
+		% [at, state, _pickup_intents],
 	)
 	_check(
-		_pickup_intents.is_empty() and _drop_intents.is_empty() and _use_intents.is_empty(),
-		"and no pickup, drop, or use either (%s): chrome is not a control, it is a wall" % state,
+		_drop_intents.is_empty() and _use_intents.is_empty(),
+		"and no drop or use either (%s): chrome is not a control, it is a wall" % state,
 	)
+
+	_dock.visible = false
+	await get_tree().process_frame
+	_watch()
+	await _left_click(at)
+	_check(
+		_pickup_intents.size() == 1 and _pickup_intents[0] == CHROME_ITEM_ID,
+		"while the very same click with the dock hidden picks item %d up (%s), got %s"
+		% [CHROME_ITEM_ID, state, _pickup_intents],
+	)
+
+	_dock.visible = true
+	await _feed('{"item_despawn":{"id":%d}}' % CHROME_ITEM_ID)
 
 
 func _panel_chrome_point(panel_rect: Rect2, screen: Rect2) -> Variant:
