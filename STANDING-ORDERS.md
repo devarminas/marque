@@ -82,8 +82,7 @@ node does not.
 - Before PR: run Opening a PR. That includes deslop (cursor-team-kit) then no-comments / Comment
   Sicko on the unit diff. Soft skips on Opening a PR, deslop, or no-comments are forbidden.
   Narrating `//`, `#`, and `##` are land blockers. Do not add file-top essays, banners, phase
-  labels, or commented-out code. `CLAUDE.md` Comments owns the rule; `scripts/check_comments.ps1`
-  must stay green (downward ratchet, no upward re-baseline).
+  labels, or commented-out code. `CLAUDE.md` Comments owns the rule.
 - The writer report must include Comment Sicko agent id or report path, plus a short summary of
   deletions.
 - `interrogate` is adversarial multi-model review of a diff. It is not a channel for asking the

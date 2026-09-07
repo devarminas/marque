@@ -34,5 +34,4 @@ a non-obvious constraint the code cannot express, and that constraint still hold
 
 Banned shapes: restating the next line, file-top essays, section banners, `Phase N` labels,
 Arrange/Act/Assert markers, commented-out code, and stale `NOTE`/`HACK`/`XXX` markers left as
-decoration. `scripts/check_comments.ps1` enforces a downward-only comment ratchet plus those
-pattern bans. Do not re-baseline upward to "make room" for new comments.
+decoration.
