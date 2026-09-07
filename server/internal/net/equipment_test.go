@@ -12,8 +12,6 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// fullBagKit is a join kit that fills the bag: the sword M3a equips, and acorns
-// in every remaining slot.
 func fullBagKit() []string {
 	kit := make([]string, 0, game.InventorySize)
 	kit = append(kit, game.KindSword)
@@ -70,14 +68,7 @@ func TestDefaultJoinKitIsEmpty(t *testing.T) {
 	}
 }
 
-// TestTheJoinKitPutsOneAxeInTheLowestFreeBagSlot is the precondition for
-// equipping anything: a client can reach equip without gathering content.
-//
-// It also holds the kit to being a bag item and not a world item. a sword placed
-// on the ground and picked up would satisfy "the player has a sword" and would
-// mint an item id, broadcast an item_spawn to everybody, and leave a second
-// client drawing a sword nobody can see.
-func TestTheJoinKitPutsOneAxeInTheLowestFreeBagSlot(t *testing.T) {
+func TestTheJoinKitPutsOneSwordInTheLowestFreeBagSlot(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindSword})
 
 	alice := h.dial("alice")
@@ -88,7 +79,7 @@ func TestTheJoinKitPutsOneAxeInTheLowestFreeBagSlot(t *testing.T) {
 		t.Fatalf("the world holds %+v, want nothing: the join kit is a bag item, not a ground item", world.Items)
 	}
 	if len(held.Slots) != 1 {
-		t.Fatalf("a joining player holds %+v, want exactly the one axe of the kit", held.Slots)
+		t.Fatalf("a joining player holds %+v, want exactly the one sword of the kit", held.Slots)
 	}
 	if got := held.Slots[0]; got.Slot != 0 || got.Kind != game.KindSword {
 		t.Fatalf("the kit landed as %q in slot %d, want a sword in slot 0, the lowest free one", got.Kind, got.Slot)
@@ -158,12 +149,7 @@ func TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty(t *testing.T) {
 	alice.expectSilence()
 }
 
-// TestEquippingAnAxeIsOneMoveFromBagToWeapon is AC1.
-//
-// The hazards it exists for are the three ways one transaction can be written as
-// two: the sword in both containers, in neither, or on the ground. A get-then-put
-// implementation passes "the sword is worn" and fails at least one of the others.
-func TestEquippingAnAxeIsOneMoveFromBagToWeapon(t *testing.T) {
+func TestEquippingASwordIsOneMoveFromBagToWeapon(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindSword})
 
 	alice := h.dial("alice")
@@ -211,9 +197,6 @@ func TestEquippingAnAxeIsOneMoveFromBagToWeapon(t *testing.T) {
 		t.Fatalf("alice's bag holds %+v, want it emptied by the equip", held.Slots)
 	}
 
-	// The other half of "in exactly one place". A world snapshot composed by the
-	// server itself is the authoritative answer to "is the sword on the ground",
-	// and it is not a list the test assembled.
 	charlie := h.dial("charlie")
 	if world := charlie.welcomeFrame(); len(world.Items) != 0 {
 		t.Fatalf("the world holds %+v after an equip, want nothing on the ground", world.Items)
@@ -240,9 +223,7 @@ func TestEquippingAnAxeIsOneMoveFromBagToWeapon(t *testing.T) {
 	}
 }
 
-// TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot is AC2, and it is AC1's
-// transaction read backwards: the same three hazards in the other direction.
-func TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot(t *testing.T) {
+func TestUnequippingReturnsTheSwordToTheLowestFreeBagSlot(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindSword})
 
 	alice := h.dial("alice")
@@ -275,7 +256,7 @@ func TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot(t *testing.T) {
 		t.Fatalf("alice is still wearing %+v after taking it off", worn.Slots)
 	}
 	if len(held.Slots) != 1 {
-		t.Fatalf("alice's bag holds %+v, want exactly the one axe back: more than one is a dupe", held.Slots)
+		t.Fatalf("alice's bag holds %+v, want exactly the one sword back: more than one is a dupe", held.Slots)
 	}
 	if got := held.Slots[0]; got.Slot != 0 || got.Kind != game.KindSword {
 		t.Fatalf("the sword came back as %q in slot %d, want a sword in slot 0, the lowest free one", got.Kind, got.Slot)
@@ -303,8 +284,6 @@ func TestUnequipFillsTheLowestFreeSlotRatherThanTheOneItLeft(t *testing.T) {
 	alice := h.dial("alice")
 	alice.welcome()
 
-	// the sword is in slot 1, behind an acorn. Equipping it and dropping the acorn
-	// leaves slot 0 as the lowest free slot and slot 1 as the one it left.
 	alice.equip(1)
 	h.awaitEvents(game.EvEquip, 1)
 	alice.drop(0)
@@ -404,13 +383,7 @@ func TestEquipRefusalsNameTheirReasonAndChangeNothing(t *testing.T) {
 	}
 }
 
-// TestUnequippingIntoAFullBagIsRefusedAndTheAxeStaysWorn is AC4.
-//
-// The failure this forbids is not a crash. It is the server helpfully dropping
-// the sword at the player's feet, where this protocol gives ground items no owner
-// and no visibility rules, so anybody standing there takes it. Losing the item
-// outright is the other way to pass "the worn slot is empty".
-func TestUnequippingIntoAFullBagIsRefusedAndTheAxeStaysWorn(t *testing.T) {
+func TestUnequippingIntoAFullBagIsRefusedAndTheSwordStaysWorn(t *testing.T) {
 	// One acorn underfoot, so refilling the slot the equip vacates costs one
 	// tick and no walk.
 	h := newHarnessWithKit(t, fullBagKit(), acornAt(0, 0))
@@ -460,8 +433,6 @@ func TestUnequippingIntoAFullBagIsRefusedAndTheAxeStaysWorn(t *testing.T) {
 		t.Fatalf("logged %d %s events, want only the one seeded acorn: %+v", len(spawns), game.EvItemSpawned, spawns)
 	}
 
-	// And the sword is still worn, not lost. Read from a resumed join step, which
-	// is the server restating what it holds rather than the test remembering.
 	alice.destroy()
 	resumed := readJoinStep(h.dialResume("alice-again", world.Session))
 	kind, wearing := wornKind(resumed.equipment, game.SlotRightHand)
@@ -533,10 +504,7 @@ func TestUnequipNamingABagIndexIsRefusedAsAMissingField(t *testing.T) {
 	alice.expectSilence()
 }
 
-// TestEquippingOntoAWornAxeSwapsThroughTheVacatedSlot. RuneScape swaps, and the
-// swap is also what makes equip total: it needs no free slot, because the slot
-// the new item is leaving is the one the old item lands in.
-func TestEquippingOntoAWornAxeSwapsThroughTheVacatedSlot(t *testing.T) {
+func TestEquippingOntoAWornSwordSwapsThroughTheVacatedSlot(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindSword, game.KindSword})
 
 	alice := h.dial("alice")
@@ -565,7 +533,7 @@ func TestEquippingOntoAWornAxeSwapsThroughTheVacatedSlot(t *testing.T) {
 	}
 
 	if len(worn.Slots) != 1 || worn.Slots[0].Kind != game.KindSword {
-		t.Fatalf("alice is wearing %+v, want the one axe the swap put on", worn.Slots)
+		t.Fatalf("alice is wearing %+v, want the one sword the swap put on", worn.Slots)
 	}
 	if len(held.Slots) != 1 {
 		t.Fatalf("alice's bag holds %+v, want exactly the displaced axe: two axes went in, two must come out", held.Slots)
@@ -667,7 +635,7 @@ func TestWornEquipmentDiesWithThePlayer(t *testing.T) {
 		t.Fatalf("a fresh player is wearing %+v, want nothing: worn equipment dies with the player", fresh.equipment.Slots)
 	}
 	if len(fresh.inventory.Slots) != 1 || fresh.inventory.Slots[0].Kind != game.KindSword {
-		t.Fatalf("a fresh player holds %+v, want the one axe of its own kit", fresh.inventory.Slots)
+		t.Fatalf("a fresh player holds %+v, want the one sword of its own kit", fresh.inventory.Slots)
 	}
 }
 

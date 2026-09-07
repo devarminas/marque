@@ -531,8 +531,6 @@ func putWearable(out map[string][]mnet.EquipSlot, kind string, slots []mnet.Equi
 	return nil
 }
 
-// Wearables builds kind → worn slots from sets only. Every classes.json
-// require kind must appear (fail closed); missing requires are not invented.
 func (c *Catalog) Wearables() (map[string][]mnet.EquipSlot, error) {
 	if c == nil {
 		return nil, fmt.Errorf("classdef: nil catalog")

@@ -245,7 +245,7 @@ func TestUnequipIsOneMove(t *testing.T) {
 	}
 	held := s.Inventory(1)
 	if len(held) != 1 || held[0].Kind != KindSword || held[0].Index != 0 {
-		t.Fatalf("the bag holds %+v, want the one axe back in slot 0", held)
+		t.Fatalf("the bag holds %+v, want the one sword back in slot 0", held)
 	}
 }
 

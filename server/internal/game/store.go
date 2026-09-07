@@ -13,21 +13,14 @@ const InventorySize = 28
 
 // Item kinds. Kinds are opaque strings on the wire.
 const (
-	KindAcorn = "acorn"
-	// KindSword is the knight's one-handed tool. M7b.
-	KindSword = "sword"
-	// KindStaff is the mage's two-handed tool. M7b.
-	KindStaff = "staff"
-	// KindBow is the archer's two-handed tool. M7b.
-	KindBow = "bow"
-	// KindLumberjackAxe is the lumberjack's two-handed tool. M7b.
-	KindLumberjackAxe = "lumberjack axe"
-	// KindPickaxe is the miner's one-handed tool. M7b.
-	KindPickaxe = "pickaxe"
-	// KindProspectorBoots is the miner's footwear (sets/classes string). M7f.
+	KindAcorn           = "acorn"
+	KindSword           = "sword"
+	KindStaff           = "staff"
+	KindBow             = "bow"
+	KindLumberjackAxe   = "lumberjack axe"
+	KindPickaxe         = "pickaxe"
 	KindProspectorBoots = "prospector_boots"
-	// KindShield is the knight's offhand. M7f.
-	KindShield = "shield"
+	KindShield          = "shield"
 )
 
 // Worn slot names on the wire (PROTOCOL.md, "Worn slots"). Exact strings,
@@ -49,7 +42,6 @@ var WornSlots = []mnet.EquipSlot{
 	SlotHelmet, SlotLeftHand, SlotChest, SlotRightHand, SlotFeet, SlotTrousers,
 }
 
-// DefaultJoinKit is empty: class gear is not seeded at join.
 var DefaultJoinKit []string
 
 var (
@@ -221,9 +213,13 @@ type memStore struct {
 	held map[mnet.PlayerID]*playerItems
 }
 
-// NewMemoryStore returns an empty Store. Nil or empty wearables means nothing
-// is equippable. Item ids start at 1.
+// NoWearables is an empty kind→slots table: bag and ground work; nothing equips.
+var NoWearables = map[string][]mnet.EquipSlot{}
+
 func NewMemoryStore(wearables map[string][]mnet.EquipSlot) Store {
+	if wearables == nil {
+		panic("game: NewMemoryStore: nil wearables (pass NoWearables for bag-only)")
+	}
 	return &memStore{
 		wearables: wearables,
 		ground:    make(map[mnet.ItemID]GroundItem),
