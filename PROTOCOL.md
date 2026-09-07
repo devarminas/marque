@@ -1184,6 +1184,21 @@ Named constants, revisitable:
 - **A depleted node does not accept new gathers** until respawn. After `NodeRespawnTicks` it
   returns to full: GAMELOG plus `node_state`.
 
+### A refused gather reaches the player. **ARM-147**
+
+`gather_rejected.reason` is a GAMELOG field and never leaves the server. The `error` frame
+carries `re` and the detail only, so the client keys on the detail.
+
+> A `gather` `error` frame whose `msg` is exactly
+> `gather requires an active class whose skill matches this node` is the class gate refusing.
+> The client renders it to the player as the exact text `usable tool not equipped`. Any other
+> `gather` error frame is shown to the player with the server's own `msg`, unaltered.
+
+The mapping is client-side and the server is unchanged by it. Reword that detail in
+`server/internal/game/nodes.go` and the class gate falls through to the second sentence, so
+`client/tests/test_interop.gd` drives a no-tool gather against a live server and asserts the
+text the player sees.
+
 ### Contested gather
 
 Two players may pending-gather the same full node. **First completer who reaches resolution on
