@@ -676,8 +676,9 @@ Broadcast to **everyone, including the player who caused it**. This is `path`'s 
 have to conjure the body from its own intent, which is the client inventing state the server
 never announced.
 
-`kind` is an item type name. M1 ships exactly one, `acorn`. **M3a** adds `axe`. **M4a** adds
-`logs`, the gather yield. **M4c** adds `sticks`, the craft product. **A client that does not know a `kind` renders it magenta and keeps
+`kind` is an item type name. M1 ships exactly one, `acorn`. **M3a** introduced a prototype
+`axe` join-kit kind; **M7f** removed it. Wearable kinds now come from `shared/sets.json`.
+**M4a** adds `logs`, the gather yield. **M4c** adds `sticks`, the craft product. **A client that does not know a `kind` renders it magenta and keeps
 going** (`NOTES.md`, the palette), because a missing asset must scream rather than render
 nothing, and because unknown kinds are how content is added without a client release.
 

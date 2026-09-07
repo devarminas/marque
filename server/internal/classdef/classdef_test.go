@@ -92,6 +92,13 @@ func TestMalformedFailsClosed(t *testing.T) {
 	}
 }
 
+func TestUnknownSlotKeyFailsClosed(t *testing.T) {
+	raw := []byte(`{"sets":[{"id":"x","name":"X","slots":{"helmett":"helm"},"tools":{}}]}`)
+	if _, err := ParseSets(raw); err == nil {
+		t.Fatal("expected unknown worn slot error")
+	}
+}
+
 func TestEmptyTablesFailClosed(t *testing.T) {
 	if _, err := ParseSets([]byte(`{"sets":[]}`)); err == nil {
 		t.Fatal("expected empty sets error")
