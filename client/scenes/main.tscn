@@ -1,4 +1,4 @@
-[gd_scene load_steps=27 format=3 uid="uid://bbk0w4hee5gof"]
+[gd_scene load_steps=28 format=3 uid="uid://bbk0w4hee5gof"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="2_checker"]
@@ -17,6 +17,7 @@
 [ext_resource type="Script" path="res://scripts/death_overlay.gd" id="12_death_overlay"]
 [ext_resource type="Script" path="res://scripts/hotbar.gd" id="13_hotbar"]
 [ext_resource type="PackedScene" path="res://scenes/hotbar_slot.tscn" id="14_hotbar_slot"]
+[ext_resource type="Script" path="res://scripts/cursor_hint.gd" id="18_cursor_hint"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.38, 0.5, 0.68, 1)
@@ -136,6 +137,17 @@ ground_collision_mask = 1
 item_collision_mask = 2
 player_collision_mask = 4
 node_collision_mask = 8
+
+[node name="CursorHint" type="Node" parent="." node_paths=PackedStringArray("picker", "camera", "local_player", "chrome_layer")]
+script = ExtResource("18_cursor_hint")
+picker = NodePath("../GroundPicker")
+camera = NodePath("../CameraRig/Camera3D")
+local_player = NodePath("../Player")
+chrome_layer = NodePath("../UI")
+
+[node name="Recheck" type="Timer" parent="CursorHint"]
+wait_time = 0.25
+autostart = true
 
 [node name="UI" type="CanvasLayer" parent="."]
 
@@ -584,3 +596,4 @@ script = ExtResource("7_net_client")
 
 [connection signal="pressed" from="UI/InventoryToggle" to="UI/RightDock" method="toggle"]
 [connection signal="timeout" from="UI/ErrorHud/Linger" to="UI/ErrorHud" method="clear"]
+[connection signal="timeout" from="CursorHint/Recheck" to="CursorHint" method="refresh"]
