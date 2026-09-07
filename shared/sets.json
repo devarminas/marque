@@ -59,7 +59,7 @@
         "trousers": "forester_trousers"
       },
       "tools": {
-        "lumberjack axe": {"handed": "two"}
+        "lumberjack_axe": {"handed": "two"}
       }
     }
   ]
