@@ -49,8 +49,8 @@ func TestLoadSharedSets(t *testing.T) {
 	if lj.Slots["chest"] != "forester_shirt" {
 		t.Fatalf("lumberjack chest %q", lj.Slots["chest"])
 	}
-	if a, ok := lj.Tools["lumberjack axe"]; !ok || a.Handed != HandedTwo {
-		t.Fatalf("lumberjack axe missing or wrong handed: %+v", a)
+	if a, ok := lj.Tools["lumberjack_axe"]; !ok || a.Handed != HandedTwo {
+		t.Fatalf("lumberjack_axe missing or wrong handed: %+v", a)
 	}
 }
 
@@ -364,8 +364,8 @@ func TestWearablesFromSharedCatalog(t *testing.T) {
 	if got := wearables["prospector_boots"]; len(got) != 1 || got[0] != "feet" {
 		t.Fatalf("prospector_boots → %v, want [feet]", got)
 	}
-	if got := wearables["lumberjack axe"]; len(got) != 2 || got[0] != "left hand" || got[1] != "right hand" {
-		t.Fatalf("lumberjack axe → %v, want both hands", got)
+	if got := wearables["lumberjack_axe"]; len(got) != 2 || got[0] != "left hand" || got[1] != "right hand" {
+		t.Fatalf("lumberjack_axe → %v, want both hands", got)
 	}
 	if got := wearables["sword"]; len(got) != 1 || got[0] != "right hand" {
 		t.Fatalf("sword → %v, want [right hand]", got)

@@ -56,8 +56,8 @@
         "helmet": "forester_cap",
         "chest": "forester_shirt",
         "trousers": "forester_trousers",
-        "left hand": "lumberjack axe",
-        "right hand": "lumberjack axe"
+        "left hand": "lumberjack_axe",
+        "right hand": "lumberjack_axe"
       }
     }
   ]

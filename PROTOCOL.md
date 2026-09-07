@@ -1007,7 +1007,7 @@ one-handed kind occupies exactly one of them. Handedness and slot come from the 
 they cannot disagree.
 
 - **`pickaxe` and `sword` are one-handed and occupy `right hand`; `shield` is one-handed and occupies `left hand`.**
-- **`staff`, `bow`, and `lumberjack axe` are two-handed, and occupy `left hand` and `right hand`.**
+- **`staff`, `bow`, and `lumberjack_axe` are two-handed, and occupy `left hand` and `right hand`.**
 
 `kind` names the item; handedness is a property of the kind. **A kind cannot
 be both one- and two-handed.** One-handed tools declare their hand in `sets.json` (`slot`);
@@ -1022,10 +1022,10 @@ handedness is the whole reason a slot is left alone: nothing displaces a hand it
 ### Wearable kinds. **M7b** → **M7f**
 
 Wearable kinds are the armor and tools authored in `shared/sets.json`, including class require
-kinds such as `sword`, `shield`, `staff`, `bow`, `lumberjack axe`, `pickaxe`, and
-`prospector_boots`. The prototype one-handed `axe` join-kit kind is gone. Handedness and slot
-per *Handedness*. Boot fails closed if any `classes.json` require kind is missing from the
-sets-derived wearables map.
+kinds such as `sword`, `shield`, `staff`, `bow`, `lumberjack_axe`, `pickaxe`, and
+`prospector_boots`. Multi-word kinds use underscores. The prototype one-handed `axe` join-kit
+kind is gone. Handedness and slot per *Handedness*. Boot fails closed if any `classes.json`
+require kind is missing from the sets-derived wearables map.
 
 ### The join kit
 

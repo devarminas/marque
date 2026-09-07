@@ -17,7 +17,7 @@ const (
 	KindSword           = "sword"
 	KindStaff           = "staff"
 	KindBow             = "bow"
-	KindLumberjackAxe   = "lumberjack axe"
+	KindLumberjackAxe   = "lumberjack_axe"
 	KindPickaxe         = "pickaxe"
 	KindProspectorBoots = "prospector_boots"
 	KindShield          = "shield"
