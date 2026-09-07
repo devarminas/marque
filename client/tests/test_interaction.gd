@@ -601,8 +601,6 @@ func _test_a_click_on_a_node_is_a_gather_and_nothing_else() -> void:
 	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
 
 
-## The gather half's negative. A cursor beside the node reaches bare ground, and
-## bare ground is not a gesture.
 func _test_a_click_on_bare_ground_beside_a_node_sends_nothing() -> void:
 	var cursor := _viewport_centre() + _beside_offset()
 	var beside := _picker.pick(cursor)
@@ -733,8 +731,6 @@ func _test_a_click_on_self_is_not_a_selection() -> void:
 	await get_tree().physics_frame
 
 
-## Selection is sticky. A left click on bare ground does nothing at all now, and
-## "nothing" has to include clearing the tab target on the way past.
 func _test_a_ground_click_leaves_the_selection_alone() -> void:
 	_watch()
 	await _left_click(_viewport_centre())

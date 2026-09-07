@@ -23,8 +23,6 @@ const CLOCK_SKEW_TOLERANCE := 0.95
 const CLICK_AT := Vector2(0.30, 0.88)
 const MIN_WALK_DISTANCE := 3.0
 
-## The item the chrome test stands under its click point, so that "the click
-## reached nothing" has something it could have reached.
 const CHROME_ITEM_ID := 11
 
 const SAMPLE_GAP_MSEC := 600
@@ -406,9 +404,6 @@ func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
 		return
 	var at: Vector2 = chrome
 
-	# The rig damps toward its target every frame. A camera still drifting
-	# between resolving the ground point and clicking it would leave the item
-	# beside the click rather than under it.
 	for _frame in 20:
 		await get_tree().process_frame
 
@@ -506,11 +501,6 @@ func _test_the_scripted_click_misses_an_open_equipment_panel(client: Client) -> 
 	_check(not client.equipment.visible, "and it closes again for the tests below")
 
 
-## Movement is WASD, so a left click on bare ground becomes no intent at all.
-##
-## The same position the live half aims its walk at, asserted here as bare
-## ground before the silence is asserted. Without that, a click that had drifted
-## onto the sky would prove the same thing.
 func _test_a_left_click_on_bare_ground_becomes_no_intent(client: Client) -> void:
 	var viewport := client.camera.get_viewport()
 	var screen_position := viewport.get_visible_rect().size * CLICK_AT

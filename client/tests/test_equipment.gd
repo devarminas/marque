@@ -355,8 +355,7 @@ func _stand_an_item_at(ground: Vector2) -> void:
 		% [CLICK_ITEM_ID, ground.x, ground.y]
 	)
 	await get_tree().process_frame
-	# A body added this frame is invisible to a ray until the space has stepped,
-	# and a query before that looks exactly like a broken raycast.
+	# A body added this frame is invisible to a ray until the space has stepped.
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 

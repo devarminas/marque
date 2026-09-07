@@ -9,9 +9,8 @@ signal player_clicked(avatar: Node3D)
 
 signal player_attack_clicked(avatar: Node3D)
 
-## [code]GROUND[/code] has no signal and no subscriber. Movement is WASD, so a left click
-## on bare ground is not a gesture. [method pick] still classifies it because the cursor
-## needs to know the ray met bare ground.
+## [code]GROUND[/code] is classified but routed nowhere, deliberately. ARM-146's cursor
+## consumes the classification, so this is not dead code to delete.
 enum Target {
 	NOTHING,
 	GROUND,

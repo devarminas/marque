@@ -426,9 +426,6 @@ try {
         }
         if ([string]::IsNullOrWhiteSpace($client.Click)) { continue }
 
-        # Exactly one, not at least one. This client pushes a real left click on
-        # bare ground before its phases and then asks to walk once, so a second
-        # move_to here means the removed click-to-move gesture came back.
         $moves = Select-PlayerEvents $events "move_to" $id
         if ($moves.Count -ne 1) {
             $failures.Add("the server logged $($moves.Count) move_to intent(s) for player $id (client $label), want exactly 1: the phase walk, and nothing from the ground click")

@@ -313,9 +313,6 @@ func _run_demo(args: Array) -> void:
 	var my_phase := _argument_after(args, PHASE_FLAG).to_int()
 	var shot := 0
 
-	# Ahead of the phases, and on every client that was given a fraction rather
-	# than only on the walker. Both clients then pay the same wall clock here, so
-	# the phase schedules they keep independently stay in step.
 	if not click.is_empty():
 		if not await _probe_ground_click_ignored(session, picker, _parse_fraction(click)):
 			get_tree().quit(1)
