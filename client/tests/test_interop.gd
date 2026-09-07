@@ -3,6 +3,9 @@ extends Node
 
 const URL_ENV := "MARQUE_WS_URL"
 const NetClientScript := preload("res://scripts/net_client.gd")
+const SessionScript := preload("res://scripts/session.gd")
+
+const NO_TOOL_TEXT := "usable tool not equipped"
 
 const WAIT_FRAMES := 240
 
@@ -46,6 +49,7 @@ class Peer:
 	var inventories: Array[int] = []
 	var unknown_keys := PackedStringArray()
 	var ticks: Array[int] = []
+	var node_ids := PackedInt64Array()
 
 	func _init(peer_label: String) -> void:
 		label = peer_label
@@ -54,6 +58,7 @@ class Peer:
 		net.connected.connect(_on_connected)
 		net.disconnected.connect(_on_disconnected)
 		net.welcomed.connect(_on_welcomed)
+		net.welcome_nodes.connect(_on_welcome_nodes)
 		net.spawned.connect(_on_spawned)
 		net.despawned.connect(_on_despawned)
 		net.path_assigned.connect(_on_path_assigned)
@@ -88,6 +93,14 @@ class Peer:
 			"at_msec": Time.get_ticks_msec(),
 		}
 		welcomes.append(welcome)
+
+	func _on_welcome_nodes(
+		ids: PackedInt64Array,
+		_kinds: PackedStringArray,
+		_positions: PackedVector2Array,
+		_states: PackedStringArray,
+	) -> void:
+		node_ids = ids
 
 	func _on_inventory_changed(
 		size: int, _slot_indices: PackedInt32Array, _slot_kinds: PackedStringArray
@@ -351,6 +364,8 @@ func _run(url: String) -> void:
 		return
 	if not await _test_pickup_and_drop_are_sequenced(a):
 		return
+	if not await _test_a_no_tool_gather_reads_as_no_usable_tool(a):
+		return
 
 	await _wait_msec(ARRIVAL_WAIT_MSEC)
 
@@ -562,6 +577,37 @@ func _test_pickup_and_drop_are_sequenced(a: Peer) -> bool:
 	_check(
 		a.paths.size() == paths_before,
 		"a refused pickup and drop assign no path",
+	)
+	return true
+
+
+func _test_a_no_tool_gather_reads_as_no_usable_tool(a: Peer) -> bool:
+	print("== gather with no class equipped ==")
+	_check(
+		not a.node_ids.is_empty(),
+		"the welcome carries the seeded node, got %d" % a.node_ids.size(),
+	)
+	if a.node_ids.is_empty():
+		return false
+	var tree_id := int(a.node_ids[0])
+	var errors_before := a.errors.size()
+	_check(a.net.send_gather(tree_id) == OK, "gather sent for node %d" % tree_id)
+	if not await _wait_until(
+		func() -> bool: return a.errors.size() > errors_before, "a gather refusal"
+	):
+		return false
+	var failure: Dictionary = a.errors[a.errors.size() - 1]
+	_check(
+		String(failure["re"]) == "gather",
+		'the refusal names gather, got "%s"' % String(failure["re"]),
+	)
+	var rendered := SessionScript.player_refusal_text(
+		String(failure["re"]), String(failure["msg"])
+	)
+	_check(
+		rendered == NO_TOOL_TEXT,
+		'a no-tool gather reads "%s" to the player, got "%s" for server msg "%s"'
+		% [NO_TOOL_TEXT, rendered, String(failure["msg"])],
 	)
 	return true
 

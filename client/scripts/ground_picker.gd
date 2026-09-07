@@ -3,7 +3,7 @@ extends Node
 
 signal item_clicked(item: Node3D)
 
-signal node_clicked(resource_node: Node3D)
+signal node_gather_clicked(resource_node: Node3D)
 
 signal player_clicked(avatar: Node3D)
 
@@ -35,9 +35,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if button == null or not button.pressed:
 		return
 	if button.button_index == MOUSE_BUTTON_RIGHT:
-		var attack_pick := pick(button.position)
-		if attack_pick["target"] == Target.PLAYER:
-			player_attack_clicked.emit(attack_pick["player"])
+		var context_pick := pick(button.position)
+		match context_pick["target"]:
+			Target.NODE:
+				node_gather_clicked.emit(context_pick["node"])
+			Target.PLAYER:
+				player_attack_clicked.emit(context_pick["player"])
+			_:
+				pass
 		return
 	if button.button_index != MOUSE_BUTTON_LEFT:
 		return
@@ -45,8 +50,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	match picked["target"]:
 		Target.ITEM:
 			item_clicked.emit(picked["item"])
-		Target.NODE:
-			node_clicked.emit(picked["node"])
 		Target.PLAYER:
 			player_clicked.emit(picked["player"])
 		_:

@@ -16,6 +16,7 @@ const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
 const ClassHudScript := preload("res://scripts/class_hud.gd")
 const ClassDebugScript := preload("res://scripts/class_debug.gd")
+const ErrorHudScript := preload("res://scripts/error_hud.gd")
 const ClassDefs := preload("res://scripts/class_defs.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const HotbarScript := preload("res://scripts/hotbar.gd")
@@ -31,6 +32,12 @@ const RECONNECT_BACKOFF_START_MSEC := 500
 const RECONNECT_BACKOFF_CAP_MSEC := 5000
 
 const MOVE_INTENT_PERIOD_MSEC := 100
+
+const REFUSAL_TEXT := {
+	"gather": {
+		"gather requires an active class whose skill matches this node": "usable tool not equipped",
+	},
+}
 
 signal joined(you: int)
 
@@ -84,6 +91,7 @@ signal respawn_requested()
 @export var hp_hud: Node
 @export var class_hud: Node
 @export var class_debug: Node
+@export var error_hud: Node
 @export var death_overlay: Node
 @export var hotbar: Node
 @export var camera_rig: Node
@@ -95,6 +103,7 @@ var _equipment: EquipmentPanelScript = null
 var _hp_hud: HpHudScript = null
 var _class_hud: ClassHudScript = null
 var _class_debug: ClassDebugScript = null
+var _error_hud: ErrorHudScript = null
 var _classes: Dictionary = {}
 var _skill_levels := {}
 var _active_class_id := ""
@@ -176,7 +185,7 @@ func _ready() -> void:
 		push_error("Session.ground_picker must point at a node running ground_picker.gd")
 	else:
 		_picker.item_clicked.connect(_on_item_clicked)
-		_picker.node_clicked.connect(_on_node_clicked)
+		_picker.node_gather_clicked.connect(_on_node_gather_clicked)
 		_picker.player_clicked.connect(_on_player_clicked)
 		_picker.player_attack_clicked.connect(_on_player_attack_clicked)
 
@@ -206,6 +215,10 @@ func _ready() -> void:
 	_class_debug = class_debug as ClassDebugScript
 	if _class_debug == null:
 		push_error("Session.class_debug must point at a node running class_debug.gd")
+
+	_error_hud = error_hud as ErrorHudScript
+	if _error_hud == null:
+		push_error("Session.error_hud must point at a node running error_hud.gd")
 
 	_death_overlay = death_overlay as DeathOverlayScript
 	if _death_overlay == null:
@@ -869,6 +882,12 @@ func _on_server_error(re: String, message: String) -> void:
 	if re == "cast" and not _casts_awaiting_mana.is_empty():
 		_casts_awaiting_mana.pop_front()
 	push_warning('session: server refused "%s": %s' % [re, message])
+	if _error_hud != null:
+		_error_hud.show_refusal(player_refusal_text(re, message))
+
+
+static func player_refusal_text(re: String, message: String) -> String:
+	return REFUSAL_TEXT.get(re, {}).get(message, message)
 
 
 func _on_disconnected(code: int, reason: String) -> void:
@@ -919,7 +938,7 @@ func _on_item_clicked(body: Node3D) -> void:
 	request_pickup(id)
 
 
-func _on_node_clicked(body: Node3D) -> void:
+func _on_node_gather_clicked(body: Node3D) -> void:
 	var resource_node := body as ResourceNodeScript
 	if resource_node == null:
 		push_error(

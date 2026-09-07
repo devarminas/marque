@@ -10,6 +10,7 @@ const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const PickupDemoScript := preload("res://scripts/pickup_demo.gd")
 const EquipDemoScript := preload("res://scripts/equip_demo.gd")
 const GatherCraftDemoScript := preload("res://scripts/gather_craft_demo.gd")
+const GatherErrorDemoScript := preload("res://scripts/gather_error_demo.gd")
 const CombatDemoScript := preload("res://scripts/combat_demo.gd")
 const DummyCastDemoScript := preload("res://scripts/dummy_cast_demo.gd")
 const DummyAttackDemoScript := preload("res://scripts/dummy_attack_demo.gd")
@@ -36,6 +37,8 @@ const DROP_CLICK_FLAG := "--drop-click"
 const EQUIP_SHOTS_FLAG := "--equip-shots"
 
 const GATHER_CRAFT_SHOTS_FLAG := "--gather-craft-shots"
+
+const GATHER_ERROR_SHOTS_FLAG := "--gather-error-shots"
 
 const COMBAT_SHOTS_FLAG := "--combat-shots"
 const DUMMY_CAST_FLAG := "--dummy-cast"
@@ -76,6 +79,9 @@ func _ready() -> void:
 		return
 	if GATHER_CRAFT_SHOTS_FLAG in args:
 		await _run_gather_craft_demo(args)
+		return
+	if GATHER_ERROR_SHOTS_FLAG in args:
+		await _run_gather_error_demo(args)
 		return
 	if COMBAT_SHOTS_FLAG in args:
 		await _run_combat_demo(args)
@@ -205,6 +211,27 @@ func _run_gather_craft_demo(args: Array) -> void:
 
 	var demo := GatherCraftDemoScript.new()
 	var code: int = await demo.run(self, session, inventory, equipment, prefix)
+	get_tree().quit(code)
+
+
+func _run_gather_error_demo(args: Array) -> void:
+	var prefix := _argument_after(args, GATHER_ERROR_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % GATHER_ERROR_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+
+	var session := get_node_or_null("Session") as SessionScript
+	var inventory := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
+	var equipment := get_node_or_null("UI/RightDock") as EquipmentPanelScript
+	var error_hud := get_node_or_null("UI/ErrorHud")
+	if session == null or inventory == null or equipment == null or error_hud == null:
+		push_error("main.tscn is missing Session, UI/RightDock, or UI/ErrorHud")
+		get_tree().quit(1)
+		return
+
+	var demo := GatherErrorDemoScript.new()
+	var code: int = await demo.run(self, session, inventory, equipment, error_hud, prefix)
 	get_tree().quit(code)
 
 

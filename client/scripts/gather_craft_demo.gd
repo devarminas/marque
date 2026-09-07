@@ -96,7 +96,7 @@ func run(
 	var click_tick := clock.estimated_tick_at(click_usec)
 	if not await _await_usec(click_usec):
 		return _fail("frames stopped before the gather click")
-	_click_at(screen)
+	_click_at(screen, MOUSE_BUTTON_RIGHT)
 	print("DEMO gatherclick %d %d %f %f" % [clock.estimated_tick(), node_id, screen.x, screen.y])
 
 	var saw_depleted := false
@@ -355,15 +355,15 @@ func _right_click_bag_slot(index: int) -> void:
 
 
 func _click_control(control: Control) -> void:
-	_click_at(control.get_global_rect().get_center())
+	_click_at(control.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 	await _tree.process_frame
 
 
-func _click_at(position: Vector2) -> void:
+func _click_at(position: Vector2, button: int) -> void:
 	var viewport := _root.get_viewport()
 	for pressed: bool in [true, false]:
 		var event := InputEventMouseButton.new()
-		event.button_index = MOUSE_BUTTON_LEFT
+		event.button_index = button
 		event.pressed = pressed
 		event.position = position
 		viewport.push_input(event)
