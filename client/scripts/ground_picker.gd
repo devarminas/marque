@@ -9,8 +9,6 @@ signal player_clicked(avatar: Node3D)
 
 signal player_attack_clicked(avatar: Node3D)
 
-## [code]GROUND[/code] is classified but routed nowhere, deliberately. ARM-146's cursor
-## consumes the classification, so this is not dead code to delete.
 enum Target {
 	NOTHING,
 	GROUND,
