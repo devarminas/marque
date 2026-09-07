@@ -25,3 +25,14 @@ running the game. Script-built trees are none of those.
 - Pathfinding lives only on the server. The client walks polylines it is given.
 - One goroutine owns all game state. The tick loop is the transaction boundary.
 - Game logic never reaches into the visual tree. Talk to visuals through the visual contract.
+
+## Comments
+
+Do not leave narrating comments in `.gd`, `.go`, or `.ps1`. Names, types, tests, and
+`PROTOCOL.md` / `NOTES.md` carry the why. A `//`, `#`, or Godot `##` stays only when it records
+a non-obvious constraint the code cannot express, and that constraint still holds.
+
+Banned shapes: restating the next line, file-top essays, section banners, `Phase N` labels,
+Arrange/Act/Assert markers, commented-out code, and stale `NOTE`/`HACK`/`XXX` markers left as
+decoration. `scripts/check_comments.ps1` enforces a downward-only comment ratchet plus those
+pattern bans. Do not re-baseline upward to "make room" for new comments.

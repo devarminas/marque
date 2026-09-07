@@ -1,4 +1,3 @@
-// Package abilitydef loads the shared ability content table.
 package abilitydef
 
 import (
@@ -139,8 +138,6 @@ func (c *Catalog) Len() int {
 	return len(c.byID)
 }
 
-// ResolvePath finds shared/abilities.json from cwd or parents, or from
-// MARQUE_ABILITIES when set.
 func ResolvePath() (string, error) {
 	if env := strings.TrimSpace(os.Getenv("MARQUE_ABILITIES")); env != "" {
 		return env, nil

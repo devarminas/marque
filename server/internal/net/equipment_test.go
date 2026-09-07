@@ -1,8 +1,5 @@
 package net_test
 
-// M3a's acceptance: worn slots, equip and unequip, and the equipment
-// restatement, driven through real sockets against a world configured the way
-// the shipped server configures itself.
 
 import (
 	"strings"
@@ -21,7 +18,6 @@ func fullBagKit() []string {
 	return kit
 }
 
-// wornKind reports what one equipment restatement says is in a worn slot.
 func wornKind(equipment mnet.Equipment, slot mnet.EquipSlot) (string, bool) {
 	for _, s := range equipment.Slots {
 		if s.Slot == slot {
@@ -31,7 +27,6 @@ func wornKind(equipment mnet.Equipment, slot mnet.EquipSlot) (string, bool) {
 	return "", false
 }
 
-// bagKind reports what one inventory restatement says is in a bag slot.
 func bagKind(inv mnet.Inventory, slot int) (string, bool) {
 	for _, s := range inv.Slots {
 		if s.Slot == slot {
@@ -41,8 +36,6 @@ func bagKind(inv mnet.Inventory, slot int) (string, bool) {
 	return "", false
 }
 
-// countKinds tallies one client's frames by message name, which is how a test
-// says "exactly one of each restatement" rather than "at least one".
 func countKinds(frames []frame) map[string]int {
 	kinds := make(map[string]int)
 	for _, f := range frames {
@@ -97,12 +90,6 @@ func TestTheJoinKitPutsOneSwordInTheLowestFreeBagSlot(t *testing.T) {
 	}
 }
 
-// TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty is the equipment frame's
-// own half of the join step, and the frame where PROTOCOL.md's "an empty list is
-// [], never null" rule is exercised on every single join.
-//
-// A strict client reading "slots":null as "not an array" drops the whole frame
-// and never draws its panel, with nothing wrong-looking on either side.
 func TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindSword})
 
@@ -144,8 +131,6 @@ func TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty(t *testing.T) {
 		}
 	}
 
-	// The step ends here. An equipment frame that arrived before the inventory,
-	// or a second one, would be a join step nobody specified.
 	alice.expectSilence()
 }
 
@@ -202,8 +187,6 @@ func TestEquippingASwordIsOneMoveFromBagToWeapon(t *testing.T) {
 		t.Fatalf("the world holds %+v after an equip, want nothing on the ground", world.Items)
 	}
 
-	// An equip is unicast. Bob is in the same world and learns nothing at all
-	// about what alice is wearing.
 	for _, f := range bob.collect(silenceWindow) {
 		if f.Spawn == nil {
 			t.Errorf("bob was sent a %s frame for alice's equip: %s", f.kind(), f.raw)
@@ -275,9 +258,6 @@ func TestUnequippingReturnsTheSwordToTheLowestFreeBagSlot(t *testing.T) {
 	}
 }
 
-// TestUnequipFillsTheLowestFreeSlotRatherThanTheOneItLeft. "Lowest free" is
-// RuneScape's rule and the one every path into the bag uses, so an unequip must
-// not remember where the item came from.
 func TestUnequipFillsTheLowestFreeSlotRatherThanTheOneItLeft(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindAcorn, game.KindSword})
 
@@ -302,11 +282,6 @@ func TestUnequipFillsTheLowestFreeSlotRatherThanTheOneItLeft(t *testing.T) {
 	}
 }
 
-// TestEquippingAnAcornIsRefusedAndBothContainersAreUnchanged is AC3.
-//
-// The refusal is a table lookup that misses rather than a rule naming the kinds
-// that are not weapons, so this is the ordinary case for every kind M3a ships
-// bar one.
 func TestEquippingAnAcornIsRefusedAndBothContainersAreUnchanged(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindAcorn})
 
@@ -324,12 +299,8 @@ func TestEquippingAnAcornIsRefusedAndBothContainersAreUnchanged(t *testing.T) {
 		t.Errorf("%s reads reason %v, want %q", game.EvEquipRejected, got, mnet.ReasonNotEquippable)
 	}
 
-	// A refusal restates nothing, because nothing changed. Anything here is the
-	// server telling a client about a transaction it declined to make.
 	alice.expectSilence()
 
-	// And the state is what it was, read from a fresh join step rather than from
-	// a restatement the refusal was just asserted not to have sent.
 	again := h.dial("alice-observer")
 	again.welcomeFrame()
 	again.inventory()
@@ -345,10 +316,6 @@ func TestEquippingAnAcornIsRefusedAndBothContainersAreUnchanged(t *testing.T) {
 	}
 }
 
-// TestEquipRefusalsNameTheirReasonAndChangeNothing covers the two refusals that
-// are about the bag index rather than the kind, which is the same pair drop is
-// held to and for the same reasons: one is a broken client, the other a stale
-// one.
 func TestEquipRefusalsNameTheirReasonAndChangeNothing(t *testing.T) {
 	cases := []struct {
 		name string
@@ -384,8 +351,6 @@ func TestEquipRefusalsNameTheirReasonAndChangeNothing(t *testing.T) {
 }
 
 func TestUnequippingIntoAFullBagIsRefusedAndTheSwordStaysWorn(t *testing.T) {
-	// One acorn underfoot, so refilling the slot the equip vacates costs one
-	// tick and no walk.
 	h := newHarnessWithKit(t, fullBagKit(), acornAt(0, 0))
 
 	alice := h.dial("alice")
@@ -394,8 +359,6 @@ func TestUnequippingIntoAFullBagIsRefusedAndTheSwordStaysWorn(t *testing.T) {
 
 	alice.equip(0)
 	h.awaitEvents(game.EvEquip, 1)
-	// The equip's own restatement first, so the inventory read below is the one
-	// the pickup caused rather than the one that freed the slot it fills.
 	alice.drain()
 
 	alice.pickup(underfoot)
@@ -421,8 +384,6 @@ func TestUnequippingIntoAFullBagIsRefusedAndTheSwordStaysWorn(t *testing.T) {
 		t.Errorf("%s reads reason %v, want %q", game.EvUnequipRejected, r, mnet.ReasonInventoryFull)
 	}
 
-	// Nothing was dropped: no item_spawn to anybody, and the ground still holds
-	// only what the world started with, which the pickup already took.
 	for _, f := range alice.collect(silenceWindow) {
 		t.Errorf("a refused unequip sent alice a %s frame: %s", f.kind(), f.raw)
 	}
@@ -444,10 +405,6 @@ func TestUnequippingIntoAFullBagIsRefusedAndTheSwordStaysWorn(t *testing.T) {
 	}
 }
 
-// TestUnequipRefusalsNameTheirReasonAndChangeNothing covers the two refusals
-// about the worn slot name: one this server does not have, and one it has that
-// holds nothing. Membership is the game's question, not the decoder's, which is
-// why an empty name lands here rather than as malformed JSON.
 func TestUnequipRefusalsNameTheirReasonAndChangeNothing(t *testing.T) {
 	cases := []struct {
 		name string
@@ -481,9 +438,6 @@ func TestUnequipRefusalsNameTheirReasonAndChangeNothing(t *testing.T) {
 	}
 }
 
-// TestUnequipNamingABagIndexIsRefusedAsAMissingField is the confusion the field
-// name exists to prevent, held to producing a refusal rather than an accident.
-// A client that sends drop's field to unequip has named no worn slot at all.
 func TestUnequipNamingABagIndexIsRefusedAsAMissingField(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindSword})
 	alice := h.dial("alice")
@@ -548,12 +502,6 @@ func TestEquippingOntoAWornSwordSwapsThroughTheVacatedSlot(t *testing.T) {
 	}
 }
 
-// TestWornEquipmentSurvivesSuspendAndResume is AC5.
-//
-// Worn equipment belongs to the player and the player outlives its socket, so
-// this asserts a consequence of where the state lives rather than a mechanism
-// of its own. It is the regression test for somebody later moving worn slots
-// onto the connection, where it would look correct until a cable came out.
 func TestWornEquipmentSurvivesSuspendAndResume(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindSword})
 
@@ -564,8 +512,6 @@ func TestWornEquipmentSurvivesSuspendAndResume(t *testing.T) {
 
 	before := alice.awaitEquipmentBeforeDeath(t)
 
-	// An abrupt death, which is what suspends rather than retires: no close
-	// frame, so the server reads peer_gone.
 	alice.destroy()
 	h.awaitEvents(game.EvPlayerSuspended, 1)
 
@@ -592,9 +538,6 @@ func TestWornEquipmentSurvivesSuspendAndResume(t *testing.T) {
 	}
 }
 
-// awaitEquipmentBeforeDeath reads the kind in the weapon slot from the
-// restatement the equip sent, so the resume assertion compares against what the
-// server said rather than against what the test arranged.
 func (c *client) awaitEquipmentBeforeDeath(t *testing.T) string {
 	t.Helper()
 
@@ -611,8 +554,6 @@ func (c *client) awaitEquipmentBeforeDeath(t *testing.T) string {
 	return ""
 }
 
-// TestWornEquipmentDiesWithThePlayer is AC5's boundary. A clean logout retires
-// the player, and worn equipment goes with everything else it was holding.
 func TestWornEquipmentDiesWithThePlayer(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindSword})
 
@@ -625,8 +566,6 @@ func TestWornEquipmentDiesWithThePlayer(t *testing.T) {
 	alice.close()
 	h.awaitEvents(game.EvDisconnected, 1)
 
-	// The token is dead, so this is a fresh join with a fresh kit rather than a
-	// resume, and the client can tell because you and session both differ.
 	fresh := readJoinStep(h.dialResume("alice-again", first.Session))
 	if fresh.welcome.You == first.You {
 		t.Fatalf("a logged-out player's token was handed back player %d", fresh.welcome.You)
@@ -639,9 +578,6 @@ func TestWornEquipmentDiesWithThePlayer(t *testing.T) {
 	}
 }
 
-// TestASequencedEquipIsDedupedAndLogsItsSeq holds M3a's two intents to the rule
-// PROTOCOL.md's "Sequence numbers" states once at the envelope for all of them.
-// A retried equip must not equip twice.
 func TestASequencedEquipIsDedupedAndLogsItsSeq(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindSword})
 
@@ -653,8 +589,6 @@ func TestASequencedEquipIsDedupedAndLogsItsSeq(t *testing.T) {
 	h.awaitEvents(game.EvEquip, 1)
 	alice.drain()
 
-	// The same number again, which is the retry a client sends when it did not
-	// see the restatement.
 	alice.sendRaw(`{"equip":{"slot":0,"seq":4}}`)
 	h.awaitEvents(game.EvIntentDuplicate, 1)
 
@@ -664,15 +598,9 @@ func TestASequencedEquipIsDedupedAndLogsItsSeq(t *testing.T) {
 	if got := h.eventsNamed(game.EvEquip)[0]["seq"]; got != float64(4) {
 		t.Errorf("%s reads seq %v, want 4", game.EvEquip, got)
 	}
-	// A duplicate is not answered at all, so there is no second restatement and
-	// no error.
 	alice.expectSilence()
 }
 
-// TestATwoHandedEquipRestatesBothHands is the wire half of AC1: the equipment
-// restatement after a 2H equip shows the kind in both hand slots, so a client
-// that draws fixed chrome for those names sees the truth without merging
-// anything itself.
 func TestATwoHandedEquipRestatesBothHands(t *testing.T) {
 	h := newHarnessWithKit(t, []string{game.KindStaff})
 

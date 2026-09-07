@@ -1,17 +1,10 @@
 extends Button
 
-## One worn slot's widget. Five instances are authored in `main.tscn` for the
-## closed worn set. **M3c** / ARM-105.
-##
-## It draws; it does not decide. The panel calls [method show_item] or
-## [method show_empty] on it and it obeys.
 
 const ItemKinds := preload("res://scripts/item_kinds.gd")
 
-## The slot name on the wire, e.g. `right hand`. This is what `unequip` names.
 var worn_name := ""
 
-## What is worn, or "" when empty.
 var kind := ""
 
 @export var fill: ColorRect
@@ -20,10 +13,8 @@ var kind := ""
 @export var known_color: Color
 @export var unknown_color: Color
 
-## A bag slot was dragged here. The panel forwards it as `equip`.
 signal equip_from_bag(bag_slot: int)
 
-## The player activated an occupied slot. The panel forwards it as `unequip`.
 signal activated(worn: String)
 
 

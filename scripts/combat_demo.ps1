@@ -1,18 +1,3 @@
-<#
-.SYNOPSIS
-    The M5 milestone on screen and in the server's ledger: two windowed clients,
-    A engages B from out of AttackRange, walks in, lands period hits of 10 until
-    death, B shows the death overlay, respawns to HP 100, and can act again.
-    Exits 0 only when GAMELOG shows the walk-in, ten attack_hit events, death,
-    and respawn, and both clients print DEMO done with three screenshots each.
-
-.PARAMETER Godot
-    The Godot 4 executable. Defaults to $env:GODOT, then "godot" on PATH.
-
-.PARAMETER OutDir
-    Evidence directory. Default `$env:TEMP\marque-combat`. Emptied at the
-    start of each run when it carries this script's `.marque-evidence` marker.
-#>
 [CmdletBinding()]
 param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),

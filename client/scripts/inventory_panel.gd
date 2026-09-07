@@ -1,17 +1,11 @@
 extends PanelContainer
 
-## The player's inventory, as the server last stated it. Authored in
-## `main.tscn`; the wire format is `PROTOCOL.md`, `inventory`.
 
 const InventorySlotScene := preload("res://scenes/inventory_slot.tscn")
 const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 
-## Emitted when the player left-clicks an occupied slot. [param slot] is a slot
-## index, never an item id (`PROTOCOL.md`, `drop`).
 signal slot_activated(slot: int)
 
-## Emitted when the player right-clicks an occupied slot or drags it onto a
-## worn slot. [param slot] is a bag index (`PROTOCOL.md`, `equip`).
 signal equip_requested(slot: int)
 
 @export var slot_grid: GridContainer
@@ -22,11 +16,6 @@ var _size := 0
 var _slots := {}
 
 
-## Applies one `inventory` frame, wholesale.
-##
-## [param slot_indices] and [param slot_kinds] are index aligned and sparse:
-## they name only the occupied slots. [param size] is how many slots to draw,
-## which is not `slot_indices.size()`.
 func apply(size: int, slot_indices: PackedInt32Array, slot_kinds: PackedStringArray) -> void:
 	if size < 0:
 		push_error("InventoryPanel.apply: size is negative (%d)" % size)
@@ -50,25 +39,21 @@ func apply(size: int, slot_indices: PackedInt32Array, slot_kinds: PackedStringAr
 	_update_heading(slot_indices.size())
 
 
-## Drops back to the uninformed state: no slots, and a heading that says so.
 func clear() -> void:
 	_rebuild(0)
 	if heading != null:
 		heading.text = unknown_heading
 
 
-## How many slots are drawn, as the last `inventory` stated.
 func slot_count() -> int:
 	return _size
 
 
-## The widget for [param index], or null when the panel is not drawing one.
 func slot_at(index: int) -> InventorySlotScript:
 	var slot: InventorySlotScript = _slots.get(index)
 	return slot
 
 
-## What is in [param index], or "" when it is empty or not drawn.
 func kind_in_slot(index: int) -> String:
 	var slot := slot_at(index)
 	return "" if slot == null else slot.kind
@@ -83,10 +68,6 @@ func occupied_slot_count() -> int:
 	return occupied
 
 
-## Discards every slot widget and builds [param size] empty ones.
-##
-## `queue_free` is deferred, so children are removed from the tree first: a
-## caller counting the grid's children in the same frame must see the new count.
 func _rebuild(size: int) -> void:
 	if slot_grid == null:
 		push_error("InventoryPanel: the scene did not assign a slot grid")

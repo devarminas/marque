@@ -1,11 +1,5 @@
 extends RefCounted
 
-## The M1 milestone, driven from one client: race the other client for the one
-## item on the ground, then say what this client saw.
-##
-## Prints greppable `DEMO ` lines and asserts almost nothing;
-## `scripts/contested_pickup_demo.ps1` owns the assertions and reads these
-## alongside the server's event log.
 
 const SessionScript := preload("res://scripts/session.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
@@ -24,7 +18,6 @@ const USEC_PER_MSEC := 1000
 
 const CLICK_LEAD_TICKS := 20
 
-## Offsets from the click tick. They must stay in this order.
 const SHOT_BEFORE_LEAD_TICKS := 6
 const SHOT_RESOLVED_OFFSET_TICKS := 26
 const WALK_AWAY_OFFSET_TICKS := 30
@@ -44,10 +37,6 @@ var _prefix: String
 var _drop_click: Vector2
 
 
-## Runs the whole choreography. Returns the process exit code.
-##
-## [param drop_click] is a viewport fraction. It must resolve to ground, and it
-## must not be where the winner already stands.
 func run(
 	root: Node,
 	session: SessionScript,
@@ -143,8 +132,6 @@ static func click_deadline_usec(scenario_usec: int, clock: TickClock) -> int:
 	)
 
 
-## The winner's half: walk somewhere it chose, wait to actually arrive, then
-## drop by clicking its own occupied slot.
 func _walk_away_and_drop(click_tick: int) -> bool:
 	if not await _await_tick(click_tick + WALK_AWAY_OFFSET_TICKS):
 		_fail("the clock stalled before the walk away")
@@ -182,7 +169,6 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 	return true
 
 
-## Waits until the world holds the whole scenario: both players and the item.
 func _wait_for_scenario() -> int:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
@@ -203,8 +189,6 @@ func _await_usec(deadline_usec: int) -> bool:
 	return true
 
 
-## Waits until the estimated server tick reaches [param target]. False means the
-## clock stopped advancing and the caller must fail rather than carry on.
 func _await_tick(target: int) -> bool:
 	var clock := _session.tick_clock()
 	var backstop := Time.get_ticks_msec() + TICK_WAIT_BACKSTOP_MSEC
@@ -215,11 +199,6 @@ func _await_tick(target: int) -> bool:
 	return true
 
 
-## Waits for this client's own body to start the walk it was just told to make
-## and then finish it, or until [param deadline_tick].
-##
-## The first loop is load-bearing: a body whose new path has not arrived is
-## still idle at the end of its previous one.
 func _await_arrival(deadline_tick: int) -> bool:
 	var clock := _session.tick_clock()
 	var avatar := _session.avatar_for(_session.own_id())
@@ -236,8 +215,6 @@ func _await_arrival(deadline_tick: int) -> bool:
 	return true
 
 
-## Captures one frame and reports everything in it that the claim depends on:
-## every player body, every item body, and this client's inventory.
 func _capture(index: int) -> bool:
 	for _frame in SCREENSHOT_WARMUP_FRAMES:
 		await RenderingServer.frame_post_draw
@@ -274,11 +251,6 @@ func _capture(index: int) -> bool:
 	return true
 
 
-## Where on screen [param body] is drawn, or null when it is somewhere this
-## script refuses to click.
-##
-## The depth test comes first: a body behind the camera unprojects to a point in
-## front of it.
 func _screen_position_of(body: Node3D) -> Variant:
 	var camera := _root.get_viewport().get_camera_3d()
 	if camera == null:
@@ -304,7 +276,6 @@ func _screen_position_of(body: Node3D) -> Variant:
 	return screen
 
 
-## The lowest occupied inventory slot, or -1 when the inventory is empty.
 func _first_occupied_slot() -> int:
 	for slot in _panel.slot_count():
 		if not _panel.kind_in_slot(slot).is_empty():
@@ -312,10 +283,6 @@ func _first_occupied_slot() -> int:
 	return -1
 
 
-## Pushes a real left press and release at a viewport pixel position.
-##
-## Both, because the picker acts on the press but a slot is a [Button] and fires
-## on release.
 func _click_at(position: Vector2) -> void:
 	var viewport := _root.get_viewport()
 	for pressed: bool in [true, false]:
@@ -326,8 +293,6 @@ func _click_at(position: Vector2) -> void:
 		viewport.push_input(event)
 
 
-## Reports a failure and returns the exit code. Both streams: stdout is what the
-## harness parses, stderr is what a human reads first.
 func _fail(reason: String) -> int:
 	print("DEMO FAIL %s" % reason)
 	printerr("DEMO FAIL %s" % reason)

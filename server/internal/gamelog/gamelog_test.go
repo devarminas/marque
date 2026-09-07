@@ -38,9 +38,6 @@ func TestEventWritesOnePrefixedJSONObjectPerLine(t *testing.T) {
 	}
 }
 
-// TestNonFiniteFieldsStillEncode covers the value that would otherwise take the
-// log down with it. A rejected coordinate is exactly what the log most needs to
-// record, and encoding/json refuses NaN and infinity outright.
 func TestNonFiniteFieldsStillEncode(t *testing.T) {
 	t.Parallel()
 

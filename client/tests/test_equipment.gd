@@ -1,21 +1,5 @@
 extends Node3D
 
-## The equipment panel: authored, opened, closed, and opaque. **M3b.**
-##
-## [b]No server.[/b] Nothing here needs one. The panel is player-driven chrome,
-## so every assertion is either about `main.tscn` as authored or about what a
-## real [InputEventKey] and a real [InputEventMouseButton] pushed through a real
-## viewport do to it.
-##
-## The thing under test is `main.tscn` itself, so this is about the scene the
-## game ships rather than a rig assembled for the occasion.
-##
-## [b]The opacity claim is written as its own negative.[/b] "A click on the open
-## panel sends no `move_to`" is also what a click into empty sky produces, and
-## it is what a panel that is simply never drawn produces. So the ground under
-## the click point is resolved with the picker first, and then the same click at
-## the same point is pushed again with the panel closed and asserted to walk the
-## player. Either half alone passes for a build that is broken the other way.
 
 const MainScene := preload("res://scenes/main.tscn")
 const SessionScript := preload("res://scripts/session.gd")
@@ -27,27 +11,17 @@ const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 const WornSlotScript := preload("res://scripts/worn_slot.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
-## The action `project.godot` authors, and the physical key it is bound to.
-## Physical, so the bind survives a non-QWERTY layout.
 const TOGGLE_ACTION := "toggle_inventory"
 const TOGGLE_KEY := KEY_I
 
-## How far the dock sits from the edges it is anchored to.
 const EDGE_INSET := 16.0
 
-## Camera height for the click tests. High enough that the whole viewport is
-## ground, so a click that gets through lands on the ground rather than the sky.
 const CAMERA_HEIGHT := 20.0
 
-## Tolerance for a laid-out edge, in pixels.
 const LAYOUT_EPSILON := 0.5
 
-## Scripts that must never assign `mouse_filter`. Scanned as source, because the
-## property being right when a test looks at it is a weaker claim than nothing
-## in the client being able to change it.
 const SCRIPTS_DIR := "res://scripts"
 
-## Dock chrome that must IGNORE so the root STOP is the only opaque surface.
 const CHROME_PATHS := [
 	"Margin",
 	"Margin/Rows",
@@ -67,13 +41,9 @@ var _inventory: InventoryPanelScript = null
 
 var _move_to_intents := PackedVector2Array()
 
-## Where the opacity pair clicks. Derived once, by the open-panel test, so that
-## the closed-panel test can make the stronger claim: not a click at the same
-## computation, the same click.
 var _click_point := Vector2.INF
 
 
-## Suite contract, polled by `run_tests.gd`. Reports; never quits.
 func is_finished() -> bool:
 	return _finished
 
@@ -88,8 +58,6 @@ func get_assertion_count() -> int:
 
 func _ready() -> void:
 	print("== equipment: a panel the player opens, no server ==")
-	# Asserted against an instance that is not in the tree yet, so no `_ready`
-	# anywhere has run. See the method's own note.
 	_test_the_panel_is_authored_before_anything_runs()
 
 	_root = MainScene.instantiate() as Node3D
@@ -101,8 +69,6 @@ func _ready() -> void:
 	_panel = _root.get_node("UI/RightDock") as EquipmentPanelScript
 	_inventory = _root.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
 
-	# The rig chases its target every frame and would undo the camera placement
-	# the click tests depend on. Switched off rather than fought.
 	var rig := _root.get_node("CameraRig") as Node3D
 	if rig != null:
 		rig.set_process(false)
@@ -133,19 +99,6 @@ func _ready() -> void:
 	_finished = true
 
 
-# --------------------------------------------------------------------------
-# Authoring.
-# --------------------------------------------------------------------------
-
-
-## [b]AC3 and AC4, at the only moment that can tell authoring from
-## construction.[/b] The instance is not in the tree, so no `_ready` has run
-## anywhere in it. Every property asserted here therefore came out of
-## `main.tscn` and could not have been assigned by a script.
-##
-## This is the assertion CLAUDE.md's scene-authoring rule actually needs. A
-## panel built by an `add_child` in `_ready` passes every other test in this
-## file and fails only this one.
 func _test_the_panel_is_authored_before_anything_runs() -> void:
 	var unopened := MainScene.instantiate() as Node3D
 	var panel := unopened.get_node_or_null("UI/RightDock") as Control
@@ -190,7 +143,6 @@ func _test_the_panel_is_authored_before_anything_runs() -> void:
 	unopened.queue_free()
 
 
-## [b]AC1 / AC3.[/b] The dock hangs off UI/ and hosts the nested inventory.
 func _test_the_panel_hangs_off_the_ui_layer() -> void:
 	var layer := _panel.get_parent()
 	_check(layer != null and layer.name == "UI", "the dock hangs off UI/")
@@ -205,10 +157,6 @@ func _test_the_panel_hangs_off_the_ui_layer() -> void:
 	)
 
 
-## [b]AC3, the durable half.[/b] `mouse_filter` is authored, and no client
-## script can assign it. Read out of the source rather than off the property:
-## the property being right at the moment a test looks is exactly what M1k's
-## regression looked like too.
 func _test_no_client_script_assigns_a_mouse_filter() -> void:
 	var files := DirAccess.get_files_at(SCRIPTS_DIR)
 	_check(
@@ -232,7 +180,6 @@ func _test_no_client_script_assigns_a_mouse_filter() -> void:
 	_check(scanned > 1, "and more than one script was scanned, got %d" % scanned)
 
 
-## Five authored worn slots, drawn empty until an equipment frame arrives.
 func _test_the_worn_weapon_slot_is_drawn_empty() -> void:
 	_panel.visible = true
 	await get_tree().process_frame
@@ -265,12 +212,6 @@ func _test_the_worn_weapon_slot_is_drawn_empty() -> void:
 	_panel.visible = false
 
 
-# --------------------------------------------------------------------------
-# Opening and closing.
-# --------------------------------------------------------------------------
-
-
-## [b]AC1.[/b]
 func _test_the_toggle_flips_visibility() -> void:
 	_check(not _panel.visible, "the panel starts closed")
 	_panel.toggle()
@@ -279,8 +220,6 @@ func _test_the_toggle_flips_visibility() -> void:
 	_check(not _panel.visible, "and the next closes it again")
 
 
-## The bind is configuration, not a keycode in a script, so it is asserted
-## against the [InputMap] the project file built.
 func _test_the_keybind_is_authored() -> void:
 	_check(
 		InputMap.has_action(TOGGLE_ACTION),
@@ -298,10 +237,6 @@ func _test_the_keybind_is_authored() -> void:
 	)
 
 
-## [b]AC1, through the path a player actually uses.[/b] A real key event pushed
-## through a real viewport, at a panel that is hidden when the event arrives: a
-## hidden node still receives `_unhandled_key_input`, and this is the assertion
-## that says so out loud.
 func _test_the_authored_key_opens_and_closes_it() -> void:
 	_check(not _panel.visible, "the panel is closed before the key is pressed")
 
@@ -312,8 +247,6 @@ func _test_the_authored_key_opens_and_closes_it() -> void:
 	_check(not _panel.visible, "and pressing it again closes it")
 
 
-## The dock is drawn against the right edge. The bottom inset keeps
-## `test_wiring.gd`'s `CLICK_AT` on the free strip below the chrome.
 func _test_the_panel_is_left_anchored_where_it_is_drawn() -> void:
 	_panel.visible = true
 	await get_tree().process_frame
@@ -337,12 +270,6 @@ func _test_the_panel_is_left_anchored_where_it_is_drawn() -> void:
 	_panel.visible = false
 
 
-# --------------------------------------------------------------------------
-# Opacity.
-# --------------------------------------------------------------------------
-
-
-## [b]AC2 / AC5.[/b] A click inside the open dock's rect sends no `move_to`.
 func _test_an_open_panel_swallows_a_click() -> void:
 	_look_straight_down()
 	_panel.visible = true
@@ -371,8 +298,6 @@ func _test_an_open_panel_swallows_a_click() -> void:
 	)
 
 
-## The counterfactual for the test above, at the same point, with the same
-## click. Without this, a panel that was never drawn at all would pass.
 func _test_a_closed_panel_lets_the_same_click_through() -> void:
 	if _click_point == Vector2.INF:
 		return
@@ -389,8 +314,6 @@ func _test_a_closed_panel_lets_the_same_click_through() -> void:
 	)
 
 
-## [b]AC3, behaviourally.[/b] Nothing in the open/close path touches the filter,
-## so it is still STOP after the panel has been round the loop several times.
 func _test_toggling_never_re_arms_the_filter() -> void:
 	for _round in 3:
 		_panel.toggle()
@@ -402,18 +325,6 @@ func _test_toggling_never_re_arms_the_filter() -> void:
 		)
 
 
-# --------------------------------------------------------------------------
-# Driving.
-# --------------------------------------------------------------------------
-
-
-## A point inside the open panel's rect and inside the viewport, or
-## [constant Vector2.INF] when the panel covers no such point.
-##
-## Derived rather than written down: the panel's size comes from the theme and
-## the slot metrics, and a literal would go stale silently the first time either
-## moved, because a point that had drifted off the panel still sends no
-## `move_to` when the click lands on empty sky.
 func _point_inside_the_panel() -> Vector2:
 	var screen := _camera.get_viewport().get_visible_rect()
 	var covered := _panel.get_global_rect().intersection(screen)
@@ -422,8 +333,6 @@ func _point_inside_the_panel() -> Vector2:
 	return covered.get_center()
 
 
-## Presses and releases the authored key. Both halves, so a press cannot leave
-## the action latched for the next assertion.
 func _push_toggle_key() -> void:
 	var viewport := _camera.get_viewport()
 	for pressed: bool in [true, false]:
@@ -434,8 +343,6 @@ func _push_toggle_key() -> void:
 	await get_tree().process_frame
 
 
-## Presses and releases the left button. Both, so a press landing on the panel
-## cannot leave it holding mouse focus for the next click.
 func _push_left_click(screen_position: Vector2) -> void:
 	var viewport := _camera.get_viewport()
 	for pressed: bool in [true, false]:
@@ -447,8 +354,6 @@ func _push_left_click(screen_position: Vector2) -> void:
 	await get_tree().process_frame
 
 
-## Puts the camera above the origin looking straight down, so every point in the
-## viewport is ground and a click that gets through has somewhere to land.
 func _look_straight_down() -> void:
 	_camera.global_transform = Transform3D(
 		Basis(Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0)),

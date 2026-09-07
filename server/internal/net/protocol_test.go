@@ -34,11 +34,6 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":150,"tick":142,"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},{"id":2,"x":5,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[],"npcs":[]}}`,
 		},
 		{
-			// An empty world is [] on both arrays, never null and never an
-			// absent key. A client should not have to tell three spellings of
-			// "nothing there" apart. session is a string and is always present,
-			// because every welcome names the identity of the player receiving
-			// it; there is no such thing as a welcome without one.
 			name: "welcome with an empty world",
 			msg: mnet.Welcome{
 				You:     1,
@@ -86,9 +81,6 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			want: `{"equipment":{"worn":["helmet","left hand","chest","right hand","feet","trousers"],"slots":[{"slot":"right hand","kind":"sword"}]}}`,
 		},
 		{
-			// A worn slot's name is a string on the wire and the only "slot"
-			// field that is not an index, which is why the intent that names one
-			// is spelled "worn".
 			name: "empty equipment",
 			msg: mnet.Equipment{
 				Worn:  []mnet.EquipSlot{"helmet", "left hand", "chest", "right hand", "feet", "trousers"},
@@ -195,12 +187,8 @@ func TestDecodeMoveTo(t *testing.T) {
 	}{
 		{"plain", `{"move_to":{"x":42.3,"z":17.8}}`, 0},
 		{"with a seq", `{"move_to":{"x":42.3,"z":17.8,"seq":9}}`, 9},
-		// The high-water mark is unbounded, so the largest number the wire type
-		// can carry has to survive the round trip rather than overflow into a
-		// refusal or a negative.
 		{"with the largest seq an int64 holds", `{"move_to":{"x":42.3,"z":17.8,"seq":9223372036854775807}}`, 9223372036854775807},
 		{"with an explicitly null seq", `{"move_to":{"x":42.3,"z":17.8,"seq":null}}`, 0},
-		// Compatibility rule 2: senders may add fields.
 		{"with a field nobody has invented yet", `{"move_to":{"x":42.3,"z":17.8,"whatever":true}}`, 0},
 	}
 
@@ -244,9 +232,6 @@ func TestDecodeMove(t *testing.T) {
 	}
 }
 
-// TestDecodeNamesEveryMessageAfterItsWireKey pins the pairing Event.Name and
-// every "re" field rest on. A message whose Name disagreed with the key it
-// decoded from would file its duplicates under another message's name.
 func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 	t.Parallel()
 
@@ -278,10 +263,6 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 	}
 }
 
-// TestABodyRejectionStillReportsItsSequenceNumber is the one place a seq and an
-// error come back together. A seq the envelope accepted is consumed even when
-// the body is then refused, so dropping it here would make last_seq depend on
-// whether the server liked the body (PROTOCOL.md, "Sequence numbers").
 func TestABodyRejectionStillReportsItsSequenceNumber(t *testing.T) {
 	t.Parallel()
 
@@ -316,26 +297,13 @@ func TestDecodeRejections(t *testing.T) {
 	}{
 		{"not json", `hello`, mnet.ReasonMalformedJSON, mnet.ReplyError, ""},
 		{"not an object", `[1,2,3]`, mnet.ReasonMalformedJSON, mnet.ReplyError, ""},
-		// Zero or two keys is a malformed frame, not a compatibility question:
-		// there is no message to interpret.
 		{"empty object", `{}`, mnet.ReasonProtocolError, mnet.ReplyErrorAndClose, ""},
 		{"two keys", `{"move_to":{"x":1,"z":2},"use":{}}`, mnet.ReasonProtocolError, mnet.ReplyErrorAndClose, ""},
-		// Compatibility rule 1: one unknown key is logged and ignored, so a
-		// client written against a later protocol keeps working.
 		{"unknown message", `{"teleport":{"x":1,"z":2}}`, mnet.ReasonUnknownMessage, mnet.Ignore, "teleport"},
-		// A field left out is a broken client, not a click on an axis.
-		// encoding/json would otherwise fill z with 0 and the server would
-		// happily walk the player to it.
 		{"missing z", `{"move_to":{"x":5}}`, mnet.ReasonMissingField, mnet.ReplyError, "move_to"},
 		{"missing x", `{"move_to":{"z":5}}`, mnet.ReasonMissingField, mnet.ReplyError, "move_to"},
 		{"null payload", `{"move_to":null}`, mnet.ReasonMissingField, mnet.ReplyError, "move_to"},
 		{"wrong type", `{"move_to":{"x":"far","z":2}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		// JSON has no literal for NaN or infinity, so a client trying to send
-		// one is refused while still text. The finite check in Decode runs on
-		// the decoded float and is the backstop for any parser that saturates
-		// an overflowing literal instead of failing on it.
-		// NaN is invalid JSON anywhere in the document, so the frame fails
-		// before the key is read and there is no message to attribute it to.
 		{"nan literal", `{"move_to":{"x":NaN,"z":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, ""},
 		{"overflowing literal", `{"move_to":{"x":1e400,"z":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
 		{"zero seq", `{"move_to":{"x":1,"z":1,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
@@ -343,25 +311,14 @@ func TestDecodeRejections(t *testing.T) {
 		{"fractional seq", `{"move_to":{"x":1,"z":1,"seq":1.5}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
 		{"quoted seq", `{"move_to":{"x":1,"z":1,"seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
 		{"seq past what an int64 holds", `{"move_to":{"x":1,"z":1,"seq":9223372036854775808}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		// The seq is refused before the body is looked at, so a frame that is
-		// wrong in both ways is answered for the seq. Ordering, not preference:
-		// the envelope is read first.
 		{"a bad seq on a body that is also broken", `{"move_to":{"x":1,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		// An unknown message never reaches the seq parse: there is nothing to
-		// spend a sequence number on, and the frame is ignored rather than
-		// answered.
 		{"a bad seq on an unknown message", `{"teleport":{"seq":0}}`, mnet.ReasonUnknownMessage, mnet.Ignore, "teleport"},
 		{"a bad seq on a pickup", `{"pickup":{"item":7,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "pickup"},
 		{"a bad seq on a drop", `{"drop":{"slot":3,"seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "drop"},
-		// M3a's two intents. A missing field rather than a zero-filled one, for
-		// "missing z"'s reason: an equip of slot 0 is a real intent and must not
-		// be what an empty body means.
 		{"an equip naming no slot", `{"equip":{}}`, mnet.ReasonMissingField, mnet.ReplyError, "equip"},
 		{"an equip whose slot is not a number", `{"equip":{"slot":"right hand"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "equip"},
 		{"an equip whose slot is fractional", `{"equip":{"slot":1.5}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "equip"},
 		{"an unequip naming no worn slot", `{"unequip":{}}`, mnet.ReasonMissingField, mnet.ReplyError, "unequip"},
-		// The confusion the field name exists to prevent: drop's field sent to
-		// unequip names no worn slot at all.
 		{"an unequip carrying a bag index", `{"unequip":{"slot":0}}`, mnet.ReasonMissingField, mnet.ReplyError, "unequip"},
 		{"an unequip whose worn slot is a number", `{"unequip":{"worn":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "unequip"},
 		{"a bad seq on an equip", `{"equip":{"slot":0,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "equip"},
@@ -397,9 +354,6 @@ func TestDecodeRejections(t *testing.T) {
 	}
 }
 
-// TestLargeFiniteCoordinateDecodesCleanly pins the hazard the protocol calls
-// out: 1e30 is not a decoder problem, it is a bounds problem, and the decoder
-// must hand it on rather than refuse it.
 func TestLargeFiniteCoordinateDecodesCleanly(t *testing.T) {
 	t.Parallel()
 

@@ -1,8 +1,5 @@
 package net_test
 
-// Test harness: a real server, real WebSocket clients, real frames. Nothing
-// here mocks the transport, because the assumption M0a exists to retire is that
-// two clients connected to one server see each other move.
 
 import (
 	"bytes"
@@ -25,32 +22,16 @@ import (
 )
 
 const (
-	// readTimeout bounds a read that is expected to succeed. Generous relative
-	// to the 150ms tick so a loaded CI box does not fail an honest test.
 	readTimeout = 5 * time.Second
-	// silenceWindow is how long "nothing arrives" is observed for. Several
-	// ticks, so a broadcast that was going to happen has happened.
 	silenceWindow = 5 * game.TickDuration
-	// awaitPoll is how often the event log is re-read while waiting for a line.
 	awaitPoll = 5 * time.Millisecond
-	// frameBuffer is how far ahead a client's reader may run of the test
-	// consuming it. Deep enough that a test which ignores its stream for a while
-	// does not stall the reader and hide a later assertion.
 	frameBuffer = 1024
 )
 
-// syncBuffer collects the event log. The world goroutine writes it and the test
-// goroutine reads it, so it is mutex-guarded; without that the race detector
-// would be reporting the harness rather than the server.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
 
-	// hook, when set, runs on the goroutine doing the write, with the line just
-	// written. The world goroutine is the only thing that writes this log, so a
-	// hook that blocks is the one lever a test has on how long that goroutine
-	// spends away from its ticker. TestCatchUpBoundHoldsUnderAStalledLoop is
-	// the only user; nothing else needs the tick loop to fall behind.
 	hook func(line []byte)
 }
 
@@ -60,16 +41,12 @@ func (s *syncBuffer) Write(p []byte) (int, error) {
 	n, err := s.buf.Write(p)
 	s.mu.Unlock()
 
-	// Outside the lock, and after the line has landed: a blocking hook must not
-	// also block String, which the test goroutine polls while it waits.
 	if hook != nil {
 		hook(p)
 	}
 	return n, err
 }
 
-// onWrite installs the write hook. Called from the test goroutine before the
-// world has anything to say.
 func (s *syncBuffer) onWrite(hook func(line []byte)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -92,9 +69,6 @@ type harness struct {
 	once    sync.Once
 }
 
-// seed is one ground item placed before the world opens, the way marqued's
-// -item flag places one. Ids are assigned in the order given, so a test naming
-// item 1 means the first seed it passed.
 type seed struct {
 	kind string
 	x, z float64
@@ -102,32 +76,16 @@ type seed struct {
 
 func acornAt(x, z float64) seed { return seed{kind: game.KindAcorn, x: x, z: z} }
 
-// newHarness boots hub, world, and HTTP server exactly the way cmd/marqued
-// does, seeds any items it was given, and tears everything down in the same
-// order marqued does.
-//
-// Its joining players carry nothing, which is what every test written before
-// M3a assumes and what keeps a bag index in one of them meaning what its author
-// meant. The equipment tests use newHarnessWithKit and pass game.DefaultJoinKit,
-// which is the shipped configuration.
 func newHarness(t *testing.T, seeds ...seed) *harness {
 	t.Helper()
 	return newHarnessWith(t, game.ResumeGraceTicks, nil, seeds...)
 }
 
-// newHarnessWithGrace is newHarness with the resume grace shortened, for the
-// one test that has to watch a suspended player expire.
-//
-// Sixty seconds of production grace is not something a test can wait out, and
-// nothing else in the suite cares what the number is: every other test either
-// resumes well inside it or never suspends at all.
 func newHarnessWithGrace(t *testing.T, grace int64, seeds ...seed) *harness {
 	t.Helper()
 	return newHarnessWith(t, grace, nil, seeds...)
 }
 
-// newHarnessWithKit is newHarness with a join kit, for the tests about what a
-// player is wearing and carrying.
 func newHarnessWithKit(t *testing.T, kit []string, seeds ...seed) *harness {
 	t.Helper()
 	return newHarnessWith(t, game.ResumeGraceTicks, kit, seeds...)
@@ -150,8 +108,6 @@ func newHarnessWith(t *testing.T, grace int64, kit []string, seeds ...seed) *har
 	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore(wearables), grace, kit)
 	world.SetClasses(classes)
 
-	// Before Run, which is the only time seeding is safe: after it, the world
-	// goroutine owns the store.
 	for _, s := range seeds {
 		if err := world.SeedGroundItem(s.kind, s.x, s.z); err != nil {
 			t.Fatalf("seeding %+v: %v", s, err)
@@ -179,8 +135,6 @@ func newHarnessWith(t *testing.T, grace int64, kit []string, seeds ...seed) *har
 	return h
 }
 
-// shutdown mirrors the server's own sequence: stop the world, close the
-// sockets so the blocked handlers return, then close the HTTP server.
 func (h *harness) shutdown() {
 	h.once.Do(func() {
 		h.stop()
@@ -198,21 +152,12 @@ func (h *harness) wsURL() string {
 	return "ws" + strings.TrimPrefix(h.server.URL, "http") + "/ws"
 }
 
-// backgroundErr collects the first failure from goroutines that are not the
-// test's own.
-//
-// Only the test's own goroutine may touch *testing.T, so a background goroutine
-// records its problem here and the test goroutine fails on its behalf. It is
-// the same shape parseFrame's bad field uses for the reader goroutine, hoisted
-// to something a test can share between several background goroutines.
 type backgroundErr struct {
 	errs chan error
 }
 
 func newBackgroundErr() *backgroundErr { return &backgroundErr{errs: make(chan error, 1)} }
 
-// report records a failure. Only the first is kept: later ones are almost
-// always fallout from it, and the first is the one worth reading.
 func (b *backgroundErr) report(err error) {
 	select {
 	case b.errs <- err:
@@ -220,8 +165,6 @@ func (b *backgroundErr) report(err error) {
 	}
 }
 
-// check fails the test if any background goroutine reported. Call it from the
-// test's own goroutine, and only once every one of them has stopped.
 func (b *backgroundErr) check(t *testing.T) {
 	t.Helper()
 
@@ -232,12 +175,6 @@ func (b *backgroundErr) check(t *testing.T) {
 	}
 }
 
-// churnOnce runs one connect, welcome, move, leave cycle and returns its
-// failure instead of raising it.
-//
-// It duplicates what dial and the client helpers do because those all fail
-// through *testing.T, which a background goroutine may not touch. The cycle is
-// the point: connections coming and going underneath live broadcasts.
 func (h *harness) churnOnce() error {
 	ctx, cancel := context.WithTimeout(context.Background(), readTimeout)
 	defer cancel()
@@ -291,10 +228,6 @@ func (h *harness) dial(name string) *client {
 	return h.dialURL(name, h.wsURL())
 }
 
-// dialResume connects presenting a session token, the way a client that held a
-// welcome comes back. It builds the URL the same way a client does rather than
-// reaching for an in-process shortcut, because the query parameter surviving
-// the handshake is part of what is being tested.
 func (h *harness) dialResume(name, token string) *client {
 	h.t.Helper()
 	return h.dialURL(name, h.wsURL()+"?"+mnet.SessionParam+"="+url.QueryEscape(token))
@@ -317,9 +250,6 @@ func (h *harness) dialURL(name, target string) *client {
 	return c
 }
 
-// logEvents parses the NDJSON event log, asserting the shape the acceptance
-// criterion names: every line carries the prefix, and what follows it is one
-// valid JSON object per line.
 func (h *harness) logEvents() []map[string]any {
 	h.t.Helper()
 
@@ -358,9 +288,6 @@ func (h *harness) eventsNamed(name string) []map[string]any {
 	return matched
 }
 
-// awaitEvents waits for at least count log lines named name. The log is written
-// by the world goroutine, so a test that checks it immediately after sending a
-// frame is checking before the server has read it.
 func (h *harness) awaitEvents(name string, count int) []map[string]any {
 	h.t.Helper()
 
@@ -378,13 +305,6 @@ func (h *harness) awaitEvents(name string, count int) []map[string]any {
 	}
 }
 
-// client is one real WebSocket client.
-//
-// A single goroutine owns the socket's read side and publishes decoded frames
-// on a channel. Two things force that shape. The library allows only one
-// concurrent reader, and cancelling the context of a read closes the
-// connection, so a test that waits for a frame that never comes would otherwise
-// disconnect the very client it is making an assertion about.
 type client struct {
 	t      *testing.T
 	ws     *websocket.Conn
@@ -392,8 +312,6 @@ type client struct {
 	frames chan frame
 }
 
-// frame is a decoded server message. Every field but one is nil, which is what
-// makes it a usable assertion about the key-as-tag envelope.
 type frame struct {
 	Welcome     *mnet.Welcome     `json:"welcome"`
 	Spawn       *mnet.Spawn       `json:"spawn"`
@@ -412,9 +330,6 @@ type frame struct {
 	Tick        *mnet.Tick        `json:"tick"`
 
 	raw string
-	// bad is set when the frame broke an envelope rule. The reader goroutine
-	// cannot fail a test, so it reports the problem and the test goroutine
-	// fails on it.
 	bad string
 }
 
@@ -455,9 +370,6 @@ func (f frame) kind() string {
 	}
 }
 
-// readPump owns the socket's read side for the client's whole life. It closes
-// the frame channel when the connection ends, which is how a test observes that
-// the server hung up.
 func (c *client) readPump() {
 	defer close(c.frames)
 
@@ -470,8 +382,6 @@ func (c *client) readPump() {
 	}
 }
 
-// parseFrame checks one inbound frame against the envelope rules: a text frame,
-// carrying one JSON object, with exactly one key, and that key naming a message.
 func parseFrame(typ websocket.MessageType, data []byte) frame {
 	f := frame{raw: string(data)}
 
@@ -529,8 +439,6 @@ func (c *client) moveTo(x, z float64) {
 	c.sendRaw(fmt.Sprintf(`{"move_to":{"x":%v,"z":%v}}`, x, z))
 }
 
-// moveToBackground is moveTo for a goroutine that is not the test's own. It
-// returns its failure rather than raising it, for backgroundErr's reason.
 func (c *client) moveToBackground(x, z float64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), readTimeout)
 	defer cancel()
@@ -580,9 +488,6 @@ func (c *client) next() frame {
 	return frame{}
 }
 
-// collect returns every game frame that arrives within the window. Tick
-// heartbeats are skipped: they are periodic and would otherwise appear inside
-// silence windows that assert leftover game traffic.
 func (c *client) collect(window time.Duration) []frame {
 	c.t.Helper()
 
@@ -599,8 +504,6 @@ func (c *client) collect(window time.Duration) []frame {
 	}
 }
 
-// tryNext takes the next frame, reporting false if none arrives in time or the
-// connection has ended.
 func (c *client) tryNext(within time.Duration) (frame, bool) {
 	c.t.Helper()
 
@@ -631,14 +534,11 @@ func (c *client) welcome() mnet.Welcome {
 	return got
 }
 
-// welcomeFrame reads only the welcome, leaving the rest of the join step queued.
 func (c *client) welcomeFrame() mnet.Welcome {
 	c.t.Helper()
 	return *c.welcomeEnvelope().Welcome
 }
 
-// welcomeEnvelope is welcomeFrame keeping the raw JSON, for the assertions that
-// are about the encoding rather than the values.
 func (c *client) welcomeEnvelope() frame {
 	c.t.Helper()
 	f := c.next()
@@ -675,9 +575,6 @@ func (c *client) errorFrame() mnet.Error {
 	return *f.Error
 }
 
-// awaitError reads until an error arrives, ignoring everything else. A refusal
-// that follows a broadcast, such as a lost pickup's halt path, is not the next
-// frame the client sees.
 func (c *client) awaitError() mnet.Error {
 	c.t.Helper()
 
@@ -704,9 +601,6 @@ func (c *client) inventory() mnet.Inventory {
 	return *f.Inventory
 }
 
-// awaitInventory reads until an inventory arrives, ignoring everything else. A
-// pickup resolving broadcasts a despawn to every client before it unicasts the
-// winner's inventory, so the winner sees traffic in between.
 func (c *client) awaitInventory() mnet.Inventory {
 	c.t.Helper()
 	return *c.awaitInventoryFrame().Inventory
@@ -717,8 +611,6 @@ func (c *client) equipment() mnet.Equipment {
 	return *c.equipmentFrame().Equipment
 }
 
-// equipmentFrame is equipment keeping the raw JSON, for the assertions that are
-// about the encoding rather than the values.
 func (c *client) equipmentFrame() frame {
 	c.t.Helper()
 	f := c.next()
@@ -746,8 +638,6 @@ func (c *client) skillsFrame() mnet.Skills {
 	return *f.Skills
 }
 
-// awaitInventoryFrame is awaitInventory keeping the raw JSON, for the
-// assertions that are about the encoding rather than the values.
 func (c *client) awaitInventoryFrame() frame {
 	c.t.Helper()
 
@@ -765,20 +655,11 @@ func (c *client) awaitInventoryFrame() frame {
 	return frame{}
 }
 
-// awaitItemSpawn reads until an item is announced onto the ground, ignoring
-// everything else. A drop broadcasts the spawn to every client before it
-// unicasts the dropper's inventory, so the dropper sees traffic around it.
-//
-// It takes the next spawn rather than one named id, because the id of a dropped
-// item is not predictable from outside: it is freshly assigned, the id the item
-// had before it was picked up having been retired for good.
 func (c *client) awaitItemSpawn() mnet.ItemSpawn {
 	c.t.Helper()
 	return *c.awaitItemSpawnFrame().ItemSpawn
 }
 
-// awaitItemSpawnFrame is awaitItemSpawn keeping the raw JSON, for the
-// assertions that are about the encoding rather than the values.
 func (c *client) awaitItemSpawnFrame() frame {
 	c.t.Helper()
 
@@ -796,9 +677,6 @@ func (c *client) awaitItemSpawnFrame() frame {
 	return frame{}
 }
 
-// countItemSpawns reports how many times one item was announced onto the ground
-// within the window, which is the only way to catch a client being told about
-// the same item twice.
 func (c *client) countItemSpawns(item mnet.ItemID, window time.Duration) int {
 	c.t.Helper()
 
@@ -811,12 +689,6 @@ func (c *client) countItemSpawns(item mnet.ItemID, window time.Duration) int {
 	return seen
 }
 
-// positionOf is where the server says one player is, taken from a snapshot of
-// the world it composed itself.
-//
-// It exists so that a test can compare a claim about a player's position
-// against the server's own authoritative answer, rather than against an
-// interval the test author guessed or arithmetic the test author repeated.
 func positionOf(t *testing.T, world mnet.Welcome, id mnet.PlayerID) mnet.PlayerState {
 	t.Helper()
 
@@ -829,7 +701,6 @@ func positionOf(t *testing.T, world mnet.Welcome, id mnet.PlayerID) mnet.PlayerS
 	return mnet.PlayerState{}
 }
 
-// awaitItemDespawn reads until the named item is announced gone.
 func (c *client) awaitItemDespawn(item mnet.ItemID) mnet.ItemDespawn {
 	c.t.Helper()
 
@@ -856,9 +727,6 @@ func (c *client) despawn() mnet.Despawn {
 	return *f.Despawn
 }
 
-// awaitPath reads until a path for the given player arrives, ignoring frames
-// about anyone else. For tests where other clients are churning in the
-// background and their spawns and despawns are noise.
 func (c *client) awaitPath(id mnet.PlayerID) mnet.Path {
 	c.t.Helper()
 
@@ -876,11 +744,6 @@ func (c *client) awaitPath(id mnet.PlayerID) mnet.Path {
 	return mnet.Path{}
 }
 
-// awaitHaltPath reads until a one-point path for the given player arrives.
-//
-// Getting a walking player to halt takes a click that lands inside one tick, so
-// an observer sees the ordinary paths of the attempts that missed before it
-// sees the halt.
 func (c *client) awaitHaltPath(id mnet.PlayerID) mnet.Path {
 	c.t.Helper()
 
@@ -898,10 +761,6 @@ func (c *client) awaitHaltPath(id mnet.PlayerID) mnet.Path {
 	return mnet.Path{}
 }
 
-// expectSilence asserts that no game frame arrives for the length of the
-// silence window. Tick heartbeats are ignored: they are periodic and would
-// otherwise fail every rejection test that happens to land near a multiple
-// of HeartbeatEveryTicks.
 func (c *client) expectSilence() {
 	c.t.Helper()
 
@@ -918,7 +777,6 @@ func (c *client) expectSilence() {
 	}
 }
 
-// expectClosed asserts the server hung up, and that nothing arrives afterwards.
 func (c *client) expectClosed() {
 	c.t.Helper()
 
@@ -935,18 +793,11 @@ func (c *client) expectClosed() {
 	c.t.Fatalf("client %s: connection is still open after %v", c.name, readTimeout)
 }
 
-// drain takes everything queued, so a later assertion starts from a known-empty
-// stream.
 func (c *client) drain() {
 	c.t.Helper()
 	c.collect(silenceWindow)
 }
 
-// drainUntil discards frames from another goroutine, so a client under load
-// keeps up and is not dropped for being slow.
-//
-// It touches nothing belonging to *testing.T, because only the test's own
-// goroutine may do that.
 func (c *client) drainUntil(stop <-chan struct{}) {
 	for {
 		select {
@@ -967,10 +818,6 @@ func (c *client) close() {
 	}
 }
 
-// destroy drops the TCP connection without a close handshake, which is what a
-// killed process or a pulled cable looks like from the server. The difference
-// from close is the whole of what separates peer_gone from closed, so a test
-// about one of those reasons has to be explicit about which it staged.
 func (c *client) destroy() {
 	c.t.Helper()
 	if err := c.ws.CloseNow(); err != nil {

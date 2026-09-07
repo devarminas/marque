@@ -11,56 +11,6 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// TestSlowClientIsDroppedWhenItsSendQueueFills covers rule 4 of PROTOCOL.md's
-// "Ordering and the join race": a connection whose send queue is full is
-// closed, never waited on. It is the tick loop's only protection against a
-// client that has stopped reading, and it is the branch in Conn.Send that
-// TestConcurrentTrafficStaysConsistent does not reach -- that test's churn
-// client is closed, which leaves Send by the already-closed early return one
-// line above.
-//
-// The peer here is the opposite: alive, handshaken, answering at the TCP level,
-// and simply never calling Read. That turns out not to be what makes this pass,
-// and saying so precisely is most of what this comment is for.
-//
-// The test reports 65 accepted frames: the 64 channel slots plus the one
-// writePump took. A jammed socket absorbs about a megabyte on this machine,
-// sixteen more frames of this size, and that number never appears. So the socket
-// is never jammed and the peer's refusal to read is irrelevant to the pass.
-//
-// What makes it pass is an asymmetry between a syscall and a channel send.
-// Measured under instrumentation during review: one write syscall costs hundreds
-// of microseconds -- 527us for the 30-byte greeting -- while the 64 non-blocking
-// channel sends below cost far less than that in total. writePump's first write
-// is still in flight when the loop has already filled the queue.
-//
-// Frame size is not what does it. The same instrumentation timed a
-// 1,048,611-byte write returning inside one clock tick on an empty socket, so a
-// 64KiB frame does not block either. The large frames are not load-bearing here.
-// They are left alone because changing them is a test change, not a comment fix.
-//
-// Two mechanisms have already been wrong in this comment. The first said every
-// layer in front of the branch fills first. The second, written to correct it,
-// said a 64KiB frame keeps writePump blocked. Both explained the behaviour the
-// test actually shows, and that is exactly why each one felt confirmed by it.
-// Only a measurement separates the mechanism that explains what you see from the
-// one that produces it. This is the third attempt, and it is the first
-// backed by timings rather than by intuition about what ought to be slow.
-//
-// The gap this comment used to claim -- that nothing proves a peer which stops
-// reading is eventually dropped -- is not a gap, and should not have been parked.
-// Two tests stage exactly that peer and both end in a drop:
-//
-//	TestWriteTimeoutCondemnsASlowClientAndTheReadErrorDoesNotOverwriteIt
-//	TestAJammedPongCondemnsTheClientAsPeerGone
-//
-// This test covers the channel branch; those two cover the socket.
-//
-// The hub is driven directly rather than through newHarness because the branch
-// is the net layer's, and the harness owns no way to hand a test the *Conn that
-// the world would be broadcasting to. Nothing about the connection is faked:
-// real Hub, real HTTP upgrade, real socket, real writePump, and Send called
-// exactly as World.broadcast calls it.
 func TestSlowClientIsDroppedWhenItsSendQueueFills(t *testing.T) {
 	hub := mnet.NewHub()
 	server := httptest.NewServer(hub)
@@ -78,16 +28,10 @@ func TestSlowClientIsDroppedWhenItsSendQueueFills(t *testing.T) {
 		t.Fatalf("dial %s: %v", url, err)
 	}
 	t.Cleanup(func() { _ = ws.CloseNow() })
-	// The frames below are deliberately larger than the library's 32KiB
-	// default, and a peer that refused them on a read limit would be a
-	// different failure from a peer that never read them.
 	ws.SetReadLimit(1 << 20)
 
 	conn := awaitEvent(t, hub, mnet.EventConnected).Conn
 
-	// The peer is alive and the pipe works. Without this the test could pass
-	// against a connection that was already broken, which is the failure mode
-	// it exists to distinguish from.
 	greeting := encodeFrame(t, mnet.Spawn{ID: 1})
 	if !conn.Send(greeting) {
 		t.Fatalf("the first send was refused; the connection was never healthy")
@@ -98,9 +42,6 @@ func TestSlowClientIsDroppedWhenItsSendQueueFills(t *testing.T) {
 		t.Fatalf("the peer read %q, want %q", got, greeting)
 	}
 
-	// From here the peer never reads again. It is not closed and it is not
-	// broken; it has simply stopped draining, which is the case the branch is
-	// for.
 	fat := encodeFrame(t, mnet.Error{Re: mnet.MsgMoveTo, Msg: strings.Repeat("x", 1<<16)})
 
 	deadline := time.Now().Add(readTimeout)
@@ -113,14 +54,6 @@ func TestSlowClientIsDroppedWhenItsSendQueueFills(t *testing.T) {
 		}
 	}
 
-	// Send refused a frame. It refuses for two reasons and they are not the
-	// same event, so the disconnect has to name which one happened.
-	//
-	// This is also the send queue's half of the latch. Filling the queue
-	// condemns the connection and tears the socket down, so the read pump wakes
-	// with net.ErrClosed and would classify it as peer_gone -- and the event
-	// below exists only because that read pump ran to completion. The reason on
-	// it is the one that survived, not the only one that was offered.
 	disconnect := awaitEvent(t, hub, mnet.EventDisconnected)
 	if disconnect.Conn != conn {
 		t.Fatalf("the disconnect is for a different connection than the one that was flooded")
@@ -134,18 +67,13 @@ func TestSlowClientIsDroppedWhenItsSendQueueFills(t *testing.T) {
 			disconnect.Reason, disconnect.Detail, accepted, mnet.DetailSendBufferFull)
 	}
 
-	// A dropped connection stays dropped, so the world cannot go on queueing
-	// frames for a player it is about to be told has left.
 	if conn.Send(greeting) {
 		t.Fatalf("a send was accepted after the connection was dropped")
 	}
 
-	// And the socket really is gone, rather than only the server's opinion of
-	// it. The peer's own reads are what say so.
 	expectPeerClosed(t, ws)
 }
 
-// awaitEvent takes the next hub event and insists it is the kind expected.
 func awaitEvent(t *testing.T, hub *mnet.Hub, kind mnet.EventKind) mnet.Event {
 	t.Helper()
 
@@ -164,10 +92,6 @@ func awaitEvent(t *testing.T, hub *mnet.Hub, kind mnet.EventKind) mnet.Event {
 	}
 }
 
-// expectPeerClosed reads until the peer's socket reports an error, which is how
-// a client learns the server hung up on it. Whatever the server had already
-// pushed into the socket may still be waiting there, so this reads through it
-// rather than expecting the very next read to fail.
 func expectPeerClosed(t *testing.T, ws *websocket.Conn) {
 	t.Helper()
 

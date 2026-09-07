@@ -1,7 +1,5 @@
 package game
 
-// Seeding, which is the only way an item enters the world in M1a and the only
-// piece of item handling that runs outside the world goroutine.
 
 import (
 	"math"
@@ -9,8 +7,6 @@ import (
 	"testing"
 )
 
-// TestSeedingAdmitsAnItemAndLogsIt covers the happy path and the log line the
-// acceptance asks for: an item entering the world is visible in the NDJSON.
 func TestSeedingAdmitsAnItemAndLogsIt(t *testing.T) {
 	w, logs := newStepWorld(t)
 
@@ -38,10 +34,6 @@ func TestSeedingAdmitsAnItemAndLogsIt(t *testing.T) {
 	}
 }
 
-// TestSeedingRefusesACoordinateTheWorldWouldRefuse holds seeds to exactly the
-// rule a move_to destination is held to. A seed outside the world is a startup
-// failure, never a silently clamped item: an item nobody can legally walk to is
-// a bug that only shows up as a player who never arrives.
 func TestSeedingRefusesACoordinateTheWorldWouldRefuse(t *testing.T) {
 	cases := []struct {
 		name string
@@ -77,8 +69,6 @@ func TestSeedingRefusesACoordinateTheWorldWouldRefuse(t *testing.T) {
 	}
 }
 
-// TestSeedsEnterInTheOrderTheyWereGiven is what lets a caller predict the ids
-// it is about to be handed, which every test and every launch script relies on.
 func TestSeedsEnterInTheOrderTheyWereGiven(t *testing.T) {
 	w, _ := newStepWorld(t)
 
@@ -96,8 +86,6 @@ func TestSeedsEnterInTheOrderTheyWereGiven(t *testing.T) {
 	}
 }
 
-// TestSeedingRefusesAnItemWithNoKind. A kind is what the client renders, and an
-// empty one would reach an M1c client as a body with no asset name at all.
 func TestSeedingRefusesAnItemWithNoKind(t *testing.T) {
 	w, _ := newStepWorld(t)
 

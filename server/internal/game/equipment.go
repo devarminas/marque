@@ -1,8 +1,5 @@
 package game
 
-// Worn equipment: the two intents that move an item between the bag and a worn
-// slot, and the restatement that tells one player what it is wearing.
-// PROTOCOL.md, "Equipment", is the contract.
 
 import (
 	"errors"

@@ -1,16 +1,5 @@
 extends Node3D
 
-## What holding WASD puts on the wire: the camera-relative chord. **ARM-130.**
-## Asserts WASD chords against the rig's live view direction, not a trig
-## formula, because the trig assertion stayed green through the M6g inversion.
-##
-## The client under test is [code]main.tscn[/code], instanced here rather than
-## authored into the suite's scene so that the session's net node can be
-## swapped for [code]tests/stub_move_net.gd[/code] before the session's
-## [method Node._ready] resolves its exports. The stub inherits the real
-## decoder, so the welcome below goes through the same
-## [code]ingest_text_frame[/code] a socket feeds, and the keys go through the
-## real action state, so what is pressed is what [code]session.gd[/code] reads.
 
 const MainScene := preload("res://scenes/main.tscn")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
@@ -19,35 +8,25 @@ const Assertions := preload("res://tests/assertions.gd")
 
 const WELCOME := '{"welcome":{"you":1,"tick_ms":150,"tick":100,"players":[{"id":1,"x":0.0,"z":0.0}]}}'
 
-## Authored rig yaw in [code]main.tscn[/code].
 const AUTHORED_YAW_DEGREES := 30.0
 
-## Rig at 30° yaw, basis.z on +Z.
 const CHORD_W := Vector2(-0.5, -0.8660254)
 const CHORD_S := Vector2(0.5, 0.8660254)
 const CHORD_A := Vector2(-0.8660254, 0.5)
 const CHORD_D := Vector2(0.8660254, -0.5)
-## Right times forward, unnormalized; the server normalizes.
 const CHORD_WD := Vector2(0.3660254, -1.3660254)
 
-## Yaw-0 chords, named as [code]PROTOCOL.md[/code]'s `move` example.
 const CHORD_W_YAW0 := Vector2(0.0, -1.0)
 const CHORD_S_YAW0 := Vector2(0.0, 1.0)
 
-## Chord the release provokes, clearing the server's sticky steer.
 const CHORD_IDLE := Vector2.ZERO
 
-## Chord comparison slack, absorbing float32 transform round-tripping.
 const EPSILON := 0.001
 
-## Dot floor for chord-along-view; 0 is perpendicular, -1 is opposite.
 const VIEW_DOT_MIN := 0.9
 
-## 85.7142857 mouse pixels at the authored
-## [code]orbit_degrees_per_pixel = 0.35[/code] is exactly 30 degrees.
 const ORBIT_PIXELS_TO_ZERO := 85.7142857
 
-## Frames for the input pipeline to see a press.
 const SETTLE_FRAMES := 3
 
 var _assertions := Assertions.new()
@@ -73,8 +52,6 @@ func _ready() -> void:
 	var net := main.get_node("Session/Net")
 	net.set_script(StubNet)
 	add_child(main)
-	# main.tscn's Session resolves its exported node paths in _ready, and a
-	# suite that grabs before that reads nulls that look like scene bugs.
 	await get_tree().process_frame
 	await get_tree().process_frame
 
@@ -130,8 +107,6 @@ func _press_and_read(key: Key, expected: Vector2, extra: Array = []) -> void:
 		_check_chord_versus_camera(key, new_chords[0])
 	for k: Key in keys:
 		_set_key(k, false)
-	# The release's chord lands in this block's frame; snapshot before the
-	# await or the count races the poll.
 	var before_release := _stub.move_chords.size()
 	await get_tree().process_frame
 	var after_release := _stub.move_chords.size()
@@ -155,9 +130,6 @@ func _press_and_read(key: Key, expected: Vector2, extra: Array = []) -> void:
 	)
 
 
-## The semantic core, independent of any trig formula: W's chord is the
-## camera's own view direction, read back out of the rig's live transform, and
-## S's is its opposite.
 func _check_chord_versus_camera(key: Key, chord: Vector2) -> void:
 	if key != KEY_W and key != KEY_S:
 		return
@@ -176,8 +148,6 @@ func _check_chord_versus_camera(key: Key, chord: Vector2) -> void:
 		)
 
 
-## Distinguishes a sign inversion from dead input: without this, every
-## chord below fails identically.
 func _check_latched(keys: Array) -> void:
 	var actions := {
 		KEY_W: "move_forward",

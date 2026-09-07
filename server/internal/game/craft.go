@@ -8,7 +8,6 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// KindSticks is M4c's craft product (PROTOCOL.md, "Crafting").
 const KindSticks = "sticks"
 
 func (w *World) use(p *player, msg mnet.Use, seq mnet.Seq) {

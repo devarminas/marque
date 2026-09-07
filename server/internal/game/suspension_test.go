@@ -1,11 +1,5 @@
 package game
 
-// The suspension lifecycle: the grace boundary tick by tick, and which socket
-// death suspends rather than retires.
-//
-// Written by M2a's second verifier and adopted verbatim; the assertions are
-// theirs. In-package, and driven through World.handle and World.step by hand
-// so that a tick boundary is exact rather than raced.
 
 import (
 	"bytes"
@@ -44,8 +38,6 @@ func newProbeWorld(t *testing.T) *probeWorld {
 	return &probeWorld{t: t, w: w, logs: logs, hub: hub, srv: srv}
 }
 
-// dial opens a real socket, optionally presenting a token, and hands the hub's
-// connected event to the world.
 func (pw *probeWorld) dial(token string) *mnet.Conn {
 	pw.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -102,9 +94,6 @@ func (pw *probeWorld) events(name string) []map[string]any {
 	return out
 }
 
-// checkIndexes is the invariant every transition must preserve: players, order
-// and bySession agree on the set of players, and byConn holds exactly the
-// connected ones.
 func (pw *probeWorld) checkIndexes(where string) {
 	pw.t.Helper()
 	w := pw.w

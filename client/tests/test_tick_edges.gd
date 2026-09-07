@@ -1,8 +1,5 @@
 extends RefCounted
 
-## The `tick` wire layer at the shapes [code]test_tick_protocol.gd[/code] does
-## not cover: a fractional `t`, a negative one, `1e18`, a boolean, two thousand
-## in one call, and frames arriving after the socket was abandoned. **M2c.**
 
 const NetClientScript := preload("res://scripts/net_client.gd")
 
@@ -14,7 +11,6 @@ class Recorder:
 
 	var net: NetClientScript
 	var ticks: Array[int] = []
-	## One entry per `welcome`: the `heartbeat_ticks` it was read as.
 	var welcomes: Array[int] = []
 	var disconnects := 0
 	var unknown := 0
@@ -102,8 +98,6 @@ func _test_a_storm_decodes_in_order() -> void:
 	r.release()
 
 
-## Knowing when to stop listening is the session's job, not the decoder's:
-## [code]test_heartbeat_edges.gd[/code] holds the session to it.
 func _test_ticks_after_abandon_still_decode_and_the_session_ended_once() -> void:
 	var r := Recorder.new()
 	r.feed(

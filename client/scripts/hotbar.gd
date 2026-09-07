@@ -62,8 +62,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-## Slots are authored mouse-filter ignore so a 64x64 headless viewport can still
-## ground-click through the bar. Desktop clicks are hit-tested here instead.
 func _input(event: InputEvent) -> void:
 	var button := event as InputEventMouseButton
 	if button == null or not button.pressed:

@@ -1,6 +1,3 @@
-// Package game owns every piece of authoritative state and the tick loop that
-// mutates it. Exactly one goroutine runs World.Run, and it is the only thing
-// that touches world state. PROTOCOL.md is the contract this implements.
 package game
 
 import (
@@ -17,33 +14,20 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// TickDuration is the tick. The tick counter is the clock; nothing in game
-// logic reads wall-clock time (NOTES.md, "Tick rate").
 const TickDuration = 150 * time.Millisecond
 
-// MaxCatchUpTicks bounds how far the loop catches up in one wake-up. Beyond it
-// the backlog is discarded and the drop is logged (PROTOCOL.md, "Clock").
 const MaxCatchUpTicks = 5
 
-// WalkSpeed is how fast a player walks, in world units per second; broadcast in
-// every path message. Tuning: ARM-13.
+// Tuning: ARM-13.
 const WalkSpeed = 3.0
 
-// WorldHalfExtent bounds the playable square, centred on the origin: legal
-// coordinates are x, z in [-WorldHalfExtent, +WorldHalfExtent], inclusive
-// (PROTOCOL.md, "Validation").
 const WorldHalfExtent = 128.0
 
-// MinPathLength is how near a click has to land before it counts as a click on
-// the ground the player is already standing on. Below it, no walk is assigned.
 const MinPathLength = 1e-3
 
-// ResumeGraceTicks is how long a player's body stays in the world after its
-// socket died abruptly, in ticks. Tuning: ARM-58.
+// Tuning: ARM-58.
 const ResumeGraceTicks = int64(60 * time.Second / TickDuration)
 
-// HeartbeatEveryTicks is how often the server broadcasts tick, in ticks; sent
-// on every welcome as heartbeat_ticks (PROTOCOL.md, "Clock").
 const HeartbeatEveryTicks = 10
 
 const (
@@ -51,7 +35,6 @@ const (
 	spawnZ = 0.0
 )
 
-// Event names in the NDJSON log.
 const (
 	EvServerStarted  = "server_started"
 	EvServerStopping = "server_stopping"
@@ -60,14 +43,11 @@ const (
 	EvMoveTo         = "move_to"
 	EvMoveToRejected = "move_to_rejected"
 	EvIntentIgnored  = "intent_ignored"
-	// EvIntentDuplicate: seq at or below the sender's high-water mark; nothing
-	// is sent back (PROTOCOL.md, "Sequence numbers").
 	EvIntentDuplicate = "intent_duplicate"
 	EvPathAssigned    = "path_assigned"
 	EvArrived         = "arrived"
 	EvTicksDropped    = "ticks_dropped"
 
-	// EvPlayerSuspended follows the EvDisconnected for the same death.
 	EvPlayerSuspended = "player_suspended"
 
 	EvPlayerResumed = "player_resumed"
@@ -76,19 +56,14 @@ const (
 
 	EvJoinRefused = "join_refused"
 
-	// EvResumeRefused names only the remote address; no player exists for it.
 	EvResumeRefused = "resume_refused"
 
 	EvResumeUnknown = "resume_unknown"
 
-	// EvPathReplayed is one path frame unicast to a joining client:
-	// EvPathAssigned's fields plus "to".
 	EvPathReplayed = "path_replayed"
 
 	EvFrameDropped = "frame_dropped"
 
-	// EvItemSpawned is an item entering the world by seed or by drop; it carries
-	// the item only, never the causer.
 	EvItemSpawned = "item_spawned"
 
 	EvPickup = "pickup"
@@ -101,24 +76,16 @@ const (
 
 	EvPickupNoRoom = "pickup_no_room"
 
-	// EvDrop is one completed drop, logged after the move with EvPickupResolved's
-	// field set.
 	EvDrop = "drop"
 
 	EvDropRejected = "drop_rejected"
 
-	// EvJoinSeeded is one item of the join kit placed in a joining player's bag.
-	// It is not an EvItemSpawned: nothing entered the world and no id was minted
-	// (PROTOCOL.md, "The join kit").
 	EvJoinSeeded = "join_seeded"
 
-	// EvEquip is one completed equip, logged after the move. "displaced" is
-	// present only when a swap put something back in the bag.
 	EvEquip = "equip"
 
 	EvEquipRejected = "equip_rejected"
 
-	// EvUnequip is one completed unequip, logged after the move.
 	EvUnequip = "unequip"
 
 	EvUnequipRejected = "unequip_rejected"
@@ -176,8 +143,6 @@ const (
 	EvClass = "class"
 )
 
-// Transport is the world's view of the network: a stream of connection events.
-// Replies go back through the *mnet.Conn each event carries.
 type Transport interface {
 	Events() <-chan mnet.Event
 }
@@ -228,7 +193,6 @@ func (p *player) walking() bool { return len(p.remaining) > 0 }
 
 func (p *player) suspended() bool { return p.conn == nil }
 
-// World is the authoritative game state.
 type World struct {
 	transport Transport
 	log       *gamelog.Logger
@@ -263,14 +227,6 @@ type World struct {
 	order []*player
 }
 
-// NewWorld returns an empty world reading intents from transport and keeping
-// items in store, holding a suspended player for resumeGrace ticks and giving
-// every joining player one item per kind in joinKit. resumeGrace must be at
-// least 1, joinKit may be empty, and the store must be used by nobody else.
-//
-// The kit is a parameter rather than a constant for resumeGrace's reason: it is
-// a tunable, and a test that wants a world whose joining players carry nothing
-// is asking about the rest of the game rather than about the kit.
 func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace int64, joinKit []string) *World {
 	if transport == nil {
 		panic("game: nil transport")
@@ -295,7 +251,6 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 	}
 }
 
-// SetAbilities installs the shared ability catalog used by cast. Nil rejects every cast.
 func (w *World) SetAbilities(c *abilitydef.Catalog) {
 	w.abilities = c
 }
@@ -304,8 +259,6 @@ func (w *World) SetClasses(c *classdef.Catalog) {
 	w.classes = c
 }
 
-// Run drives the world until ctx is cancelled. It must be called on exactly one
-// goroutine.
 func (w *World) Run(ctx context.Context) {
 	ticker := time.NewTicker(TickDuration)
 	defer ticker.Stop()

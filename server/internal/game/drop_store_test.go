@@ -1,9 +1,5 @@
 package game
 
-// The reverse of store_test.go's take: DropInventorySlot, the one call that
-// moves an item out of a slot and onto the ground. In-package for the same
-// reason, and every test here is a sentence about the Store interface that a
-// Postgres implementation will have to reproduce.
 
 import (
 	"errors"
@@ -12,10 +8,6 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// TestDropIsOneMove is TestTakeIsOneMove in the other direction, and the
-// interface's reason to exist read backwards. One call moves the item out of
-// the slot and onto the ground; afterwards it is in exactly one of the two
-// places, never both and never neither.
 func TestDropIsOneMove(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(7)
@@ -44,14 +36,6 @@ func TestDropIsOneMove(t *testing.T) {
 	}
 }
 
-// TestADroppedItemGetsANewId is forced by the data model rather than chosen. An
-// inventory holds kinds, not item ids, so the id an item had before it was
-// picked up is already unrecoverable by the time it is dropped -- and ids are
-// never reused within a process, so it could not come back even if it were.
-//
-// It matters on the wire: a client that cached the old id was told that one
-// despawned, and must be told about the new body under a name it has never
-// heard.
 func TestADroppedItemGetsANewId(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
@@ -73,10 +57,6 @@ func TestADroppedItemGetsANewId(t *testing.T) {
 	}
 }
 
-// TestTakeAndDropRoundTripReturnsTheStoreToItsShape is the unit's reason to
-// exist at the layer that decides it: pickup's reverse transaction leaves one
-// item on the ground and an empty inventory, exactly as it started, and the
-// only difference is the id.
 func TestTakeAndDropRoundTripReturnsTheStoreToItsShape(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
@@ -105,9 +85,6 @@ func TestTakeAndDropRoundTripReturnsTheStoreToItsShape(t *testing.T) {
 	}
 }
 
-// TestDroppingAnEmptySlotChangesNothing is the other half of atomicity, the
-// same one TestAFullInventoryRefusesAndKeepsTheItemOnTheGround holds for take:
-// a move that cannot complete does not half-complete.
 func TestDroppingAnEmptySlotChangesNothing(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
@@ -116,7 +93,6 @@ func TestDroppingAnEmptySlotChangesNothing(t *testing.T) {
 		t.Fatalf("taking item %d: %v", item.ID, err)
 	}
 
-	// Slot 0 holds the acorn; every other slot is empty.
 	for _, slot := range []int{1, InventorySize - 1} {
 		if _, err := s.DropInventorySlot(1, slot, 0, 0); !errors.Is(err, ErrEmptySlot) {
 			t.Fatalf("dropping empty slot %d returned %v, want ErrEmptySlot", slot, err)
@@ -131,9 +107,6 @@ func TestDroppingAnEmptySlotChangesNothing(t *testing.T) {
 	}
 }
 
-// TestDroppingAnIndexOutsideTheInventoryChangesNothing. No index in that range
-// was ever legal, so this is a broken client rather than a stale one, and it
-// gets its own error for that reason.
 func TestDroppingAnIndexOutsideTheInventoryChangesNothing(t *testing.T) {
 	for _, slot := range []int{-1, InventorySize, InventorySize + 1000} {
 		s := NewMemoryStore(NoWearables)
@@ -155,10 +128,6 @@ func TestDroppingAnIndexOutsideTheInventoryChangesNothing(t *testing.T) {
 	}
 }
 
-// TestDroppingForAnUnknownPlayerFails. Reaching it means the caller has a
-// player the store has never heard of, which is a broken invariant rather than
-// a condition; the store still refuses rather than panicking, because the
-// interface answers questions and the caller decides what is fatal.
 func TestDroppingForAnUnknownPlayerFails(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 
@@ -170,9 +139,6 @@ func TestDroppingForAnUnknownPlayerFails(t *testing.T) {
 	}
 }
 
-// TestADroppedItemJoinsTheBackOfTheGroundOrder keeps welcome's item list
-// deterministic once drops exist. GroundItems is ordered by when items entered
-// the world, and a dropped item entered now.
 func TestADroppedItemJoinsTheBackOfTheGroundOrder(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)

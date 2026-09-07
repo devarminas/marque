@@ -1,25 +1,3 @@
-<#
-.SYNOPSIS
-    The M3 milestone, on screen and in the server's ledger: one windowed client
-    opens equipment on the left, right-clicks the join-kit axe to equip it, sees
-    the weapon slot occupied, then unequips back to the bag. Exits 0 only if the
-    GAMELOG records one equip and one unequiv, the client's DEMO lines report
-    each step, and three screenshots were written.
-
-.DESCRIPTION
-    M3d closes M3 by observation. The load-bearing claims are server-side facts
-    (the axe moved between bag slot 0 and worn slot weapon exactly once each
-    way) and client-side observations (the panel opened left, the worn slot
-    showed the axe after equip and emptied after unequip, the bag lost then
-    regained the axe). Neither layer substitutes for the other.
-
-.PARAMETER Godot
-    The Godot 4 executable. Defaults to $env:GODOT, then "godot" on PATH.
-
-.PARAMETER OutDir
-    Evidence directory. Default `$env:TEMP\marque-equip`. Emptied at the start of
-    each run when it carries this script's `.marque-evidence` marker.
-#>
 [CmdletBinding()]
 param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
@@ -251,7 +229,6 @@ try {
         if ($size -lt 4096) { Add-Failure "$shot is only $size bytes; that is not a frame" }
     }
 
-    # AC1: equipment panel visible and left of centre.
     if (-not $report.EquipOpen.ContainsKey(1)) {
         Add-Failure "client never reported equipment panel layout for shot 1"
     } else {
@@ -271,7 +248,6 @@ try {
             "in viewport $($open.ViewportW))")
     }
 
-    # AC2: after equip, worn holds axe and bag does not.
     if (-not $report.Inventory.ContainsKey(2)) {
         Add-Failure "client reported no inventory for shot 2"
     } elseif ($report.Inventory[2].Occupied -ne 0) {
@@ -285,7 +261,6 @@ try {
         Write-Host "==> client: weapon slot shows $AxeKind after equip"
     }
 
-    # AC3: after unequip, worn empty and bag has axe again.
     if (-not $report.Worn.ContainsKey(3)) {
         Add-Failure "client reported no worn state for shot 3"
     } elseif (-not [string]::IsNullOrEmpty($report.Worn[3].Kind)) {

@@ -1,18 +1,3 @@
-<#
-.SYNOPSIS
-    The M4 milestone on screen and in the server's ledger: two windowed clients
-    equip the join-kit axe, race the seeded tree for one logs yield, and the
-    winner crafts logs→sticks via use. Exits 0 only when GAMELOG shows one
-    gather_resolved and one gather_lost for that depletion, one use
-    logs→sticks, and both clients print DEMO done with three screenshots each.
-
-.PARAMETER Godot
-    The Godot 4 executable. Defaults to $env:GODOT, then "godot" on PATH.
-
-.PARAMETER OutDir
-    Evidence directory. Default `$env:TEMP\marque-gather-craft`. Emptied at the
-    start of each run when it carries this script's `.marque-evidence` marker.
-#>
 [CmdletBinding()]
 param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),

@@ -1,12 +1,5 @@
 extends RefCounted
 
-## Tests for [code]scripts/tick_clock.gd[/code], with no scene tree at all.
-##
-## Same shape as the walker suite: a [RefCounted] the runner executes from
-## [method SceneTree._initialize], before any scene exists.
-##
-## The load-bearing test is [method _test_a_stall_does_not_lose_ticks]. Every
-## other assertion here would also pass for a clock that summed frame deltas.
 
 const TickClock := preload("res://scripts/tick_clock.gd")
 const PickupDemo := preload("res://scripts/pickup_demo.gd")
@@ -15,16 +8,11 @@ const Assertions := preload("res://tests/assertions.gd")
 const TICK_MS := 150
 const USEC_PER_MSEC := 1000
 
-## The stall to simulate, in ticks. Long enough that a frame-delta clock could
-## not plausibly have caught up by accident.
 const STALL_TICKS := 400
 
-## A real, unfaked stall used by the wall-clock test. Long enough to span
-## several ticks and short enough not to pad the suite.
 const REAL_STALL_MSEC := 500
 
 
-## A monotonic time source the test moves by hand, standing in for wall time.
 class FakeMonotonicClock extends RefCounted:
 	var now_usec := 0
 
@@ -55,8 +43,6 @@ func run(assertions: Assertions) -> void:
 	assertions.finish()
 
 
-## Before anchoring the clock must be unambiguously un-anchored, not silently
-## reporting tick 0. Tick 0 is a real server tick.
 func _test_unanchored_is_distinguishable_from_tick_zero(assertions: Assertions) -> void:
 	var fake := FakeMonotonicClock.new()
 	var clock := TickClock.new(fake.read)
@@ -76,8 +62,6 @@ func _test_unanchored_is_distinguishable_from_tick_zero(assertions: Assertions) 
 	)
 	assertions.check(clock.tick_ms() == 0, "an un-anchored clock reports no tick length")
 
-	# Anchoring at server tick 0 must then be distinguishable from not being
-	# anchored, which is the whole point of the sentinel.
 	clock.anchor(0, TICK_MS)
 	assertions.check(clock.is_anchored(), "after anchoring at tick 0 the clock is anchored")
 	assertions.check(
@@ -85,7 +69,6 @@ func _test_unanchored_is_distinguishable_from_tick_zero(assertions: Assertions) 
 	)
 
 
-## estimated_tick = anchor_tick + floor((now - anchor_time) / tick_ms).
 func _test_one_tick_per_tick_ms(assertions: Assertions) -> void:
 	var fake := FakeMonotonicClock.new()
 	var clock := TickClock.new(fake.read)
@@ -116,16 +99,6 @@ func _test_sub_tick_time_floors(assertions: Assertions) -> void:
 	assertions.check(clock.estimated_tick() == 11, "the next millisecond ticks over")
 
 
-## [b]The assertion that protects the whole design.[/b]
-##
-## Monotonic time jumps by [constant STALL_TICKS] ticks with zero frames run in
-## between: this suite is a plain function call, so no frame can occur inside it.
-## A clock that accumulated frame deltas would report the anchor tick, because it
-## saw no frames. This one must report the full elapsed interval.
-##
-## A minimized or stalled window is exactly this case, and a frame-delta clock
-## would fall permanently behind it with nothing to correct it (PROTOCOL.md,
-## "Clock").
 func _test_a_stall_does_not_lose_ticks(assertions: Assertions) -> void:
 	var fake := FakeMonotonicClock.new()
 	var clock := TickClock.new(fake.read)
@@ -143,8 +116,6 @@ func _test_a_stall_does_not_lose_ticks(assertions: Assertions) -> void:
 		"the estimate did not sit at the anchor the way a frame-delta clock would",
 	)
 
-	# And it recovers with no catch-up: the next read after the stall is
-	# correct immediately, not gradually.
 	fake.advance_msec(TICK_MS)
 	assertions.check(
 		clock.estimated_tick() == 1000 + STALL_TICKS + 1,
@@ -152,12 +123,6 @@ func _test_a_stall_does_not_lose_ticks(assertions: Assertions) -> void:
 	)
 
 
-## The same property against the real default time source, so the fake above
-## cannot be the only thing that makes it hold.
-##
-## [method OS.delay_msec] blocks this thread. Nothing renders, no frame is
-## processed, and no [code]delta[/code] is delivered to anything for the whole
-## interval. A clock that needed frames would report no progress.
 func _test_real_monotonic_time_advances_without_frames(assertions: Assertions) -> void:
 	var clock := TickClock.new()
 	clock.anchor(0, TICK_MS)
@@ -174,8 +139,6 @@ func _test_real_monotonic_time_advances_without_frames(assertions: Assertions) -
 			% [REAL_STALL_MSEC, expected, advanced]
 		),
 	)
-	# The scheduler can overshoot a delay but cannot undershoot it by a tick,
-	# so an upper bound this loose still catches a runaway estimate.
 	assertions.check(
 		advanced <= expected + 4,
 		"the real stall did not overshoot wildly (%d ticks for %dms)" % [advanced, REAL_STALL_MSEC],
@@ -449,7 +412,6 @@ func _server_tick(recv_usec: int, tick_usec: int) -> int:
 	return floori(float(recv_usec) / float(tick_usec))
 
 
-## Re-anchoring is how a reconnect, and later an M2 heartbeat, correct drift.
 func _test_re_anchoring_moves_the_origin(assertions: Assertions) -> void:
 	var fake := FakeMonotonicClock.new()
 	var clock := TickClock.new(fake.read)
@@ -470,7 +432,6 @@ func _test_invalid_anchors_are_rejected(assertions: Assertions) -> void:
 	var fake := FakeMonotonicClock.new()
 	var clock := TickClock.new(fake.read)
 
-	# Each of these emits a push_error; see the banner the suite prints.
 	clock.anchor(-1, TICK_MS)
 	assertions.check(not clock.is_anchored(), "a negative anchor_tick is refused")
 	clock.anchor(5, 0)

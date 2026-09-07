@@ -1,27 +1,12 @@
 extends StaticBody3D
 
-## One resource node's body. Instanced once per live node id by `session.gd`.
-##
-## The scene is [code]res://scenes/resource_node.tscn[/code]. How many nodes
-## exist is genuine runtime information, so instancing it in script is the case
-## CLAUDE.md allows. Trunk, foliage, collision, and materials are authored in
-## the scene; this script only binds id/kind/state and swaps visibility.
-##
-## Collision layer 3 (mask value 4) is exclusive to resource nodes. Ground is
-## layer 1, ground items layer 2. [code]ground_picker.gd[/code] casts one ray
-## against all three so the nearest surface wins.
-##
-## Typed by [code]preload[/code], per NOTES.md, "Godot authoring traps".
 
 const NodeKinds := preload("res://scripts/node_kinds.gd")
 
-## Server node id, or 0 before [method configure].
 var node_id := 0
 
-## `node_spawn.kind`, held verbatim including unknown kinds.
 var kind := ""
 
-## `full` or `depleted`, or "" before [method configure].
 var state := ""
 
 @export var ground_y := 0.0

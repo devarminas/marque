@@ -1,10 +1,3 @@
-<#
-.SYNOPSIS
-    M6f right-click basic attack on practice dummies: right-click friendly refuses
-    locally (DEMO refuse), right-click hostile engages pending melee. Exits 0 only
-    when DEMO done and GAMELOG shows attack + attack_hit on the hostile path with
-    no attack_rejected on that happy path.
-#>
 [CmdletBinding()]
 param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
