@@ -7,12 +7,13 @@ extends RefCounted
 ## var defs := ClassDefs.load_default()
 ## [/codeblock]
 ##
-## Reads the same shared tables as the Go server: shared/sets.json and
-## shared/skills.json. The client is cache-only, so both loaders fail closed
-## to an empty catalog rather than inventing content.
+## Reads the same shared tables as the Go server: shared/sets.json,
+## shared/skills.json, and shared/classes.json. The client is cache-only, so
+## every loader fails closed to an empty catalog rather than inventing content.
 
 const SETS_REL_PATH := "shared/sets.json"
 const SKILLS_REL_PATH := "shared/skills.json"
+const CLASSES_REL_PATH := "shared/classes.json"
 
 const HANDED_ONE := "one"
 const HANDED_TWO := "two"
@@ -32,6 +33,14 @@ static func load_skills() -> Dictionary:
 		push_error("class_defs: %s not found (set MARQUE_SKILLS)" % SKILLS_REL_PATH)
 		return _empty_for("by_skill_id")
 	return load_from_path(path, "skills", "by_skill_id")
+
+
+static func load_classes() -> Dictionary:
+	var path := resolve_path(CLASSES_REL_PATH, "MARQUE_CLASSES")
+	if path.is_empty():
+		push_error("class_defs: %s not found (set MARQUE_CLASSES)" % CLASSES_REL_PATH)
+		return _empty_for("by_class_id")
+	return load_from_path(path, "classes", "by_class_id")
 
 
 static func load_from_path(path: String, root_key: String, catalog_key: String) -> Dictionary:
@@ -101,6 +110,22 @@ static func get_skill(catalog: Dictionary, id: String) -> Variant:
 	return by_id[id]
 
 
+static func lookup_class(catalog: Dictionary, id: String) -> Variant:
+	var by_id: Dictionary = catalog.get("by_class_id", {})
+	if not by_id.has(id):
+		return null
+	return by_id[id]
+
+
+static func class_display_name(catalog: Dictionary, id: String) -> String:
+	if id.is_empty():
+		return ""
+	var entry: Variant = lookup_class(catalog, id)
+	if entry == null:
+		return id
+	return String(entry["name"])
+
+
 static func set_ids(catalog: Dictionary) -> PackedStringArray:
 	var by_id: Dictionary = catalog.get("by_set_id", {})
 	return PackedStringArray(by_id.keys())
@@ -108,6 +133,11 @@ static func set_ids(catalog: Dictionary) -> PackedStringArray:
 
 static func skill_ids(catalog: Dictionary) -> PackedStringArray:
 	var by_id: Dictionary = catalog.get("by_skill_id", {})
+	return PackedStringArray(by_id.keys())
+
+
+static func class_ids(catalog: Dictionary) -> PackedStringArray:
+	var by_id: Dictionary = catalog.get("by_class_id", {})
 	return PackedStringArray(by_id.keys())
 
 
@@ -143,6 +173,19 @@ static func _validate(item: Dictionary, root_key: String) -> String:
 		var max_level: Variant = item.get("max_level", null)
 		if not (typeof(max_level) == TYPE_INT or typeof(max_level) == TYPE_FLOAT) or float(max_level) < 1.0:
 			return "%s: max_level must be a number >= 1" % id
+		return ""
+	if root_key == "classes":
+		var skill: Variant = item.get("skill", null)
+		if typeof(skill) != TYPE_STRING or String(skill).is_empty():
+			return "%s: missing skill" % id
+		var requires: Variant = item.get("requires", null)
+		if typeof(requires) != TYPE_DICTIONARY:
+			return "%s: requires required" % id
+		var requires_dict: Dictionary = requires
+		for slot in requires_dict:
+			var kind: Variant = requires_dict[slot]
+			if typeof(kind) != TYPE_STRING or String(kind).is_empty():
+				return "%s: requires slot %s has no kind" % [id, slot]
 		return ""
 	var slots: Variant = item.get("slots", null)
 	if typeof(slots) != TYPE_DICTIONARY:

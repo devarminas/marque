@@ -176,6 +176,16 @@ signal equipment_changed(
 	worn_names: PackedStringArray, slot_names: PackedStringArray, slot_kinds: PackedStringArray
 )
 
+## [param class_id] is "" when no class is complete.
+## [param missing_slot_names] and [param missing_slot_kinds] are index aligned.
+signal class_changed(
+	player: int,
+	class_id: String,
+	missing_slot_names: PackedStringArray,
+	missing_slot_kinds: PackedStringArray,
+	missing_tools: PackedStringArray,
+)
+
 signal hp_changed(id: int, hp: int, max_hp: int)
 
 signal mana_changed(id: int, mana: int, max_mana: int)
@@ -558,6 +568,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_inventory(body, text)
 		"equipment":
 			_on_equipment(body, text)
+		"class":
+			_on_class(body, text)
 		"hp":
 			_on_hp(body, text)
 		"mana":
@@ -958,6 +970,61 @@ func _on_equipment(body: Dictionary, text: String) -> void:
 		slot_kinds.append(occupied["kind"])
 
 	equipment_changed.emit(worn_names, slot_names, slot_kinds)
+
+
+func _on_class(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["player"], text):
+		return
+	if not body.has("class") or typeof(body["class"]) != TYPE_STRING:
+		push_error("net_client: class.class is missing or not a string: %s" % text)
+		return
+
+	var missing_slot_names := PackedStringArray()
+	var missing_slot_kinds := PackedStringArray()
+	var missing_tools := PackedStringArray()
+	if body.has("missing"):
+		if typeof(body["missing"]) != TYPE_DICTIONARY:
+			push_error("net_client: class.missing is not an object: %s" % text)
+			return
+		var missing: Dictionary = body["missing"]
+		var raw_slots: Variant = missing.get("slots", [])
+		if _is_null_list(raw_slots, "class.missing.slots", text):
+			return
+		if typeof(raw_slots) != TYPE_ARRAY:
+			push_error("net_client: class.missing.slots is missing or not an array: %s" % text)
+			return
+		for entry: Variant in raw_slots as Array:
+			if typeof(entry) != TYPE_DICTIONARY:
+				push_error("net_client: class.missing.slots entry is not an object: %s" % text)
+				return
+			var slot_entry: Dictionary = entry
+			if typeof(slot_entry.get("slot", null)) != TYPE_STRING:
+				push_error("net_client: class.missing.slots entry has no slot string: %s" % text)
+				return
+			if typeof(slot_entry.get("kind", null)) != TYPE_STRING:
+				push_error("net_client: class.missing.slots entry has no kind string: %s" % text)
+				return
+			missing_slot_names.append(String(slot_entry["slot"]))
+			missing_slot_kinds.append(String(slot_entry["kind"]))
+		var raw_tools: Variant = missing.get("tools", [])
+		if _is_null_list(raw_tools, "class.missing.tools", text):
+			return
+		if typeof(raw_tools) != TYPE_ARRAY:
+			push_error("net_client: class.missing.tools is missing or not an array: %s" % text)
+			return
+		for entry: Variant in raw_tools as Array:
+			if typeof(entry) != TYPE_STRING:
+				push_error("net_client: class.missing.tools entry is not a string: %s" % text)
+				return
+			missing_tools.append(String(entry))
+
+	class_changed.emit(
+		int(body["player"]),
+		String(body["class"]),
+		missing_slot_names,
+		missing_slot_kinds,
+		missing_tools,
+	)
 
 
 func _on_hp(body: Dictionary, text: String) -> void:

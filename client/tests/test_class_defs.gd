@@ -8,6 +8,7 @@ func run(assertions: Assertions) -> void:
 	print("  (ERROR lines below are fail-closed paths under test)")
 	_test_shared_starters(assertions)
 	_test_skill_starters(assertions)
+	_test_class_starters(assertions)
 	_test_missing_file_is_empty(assertions)
 	_test_malformed_is_empty(assertions)
 	_test_empty_is_empty(assertions)
@@ -48,6 +49,20 @@ func _test_skill_starters(assertions: Assertions) -> void:
 		if skill != null:
 			var s: Dictionary = skill
 			assertions.check(int(s["max_level"]) == 99, "skill %s max_level is 99" % id)
+
+
+func _test_class_starters(assertions: Assertions) -> void:
+	var cat: Dictionary = ClassDefs.load_classes()
+	var id_list := ClassDefs.class_ids(cat)
+	assertions.check(id_list.size() == 5, "shared classes has five classes, got %d" % id_list.size())
+	var miner: Variant = ClassDefs.lookup_class(cat, "miner")
+	assertions.check(miner != null, "miner class is present")
+	if miner != null:
+		assertions.check(
+			ClassDefs.class_display_name(cat, "miner") == "Miner",
+			"miner class display name is Miner",
+		)
+	assertions.check(ClassDefs.class_display_name(cat, "") == "", "empty id has no display name")
 
 
 func _test_missing_file_is_empty(assertions: Assertions) -> void:
