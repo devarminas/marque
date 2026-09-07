@@ -10,32 +10,10 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// TestCatchUpBoundHoldsUnderAStalledLoop drives the catch-up bound through the
-// real loop, on the real server, against real wall-clock time.
-//
-// Nothing here asks the loop to fall behind, because nothing can: it is driven
-// by a ticker and a monotonic clock, and no test-visible knob moves either. So
-// the loop is stalled instead, by blocking the one thing it does that a test
-// can get in front of -- writing a line to the event log. While that write is
-// blocked the world goroutine is off its ticker, wall-clock runs on, and the
-// backlog it finds when it comes back is a genuine overrun rather than a number
-// handed to it.
-//
-// How large that backlog is belongs to the scheduler, so the assertions are on
-// the arithmetic the bound guarantees whatever its size: the loop ran the bound
-// and no more, and the number it says it dropped is the number it did drop.
-// TestCatchUpStopsAtTheBound in internal/game pins the exact figures.
 func TestCatchUpBoundHoldsUnderAStalledLoop(t *testing.T) {
 	const (
-		// Comfortably past the bound, so scheduler jitter cannot bring the
-		// backlog back under it, and still short enough not to dominate the
-		// suite.
 		stall = 8 * game.TickDuration
-		// stall/TickDuration, less two ticks of slack for the tick the ticker
-		// had already buffered and for where the stall lands inside a period.
 		leastDue = 6
-		// The line the stall waits for. The closing quote matters: without it
-		// this also matches move_to_rejected.
 		stallOn = `"ev":"` + game.EvMoveTo + `"`
 	)
 
@@ -47,8 +25,6 @@ func TestCatchUpBoundHoldsUnderAStalledLoop(t *testing.T) {
 		if !bytes.Contains(line, []byte(stallOn)) {
 			return
 		}
-		// Only the first move_to stalls. The hook runs on the world goroutine,
-		// which is exactly the goroutine this needs to hold still.
 		once.Do(func() {
 			close(stalling)
 			time.Sleep(stall)
@@ -58,8 +34,6 @@ func TestCatchUpBoundHoldsUnderAStalledLoop(t *testing.T) {
 	alice := h.dial("alice")
 	me := alice.welcome().You
 
-	// A click the server accepts, so the loop is inside handle when it stalls
-	// rather than somewhere incidental.
 	alice.moveTo(4, 4)
 
 	select {
@@ -86,8 +60,6 @@ func TestCatchUpBoundHoldsUnderAStalledLoop(t *testing.T) {
 		t.Errorf("the loop reports due=%v ran=%v dropped=%v, which do not add up", due, ran, dropped)
 	}
 
-	// The server is still a server afterwards. The backlog was discarded rather
-	// than carried, so the next click is answered like any other.
 	alice.drain()
 	alice.moveTo(9, 9)
 	points := alice.awaitPath(me).Points
@@ -96,8 +68,6 @@ func TestCatchUpBoundHoldsUnderAStalledLoop(t *testing.T) {
 	}
 }
 
-// logNumber reads one numeric field out of a parsed log line. Every JSON number
-// decodes into a float64, so an int field has to be read back as one.
 func logNumber(t *testing.T, obj map[string]any, key string) float64 {
 	t.Helper()
 

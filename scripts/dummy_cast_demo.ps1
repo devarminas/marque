@@ -1,9 +1,3 @@
-<#
-.SYNOPSIS
-    M6e practice dummies: one client selects both, heals the friendly dummy,
-    fireballs the hostile dummy. Exits 0 only when DEMO done and GAMELOG shows
-    cast_effect for heal and fireball on the seeded NPC ids.
-#>
 [CmdletBinding()]
 param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
@@ -98,7 +92,6 @@ try {
         try { $client.Refresh() } catch { }
         $code = $client.ExitCode
         if ($null -eq $code) {
-            # Process object sometimes lacks ExitCode after WaitForExit on Godot.
         } elseif ([int]$code -ne 0) {
             Add-Failure "client exit $code"
         }

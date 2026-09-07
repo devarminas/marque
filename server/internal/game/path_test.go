@@ -54,7 +54,6 @@ func TestAdvanceReachesWaypointExactly(t *testing.T) {
 func TestAdvanceCarriesLeftoverDistanceAroundCorners(t *testing.T) {
 	t.Parallel()
 
-	// Two segments of length 3 and 4. Ten units of travel overshoots both.
 	pos, remaining := game.Advance(
 		game.Point{},
 		[]game.Point{{X: 3}, {X: 3, Z: 4}},
@@ -71,8 +70,6 @@ func TestAdvanceCarriesLeftoverDistanceAroundCorners(t *testing.T) {
 func TestAdvanceConsumesZeroLengthPath(t *testing.T) {
 	t.Parallel()
 
-	// Clicking where you already stand still yields a path, and that path must
-	// finish rather than leave the player walking forever.
 	pos, remaining := game.Advance(game.Point{X: 7}, []game.Point{{X: 7}}, 0.45)
 	if pos != (game.Point{X: 7}) {
 		t.Fatalf("position %v, want {7 0}", pos)
@@ -108,9 +105,6 @@ func TestAdvanceRejectsNegativeDistance(t *testing.T) {
 func TestTickConstantIsTheDecidedOne(t *testing.T) {
 	t.Parallel()
 
-	// The tick is settled at 150ms and revisitable exactly once, after M1. This
-	// asserts the constant rather than the behaviour, so that changing it is a
-	// deliberate act with a failing test attached.
 	if game.TickDuration.Milliseconds() != 150 {
 		t.Fatalf("TickDuration is %v, want 150ms", game.TickDuration)
 	}

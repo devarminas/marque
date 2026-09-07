@@ -1,7 +1,5 @@
 extends RefCounted
 
-## M3 milestone: open equipment, equip the join-kit axe, unequip back to bag.
-## Prints greppable `DEMO ` lines; `scripts/equip_demo.ps1` owns the assertions.
 
 const SessionScript := preload("res://scripts/session.gd")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")

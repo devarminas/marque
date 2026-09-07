@@ -10,13 +10,8 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// tickStep is how far a walker moves in one tick. Derived from the two
-// constants, never restated as a number, so a change to either shows up here as
-// a changed expectation rather than a failing test with a stale literal.
 var tickStep = game.WalkSpeed * game.TickDuration.Seconds()
 
-// TestOneClientsMoveReachesTheOther is the M0a assertion: two real clients on
-// one real server, and what A does is what B sees.
 func TestOneClientsMoveReachesTheOther(t *testing.T) {
 	h := newHarness(t)
 
@@ -36,8 +31,6 @@ func TestOneClientsMoveReachesTheOther(t *testing.T) {
 		t.Fatalf("bob's welcome lists %d players, want alice and bob: %+v", len(bobWelcome.Players), bobWelcome.Players)
 	}
 
-	// Alice hears that Bob joined. Bob does not hear about himself; he learned
-	// his own existence from welcome.
 	if spawned := alice.spawn(); spawned.ID != bobWelcome.You {
 		t.Fatalf("alice saw a spawn for player %d, want bob (%d)", spawned.ID, bobWelcome.You)
 	}
@@ -45,7 +38,6 @@ func TestOneClientsMoveReachesTheOther(t *testing.T) {
 	const destX, destZ = 10.5, -4.25
 	alice.moveTo(destX, destZ)
 
-	// The assertion this unit exists for.
 	seen := bob.path()
 	if seen.ID != aliceWelcome.You {
 		t.Fatalf("bob got a path for player %d, want alice (%d)", seen.ID, aliceWelcome.You)
@@ -67,8 +59,6 @@ func TestOneClientsMoveReachesTheOther(t *testing.T) {
 		t.Fatalf("start_tick %d precedes the tick bob was welcomed at (%d)", seen.StartTick, bobWelcome.Tick)
 	}
 
-	// The mover is not excluded from its own path broadcast: the client's
-	// position is the server's, not one it predicted.
 	mine := alice.path()
 	if mine.ID != aliceWelcome.You || mine.StartTick != seen.StartTick {
 		t.Fatalf("alice got path %+v, want the same one bob got: %+v", mine, seen)
@@ -80,16 +70,12 @@ func TestOneClientsMoveReachesTheOther(t *testing.T) {
 	}
 }
 
-// TestLateJoinLearnsInFlightPath covers a client arriving while someone else is
-// already walking. The replayed path is re-anchored, not resent verbatim, so it
-// agrees with the position the same welcome reported.
 func TestLateJoinLearnsInFlightPath(t *testing.T) {
 	h := newHarness(t)
 
 	alice := h.dial("alice")
 	aliceWelcome := alice.welcome()
 
-	// Far enough that alice is still walking well after bob arrives.
 	const destX = 30.0
 	alice.moveTo(destX, 0)
 	first := alice.path()
@@ -97,12 +83,10 @@ func TestLateJoinLearnsInFlightPath(t *testing.T) {
 		t.Fatalf("points[0] = %v, want the spawn point", first.Points[0])
 	}
 
-	// Let her get under way, so "in flight" means something.
 	time.Sleep(4 * game.TickDuration)
 
 	bob := h.dial("bob")
 
-	// Welcome first, always.
 	bobWelcome := bob.welcomeFrame()
 	var alicePos mnet.PlayerState
 	found := false
@@ -118,7 +102,6 @@ func TestLateJoinLearnsInFlightPath(t *testing.T) {
 		t.Fatalf("welcome puts alice at x=%v, want her partway along the walk (0, %v)", alicePos.X, destX)
 	}
 
-	// Then the in-flight walk, as an ordinary path message. No snapshot format.
 	inFlight := bob.path()
 	if inFlight.ID != aliceWelcome.You {
 		t.Fatalf("path is for player %d, want alice (%d)", inFlight.ID, aliceWelcome.You)
@@ -138,8 +121,6 @@ func TestLateJoinLearnsInFlightPath(t *testing.T) {
 	}
 }
 
-// TestSecondMoveStartsFromTheInterpolatedPosition covers replacing a path
-// mid-walk.
 func TestSecondMoveStartsFromTheInterpolatedPosition(t *testing.T) {
 	h := newHarness(t)
 
@@ -164,8 +145,6 @@ func TestSecondMoveStartsFromTheInterpolatedPosition(t *testing.T) {
 			second.Points[0])
 	}
 
-	// Position at start_tick is exactly the ticks elapsed times the per-tick
-	// step, because a player's position changes only on a tick.
 	wantX := float64(elapsed) * tickStep
 	if math.Abs(second.Points[0].X()-wantX) > 1e-6 {
 		t.Fatalf("points[0].x = %v after %d ticks, want %v", second.Points[0].X(), elapsed, wantX)
@@ -178,12 +157,6 @@ func TestSecondMoveStartsFromTheInterpolatedPosition(t *testing.T) {
 	}
 }
 
-// TestOutOfBoundsMoveIsRejected covers a destination the server refuses.
-//
-// 1e30 is the hazard worth naming: it decodes cleanly as a finite float and
-// only becomes a problem once 32-bit vector math on the client overflows on it.
-// Rejected means rejected: not clamped to the edge, not snapped to the nearest
-// legal point.
 func TestOutOfBoundsMoveIsRejected(t *testing.T) {
 	h := newHarness(t)
 
@@ -191,11 +164,10 @@ func TestOutOfBoundsMoveIsRejected(t *testing.T) {
 	aliceWelcome := alice.welcome()
 	bob := h.dial("bob")
 	bob.welcome()
-	alice.spawn() // bob joining
+	alice.spawn()
 
 	alice.moveTo(1e30, 0)
 
-	// The sender is told, in as many words.
 	refusal := alice.errorFrame()
 	if refusal.Re != mnet.MsgMoveTo {
 		t.Fatalf("error attributed to %q, want %q", refusal.Re, mnet.MsgMoveTo)
@@ -212,7 +184,6 @@ func TestOutOfBoundsMoveIsRejected(t *testing.T) {
 		t.Fatalf("rejection reason %v, want %q", got, mnet.ReasonOutOfBounds)
 	}
 
-	// Nobody is told to walk anywhere. Not the sender, and not anyone else.
 	bob.expectSilence()
 	alice.expectSilence()
 
@@ -220,15 +191,12 @@ func TestOutOfBoundsMoveIsRejected(t *testing.T) {
 		t.Fatalf("a rejected move still assigned a path: %+v", assigned)
 	}
 
-	// The connection survives its own bad input.
 	alice.moveTo(1, 1)
 	if p := bob.path(); p.ID != aliceWelcome.You {
 		t.Fatalf("after a rejection, bob got a path for %d, want alice (%d)", p.ID, aliceWelcome.You)
 	}
 }
 
-// TestWorldEdgeIsInsideTheBounds pins the bound as inclusive, so that the one
-// number in PROTOCOL.md and the one constant here cannot drift by an epsilon.
 func TestWorldEdgeIsInsideTheBounds(t *testing.T) {
 	h := newHarness(t)
 
@@ -242,8 +210,6 @@ func TestWorldEdgeIsInsideTheBounds(t *testing.T) {
 	}
 }
 
-// TestNaNMoveIsRejected covers the coordinate that has no JSON literal. A
-// client that tries to send one is refused while the frame is still text.
 func TestNaNMoveIsRejected(t *testing.T) {
 	h := newHarness(t)
 
@@ -272,10 +238,6 @@ func TestNaNMoveIsRejected(t *testing.T) {
 	}
 }
 
-// TestDegenerateClickWhileStationaryIsAnswered covers clicking the ground you
-// are already standing on while standing still. Somebody does this in the first
-// minute of any demo. Nothing changes, so nothing is broadcast, but the sender
-// is told: without a reply the click is indistinguishable from a dropped frame.
 func TestDegenerateClickWhileStationaryIsAnswered(t *testing.T) {
 	h := newHarness(t)
 
@@ -285,7 +247,6 @@ func TestDegenerateClickWhileStationaryIsAnswered(t *testing.T) {
 	bob.welcome()
 	alice.spawn()
 
-	// Exactly where she stands, and then near enough to make no difference.
 	alice.moveTo(0, 0)
 	alice.moveTo(game.MinPathLength/2, 0)
 
@@ -309,7 +270,6 @@ func TestDegenerateClickWhileStationaryIsAnswered(t *testing.T) {
 		}
 	}
 
-	// Nothing changed, so nobody is told anything.
 	alice.expectSilence()
 	bob.expectSilence()
 	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
@@ -317,9 +277,6 @@ func TestDegenerateClickWhileStationaryIsAnswered(t *testing.T) {
 	}
 }
 
-// TestDegenerateClickWhileWalkingHalts covers the other branch: the same click
-// from a player who is moving means stop. It is broadcast like any other path,
-// because everyone watching has to stop drawing her walking.
 func TestDegenerateClickWhileWalkingHalts(t *testing.T) {
 	h := newHarness(t)
 
@@ -338,7 +295,6 @@ func TestDegenerateClickWhileWalkingHalts(t *testing.T) {
 		t.Fatalf("halt path is for player %d, want alice (%d)", halt.ID, aliceWelcome.You)
 	}
 
-	// Everyone including the mover, as with any other path.
 	seen := bob.awaitHaltPath(aliceWelcome.You)
 	if seen.Points[0] != halt.Points[0] {
 		t.Fatalf("bob was told alice halts at %v, alice was told %v", seen.Points[0], halt.Points[0])
@@ -348,12 +304,6 @@ func TestDegenerateClickWhileWalkingHalts(t *testing.T) {
 	}
 }
 
-// TestHaltedPlayerStaysHalted is the assertion that makes a halt a halt: no
-// further path, and a position that stops advancing.
-//
-// The position is read back through a third client's welcome, because welcome
-// reports every player's position as of the current tick and is the only way to
-// ask the server where somebody is without moving them.
 func TestHaltedPlayerStaysHalted(t *testing.T) {
 	h := newHarness(t)
 
@@ -366,8 +316,6 @@ func TestHaltedPlayerStaysHalted(t *testing.T) {
 	halt := haltMidWalk(t, alice)
 	bob.drain()
 
-	// Several ticks pass. Had she still been walking she would have covered
-	// four steps in this time.
 	time.Sleep(4 * game.TickDuration)
 
 	alice.expectSilence()
@@ -395,39 +343,25 @@ func TestHaltedPlayerStaysHalted(t *testing.T) {
 			alicePos.X, alicePos.Z, halt.Points[0])
 	}
 
-	// A halted player is not mid-walk, so there is no in-flight path to replay.
 	carol.expectSilence()
 }
 
-// haltMidWalk gets a walking player to stop and returns the halt path.
-//
-// Stopping means clicking within an epsilon of where the player is, and the
-// only position a black-box test knows exactly is the one the server just
-// reported in points[0] of a fresh path. That position is only current until
-// the next tick, so the click has to land in the same tick that reported it.
-// On loopback it does; when it does not, the click is an ordinary move and the
-// attempt simply repeats.
 func haltMidWalk(t *testing.T, c *client) mnet.Path {
 	t.Helper()
 
 	const attempts = 20
 	for range attempts {
-		// A destination far enough away that she is still walking when the
-		// second click arrives.
 		c.moveTo(30, 0)
 		walking := c.path()
 		if len(walking.Points) != 2 {
 			t.Fatalf("expected an ordinary two-point walk, got %v", walking.Points)
 		}
 
-		// Click exactly where the server just said she is.
 		here := walking.Points[0]
 		c.moveTo(here.X(), here.Z())
 
 		halt := c.path()
 		if len(halt.Points) != 1 {
-			// The tick turned over between the two frames, so the click was an
-			// ordinary move to where she used to be. Try again.
 			continue
 		}
 		if halt.Points[0] != here {
@@ -445,9 +379,6 @@ func haltMidWalk(t *testing.T, c *client) mnet.Path {
 	return mnet.Path{}
 }
 
-// TestUnknownMessageIsIgnored covers compatibility rule 1: a message this
-// server does not know is logged loudly and ignored, so that a client written
-// against a later protocol version keeps working against this one.
 func TestUnknownMessageIsIgnored(t *testing.T) {
 	h := newHarness(t)
 
@@ -464,7 +395,6 @@ func TestUnknownMessageIsIgnored(t *testing.T) {
 		}
 	}
 
-	// Nothing sent back, and the connection is untouched.
 	alice.expectSilence()
 	alice.moveTo(2, 3)
 	if p := alice.path(); p.ID != aliceWelcome.You {
@@ -472,8 +402,6 @@ func TestUnknownMessageIsIgnored(t *testing.T) {
 	}
 }
 
-// TestReservedFieldsAreIgnored covers compatibility rule 2. M2's seq must land
-// as a filled-in field, not as a renegotiation of every intent's contract.
 func TestReservedFieldsAreIgnored(t *testing.T) {
 	h := newHarness(t)
 
@@ -491,10 +419,6 @@ func TestReservedFieldsAreIgnored(t *testing.T) {
 	}
 }
 
-// TestMalformedFramesAreRejectedWithAReason walks the failure modes a frame can
-// have that still leave the connection usable. Each gets one error naming what
-// went wrong, and none of them drops the client: a broken frame is a broken
-// frame, not a broken client.
 func TestMalformedFramesAreRejectedWithAReason(t *testing.T) {
 	h := newHarness(t)
 
@@ -529,16 +453,12 @@ func TestMalformedFramesAreRejectedWithAReason(t *testing.T) {
 
 	alice.expectSilence()
 
-	// Still a working client.
 	alice.moveTo(2, 3)
 	if p := alice.path(); p.ID != aliceWelcome.You {
 		t.Fatalf("after four bad frames, alice got a path for %d, want herself (%d)", p.ID, aliceWelcome.You)
 	}
 }
 
-// TestUninterpretableFrameClosesTheConnection covers the frames that name no
-// message at all. Those are not a compatibility question, and the client is
-// told why before the socket goes away.
 func TestUninterpretableFrameClosesTheConnection(t *testing.T) {
 	t.Parallel()
 
@@ -560,8 +480,6 @@ func TestUninterpretableFrameClosesTheConnection(t *testing.T) {
 			alice.welcome()
 			tc.send(alice)
 
-			// The error arrives before the close, because both go through the
-			// one ordered send queue.
 			if refusal := alice.errorFrame(); refusal.Msg == "" {
 				t.Fatal("error carries no message for a human to read")
 			}
@@ -577,7 +495,6 @@ func TestUninterpretableFrameClosesTheConnection(t *testing.T) {
 	}
 }
 
-// TestDisconnectDespawns covers a client leaving.
 func TestDisconnectDespawns(t *testing.T) {
 	h := newHarness(t)
 
@@ -598,9 +515,6 @@ func TestDisconnectDespawns(t *testing.T) {
 	if got := disconnects[0]["player"]; got != float64(aliceWelcome.You) {
 		t.Fatalf("client_disconnected logged player %v, want %d", got, aliceWelcome.You)
 	}
-	// The reason reaches the log at all, and it is the cause rather than a
-	// detector name. This is the only place the net layer's classification is
-	// checked end to end through the world; net's own tests stop at the event.
 	if got := disconnects[0]["reason"]; got != mnet.DisconnectClosed {
 		t.Fatalf("client_disconnected logged reason %v for a clean logout, want %q", got, mnet.DisconnectClosed)
 	}
@@ -609,9 +523,6 @@ func TestDisconnectDespawns(t *testing.T) {
 	}
 }
 
-// TestPlayerIdsAreNotReused covers the id counter. A departed player's id must
-// never come back within a process, because a client that has not yet processed
-// the despawn would attach the new player's movement to the old avatar.
 func TestPlayerIdsAreNotReused(t *testing.T) {
 	h := newHarness(t)
 
@@ -637,13 +548,6 @@ func TestPlayerIdsAreNotReused(t *testing.T) {
 	}
 }
 
-// TestSimultaneousJoinsAgreeOnWhoIsThere covers the join race: two clients
-// arriving inside one tick.
-//
-// Getting this wrong produces a duplicated avatar or a player nobody hears
-// about, and both look like client bugs. The invariant is that welcome and
-// spawn partition the world for each client: a player is in one or the other,
-// never both and never neither.
 func TestSimultaneousJoinsAgreeOnWhoIsThere(t *testing.T) {
 	const attempts = 5
 
@@ -704,9 +608,6 @@ func TestSimultaneousJoinsAgreeOnWhoIsThere(t *testing.T) {
 	}
 }
 
-// TestConcurrentTrafficStaysConsistent gives the race detector something to
-// find: several clients moving at once, plus a client repeatedly joining and
-// leaving so that connections come and go in the middle of broadcasts.
 func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 	h := newHarness(t)
 
@@ -725,14 +626,8 @@ func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
 
-	// None of the goroutines below may touch *testing.T -- only the test's own
-	// goroutine may fail a test, which is the rule drainUntil already states
-	// and parseFrame's bad field already exists for. They report here instead,
-	// and the test goroutine fails on their behalf once they have all stopped.
 	bg := newBackgroundErr()
 
-	// Movers: send intents and keep draining, so nobody is dropped for being
-	// slow while the interesting concurrency happens.
 	for i, c := range clients {
 		wg.Add(1)
 		go func(i int, c *client) {
@@ -754,9 +649,6 @@ func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 		}(i, c)
 	}
 
-	// Churn: connect and disconnect underneath the broadcasts. This is the case
-	// where sending to a connection nobody is draining any more would deadlock
-	// the tick, if the design allowed it to.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -779,7 +671,6 @@ func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 	wg.Wait()
 	bg.check(t)
 
-	// The world survived, and still answers.
 	for _, c := range clients {
 		c.drain()
 	}
@@ -793,8 +684,6 @@ func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 	}
 }
 
-// TestShutdownWithOpenConnections covers the server going away while clients
-// are attached: the world stops, the sockets close, and nothing hangs.
 func TestShutdownWithOpenConnections(t *testing.T) {
 	h := newHarness(t)
 

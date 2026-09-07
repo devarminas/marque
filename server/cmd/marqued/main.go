@@ -1,5 +1,3 @@
-// Command marqued is the Project Marque game server. It accepts WebSocket
-// connections, runs the tick loop, and writes an NDJSON event log to stdout.
 package main
 
 import (
@@ -197,11 +195,9 @@ func run() error {
 		}
 	}
 
-	// Stop trapping signals first so a second interrupt kills the process.
 	stopSignals()
 	stopWorld()
 
-	// srv.Shutdown ignores hijacked connections, so hub.Close is what ends them.
 	hub.Close()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)

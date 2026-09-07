@@ -1,7 +1,5 @@
 package game
 
-// The server heartbeat: period on welcome, t values at the tick boundary,
-// and a suspended player sent nothing.
 
 import (
 	"context"

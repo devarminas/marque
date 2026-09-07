@@ -1,6 +1,5 @@
 extends "res://scripts/net_client.gd"
 
-## Records every move chord; decode paths are inherited unchanged.
 
 var move_chords: Array[Vector2] = []
 

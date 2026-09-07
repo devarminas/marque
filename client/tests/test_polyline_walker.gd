@@ -1,43 +1,19 @@
 extends RefCounted
 
-## Tests for [code]scripts/polyline_walker.gd[/code], with no scene tree at all.
-##
-## This suite is a [RefCounted]. It never calls [method Node.get_tree], never
-## instances a scene, and the runner executes it from
-## [method SceneTree._initialize] before any scene has been loaded. That is the
-## practical proof that the walker is pure logic and that "game logic never
-## reaches into the visual tree" (CLAUDE.md) actually holds in the code rather
-## than only in the comments.
-##
-## Every expectation below is hand-computable. The fixtures use a 100ms tick, not
-## the project's 150ms, so that a walker which quietly assumed the real tick
-## length would fail here.
 
 const PolylineWalker := preload("res://scripts/polyline_walker.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
-## Fixture tick length. Deliberately not 150: this is test data, not the game's
-## tick, and picking a different number is what catches a hardcoded one.
 const TICK_MS := 100
 const TICK_SECONDS := 0.1
 
-## Float32 round-trips through PackedVector2Array, so exact equality is the
-## wrong assertion even for values that are exact in decimal.
 const POSITION_EPSILON := 1.0e-5
-## Durations are float64 arithmetic over float32 inputs; 1e-5 s is four orders
-## of magnitude below a tick and well above the representation error.
 const DURATION_EPSILON := 1.0e-5
 
-## An L: 3 units east, then 4 units north. Total length 7.
-##
-## A [code]static var[/code] and not a [code]const[/code]: a
-## [PackedVector2Array] constructor is not a constant expression, and declaring
-## it as one fails to parse the whole script with a cascade of unrelated errors.
 static var CORNER_PATH := PackedVector2Array(
 	[Vector2(0.0, 0.0), Vector2(3.0, 0.0), Vector2(3.0, 4.0)]
 )
 const CORNER_START_TICK := 500
-## 2 units/second over a 7 unit polyline is 3.5 seconds, which is 35 ticks.
 const CORNER_SPEED := 2.0
 
 
@@ -62,7 +38,6 @@ func _corner_walker() -> PolylineWalker:
 	return walker
 
 
-## points[0] is the position at start_tick (PROTOCOL.md, `path`).
 func _test_starts_at_first_point(assertions: Assertions) -> void:
 	var walker := _corner_walker()
 	assertions.check_position_near(
@@ -73,9 +48,6 @@ func _test_starts_at_first_point(assertions: Assertions) -> void:
 	)
 
 
-## 15 ticks is 1.5s, which at 2 u/s is 3.0 units: exactly the corner.
-## 30 ticks is 3.0s, which is 6.0 units: 3.0 units up the second segment.
-## 35 ticks is 3.5s, which is 7.0 units: 4.0 units up the second segment.
 func _test_mid_segment_on_a_multi_segment_polyline(assertions: Assertions) -> void:
 	var walker := _corner_walker()
 	assertions.check_position_near(
@@ -96,9 +68,6 @@ func _test_mid_segment_on_a_multi_segment_polyline(assertions: Assertions) -> vo
 		POSITION_EPSILON,
 		"7.0 units in is at the far end of the second segment",
 	)
-	# Half a tick in: the walker interpolates between ticks rather than
-	# snapping to them, but positions are only sampled at whole ticks, so the
-	# check that matters is that a tick it was never given still resolves.
 	assertions.check_position_near(
 		walker.position_at_tick(CORNER_START_TICK + 5),
 		Vector2(1.0, 0.0),
@@ -107,7 +76,6 @@ func _test_mid_segment_on_a_multi_segment_polyline(assertions: Assertions) -> vo
 	)
 
 
-## No overshoot and no wrap (PROTOCOL.md, `path`).
 func _test_past_the_end_holds_at_the_final_point(assertions: Assertions) -> void:
 	var walker := _corner_walker()
 	var last := CORNER_PATH[CORNER_PATH.size() - 1]
@@ -139,9 +107,6 @@ func _test_past_the_end_holds_at_the_final_point(assertions: Assertions) -> void
 	)
 
 
-## The client's estimate lags the server, so a fresh path can start in the
-## client's perceived future. Negative elapsed means "not started", not "rewind"
-## (PROTOCOL.md, "Clock").
 func _test_negative_elapsed_clamps_to_the_first_point(assertions: Assertions) -> void:
 	var walker := _corner_walker()
 	assertions.check_position_near(
@@ -164,9 +129,6 @@ func _test_negative_elapsed_clamps_to_the_first_point(assertions: Assertions) ->
 	)
 
 
-## Clicking the ground you already stand on is the case that produces one. The
-## divide it would cause yields a NaN position that is painful to trace
-## (PROTOCOL.md, `path`, "Degenerate paths").
 func _test_zero_length_segment_is_instantly_complete(assertions: Assertions) -> void:
 	var points := PackedVector2Array(
 		[Vector2(0.0, 0.0), Vector2(2.0, 0.0), Vector2(2.0, 0.0), Vector2(2.0, 3.0)]
@@ -177,8 +139,6 @@ func _test_zero_length_segment_is_instantly_complete(assertions: Assertions) -> 
 	assertions.check_near(
 		walker.total_length(), 5.0, POSITION_EPSILON, "a zero-length segment adds no length"
 	)
-	# Sample every tick across the whole walk, including the tick that lands
-	# exactly on the degenerate segment, and past the end.
 	var all_finite := true
 	for tick in range(-5, 60):
 		var sample := walker.position_at_tick(tick)
@@ -233,7 +193,6 @@ func _test_single_repeated_point_produces_no_nan(assertions: Assertions) -> void
 	assertions.check(walker.is_finished_at_tick(100), "a zero-length path is finished immediately")
 	assertions.check_finite(walker.direction_at_tick(100), "its heading is finite")
 
-	# One point, not two. Same shape, and the arc table has a single entry.
 	var single := PolylineWalker.new(TICK_MS)
 	single.set_path(PackedVector2Array([here]), 100, 3.0)
 	assertions.check_position_near(
@@ -244,8 +203,6 @@ func _test_single_repeated_point_produces_no_nan(assertions: Assertions) -> void
 	)
 
 
-## A new path replaces the current one outright: no blending, no queue
-## (PROTOCOL.md, `path`).
 func _test_a_new_path_replaces_the_old_one_outright(assertions: Assertions) -> void:
 	var walker := _corner_walker()
 	assertions.check_position_near(
@@ -255,8 +212,6 @@ func _test_a_new_path_replaces_the_old_one_outright(assertions: Assertions) -> v
 		"mid-walk on the first path, 2.0 units along",
 	)
 
-	# The server re-anchors a replacement at the player's real position, so the
-	# new points[0] is where the old path had reached.
 	var replacement := PackedVector2Array([Vector2(2.0, 0.0), Vector2(2.0, -6.0)])
 	walker.set_path(replacement, CORNER_START_TICK + 10, 3.0)
 
@@ -308,8 +263,6 @@ func _test_total_traversal_time_is_length_over_speed(assertions: Assertions) -> 
 		"traversal time is length / speed",
 	)
 
-	# A second fixture at the project's real 150ms tick, and at a speed that
-	# does not divide evenly, so the check is not an artifact of round numbers.
 	var awkward := PolylineWalker.new(150)
 	var points := PackedVector2Array(
 		[Vector2(-1.5, 2.25), Vector2(4.5, 2.25), Vector2(4.5, 10.25)]
@@ -325,8 +278,6 @@ func _test_total_traversal_time_is_length_over_speed(assertions: Assertions) -> 
 		DURATION_EPSILON,
 		"awkward fixture traversal time is length / speed",
 	)
-	# 14 / 3.7 = 3.783783...s, which is 25.225 ticks at 150ms. Not finished at
-	# 25, finished at 26.
 	assertions.check(
 		not awkward.is_finished_at_tick(7 + 25), "awkward fixture is not finished at tick 25"
 	)
@@ -361,14 +312,10 @@ func _test_heading_follows_the_current_segment(assertions: Assertions) -> void:
 	)
 
 
-## Invalid input is rejected loudly and leaves the current path alone, rather
-## than being absorbed into a state nothing can explain later.
 func _test_malformed_paths_are_rejected(assertions: Assertions) -> void:
 	var walker := _corner_walker()
 	var before := walker.position_at_tick(CORNER_START_TICK + 10)
 
-	# push_error() is what "loudly" means here; these three calls each emit one,
-	# which is why the runner's log has errors in it on a passing run.
 	walker.set_path(PackedVector2Array(), 0, 1.0)
 	walker.set_path(CORNER_PATH, 0, 0.0)
 	walker.set_path(PackedVector2Array([Vector2(0.0, 0.0), Vector2(NAN, 1.0)]), 0, 1.0)

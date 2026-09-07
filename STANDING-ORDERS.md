@@ -81,7 +81,8 @@ node does not.
   the playbook block: every step done or `skip: <reason>`.
 - Before PR: run Opening a PR. That includes deslop (cursor-team-kit) then no-comments / Comment
   Sicko on the unit diff. Soft skips on Opening a PR, deslop, or no-comments are forbidden.
-  Narrating `//` and `##` that restate the next lines are land blockers.
+  Narrating `//`, `#`, and `##` are land blockers. Do not add file-top essays, banners, phase
+  labels, or commented-out code. `CLAUDE.md` Comments owns the rule.
 - The writer report must include Comment Sicko agent id or report path, plus a short summary of
   deletions.
 - `interrogate` is adversarial multi-model review of a diff. It is not a channel for asking the

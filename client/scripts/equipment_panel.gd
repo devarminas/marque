@@ -1,15 +1,12 @@
 extends PanelContainer
 
-## Right dock: authored worn cross above nested inventory. I toggles visibility.
 
 const WornSlotScript := preload("res://scripts/worn_slot.gd")
 
 const TOGGLE_ACTION := "toggle_inventory"
 
-## Emitted when the player activates an occupied worn slot (`unequip`).
 signal worn_activated(worn: String)
 
-## Emitted when a bag slot is dropped onto a worn slot (`equip`).
 signal equip_from_bag(bag_slot: int)
 
 @export var helmet_slot: WornSlotScript
@@ -40,7 +37,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
-## Applies one `equipment` frame, wholesale. Never grows worn widgets.
 func apply(
 	worn_names: PackedStringArray,
 	slot_names: PackedStringArray,
@@ -69,13 +65,11 @@ func apply(
 		widget.show_item(slot_kinds[entry])
 
 
-## The widget for [param worn], or null when the panel is not drawing one.
 func slot_at(worn: String) -> WornSlotScript:
 	var slot: WornSlotScript = _slots.get(worn)
 	return slot
 
 
-## What is in [param worn], or "" when it is empty or not drawn.
 func kind_in_slot(worn: String) -> String:
 	var slot := slot_at(worn)
 	return "" if slot == null else slot.kind

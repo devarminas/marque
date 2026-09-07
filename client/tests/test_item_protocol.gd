@@ -1,30 +1,9 @@
 extends RefCounted
 
-## The M1 wire layer, with no scene tree and no server.
-##
-## Everything here goes through [code]net_client.gd[/code]'s public
-## [code]ingest_text_frame[/code], which exists so that a test can inject a frame
-## the server cannot be made to send. That is the whole point of this suite: the
-## Go half of M1 does not exist on `main` yet, and this file is what makes the
-## client half independently verifiable before it does.
-##
-## [b]Tree-free on purpose.[/b] A decoder that needs a viewport to decode is a
-## decoder with a dependency nobody wrote down. Running it as a [RefCounted]
-## suite from [method SceneTree._initialize] is the practical proof it has none.
-## The [Node] under test is created and freed here and never enters a tree.
-##
-## The registry and the bodies are the other half and live in
-## [code]test_items.gd[/code], which needs a tree because bodies do.
 
 const NetClientScript := preload("res://scripts/net_client.gd")
 
 
-## Every signal one client emitted, in order, as
-## [code]{"signal": name, ...}[/code] records.
-##
-## A recorder rather than a set of booleans because two of the assertions here
-## are about ordering — `welcome_items` after `welcomed`, and a malformed frame
-## emitting nothing at all — and a boolean cannot express either.
 class Recorder:
 	extends RefCounted
 
@@ -49,16 +28,12 @@ class Recorder:
 		net.unknown_message.connect(_on_unknown_message)
 		net.disconnected.connect(_on_disconnected)
 
-	## Hands one frame to the decoder as if it had arrived on the socket.
 	func feed(text: String) -> void:
 		net.ingest_text_frame(text)
 
-	## Drops everything recorded so far, so the next assertion reads a fresh
-	## slate rather than an offset into a growing log.
 	func clear() -> void:
 		events.clear()
 
-	## Every recorded event naming [param signal_name], oldest first.
 	func of(signal_name: String) -> Array[Dictionary]:
 		var out: Array[Dictionary] = []
 		for event in events:
@@ -66,7 +41,6 @@ class Recorder:
 				out.append(event)
 		return out
 
-	## The names of the signals recorded, in order.
 	func names() -> Array:
 		var out := []
 		for event in events:
@@ -222,7 +196,6 @@ func run(assertions: RefCounted) -> void:
 	assertions.finish()
 
 
-## `welcome.items` is the world's ground items, stated alongside its players.
 func _test_welcome_carries_items() -> void:
 	var recorder := Recorder.new()
 	recorder.feed(
@@ -257,10 +230,6 @@ func _test_welcome_carries_items() -> void:
 	recorder.release()
 
 
-## Two ways of saying "the world has no items on the ground", and one is a
-## pre-M1 server that has never heard of the field. Neither may crash a post-M1
-## client, and both have to reach the listener, or a client that already had
-## items could never be told they are gone.
 func _test_welcome_without_items() -> void:
 	var recorder := Recorder.new()
 	recorder.feed(
@@ -275,7 +244,6 @@ func _test_welcome_without_items() -> void:
 		)
 
 	recorder.clear()
-	# A pre-M1 server. The key is absent, not null.
 	recorder.feed(
 		'{"welcome":{"you":2,"tick_ms":150,"tick":11,"players":[{"id":2,"x":1.0,"z":1.0}]}}'
 	)
@@ -297,7 +265,6 @@ func _test_welcome_without_items() -> void:
 	recorder.release()
 
 
-## `welcome.nodes` lists resource nodes beside players and items. **M4b.**
 func _test_welcome_carries_nodes() -> void:
 	var recorder := Recorder.new()
 	recorder.feed(
@@ -359,7 +326,6 @@ func _test_welcome_carries_npcs() -> void:
 	recorder.release()
 
 
-## `node_spawn` / `node_state` / `node_despawn`. **M4b.**
 func _test_node_spawn_state_and_despawn() -> void:
 	var recorder := Recorder.new()
 	recorder.feed('{"node_spawn":{"id":1,"kind":"tree","x":5.0,"z":0.0,"state":"full"}}')
@@ -394,8 +360,6 @@ func _test_item_spawn_and_despawn() -> void:
 			"and the ground position, got %v" % spawns[0]["position"],
 		)
 
-	# An unknown kind is not the decoder's problem. It goes through verbatim and
-	# the body decides what to draw (PROTOCOL.md, `item_spawn`).
 	recorder.clear()
 	recorder.feed('{"item_spawn":{"id":8,"kind":"sextant","x":0.0,"z":0.0}}')
 	var unknown := recorder.of("item_spawned")
@@ -413,10 +377,6 @@ func _test_item_spawn_and_despawn() -> void:
 	recorder.release()
 
 
-## `inventory.slots` is sparse: occupied slots only, each carrying its own index,
-## with `size` saying how many slots exist. There are no nulls in it by design,
-## so the number of entries is the number of items held and never the number of
-## slots to draw.
 func _test_inventory() -> void:
 	var recorder := Recorder.new()
 
@@ -443,8 +403,6 @@ func _test_inventory() -> void:
 		)
 		_check(one[0]["size"] == 28, "and 28 slots to draw, got %s" % one[0]["size"])
 
-	# A full inventory: 28 occupied slots, RuneScape's number and the server's
-	# one constant. The sparse encoding's worst case is still every slot named.
 	var full := PackedStringArray()
 	for slot in 28:
 		full.append('{"slot":%d,"kind":"acorn"}' % slot)
@@ -462,7 +420,6 @@ func _test_inventory() -> void:
 	recorder.release()
 
 
-## `equipment.slots` is sparse like `inventory.slots`: occupied worn slots only.
 func _test_equipment() -> void:
 	var recorder := Recorder.new()
 
@@ -487,31 +444,9 @@ func _test_equipment() -> void:
 	recorder.release()
 
 
-## The receiver's half of the null-list rule (`PROTOCOL.md`, `inventory`): "A
-## receiver treats `null` as an absent key, meaning empty, and logs loudly."
-##
-## A Go server holding a slice that was never appended to marshals it as `null`,
-## not `[]`, and it does so silently. A client that read `null` as "not an array"
-## would drop the whole frame, and for `welcome` that means it never joins and
-## sits frozen forever, with nothing looking wrong on either side. So `null`,
-## `[]`, and — for `welcome.items` — an absent key have to be indistinguishable
-## in the state they produce.
-##
-## [b]Loudness is printed here, not asserted.[/b] `push_error` is what "loudly"
-## means in `net_client.gd`, and a GDScript suite has no way to capture one; the
-## same limitation is why `test_polyline_walker.gd` prints a banner instead. What
-## makes the log checkable is that this function is the only source of
-## `net_client: ... is null, which is a server bug` in the whole suite, and it
-## produces exactly three of them: two `welcome.items` and one
-## `inventory.slots`, one per null frame fed below. A run with fewer has lost
-## the accommodation's log line; a run with more has spread the leniency
-## somewhere it does not belong.
 func _test_a_null_list_means_empty() -> void:
 	print("-- expect exactly three 'is null, which is a server bug' errors below")
 
-	# `welcome.items`, three ways of saying the ground is bare. The player list
-	# is identical in all three, because what is being compared is the whole
-	# resulting state and not just the items.
 	const PLAYERS := '"players":[{"id":1,"x":0.0,"z":0.0}]'
 	var absent := _replay(
 		'{"welcome":{"you":1,"tick_ms":150,"tick":5,' + PLAYERS + "}}"
@@ -530,8 +465,6 @@ func _test_a_null_list_means_empty() -> void:
 		nulled == listed,
 		"welcome.items null and [] are the same state (%s vs %s)" % [nulled, listed],
 	)
-	# Stated positively as well, so that three frames all failing the same way
-	# cannot pass the comparison above.
 	_check(
 		nulled == [
 			["welcomed", "welcome_items", "welcome_nodes", "welcome_npcs"],
@@ -543,7 +476,6 @@ func _test_a_null_list_means_empty() -> void:
 		"a welcome whose items are null still joins the client, got %s" % [nulled],
 	)
 
-	# `inventory.slots`. `[]` and `null` are one empty inventory.
 	var empty_slots := _replay('{"inventory":{"size":28,"slots":[]}}')
 	var null_slots := _replay('{"inventory":{"size":28,"slots":null}}')
 	_check(
@@ -555,21 +487,12 @@ func _test_a_null_list_means_empty() -> void:
 		"and that state is 28 slots with nothing in them, got %s" % [null_slots],
 	)
 
-	# The third shape, and the one place this client stays strict: an absent
-	# `slots` is still a missing field. `inventory` is an M1 message with no
-	# earlier form to be compatible with, so no sender legitimately omits
-	# `slots`, and a frame that lost the field is a frame that lost a field —
-	# not a server saying "empty". Dropping it is unchanged from before this
-	# unit and `_test_malformed_frames_are_dropped_and_the_connection_survives`
-	# asserts the same thing from the other side.
 	var absent_slots := _replay('{"inventory":{"size":28}}')
 	_check(
 		absent_slots == [[]],
 		"an inventory with no slots key at all is still dropped, got %s" % [absent_slots],
 	)
 
-	# The leniency is exactly two fields wide. Everywhere else a `null` is what
-	# it was before: a value of the wrong type, and a dropped frame.
 	var still_strict := [
 		'{"welcome":{"you":1,"tick_ms":150,"tick":5,"players":null}}',
 		'{"welcome":{"you":1,"tick_ms":150,"tick":5,"players":[],"items":{"id":7}}}',
@@ -589,8 +512,6 @@ func _test_a_null_list_means_empty() -> void:
 			"a null outside welcome.items and inventory.slots is still refused: %s" % frame,
 		)
 
-	# And the connection is intact after all of it, which is the rule the
-	# leniency exists to serve: this client never closes on a server's bug.
 	var recorder := Recorder.new()
 	recorder.feed('{"welcome":{"you":1,"tick_ms":150,"tick":6,' + PLAYERS + ',"items":null}}')
 	recorder.feed('{"item_spawn":{"id":7,"kind":"acorn","x":3.0,"z":-2.0}}')
@@ -605,12 +526,6 @@ func _test_a_null_list_means_empty() -> void:
 	recorder.release()
 
 
-## Feeds one frame to a fresh decoder and returns everything it emitted, as one
-## value that [code]==[/code] can compare.
-##
-## The first element is the signal names in order, so an empty result reads as
-## [code][[]][/code] and a dropped frame is distinguishable from a frame that
-## emitted the right signals carrying the wrong payload.
 func _replay(frame: String) -> Array:
 	var recorder := Recorder.new()
 	recorder.feed(frame)
@@ -659,13 +574,6 @@ func _replay(frame: String) -> Array:
 	return out
 
 
-## `PROTOCOL.md`, "Compatibility": a client logs loudly, drops the single
-## offending frame, and keeps the connection. It never closes, because the
-## server is its only peer and `error` is server-to-client only, so there is
-## nothing to reply with and nothing to reconnect to.
-##
-## The proof that the connection survived is that the frame after each bad one
-## is decoded normally, and that nothing ever emitted `disconnected`.
 func _test_malformed_frames_are_dropped_and_the_connection_survives() -> void:
 	var recorder := Recorder.new()
 	var bad := [
@@ -691,9 +599,6 @@ func _test_malformed_frames_are_dropped_and_the_connection_survives() -> void:
 		recorder.feed(frame)
 		_check(recorder.events.is_empty(), "a malformed frame emits nothing: %s" % frame)
 
-	# The frame that matters: a `welcome` whose items will not parse must lose
-	# its players too. Half a world applied is worse than none, and this file's
-	# rule is that one bad frame is dropped entire.
 	recorder.clear()
 	recorder.feed(
 		'{"welcome":{"you":1,"tick_ms":150,"tick":1,'
@@ -717,9 +622,6 @@ func _test_malformed_frames_are_dropped_and_the_connection_survives() -> void:
 	recorder.release()
 
 
-## Compatibility rule 1, unchanged by M1: an unknown top-level key is logged and
-## ignored rather than treated as an error. M2's `{"tick":{"t":N}}` is the reason
-## it exists.
 func _test_unknown_keys_are_still_ignored() -> void:
 	var recorder := Recorder.new()
 	recorder.feed('{"item_moved":{"id":7,"x":1.0,"z":2.0}}')
@@ -732,9 +634,6 @@ func _test_unknown_keys_are_still_ignored() -> void:
 	recorder.release()
 
 
-## `JSON.parse_string` returns every JSON number as a float, so every integer on
-## the wire arrives as one. `welcome.tick` was the known case; every id and slot
-## index M1 adds has the same problem (PROTOCOL.md, "Decoding notes").
 func _test_integers_arrive_as_integers() -> void:
 	var recorder := Recorder.new()
 	recorder.feed(
@@ -786,12 +685,6 @@ func _test_integers_arrive_as_integers() -> void:
 	recorder.release()
 
 
-## The two M1 intents, asserted as the exact bytes they put on the wire.
-##
-## Nothing calls the senders yet — turning a click into a `pickup` and drawing
-## an inventory are M1d — so this is the only check that the frames match
-## `PROTOCOL.md` before a server exists to reject them. `move_to` is here beside
-## them so that one file owns the whole client-to-server surface.
 func _test_intent_frames() -> void:
 	_check(
 		JSON.stringify(NetClientScript.pickup_frame(7)) == '{"pickup":{"item":7}}',
@@ -840,9 +733,6 @@ func _test_intent_frames() -> void:
 		'self-use frames as {"use":{"on":3,"slot":3}}, got %s'
 		% JSON.stringify(NetClientScript.use_frame(3, 3)),
 	)
-	# `drop` names a slot and `pickup` names an item id, and the two are
-	# different spaces. A sender that swapped them would still frame as valid
-	# JSON, so the field names are asserted rather than assumed.
 	_check(
 		(NetClientScript.pickup_frame(1)["pickup"] as Dictionary).has("item")
 		and (NetClientScript.drop_frame(1)["drop"] as Dictionary).has("slot")
@@ -857,8 +747,6 @@ func _test_intent_frames() -> void:
 	)
 
 
-## Three consecutive stamped frames are 1, 2, 3. A welcome with last_seq 7
-## restarts at 8. A welcome without last_seq restarts at 1.
 func _test_seq_stamping() -> void:
 	var net: NetClientScript = NetClientScript.new()
 	_check(net.next_seq() == 1, "before any welcome the next seq is 1")

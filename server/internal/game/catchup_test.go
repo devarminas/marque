@@ -1,13 +1,5 @@
 package game
 
-// In-package, unlike path_test.go, because the catch-up bound lives in stepAll:
-// unexported, taking the accumulator by pointer, and reachable from game_test
-// only by exporting something or injecting a clock. Go's internal test package
-// buys the same access for nothing, so production code stays as it is.
-//
-// The companion test in internal/net drives the bound through the real loop and
-// a real wall-clock stall. That one proves Run can reach the branch; this one
-// pins the arithmetic, and does it without a timer.
 
 import (
 	"bytes"
@@ -20,32 +12,20 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// idleTransport satisfies Transport without ever producing an event. These
-// tests call stepAll directly and never call Run, so the channel is never read;
-// NewWorld only insists it is not nil.
 type idleTransport struct{}
 
 func (idleTransport) Events() <-chan mnet.Event { return nil }
 
-// newStepWorld returns a world nobody is connected to, plus the log it writes.
 func newStepWorld(t *testing.T) (*World, *bytes.Buffer) {
 	t.Helper()
 	logs := &bytes.Buffer{}
 	return NewWorld(idleTransport{}, gamelog.New(logs, true), NewMemoryStore(NoWearables), ResumeGraceTicks, nil), logs
 }
 
-// TestCatchUpStopsAtTheBound is the arithmetic of PROTOCOL.md's "Clock": at
-// most MaxCatchUpTicks run in one iteration, the remainder is discarded, and
-// the discard is logged.
-//
-// The discard is the whole point. If the surplus stayed in owed it would be
-// re-owed on the next iteration and the bound would only delay the spiral it
-// exists to stop, so this asserts what owed holds afterwards and not only what
-// the log says.
 func TestCatchUpStopsAtTheBound(t *testing.T) {
 	const (
 		overdue   = MaxCatchUpTicks + 3
-		remainder = TickDuration / 3 // a sub-tick tail, which survives
+		remainder = TickDuration / 3
 	)
 
 	w, logs := newStepWorld(t)
@@ -79,9 +59,6 @@ func TestCatchUpStopsAtTheBound(t *testing.T) {
 	}
 }
 
-// TestCatchUpRunsTheWholeBacklogUpToTheBound covers the other side of the
-// comparison. A backlog exactly at the bound is not a drop, and nothing short
-// of it is either, so the >-not->= in stepAll is pinned from both directions.
 func TestCatchUpRunsTheWholeBacklogUpToTheBound(t *testing.T) {
 	for _, due := range []int{0, 1, MaxCatchUpTicks - 1, MaxCatchUpTicks} {
 		w, logs := newStepWorld(t)
@@ -100,9 +77,6 @@ func TestCatchUpRunsTheWholeBacklogUpToTheBound(t *testing.T) {
 	}
 }
 
-// TestRepeatedOverrunsDoNotAccumulate is the spiral itself, run twice. Two
-// stalls in a row each cost exactly the bound, because the first one left
-// nothing behind for the second to inherit.
 func TestRepeatedOverrunsDoNotAccumulate(t *testing.T) {
 	const overdue = MaxCatchUpTicks * 4
 
@@ -123,7 +97,6 @@ func TestRepeatedOverrunsDoNotAccumulate(t *testing.T) {
 	}
 }
 
-// eventsNamed parses the NDJSON log and returns the objects for one event name.
 func eventsNamed(t *testing.T, logs *bytes.Buffer, name string) []map[string]any {
 	t.Helper()
 
@@ -146,8 +119,6 @@ func eventsNamed(t *testing.T, logs *bytes.Buffer, name string) []map[string]any
 	return matched
 }
 
-// number reads one numeric field out of a parsed log line. Every JSON number
-// decodes into a float64, so an int field has to be read back as one.
 func number(t *testing.T, obj map[string]any, key string) float64 {
 	t.Helper()
 

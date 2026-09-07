@@ -1,10 +1,5 @@
 package net_test
 
-// Resume under contention: a token claimed twice, a player suspended and
-// resumed more than once, and a suspended body losing a race it was walking to.
-//
-// Written by M2a's second verifier and adopted verbatim; the assertions are
-// theirs. Against the real harness.
 
 import (
 	"sync"
@@ -164,8 +159,6 @@ func TestProbeRefusedConnectionThenFreshJoinWorks(t *testing.T) {
 	}
 }
 
-// A suspended player loses a contested pickup: losePickup sends to a nil conn
-// and broadcasts a halt for a body nobody is driving.
 func TestProbeSuspendedLoserOfAContestedPickupResumesEmptyHanded(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0))
 

@@ -1,9 +1,5 @@
 package game
 
-// The two Store transactions M3a adds, at the layer that decides them.
-// In-package for store_test.go's and drop_store_test.go's reason: every test
-// here is a sentence about the Store interface that a Postgres implementation
-// will have to reproduce.
 
 import (
 	"errors"
@@ -12,8 +8,6 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// fill puts a kind in every free bag slot, so a test can reach the full-bag
-// branch without twenty-eight lines saying so.
 func fill(t *testing.T, s Store, player mnet.PlayerID, kind string) {
 	t.Helper()
 	for {
@@ -26,8 +20,6 @@ func fill(t *testing.T, s Store, player mnet.PlayerID, kind string) {
 	}
 }
 
-// wornKindIn reports what a player has in one worn slot, read back through the
-// interface rather than out of the implementation.
 func wornKindIn(s Store, player mnet.PlayerID, slot mnet.EquipSlot) (string, bool) {
 	for _, w := range s.Worn(player) {
 		if w.Slot == slot {
@@ -37,10 +29,6 @@ func wornKindIn(s Store, player mnet.PlayerID, slot mnet.EquipSlot) (string, boo
 	return "", false
 }
 
-// TestWornSlotsAndTheKindTableAgree pins the two tables against each other. A
-// kind mapped to a slot name that is not in WornSlots would be equippable and
-// then impossible to take off, because unequip refuses a name the list does not
-// have.
 func TestWornSlotsAndTheKindTableAgree(t *testing.T) {
 	for kind, slots := range testWearables(t) {
 		for _, slot := range slots {
@@ -58,10 +46,6 @@ func TestWornSlotsAndTheKindTableAgree(t *testing.T) {
 	}
 }
 
-// TestEquipIsOneMove is the interface's reason to exist, the same sentence
-// TestTakeIsOneMove and TestDropIsOneMove say about the ground. One call moves
-// the item out of the bag and into the worn slot; afterwards it is in exactly
-// one of the two places, never both and never neither.
 func TestEquipIsOneMove(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(7)
@@ -90,9 +74,6 @@ func TestEquipIsOneMove(t *testing.T) {
 	}
 }
 
-// TestEquipNeverTouchesTheGround. The bag and the worn slots are the only two
-// containers an equip addresses, and an implementation that routed through the
-// ground would mint an item id and broadcast a body to every other client.
 func TestEquipNeverTouchesTheGround(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -112,10 +93,6 @@ func TestEquipNeverTouchesTheGround(t *testing.T) {
 	}
 }
 
-// TestSpawnInventoryItemMintsNoItemId is what makes the join kit a bag item
-// rather than a world item. An inventory holds kinds, so an item that was never
-// on the ground has nothing an id could name, and burning one would make the
-// next ground item's id unpredictable to every test and launch script.
 func TestSpawnInventoryItemMintsNoItemId(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -130,8 +107,6 @@ func TestSpawnInventoryItemMintsNoItemId(t *testing.T) {
 	}
 }
 
-// TestSpawnInventoryItemFillsTheLowestFreeSlot, which is what makes a join kit
-// land in a predictable order and RuneScape's rule for every path into the bag.
 func TestSpawnInventoryItemFillsTheLowestFreeSlot(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -147,8 +122,6 @@ func TestSpawnInventoryItemFillsTheLowestFreeSlot(t *testing.T) {
 	}
 }
 
-// TestSpawnInventoryItemRefusesAFullBag, which is the branch the join kit must
-// never reach and which the world panics on if it does.
 func TestSpawnInventoryItemRefusesAFullBag(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -162,10 +135,6 @@ func TestSpawnInventoryItemRefusesAFullBag(t *testing.T) {
 	}
 }
 
-// TestEquipSwapsThroughTheBagSlotItVacated is RuneScape's answer to equipping
-// onto an occupied slot, and it is the reason equip has no room question: the
-// slot the new item leaves is the one the old item lands in, so a swap cannot
-// fail for want of space even in a completely full bag.
 func TestEquipSwapsThroughTheBagSlotItVacated(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -180,8 +149,6 @@ func TestEquipSwapsThroughTheBagSlotItVacated(t *testing.T) {
 		t.Fatalf("the bag is not full, so the swap below proves nothing: %v", err)
 	}
 
-	// Slot 0 is an acorn and slots 1 upward are acorns too, so put the second
-	// axe somewhere known by taking one off the ground.
 	ground := s.SpawnGroundItem(KindSword, 0, 0)
 	if _, err := s.DropInventorySlot(1, 5, 0, 0); err != nil {
 		t.Fatalf("making room in slot 5: %v", err)
@@ -219,8 +186,6 @@ func TestEquipSwapsThroughTheBagSlotItVacated(t *testing.T) {
 	}
 }
 
-// TestUnequipIsOneMove is TestEquipIsOneMove in the other direction, which is
-// what makes it the atomicity test rather than a second happy path.
 func TestUnequipIsOneMove(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -249,9 +214,6 @@ func TestUnequipIsOneMove(t *testing.T) {
 	}
 }
 
-// TestUnequipFillsTheLowestFreeSlot, not the slot the item was equipped from.
-// The store does not remember where an item came from, and nothing should make
-// it start.
 func TestUnequipFillsTheLowestFreeSlot(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -277,9 +239,6 @@ func TestUnequipFillsTheLowestFreeSlot(t *testing.T) {
 	}
 }
 
-// TestARefusedEquipChangesNothing is atomicity's other half, the one
-// TestDroppingAnEmptySlotChangesNothing holds for drop: a move that cannot
-// complete does not half-complete.
 func TestARefusedEquipChangesNothing(t *testing.T) {
 	cases := []struct {
 		name string
@@ -319,9 +278,6 @@ func TestARefusedEquipChangesNothing(t *testing.T) {
 	}
 }
 
-// TestARefusedUnequipChangesNothing, and the full-bag case is the one that
-// matters: the alternative to refusing is the store deciding on its own to put
-// the item somewhere the player did not ask for.
 func TestARefusedUnequipChangesNothing(t *testing.T) {
 	cases := []struct {
 		name string
@@ -370,9 +326,6 @@ func TestARefusedUnequipChangesNothing(t *testing.T) {
 	}
 }
 
-// TestUnequippingAnEmptyWornSlotIsItsOwnRefusal. A name this server has that
-// holds nothing is a stale client; a name it does not have is a broken one, and
-// they get different errors for drop's reason.
 func TestUnequippingAnEmptyWornSlotIsItsOwnRefusal(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -382,10 +335,6 @@ func TestUnequippingAnEmptyWornSlotIsItsOwnRefusal(t *testing.T) {
 	}
 }
 
-// TestEquipAndUnequipForAnUnknownPlayerFail. Reaching either means the caller
-// has a player the store has never heard of; the store refuses rather than
-// panicking, because the interface answers questions and the caller decides
-// what is fatal.
 func TestEquipAndUnequipForAnUnknownPlayerFail(t *testing.T) {
 	s := newStore(t)
 
@@ -403,9 +352,6 @@ func TestEquipAndUnequipForAnUnknownPlayerFail(t *testing.T) {
 	}
 }
 
-// TestRetiringAPlayerForgetsWhatItWore. Worn equipment dies with the player, as
-// the bag does, and a worn slot that outlived its owner would be handed to
-// whoever was issued that id next if ids were ever reused.
 func TestRetiringAPlayerForgetsWhatItWore(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -427,9 +373,6 @@ func TestRetiringAPlayerForgetsWhatItWore(t *testing.T) {
 	}
 }
 
-// TestWornSlotsAreNotSharedBetweenPlayers, which a map keyed by slot name and
-// shared by accident would break silently: everybody would be wearing whatever
-// the last person equipped.
 func TestWornSlotsAreNotSharedBetweenPlayers(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -449,8 +392,6 @@ func TestWornSlotsAreNotSharedBetweenPlayers(t *testing.T) {
 	}
 }
 
-// wornKindsIn reports every worn slot a player has a given kind in, read back
-// through the interface.
 func wornKindsIn(s Store, player mnet.PlayerID, kind string) []mnet.EquipSlot {
 	var slots []mnet.EquipSlot
 	for _, w := range s.Worn(player) {
@@ -461,8 +402,6 @@ func wornKindsIn(s Store, player mnet.PlayerID, kind string) []mnet.EquipSlot {
 	return slots
 }
 
-// TestAOneHandedKindOccupiesOneHand: the right hand, so the left hand stays
-// free for a shield or a second one-handed tool. M7b, AC2.
 func TestAOneHandedKindOccupiesOneHand(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -487,9 +426,6 @@ func TestAOneHandedKindOccupiesOneHand(t *testing.T) {
 	}
 }
 
-// TestATwoHandedKindOccupiesBothHands. The kind fills left and right hand, the
-// restatement shows both, and there is no point where one hand has it and the
-// other does not. M7b, AC1.
 func TestATwoHandedKindOccupiesBothHands(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -523,8 +459,6 @@ func TestATwoHandedKindOccupiesBothHands(t *testing.T) {
 	}
 }
 
-// TestUnequippingAHandOfATwoHandedKindClearsBothHands, because a hand cannot
-// keep half of a two-handed tool, and the bag receives the kind once. M7b, AC4.
 func TestUnequippingAHandOfATwoHandedKindClearsBothHands(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -552,9 +486,6 @@ func TestUnequippingAHandOfATwoHandedKindClearsBothHands(t *testing.T) {
 	}
 }
 
-// TestUnequippingAHandOfATwoHandedKindWithAFullBagRefuses. The bag must have
-// room for the kind before either hand is cleared, so a full bag leaves both
-// hands wearing it and nothing is lost. M7b, AC4.
 func TestUnequippingAHandOfATwoHandedKindWithAFullBagRefuses(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -574,9 +505,6 @@ func TestUnequippingAHandOfATwoHandedKindWithAFullBagRefuses(t *testing.T) {
 	}
 }
 
-// TestEquippingAOneHandedWeaponOntoATwoHandedToolSwaps, which is the slot
-// exclusivity test: the new kind's handedness decides what the old item
-// vacates, so the free hand the old kind was holding opens up. M7b, AC3.
 func TestEquippingAOneHandedWeaponOntoATwoHandedToolSwaps(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -615,10 +543,6 @@ func TestEquippingAOneHandedWeaponOntoATwoHandedToolSwaps(t *testing.T) {
 	}
 }
 
-// TestEquippingATwoHandedToolOntoARightHandedWeaponSwapsThroughTheBagSlotItVacated
-// is the 2H swap from an occupied right hand with a left hand still free: both
-// hands come to hold the new kind and the old weapon lands in the bag slot the
-// new kind left. M7b, AC3.
 func TestEquippingATwoHandedToolOntoARightHandedWeaponSwapsThroughTheBagSlotItVacated(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -652,10 +576,6 @@ func TestEquippingATwoHandedToolOntoARightHandedWeaponSwapsThroughTheBagSlotItVa
 	}
 }
 
-// TestEquippingATwoHandedToolOntoATwoHandedToolSwapsBothIntoOneBagSlot is the
-// two-handed 2H↔2H swap: the left hand's weapon is lost to the swap and the
-// right hand's weapon lands in the bag slot. The survivor is the right-hand
-// item, which is what PROTOCOL.md's "Handedness" describes.
 func TestEquippingATwoHandedToolOntoATwoHandedToolSwapsBothIntoOneBagSlot(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -686,10 +606,6 @@ func TestEquippingATwoHandedToolOntoATwoHandedToolSwapsBothIntoOneBagSlot(t *tes
 	}
 }
 
-// TestACannotEquipATwoHandedToolWhenOnlyOneHandCouldBeFree is the atomicity
-// half-apply test: the free hand cannot be filled first and then leave the
-// other hand, because the move is one and the bag slot is the exchange. M7b,
-// AC6 (sabotage).
 func TestACannotEquipATwoHandedToolWhenOnlyOneHandCouldBeFree(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)
@@ -715,8 +631,6 @@ func TestACannotEquipATwoHandedToolWhenOnlyOneHandCouldBeFree(t *testing.T) {
 	}
 }
 
-// TestEquippingProspectorBootsUsesTheFeetSlot is the slot the brief adds for
-// the prospector class. M7b.
 func TestEquippingProspectorBootsUsesTheFeetSlot(t *testing.T) {
 	s := newStore(t)
 	s.AddPlayer(1)

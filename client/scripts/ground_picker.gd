@@ -1,35 +1,15 @@
 class_name GroundPicker
 extends Node
 
-## Turns a cursor position into what the player clicked: ground, a ground item,
-## a resource node, or a player body.
-##
-## Producing the answer is the whole job. This node does not move anything, does
-## not pick anything up, and does not talk to a network: `session.gd` connects
-## the signals to intents. Keeping them apart is the "game logic never reaches
-## into the visual tree" invariant from CLAUDE.md.
-##
-## [b]One ray decides, not two.[/b] Ground is layer 1, ground items layer 2,
-## players layer 3 (mask value 4), resource nodes layer 4 (mask value 8).
-## [method pick] queries all four in one
-## [method PhysicsDirectSpaceState3D.intersect_ray]; the nearest surface wins.
-##
-## Ids are not read here. [signal item_clicked], [signal node_clicked], and
-## [signal player_clicked] carry the body; `session.gd` looks that body up in
-## the registry the server's frames built.
 
 signal ground_clicked(x: float, z: float)
 
-## Emitted on a left click whose ray meets a ground item first. **M1.**
 signal item_clicked(item: Node3D)
 
-## Emitted on a left click whose ray meets a resource node first. **M4b.**
 signal node_clicked(resource_node: Node3D)
 
-## Emitted on a left click whose ray meets a player body first. **M6c.**
 signal player_clicked(avatar: Node3D)
 
-## Emitted on a right click whose ray meets a selectable body first. **M6f.**
 signal player_attack_clicked(avatar: Node3D)
 
 enum Target {
@@ -79,11 +59,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			pass
 
 
-## Resolves [param screen_position] to what is under it, in one query.
-##
-## Always returns all five keys:
-## [code]{"target": Target, "ground": Vector2, "item": Node3D, "node": Node3D,
-## "player": Node3D}[/code]
 func pick(screen_position: Vector2) -> Dictionary:
 	var miss := {
 		"target": Target.NOTHING,
@@ -160,7 +135,6 @@ func pick(screen_position: Vector2) -> Dictionary:
 	}
 
 
-## Projects a ray against the ground layer alone.
 func pick_ground(screen_position: Vector2) -> Variant:
 	var hit := _cast(screen_position, ground_collision_mask)
 	if hit.is_empty():

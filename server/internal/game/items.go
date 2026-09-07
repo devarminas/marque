@@ -9,13 +9,9 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// PickupRange is how near a player must be to a ground item to take it, in
-// world units. It governs resolution only, never path assignment.
 // Tuning: ARM-26.
 const PickupRange = 0.5
 
-// SeedGroundItem puts one item into the world before it opens. It must be
-// called before Run, and fails when the coordinate is outside the world.
 func (w *World) SeedGroundItem(kind string, x, z float64) error {
 	if kind == "" {
 		return errors.New("seed item: kind must not be empty")

@@ -46,7 +46,6 @@ func (n *npc) wire() mnet.NpcState {
 	}
 }
 
-// SeedPracticeDummies places one friendly and one enemy stationary dummy.
 func (w *World) SeedPracticeDummies() error {
 	if err := w.seedNpc(KindDummy, FactionFriendly, FriendlyDummyX, FriendlyDummyZ); err != nil {
 		return err
@@ -100,7 +99,6 @@ func (w *World) broadcastNPCHP(n *npc) {
 	w.broadcast(mnet.HP{ID: n.id, HP: n.hp, MaxHP: MaxHP}, nil)
 }
 
-// SetNPCHitPointsByFaction sets HP on the first seeded NPC of faction.
 func (w *World) SetNPCHitPointsByFaction(faction string, hp int) error {
 	if faction != FactionFriendly && faction != FactionHostile {
 		return fmt.Errorf("set npc hp: unknown faction %q", faction)

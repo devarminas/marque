@@ -17,21 +17,15 @@ const (
 	eventBuffer  = 256
 )
 
-// Disconnect reasons reported on EventDisconnected (PROTOCOL.md, "Which reason
-// is authoritative").
 const (
 	DisconnectClosed   = "closed"
 	DisconnectPeerGone = "peer_gone"
 	DisconnectSlow     = "slow_client"
 	DisconnectShutdown = "server_shutdown"
 	DisconnectProtocol = "protocol_error"
-	// DisconnectRefused: turned away at the door because the token's player is
-	// still connected.
 	DisconnectRefused = "refused"
 )
 
-// SessionParam is the WebSocket URL query parameter carrying a resuming
-// client's session token, as in ws://host/ws?session=<token>.
 const SessionParam = "session"
 
 const (
@@ -54,29 +48,19 @@ const (
 	EventDisconnected
 )
 
-// Event is one thing that happened on one connection. Per connection they
-// arrive as EventConnected, zero or more EventFrame, then one EventDisconnected.
 type Event struct {
 	Kind EventKind
 	Conn *Conn
 
-	// Exactly one of Msg and Err is set, and only when Kind is EventFrame. Err
-	// is a *RejectError.
 	Msg ClientMessage
 	Err error
 
-	// Seq is the envelope's sequence number, set even when Err rejects the
-	// body, and 0 when the frame carried none.
 	Seq Seq
 
-	// Reason is one of the Disconnect constants; Detail one of the Detail
-	// constants, or empty. Nothing may branch on Detail.
 	Reason string
 	Detail string
 }
 
-// Name is the wire name of the message this event is about, or empty for a
-// frame too malformed to attribute to one.
 func (ev Event) Name() string {
 	if ev.Msg != nil {
 		return ev.Msg.Name()
@@ -87,7 +71,6 @@ func (ev Event) Name() string {
 	return ""
 }
 
-// Conn is one client connection.
 type Conn struct {
 	ws           *websocket.Conn
 	remote       string
@@ -101,15 +84,10 @@ type Conn struct {
 	closeDetail string
 }
 
-// Remote is the peer address, for logging only. It is not an identity.
 func (c *Conn) Remote() string { return c.remote }
 
-// Session is the session token this connection presented, or empty. It is a
-// claim, not a fact; the world decides what it entitles.
 func (c *Conn) Session() string { return c.session }
 
-// Send queues one encoded frame and reports whether it was accepted. It never
-// blocks.
 func (c *Conn) Send(payload []byte) bool {
 	select {
 	case <-c.closed:
@@ -126,8 +104,6 @@ func (c *Conn) Send(payload []byte) bool {
 	}
 }
 
-// CloseAfterFlush queues a shutdown behind everything already queued, so a
-// final frame reaches the client before the socket goes.
 func (c *Conn) CloseAfterFlush(reason string) {
 	select {
 	case <-c.closed:
@@ -152,8 +128,6 @@ func (c *Conn) close(reason, detail string) {
 	})
 }
 
-// Hub turns accepted WebSocket connections into a single ordered stream of
-// Events for one consumer.
 type Hub struct {
 	events       chan Event
 	writeTimeout time.Duration
@@ -174,11 +148,8 @@ func NewHub() *Hub {
 	}
 }
 
-// Events is the hub's output. Exactly one goroutine may drain it.
 func (h *Hub) Events() <-chan Event { return h.events }
 
-// ServeHTTP upgrades a request to WebSocket and blocks for the connection's
-// lifetime.
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	session := r.URL.Query().Get(SessionParam)
 
@@ -234,8 +205,6 @@ func (h *Hub) emit(ev Event) {
 	}
 }
 
-// Close stops accepting connections and closes every open one. Safe to call
-// more than once.
 func (h *Hub) Close() {
 	h.mu.Lock()
 	if h.closed {

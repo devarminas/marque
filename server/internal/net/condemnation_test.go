@@ -1,7 +1,5 @@
 package net_test
 
-// Condemnation: why a connection died, and which observation gets to say so
-// (PROTOCOL.md, "Which reason is authoritative").
 
 import (
 	"context"
@@ -17,14 +15,10 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// fatFrame is larger than any socket buffer these tests expect to meet, so
-// jamming a write takes a frame or two rather than a flood.
 const fatFrame = 1 << 20
 
 const testWriteTimeout = 400 * time.Millisecond
 
-// sendPace throttles the flood into a jammed socket so that the write timeout
-// fires before the send queue fills, making the detector deterministic.
 const sendPace = testWriteTimeout / 8
 
 func TestClosingTheSocketUnblocksABlockedWrite(t *testing.T) {
@@ -60,8 +54,6 @@ func TestClosingTheSocketUnblocksABlockedWrite(t *testing.T) {
 }
 
 func TestTheReadPumpWouldCondemnATornDownSocketAsPeerGone(t *testing.T) {
-	// net.ErrClosed is what a blocked read returns once another goroutine has
-	// closed the socket under it, which is what condemning a slow client does.
 	reason, detail := mnet.ClassifyRead(errWrapped(net.ErrClosed))
 	if reason != mnet.DisconnectPeerGone || detail != mnet.DetailReadError {
 		t.Fatalf("a read on a torn-down socket classifies as %q/%q, want %q/%q",
@@ -88,11 +80,6 @@ func TestAReadContextDeadlineIsNotACleanClose(t *testing.T) {
 	}
 }
 
-// TestWriteTimeoutCondemnsASlowClientAndTheReadErrorDoesNotOverwriteIt proves
-// the read pump ran and lost: ServeHTTP emits EventDisconnected only after
-// readPump has returned from a branch that called close with its own
-// classification, so receiving the event at all means the consequence was
-// observed, and the reason on it says which observation survived.
 func TestWriteTimeoutCondemnsASlowClientAndTheReadErrorDoesNotOverwriteIt(t *testing.T) {
 	hub := mnet.NewHub()
 	hub.SetWriteTimeout(testWriteTimeout)
@@ -125,8 +112,6 @@ func TestWriteTimeoutCondemnsASlowClientAndTheReadErrorDoesNotOverwriteIt(t *tes
 		t.Fatalf("the peer read %q, want the greeting", got)
 	}
 
-	// From here the peer never reads again: not closed, not broken, just not
-	// draining.
 	fat := encodeFrame(t, mnet.Error{Re: mnet.MsgMoveTo, Msg: strings.Repeat("x", fatFrame)})
 	deadline := time.Now().Add(readTimeout)
 	queued := 0
@@ -172,8 +157,6 @@ func TestAbruptPeerDeathReportsPeerGone(t *testing.T) {
 
 	conn := awaitEvent(t, hub, mnet.EventConnected).Conn
 
-	// CloseNow, unlike Close, drops the TCP connection without sending a close
-	// frame, so the server has no way to be told this was on purpose.
 	if err := ws.CloseNow(); err != nil {
 		t.Fatalf("destroying the peer: %v", err)
 	}
@@ -247,13 +230,8 @@ func TestAbruptDisconnectLogsTheCauseAndTheDetector(t *testing.T) {
 	}
 }
 
-// TestAJammedPongCondemnsTheClientAsPeerGone is the only thing establishing
-// that a context deadline can reach the read goroutine at all, which is the
-// scenario readReason's context handling exists for.
 func TestAJammedPongCondemnsTheClientAsPeerGone(t *testing.T) {
 	hub := mnet.NewHub()
-	// Past the library's five-second control-frame deadline, so the library's
-	// is the one that fires.
 	hub.SetWriteTimeout(time.Minute)
 	server := httptest.NewServer(hub)
 	t.Cleanup(func() {
@@ -284,8 +262,6 @@ func TestAJammedPongCondemnsTheClientAsPeerGone(t *testing.T) {
 		t.Fatalf("the peer read %q, want the greeting", got)
 	}
 
-	// From here the peer never reads, so writePump ends up blocked inside
-	// ws.Write holding the write mutex the pong will need.
 	fat := encodeFrame(t, mnet.Error{Re: mnet.MsgMoveTo, Msg: strings.Repeat("x", fatFrame)})
 	for i := 0; i < 3; i++ {
 		if !conn.Send(fat) {
@@ -301,14 +277,10 @@ func TestAJammedPongCondemnsTheClientAsPeerGone(t *testing.T) {
 	default:
 	}
 
-	// Ping blocks for a pong that cannot arrive, so it is left to the cleanup:
-	// the frame is what matters, not the round trip.
 	pingCtx, pingCancel := context.WithCancel(context.Background())
 	t.Cleanup(pingCancel)
 	go func() { _ = ws.Ping(pingCtx) }()
 
-	// Its own budget rather than awaitEvent's: the library's control-frame
-	// deadline is five seconds on its own, so readTimeout cannot cover it.
 	const pongBudget = 15 * time.Second
 	start := time.Now()
 	var disconnect mnet.Event
@@ -337,8 +309,6 @@ func TestAJammedPongCondemnsTheClientAsPeerGone(t *testing.T) {
 	}
 }
 
-// websocketPair returns a connected server and client. The client never reads,
-// so writes on the server side jam.
 func websocketPair(t *testing.T) (server, peer *websocket.Conn) {
 	t.Helper()
 
@@ -351,8 +321,6 @@ func websocketPair(t *testing.T) (server, peer *websocket.Conn) {
 			return
 		}
 		accepted <- ws
-		// Hold the handler open for the test's lifetime; httptest.Server.Close
-		// waits for it, and t.Cleanup closes the socket first.
 		<-r.Context().Done()
 	}))
 	t.Cleanup(srv.Close)

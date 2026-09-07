@@ -18,9 +18,6 @@ type ClassKitSeed struct {
 	X, Z float64
 }
 
-// ClassKitSeeds walks catalog sets (same source as Wearables) and returns one
-// ground position per unique kind in armor slots and tools. Set ids are sorted
-// for a stable grid. First occurrence wins on dedupe. Nil catalog yields nil.
 func ClassKitSeeds(cat *classdef.Catalog) []ClassKitSeed {
 	if cat == nil {
 		return nil

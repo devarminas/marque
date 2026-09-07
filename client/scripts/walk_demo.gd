@@ -1,29 +1,5 @@
 extends Node3D
 
-## Windowed visual check for the avatar and the walker. Not part of the game.
-##
-## Anything genuinely visual cannot be checked headless (NOTES.md, "Headless
-## testing"), so this scene renders itself, captures its own frame, and asserts
-## on the pixels. The desktop is not automated.
-##
-## [codeblock]
-## godot --path client res://scenes/walk_demo.tscn
-## [/codeblock]
-##
-## It instances [code]main.tscn[/code] for the ground, the sun, and the camera
-## rig rather than duplicating them, spawns avatars into that scene's authored
-## [code]RemotePlayers[/code] container, and drives them to a fixed tick. The
-## tick is fed, not read from a clock, so the captured frame is the same every
-## run.
-##
-## Two things are asserted, both of which a plausible-looking build can fail:
-##
-## 1. [b]The avatar moved.[/b] Its logical position is mid-path, and blue pixels
-##    are actually there on screen. "The image is not black" is far too weak.
-## 2. [b]The avatar casts a shadow.[/b] Ground samples along the sun's shadow
-##    axis are compared against the mirrored samples on the lit side. An M0c
-##    build whose sun pointed at the sky passed a weaker check than this
-##    (NOTES.md, "Godot authoring traps").
 
 const PlayerAvatarScene := preload("res://scenes/player_avatar.tscn")
 const PlayerAvatar := preload("res://scripts/player_avatar.gd")
@@ -32,37 +8,19 @@ const SHOT_PATH := "user://walk_demo.png"
 
 const TICK_MS := 150
 const START_TICK := 1000
-## 10 ticks is 1.5s, which at 3 u/s is 4.5 units along a 10 unit path: mid-walk
-## by a margin no rounding can close.
 const SAMPLE_TICK := START_TICK + 10
 const SPEED := 3.0
 const PATH_START := Vector2(-5.0, 3.0)
 const PATH_END := Vector2(5.0, 3.0)
 const EXPECTED_AT_SAMPLE := Vector2(-0.5, 3.0)
 
-## Frames to let the renderer settle. The first frame has no shadow map and no
-## resolved sky, so a capture there proves nothing.
 const WARMUP_FRAMES := 30
 
-## Ground offsets, in world units from the avatar's feet, sampled along the
-## shadow axis. They span more than one 1m checker square in both directions so
-## the checker's two shades average out of the comparison.
 const SHADOW_SAMPLE_DISTANCES: Array = [0.55, 0.75, 0.95, 1.15, 1.35]
-## How much darker the shadowed side must be than the lit side, as a fraction of
-## the lit luminance. A real cast shadow is far past this; ambient-only lighting
-## with no shadow is far under it.
 const SHADOW_DARKENING := 0.2
-## Radius in pixels to hunt for the avatar's armour around its projected
-## centre.
 const AVATAR_SEARCH_RADIUS := 70
-## Sample height on the avatar. The Knight stands ~2.28 units to the helmet's
-## top, so 1.2 is inside the plate torso rather than the old capsule's head.
 const SAMPLE_HEIGHT := 1.2
 
-## The armour is steel-blue rather than the capsule's bright blue, so the hunt
-## takes either a clear blue cast or a dark tone with blue pulling away from
-## green. The gap is what keeps the checker's own grey squares (b only 0.01
-## above green) from counting as armour.
 static func is_armour_pixel(colour: Color) -> bool:
 	if colour.b - colour.r > 0.10 and colour.b > colour.g:
 		return true
@@ -81,8 +39,6 @@ func _ready() -> void:
 	avatar.update_to_tick(SAMPLE_TICK)
 
 	for _frame in WARMUP_FRAMES:
-		# The avatar has no clock, so re-feeding the same tick every frame holds
-		# it still while the renderer settles. Same tick, same position.
 		avatar.update_to_tick(SAMPLE_TICK)
 		await RenderingServer.frame_post_draw
 
@@ -108,8 +64,6 @@ func _ready() -> void:
 	get_tree().quit(1)
 
 
-## Mid-path, not at either end. An avatar that never got its path sits at
-## points[0], and one whose clamp is broken sits at the far end.
 func _check_the_avatar_left_its_origin(avatar: PlayerAvatar) -> void:
 	var here := Vector2(avatar.position.x, avatar.position.z)
 	_check(
@@ -128,8 +82,6 @@ func _check_the_avatar_left_its_origin(avatar: PlayerAvatar) -> void:
 	)
 
 
-## The logical position above proves the arithmetic. This proves the body was
-## actually drawn there, which is the half a headless test cannot reach.
 func _check_the_avatar_is_on_screen_where_the_walker_says(
 	image: Image, camera: Camera3D, avatar: PlayerAvatar
 ) -> void:
@@ -152,12 +104,6 @@ func _check_the_avatar_is_on_screen_where_the_walker_says(
 	)
 
 
-## The sun's shadow falls in the direction the light travels, projected onto the
-## ground. Ground a metre along that axis from the avatar's feet must be
-## meaningfully darker than the same ground a metre the other way.
-##
-## This is what catches a sun pointing at the sky: without a cast shadow both
-## sides are lit identically and the ratio collapses to 1.
 func _check_the_avatar_casts_a_shadow(
 	image: Image, camera: Camera3D, avatar: PlayerAvatar
 ) -> void:

@@ -1,14 +1,5 @@
 package net_test
 
-// drop, driven through real WebSocket clients against a real server. It is
-// pickup's reverse transaction, so most of what is worth asserting here is a
-// mirror of items_test.go: one atomic move, everyone told including the causer,
-// and a refusal that broadcasts nothing.
-//
-// It is also the first runtime caller of the item-spawn path. M1a seeded every
-// item before any connection existed, so item_spawn had never crossed a socket
-// and the include-the-causer rule had never been exercised by anything but the
-// type system.
 
 import (
 	"testing"
@@ -18,27 +9,8 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// underfoot is the spawn point, where every player enters the world.
-//
-// It is zero rather than something merely inside PickupRange, and the
-// difference matters: PickupRange governs resolution only, so an item a
-// fraction of a unit away is still walked to and the player ends up standing on
-// it. An item at zero distance is the degenerate case that assigns no path at
-// all and resolves on the next tick (PROTOCOL.md, "Pickup").
-//
-// These tests use it to get an item into an inventory without spending a walk
-// on it, and, for the drop tests, to know exactly where the dropper is: she
-// never moves.
 const underfoot = 0.0
 
-// TestDropIsImmediateAndReachesEveryoneIncludingTheDropper is the unit in one
-// test: the item leaves the slot and lands at the player's feet on that tick,
-// item_spawn goes to everybody, and only the dropper's inventory is restated.
-//
-// The frames are asserted as a whole set rather than one at a time, because
-// three of the four claims are about what did *not* arrive: no path, because a
-// drop is not a walk; nothing else to the dropper; and nothing but the spawn to
-// the observer.
 func TestDropIsImmediateAndReachesEveryoneIncludingTheDropper(t *testing.T) {
 	h := newHarness(t, acornAt(underfoot, 0))
 
@@ -47,7 +19,7 @@ func TestDropIsImmediateAndReachesEveryoneIncludingTheDropper(t *testing.T) {
 
 	bob := h.dial("bob")
 	bob.welcome()
-	alice.spawn() // bob joining
+	alice.spawn()
 
 	alice.pickup(seeded)
 	held := alice.awaitInventory()
@@ -59,8 +31,6 @@ func TestDropIsImmediateAndReachesEveryoneIncludingTheDropper(t *testing.T) {
 
 	alice.drop(held.Slots[0].Slot)
 
-	// The dropper's whole share of the transaction: the world's change, then
-	// the one message that is private to her.
 	mine := alice.collect(silenceWindow)
 	if len(mine) != 2 || mine[0].ItemSpawn == nil || mine[1].Inventory == nil {
 		t.Fatalf("the dropper received %d frames %v, want exactly an item_spawn then an inventory",
@@ -71,8 +41,6 @@ func TestDropIsImmediateAndReachesEveryoneIncludingTheDropper(t *testing.T) {
 		t.Fatalf("the dropper's new inventory holds %+v, want nothing", got.Slots)
 	}
 
-	// The observer's share: the same announcement, and nothing else. An
-	// inventory here would be one player's private state broadcast to another.
 	theirs := bob.collect(silenceWindow)
 	if len(theirs) != 1 || theirs[0].ItemSpawn == nil {
 		t.Fatalf("the observer received %d frames %v, want exactly one item_spawn",
@@ -83,7 +51,6 @@ func TestDropIsImmediateAndReachesEveryoneIncludingTheDropper(t *testing.T) {
 			*theirs[0].ItemSpawn, spawned)
 	}
 
-	// At the player's feet, which is the spawn point: alice has never moved.
 	if spawned.Kind != game.KindAcorn || spawned.X != 0 || spawned.Z != 0 {
 		t.Fatalf("the item landed as %+v, want an acorn at the dropper's feet (0, 0)", spawned)
 	}
@@ -92,8 +59,6 @@ func TestDropIsImmediateAndReachesEveryoneIncludingTheDropper(t *testing.T) {
 			"ids are never reused within a process", spawned.ID)
 	}
 
-	// One transaction, one tick. Nothing pending, and no path was chosen,
-	// which is the whole of "drop is immediate".
 	dropped := h.awaitEvents(game.EvDrop, 1)
 	entered := h.eventsNamed(game.EvItemSpawned)
 	if len(entered) != 2 {
@@ -112,19 +77,12 @@ func TestDropIsImmediateAndReachesEveryoneIncludingTheDropper(t *testing.T) {
 	if got := dropped[0]["kind"]; got != game.KindAcorn {
 		t.Errorf("%s names kind %v, want %q", game.EvDrop, got, game.KindAcorn)
 	}
-	// The seed's entry carries no causer, so neither may the drop's: one event
-	// name, one field set (world.go, EvItemSpawned).
 	if _, has := entered[1]["player"]; has {
 		t.Errorf("%s carries a player field for a drop and none for a seed: %+v", game.EvItemSpawned, entered[1])
 	}
 }
 
-// TestDroppingWhileWalkingLandsTheItemUnderfootAndTheWalkGoesOn. Dropping mid
-// walk is legal, the item lands where the player is at that tick rather than at
-// the end of the path, and nothing about the walk changes.
 func TestDroppingWhileWalkingLandsTheItemUnderfootAndTheWalkGoesOn(t *testing.T) {
-	// Far enough that the drop happens with most of the path still ahead, near
-	// enough that the walk costs the suite about a second.
 	const destination = 4.0
 
 	h := newHarness(t, acornAt(underfoot, 0))
@@ -140,14 +98,9 @@ func TestDroppingWhileWalkingLandsTheItemUnderfootAndTheWalkGoesOn(t *testing.T)
 		t.Fatalf("the walk is %+v, want a two-point polyline to drop in the middle of", walk.Points)
 	}
 
-	// Two ticks, so the player is demonstrably no longer where the walk began
-	// and demonstrably not yet where it ends. The suite has no finer clock than
-	// this; the tick loop is the only thing that advances a walker.
 	time.Sleep(2 * game.TickDuration)
 	alice.drop(slot)
 
-	// The walk runs to completion. Nothing halted her, and nothing replaced her
-	// path, which the frame set below is what proves.
 	h.awaitEvents(game.EvArrived, 1)
 
 	frames := alice.collect(silenceWindow)
@@ -166,9 +119,6 @@ func TestDroppingWhileWalkingLandsTheItemUnderfootAndTheWalkGoesOn(t *testing.T)
 		t.Fatalf("the item landed at z=%v, want 0: the walk never leaves the x axis", spawned.Z)
 	}
 
-	// The broadcast and the world agree. A joiner is told about the item from
-	// world state rather than from the frame, so this is a second source for
-	// the same coordinates.
 	bob := h.dial("bob")
 	items := bob.welcome().Items
 	if len(items) != 1 {
@@ -179,9 +129,6 @@ func TestDroppingWhileWalkingLandsTheItemUnderfootAndTheWalkGoesOn(t *testing.T)
 	}
 }
 
-// TestARefusedDropIsAnsweredOnceAndBroadcastsNothing covers both refusals the
-// protocol names: an index outside 0 to size-1, and a legal index holding
-// nothing. Each gets one error and nothing else, and no observer hears a thing.
 func TestARefusedDropIsAnsweredOnceAndBroadcastsNothing(t *testing.T) {
 	h := newHarness(t, acornAt(underfoot, 0))
 
@@ -225,25 +172,15 @@ func TestARefusedDropIsAnsweredOnceAndBroadcastsNothing(t *testing.T) {
 		}
 	}
 
-	// One error each and nothing more. The observer heard nothing at all,
-	// which is the half no positive assertion can show.
 	alice.expectSilence()
 	bob.expectSilence()
 
-	// Every refusal left the inventory alone, so the acorn is still there to
-	// drop for real.
 	alice.drop(0)
 	if inv := alice.awaitInventory(); len(inv.Slots) != 0 {
 		t.Fatalf("after five refusals and one real drop alice holds %+v, want nothing", inv.Slots)
 	}
 }
 
-// TestADroppedItemCanBePickedUpAgain is the unit's reason to exist: drop is
-// pickup's reverse, so the round trip must return the inventory to what it was.
-//
-// It also pins the one thing that does not come back. Ids are never reused, and
-// an inventory holds kinds rather than ids, so the item that comes back is a new
-// item as far as every client is concerned.
 func TestADroppedItemCanBePickedUpAgain(t *testing.T) {
 	h := newHarness(t, acornAt(underfoot, 0))
 
@@ -259,7 +196,6 @@ func TestADroppedItemCanBePickedUpAgain(t *testing.T) {
 		t.Fatalf("after the drop alice holds %+v, want nothing", emptied.Slots)
 	}
 
-	// The item is under her feet, so this pickup assigns no path either.
 	alice.pickup(dropped.ID)
 	alice.awaitItemDespawn(dropped.ID)
 	after := alice.awaitInventory()
@@ -279,17 +215,9 @@ func TestADroppedItemCanBePickedUpAgain(t *testing.T) {
 	}
 }
 
-// TestAJoinerRacingADropIsToldAboutTheItemExactlyOnce is the ordering rule the
-// atomic welcome step exists for, applied to the first message that can race it.
-//
-// welcome.items and a live item_spawn describe the same thing, so a joiner must
-// get exactly one of them for any one item: both is a duplicated body, neither
-// is a body the client never learns about. Which one it gets is decided by
-// whether the drop was handled before or after the join step, and both answers
-// are correct.
 func TestAJoinerRacingADropIsToldAboutTheItemExactlyOnce(t *testing.T) {
 	const races = 1
-	const drops = races + 2 // one forced each way, plus the unforced race
+	const drops = races + 2
 
 	seeds := make([]seed, 0, drops)
 	for range drops {
@@ -316,9 +244,6 @@ func TestAJoinerRacingADropIsToldAboutTheItemExactlyOnce(t *testing.T) {
 		return alice.awaitItemSpawn()
 	}
 
-	// Forced: the drop is complete before the joiner exists, so the item is
-	// world state by the time the welcome is composed and the broadcast went
-	// out to a world the joiner was not in.
 	t.Run("joining after the drop", func(t *testing.T) {
 		item := nextDrop()
 		h.awaitEvents(game.EvDrop, slot)
@@ -333,8 +258,6 @@ func TestAJoinerRacingADropIsToldAboutTheItemExactlyOnce(t *testing.T) {
 		}
 	})
 
-	// Forced the other way: the joiner is in the world before the drop, so the
-	// welcome cannot have named the item and the broadcast must reach her.
 	t.Run("joining before the drop", func(t *testing.T) {
 		dave := h.dial("dave")
 		joined := dave.welcomeFrame()
@@ -349,17 +272,6 @@ func TestAJoinerRacingADropIsToldAboutTheItemExactlyOnce(t *testing.T) {
 		}
 	})
 
-	// Unforced: the drop frame is written and the dial follows immediately,
-	// with no barrier between them, so nothing in the test decides which the
-	// world goroutine handles first. The invariant is what is asserted, not the
-	// outcome.
-	//
-	// In practice it is not a fair coin and the log line below says which way it
-	// fell. A frame on an open socket reaches the read pump in a fraction of the
-	// time a fresh WebSocket handshake takes, so the drop wins essentially
-	// always. The two subtests above are what actually cover both orderings;
-	// this one covers the interleaving neither of them has, where no wait for a
-	// log line has quiesced the server first.
 	for i := range races {
 		alice.drop(slot)
 		slot++
@@ -376,10 +288,6 @@ func TestAJoinerRacingADropIsToldAboutTheItemExactlyOnce(t *testing.T) {
 			t.Fatalf("race %d: item %d was described to the joiner %d times in welcome and %d times "+
 				"live, want exactly 1 in total", i, item.ID, fromWelcome, live)
 		}
-		// Logged rather than asserted: which side won is exactly what this
-		// test does not get to decide. It is worth reading under -v, because a
-		// run where every race landed the same way has exercised one ordering
-		// and reported on two.
 		heard := "the live item_spawn, so the join was handled first"
 		if fromWelcome == 1 {
 			heard = "welcome.items, so the drop was handled first"
@@ -388,16 +296,7 @@ func TestAJoinerRacingADropIsToldAboutTheItemExactlyOnce(t *testing.T) {
 	}
 }
 
-// TestTwoPendingPickupsForDifferentItemsResolveInOnePass. Every M1a contest
-// test has exactly one item in the world, so nothing yet showed that one pass
-// can settle two independent pickups rather than one.
-//
-// The two intents have to land inside one tick for the two walks to end
-// together, so the test starts them from an observed tick boundary the way
-// TestBothRacersArriveOnTheSameTick does.
 func TestTwoPendingPickupsForDifferentItemsResolveInOnePass(t *testing.T) {
-	// One staging point, and two items the same distance from it in different
-	// directions, so neither walker has a head start on the other.
 	const staging = 1.0
 	const reach = 2.0
 
@@ -420,7 +319,7 @@ func TestTwoPendingPickupsForDifferentItemsResolveInOnePass(t *testing.T) {
 	alice.pickup(east)
 	bob.pickup(south)
 
-	paths := h.awaitEvents(game.EvPathAssigned, 4) // two staging walks, two pickups
+	paths := h.awaitEvents(game.EvPathAssigned, 4)
 	if paths[2]["start_tick"] != paths[3]["start_tick"] {
 		t.Fatalf("the two pickups were assigned paths at ticks %v and %v, so a tick boundary fell "+
 			"between them and the walks cannot end together", paths[2]["start_tick"], paths[3]["start_tick"])
@@ -432,8 +331,6 @@ func TestTwoPendingPickupsForDifferentItemsResolveInOnePass(t *testing.T) {
 			"different items must settle in one pass", resolved[0]["t"], resolved[1]["t"])
 	}
 
-	// Each took the item they asked for. Resolution is in join order, so alice
-	// is first in the pass and her item is first in the log.
 	want := []struct {
 		player mnet.PlayerID
 		item   mnet.ItemID
@@ -450,23 +347,12 @@ func TestTwoPendingPickupsForDifferentItemsResolveInOnePass(t *testing.T) {
 		}
 	}
 
-	// Two items and two takers is not a contest, so nobody lost.
 	if lost := h.eventsNamed(game.EvPickupLost); len(lost) != 0 {
 		t.Errorf("%d players lost a pickup for two items nobody was competing over: %+v", len(lost), lost)
 	}
 }
 
-// TestANearerLaterJoinerTakesItFromAnEarlierPlayerOutOfRange separates the two
-// readings of the contest rule that M1a's tests cannot tell apart.
-//
-// Every M1a contest has both players in range at once, where join order decides.
-// This one has the earlier joiner still walking and out of range in the pass
-// that the later joiner, standing on the item, resolves in. If join order were
-// absolute priority the earlier player would win by waiting; it is a tiebreaker
-// among the players who can actually reach the item, so the nearer one takes it.
 func TestANearerLaterJoinerTakesItFromAnEarlierPlayerOutOfRange(t *testing.T) {
-	// Far enough that alice needs several ticks to walk back into range, which
-	// bob does not need at all.
 	const away = 3.0
 
 	h := newHarness(t, acornAt(underfoot, 0))
@@ -488,9 +374,6 @@ func TestANearerLaterJoinerTakesItFromAnEarlierPlayerOutOfRange(t *testing.T) {
 	alice.drain()
 	bob.drain()
 
-	// Alice asks first, and her path frame is what proves the server has
-	// already recorded her pending pickup. Bob asks second, from on top of the
-	// item, and resolves on the next tick while she is still walking.
 	alice.pickup(item)
 	alice.path()
 	bob.pickup(item)
@@ -521,8 +404,6 @@ func TestANearerLaterJoinerTakesItFromAnEarlierPlayerOutOfRange(t *testing.T) {
 	}
 }
 
-// TestDecodeDrop is the wire body, including the compatibility rule that lets
-// senders add fields the body does not name.
 func TestDecodeDrop(t *testing.T) {
 	t.Parallel()
 
@@ -532,12 +413,8 @@ func TestDecodeDrop(t *testing.T) {
 		want  int
 	}{
 		{"plain", `{"drop":{"slot":3}}`, 3},
-		// Slot 0 is the first slot RuneScape's lowest-free rule fills, so
-		// "absent" and "zero" have to stay distinguishable here.
 		{"the first slot", `{"drop":{"slot":0}}`, 0},
 		{"the last slot", `{"drop":{"slot":27}}`, 27},
-		// Out of range is a question about world state, not about the frame.
-		// The decoder hands it on and the game package refuses it.
 		{"outside the inventory", `{"drop":{"slot":-1}}`, -1},
 		{"with a seq, which the envelope reads and the body ignores", `{"drop":{"slot":3,"seq":9}}`, 3},
 		{"with a field nobody has invented yet", `{"drop":{"slot":3,"whatever":true}}`, 3},
@@ -561,8 +438,6 @@ func TestDecodeDrop(t *testing.T) {
 	}
 }
 
-// TestDecodeDropRejections. A broken body is a broken frame, not a broken
-// client, so every one of these survives the connection.
 func TestDecodeDropRejections(t *testing.T) {
 	t.Parallel()
 
@@ -571,8 +446,6 @@ func TestDecodeDropRejections(t *testing.T) {
 		frame  string
 		reason mnet.RejectReason
 	}{
-		// Absent is not zero. Left to encoding/json this would drop whatever
-		// is in the player's first slot.
 		{"no slot", `{"drop":{}}`, mnet.ReasonMissingField},
 		{"null payload", `{"drop":null}`, mnet.ReasonMissingField},
 		{"a slot named by kind", `{"drop":{"slot":"acorn"}}`, mnet.ReasonMalformedJSON},
@@ -605,9 +478,6 @@ func TestDecodeDropRejections(t *testing.T) {
 	}
 }
 
-// TestAMalformedDropIsRefusedWithoutClosing keeps drop on the same footing as
-// move_to and pickup at the layer that answers a real socket, and pins that the
-// refusals are filed under drop's own event name rather than move_to's.
 func TestAMalformedDropIsRefusedWithoutClosing(t *testing.T) {
 	h := newHarness(t, acornAt(underfoot, 0))
 
@@ -622,8 +492,6 @@ func TestAMalformedDropIsRefusedWithoutClosing(t *testing.T) {
 	}
 	h.awaitEvents(game.EvDropRejected, 3)
 
-	// Still a working client, and still able to pick something up and put it
-	// back down.
 	alice.pickup(seeded)
 	held := alice.awaitInventory()
 	if len(held.Slots) != 1 {
@@ -635,7 +503,6 @@ func TestAMalformedDropIsRefusedWithoutClosing(t *testing.T) {
 	}
 }
 
-// listsItem reports whether a welcome's world snapshot named one item.
 func listsItem(items []mnet.ItemState, id mnet.ItemID) bool {
 	for _, item := range items {
 		if item.ID == id {
@@ -645,8 +512,6 @@ func listsItem(items []mnet.ItemState, id mnet.ItemID) bool {
 	return false
 }
 
-// kindsOf names a set of frames, for a failure message about what arrived
-// rather than about what one frame contained.
 func kindsOf(frames []frame) []string {
 	kinds := make([]string, 0, len(frames))
 	for _, f := range frames {

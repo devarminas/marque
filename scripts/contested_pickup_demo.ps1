@@ -1,113 +1,3 @@
-<#
-.SYNOPSIS
-    The M1 milestone, on screen and in the server's own ledger: two real
-    windowed clients on one real server click the same ground item on the same
-    tick, exactly one of them gets it, and the winner then walks somewhere it
-    chose and drops it. Exits 0 only if the server's event log says exactly one
-    pickup resolved and exactly one was lost, both clients saw the item leave
-    the world and come back, and every coordinate and every tick span in the
-    run is plausible.
-
-.DESCRIPTION
-    `scripts/two_client_demo.ps1` is the M0 milestone and this is M1's; the two
-    do not overlap and neither replaces the other. That one choreographs ground
-    clicks so that exactly one player moves per capture window, because its
-    claim ("each client sees the other walk") needs a still camera as a control.
-    This one is the opposite scenario by construction: both players click the
-    same thing at the same moment, and there is no still camera in it anywhere.
-
-    What it generalises from that script is the thing that script was corrected
-    into being: **the claim lives on the server, and only the server's event log
-    can carry it.** "Exactly one client gets the item" is a purely server-side
-    fact. No arrangement of pixels can establish it, because two clients that
-    both drew an empty patch of ground would look identical whether the server
-    gave the item to one player, to both, or to neither.
-
-    Three evidence layers, and the milestone needs all three.
-
-    Layer one, the server (`Test-ServerLayer`). Exactly one `pickup_resolved`
-    for the seeded item and exactly one `pickup_lost`, naming different players
-    and between them naming both; two `pickup` intents, one per player; no
-    `pickup_rejected` and no `pickup_no_room`. This is the milestone sentence,
-    and nothing else in this file can substitute for it.
-
-    Layer two, the clients (`Test-ClientLayer`). Both clients must be shown to
-    have *seen* the outcome, because "by observation" is what the milestone
-    says. Each reports every item body and every inventory slot it drew at each
-    of three captures: the item present in both worlds and both inventories
-    empty; the item gone from both worlds and exactly one inventory holding it;
-    the item back on the ground in both worlds and the inventory empty again. A
-    client removes an item body only in response to the server's `item_despawn`
-    frame, so the middle capture is this run's evidence that the despawn
-    reached both clients -- see the note on `item_despawn` under KNOWN GAPS.
-
-    Layer three, the two tied together (`Test-LayerAgreement`). The client whose
-    inventory filled must be the player the server's log names as the winner,
-    and the position both clients draw the dropped item at must be the position
-    the server logged it spawning at.
-
-    Two false passes this family already has, both found by verifiers on the M0
-    demo, and how this script avoids each:
-
-    - **A frozen server passes a client-only check.** A tick loop that assigns
-      and broadcasts paths and never advances anybody still produces moving
-      pixels on every screen, because clients interpolate the polylines they
-      are handed. It cannot produce this run's `pickup_resolved`, which is
-      emitted only after movement has carried a player inside `PickupRange`,
-      and it cannot produce either `arrived`.
-
-    - **A teleporting server passes the M0 demo.** With the tick loop's
-      per-tick distance raised to 1000.0 the world crosses a whole path in one
-      tick and emits a perfectly formed `arrived`; nothing in that demo asserts
-      the span between assignment and arrival is plausible. Every walk here is
-      checked against `span / (WalkSpeed * TickDuration)`, so a walk that took
-      one tick fails whatever the endpoints say. That closes the open half of
-      unit M1j at the layer that depends on it.
-
-    A third, this script's own: **a stale PNG satisfies a `Test-Path` plus size
-    check.** The output directory is emptied at startup, and a directory this
-    script did not write is refused rather than emptied.
-
-.NOTES
-    KNOWN GAPS, stated here because the assertions below are shaped around them.
-
-    - **There is no `item_despawn` event in the server's event log.** The
-      despawn is a wire message (`items.go`, `w.broadcast(mnet.ItemDespawn...)`)
-      and `EvItemDespawned` does not exist. So the despawn is proven on the
-      client layer -- both clients drop the body, which they do only on
-      receiving that frame -- and on the server layer by `pickup_resolved`,
-      which is the event that causes it. Adding the event is a follow-up.
-
-    - **The winner is decided by join order** (`world.go`, `step`): the first
-      player in `w.order` with a pending pickup and in range takes it, and every
-      later player in that same pass finds it gone. This script asserts that
-      exactly one won, never which one; which one is a consequence of who
-      connected first and is not part of the claim.
-
-.PARAMETER Godot
-    The Godot 4 executable. Defaults to $env:GODOT, then "godot" on PATH.
-
-.PARAMETER OutDir
-    The evidence directory: the six PNGs, both clients' stdout and stderr, and
-    the server's event log and stderr. Never deleted at teardown -- the GAMELOG
-    in it is the only server-side proof this run produces -- and emptied at the
-    start of the next run.
-
-.PARAMETER ItemX
-.PARAMETER ItemZ
-    Where the one seeded item lies. Both players spawn at the origin and walk at
-    one speed, so any position makes them equidistant; this one is chosen to
-    draw in the upper-left of the viewport, well clear of the inventory panel,
-    which is opaque (unit M1k) and would swallow a click aimed at an item drawn
-    underneath it. The client checks the item's screen position against the
-    panel's rect and fails rather than trusting this default.
-
-.PARAMETER DropClick
-    Where the winner clicks the ground before dropping, as a viewport fraction.
-    Must resolve to ground somewhere the winner is not already standing: the
-    whole point of the drop is that its logged coordinates are checked against a
-    place the dropper deliberately walked to.
-#>
 [CmdletBinding()]
 param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
@@ -122,79 +12,32 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ---------------------------------------------------------------------------
-# The server's own constants, restated. Every one of them is read back out of
-# the run's `server_started` line rather than trusted from here; these are the
-# expected values, and a mismatch is a failure rather than a silent recalibration
-# against whatever the binary happened to be built with.
-# ---------------------------------------------------------------------------
 $ExpectedTickMS = 150
 $ExpectedWalkSpeed = 3.0
 $ExpectedInventorySize = 28
 
-# How far a coordinate logged by the server may sit from another coordinate
-# logged by the same server before the two count as different places. Both sides
-# of every such pair are the same float64 printed twice, so this is slack for
-# JSON round-tripping and nothing else.
 $LogCoordinateEpsilon = 1e-6
 
-# How far the server's world may sit from what a client drew, in world units.
-# The item is placed where the server said and never moves, so this is slack for
-# float printing rather than for a real discrepancy.
 $MaxLayerDisagreement = 0.05
 
-# How far the drop has to land from the origin and from where the item was
-# picked up, in world units, before its coordinates count as evidence.
-#
-# This is the assertion this unit exists to add. Nothing in this repository has
-# ever checked `item_spawned`'s x or z, for drops or for seeds, and a verifier
-# logged zeroed coordinates while the store and the wire stayed truthful and all
-# 93 Go tests stayed green. A drop whose logged position is (0, 0) or is the
-# item's old resting place is indistinguishable from a bug that lost it.
 $MinDropDisplacement = 2.0
 
-# How far off the ideal a walk's duration may be, in ticks, before the tick loop
-# counts as implausible. A walk of `span` units takes `ceil(span / (WalkSpeed *
-# TickDuration))` ticks exactly, in a healthy run, every time; the tolerance is
-# for a path assigned on a tick boundary, not for a server that crossed the
-# world in one step. `distance := 1000.0` produces one tick against an expected
-# sixteen and fails by a mile.
 $MaxWalkTickError = 2
 
-# How far apart the two clients' declared aim ticks may be before their clocks
-# count as disagreeing about more than a boundary.
-#
-# One tick, and the reason is in the client rather than the server. Each client
-# anchors its own TickClock at its own `welcome` and `estimated_tick()` floors
-# the elapsed time, so two clients anchored at different instants inside one
-# 150ms tick sit either side of a floor boundary and read numbers one apart for
-# the same moment. Measured over 21 idle runs at M1j: one apart on 15, equal on
-# 6, wider on none. Seven of those 15 had the server assign both paths on the
-# same tick regardless, so refusing them cost real contests and caught nothing.
-# What refuses a sequence is the start_tick check further down, not this one.
 $MaxAimTickSkew = 1
 
-# How near a player must be to a ground item to take it, in world units. This is
-# `PickupRange` in server/internal/game/items.go.
-#
-# Unlike tick_ms and walk_speed it is not carried in `server_started`, so no run
-# can hand it back and the check below cannot be recalibrated against the binary
-# it is judging. It is the one server constant this script has to trust.
 $ExpectedPickupRange = 0.5
 
 $repo = Split-Path -Parent $PSScriptRoot
 $serverDir = Join-Path $repo "server"
 $clientDir = Join-Path $repo "client"
 
-# Scratch, deleted at teardown: the built binary and the warm-up logs. Every
-# observable goes to $OutDir instead.
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("marque-pickup-" + [guid]::NewGuid().ToString("n"))
 New-Item -ItemType Directory -Path $work | Out-Null
 
 $binary = Join-Path $work "marqued.exe"
 $serverOut = Join-Path $OutDir "server.stdout.ndjson"
 $serverErr = Join-Path $OutDir "server.stderr.log"
-# Presence marks a directory as this script's to empty.
 $evidenceMarker = Join-Path $OutDir ".marque-evidence"
 
 $server = $null
@@ -215,14 +58,6 @@ function Get-Distance([double] $ax, [double] $az, [double] $bx, [double] $bz) {
     return [math]::Sqrt([math]::Pow($ax - $bx, 2) + [math]::Pow($az - $bz, 2))
 }
 
-# ---------------------------------------------------------------------------
-# Reading a client's stdout.
-#
-# The client prints and this script judges. Nothing below infers anything the
-# client did not say: a capture that drew no item bodies is a `DEMO items N 0`
-# line, not the absence of `DEMO item` lines, so a print loop that broke is
-# distinguishable from a world that legitimately held nothing.
-# ---------------------------------------------------------------------------
 
 function Read-ClientReport([string] $path) {
     $report = @{
@@ -291,10 +126,6 @@ function Read-ClientReport([string] $path) {
     return $report
 }
 
-# ---------------------------------------------------------------------------
-# Reading the server's NDJSON event log. One object per "GAMELOG "-prefixed
-# line; anything else on that stream is runtime noise.
-# ---------------------------------------------------------------------------
 
 function Read-GameLog([string] $path) {
     $events = New-Object System.Collections.Generic.List[object]
@@ -303,7 +134,6 @@ function Read-GameLog([string] $path) {
         if (-not $line.StartsWith("GAMELOG ")) { continue }
         $events.Add(($line.Substring(8) | ConvertFrom-Json))
     }
-    # Comma: a List of one would otherwise unroll to that one element.
     return , $events
 }
 
@@ -311,8 +141,6 @@ function Test-HasField($event, [string] $name) {
     return $event.PSObject.Properties.Name -contains $name
 }
 
-# Every event of one kind, oldest first, optionally filtered to one player
-# and/or one item. -1 means "any".
 function Select-Events($events, [string] $kind, [int] $player = -1, [int] $item = -1) {
     $hits = New-Object System.Collections.Generic.List[object]
     foreach ($event in $events) {
@@ -336,15 +164,6 @@ function Get-PathSpan($path) {
     return Get-Distance ([double]$from[0]) ([double]$from[1]) ([double]$to[0]) ([double]$to[1])
 }
 
-# One walk, checked for plausibility as well as for completion.
-#
-# The M0 demo asserts that a player arrived at the endpoint of the path it was
-# assigned, which a server that crosses the whole polyline in a single tick
-# satisfies perfectly. This asserts the walk *took as long as walking takes*:
-# `ceil(span / (WalkSpeed * TickDuration))` ticks, within a couple. It is the
-# one assertion in this file that a teleporting tick loop cannot pass.
-#
-# Returns the matching `arrived` event, or $null having recorded the failure.
 function Test-Walk($events, [int] $player, $path, [string] $label, [double] $perTick) {
     $to = $path.points[$path.points.Count - 1]
     $span = Get-PathSpan $path
@@ -378,12 +197,8 @@ function Test-Walk($events, [int] $player, $path, [string] $label, [double] $per
     return $arrived
 }
 
-# ---------------------------------------------------------------------------
 
 try {
-    # A stale PNG satisfies every check this script makes on a frame (it exists,
-    # it is over 4KB), and the default -OutDir is a fixed path reused forever.
-    # That is the exposure, and this is the only thing that closes it.
     if (Test-Path $OutDir) {
         $stale = @(Get-ChildItem -LiteralPath $OutDir -Force)
         if ($stale.Count -gt 0) {
@@ -402,7 +217,6 @@ try {
         -Value "Evidence from scripts/contested_pickup_demo.ps1. Its next run empties this directory."
 
     Write-Host "==> building marqued"
-    # Built outside the repository: server/ is not this unit's to write to.
     Push-Location $serverDir
     try {
         & go build -o $binary ./cmd/marqued
@@ -457,10 +271,6 @@ try {
     Write-Host "==> marqued listening, url $url"
     Write-Host "==> screenshots will land in $OutDir"
 
-    # Both clients run identical arguments. Nothing distinguishes them and
-    # nothing may: the whole claim is that two indistinguishable clients doing
-    # the same thing at the same moment get different answers from the server.
-    # Only the window position and the output paths differ.
     $running = @()
     foreach ($spec in @(@{ Label = "a"; Position = "40,60" }, @{ Label = "b"; Position = "700,140" })) {
         $prefix = Join-Path $OutDir $spec.Label
@@ -477,9 +287,6 @@ try {
                 "--drop-click", $DropClick
             ) `
             -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-        # Touching Handle caches it. Without it a -PassThru process object reads
-        # its ExitCode back as empty once the process is gone, which compares
-        # unequal to 0 and fails a healthy run.
         $null = $process.Handle
         $running += @{
             Label = $spec.Label; Process = $process; Stdout = $stdout
@@ -489,9 +296,6 @@ try {
 
     foreach ($client in $running) {
         if ($client.Process.WaitForExit($ClientTimeoutSeconds * 1000)) {
-            # The parameterless overload as well: on a -PassThru process the
-            # timed overload returns without caching ExitCode, which then reads
-            # back empty and compares unequal to everything.
             $client.Process.WaitForExit()
         } else {
             Add-Failure "client $($client.Label) did not finish within $ClientTimeoutSeconds seconds"
@@ -504,9 +308,6 @@ try {
         $client.Report = Read-ClientReport $client.Stdout
     }
 
-    # ------------------------------------------------------------------
-    # Structure. Nothing behavioural yet: this is only "both clients ran".
-    # ------------------------------------------------------------------
     foreach ($client in $running) {
         $label = $client.Label
         $report = $client.Report
@@ -521,8 +322,6 @@ try {
         foreach ($reason in $report.Failures) {
             Add-Failure "client $label refused to drive the scenario: $reason"
         }
-        # The exit code alone would let a client that quit early past: this is
-        # printed only after every capture was written and the hold elapsed.
         if (-not $report.Done) { Add-Failure "client $label never reported 'DEMO done'" }
         if ($report.Joined -lt 1) {
             Add-Failure "client $label never reported the id it joined as"
@@ -550,15 +349,6 @@ try {
         Add-Failure "both clients report joining as player $($ids[0]); they are not two players"
     }
 
-    # The clients' own account of the moment they aimed at.
-    #
-    # This is a client-side number and it does not decide whether the run was a
-    # contest. It is each client's own floored estimate of a shared tick, and two
-    # clients anchored either side of a floor boundary report numbers one apart
-    # for the same instant. A one-tick spread is that quantisation, not a failed
-    # contest, so it is printed and tolerated; the server-side start_tick check
-    # below is the one that refuses a sequence. A wider spread is a clock that is
-    # actually wrong, and this is where that shows up.
     $clickTicks = @($running | ForEach-Object { $_.Report.ClickTick })
     Write-Host ("==> clients chose click ticks {0} and {1} (sync ticks {2} and {3})" -f `
         $clickTicks[0], $clickTicks[1], $running[0].Report.SyncTick, $running[1].Report.SyncTick)
@@ -571,23 +361,13 @@ try {
             "which side of a tick boundary they are on and neither one's aim can be trusted.")
     }
 
-    # ------------------------------------------------------------------
-    # Layer one: what the server believes. The milestone sentence lives here
-    # and nowhere else. "Exactly one client gets the item" is a purely
-    # server-side fact; every pixel in this run is compatible with the server
-    # having given it to both, to neither, or to somebody who is not playing.
-    # ------------------------------------------------------------------
     $events = Read-GameLog $serverOut
     Write-Host "==> GAMELOG: $($events.Count) event(s) in $serverOut"
     if ($events.Count -eq 0) {
-        # Without this, every assertion below passes over an empty set.
         Add-Failure ("the server wrote no GAMELOG events to $serverOut; this run contains no " +
             "server-side evidence at all")
     }
 
-    # The run's own constants, read back rather than assumed. A binary built
-    # with a different tick or a different walk speed would make every span
-    # below meaningless, and would do it silently.
     $perTick = $ExpectedWalkSpeed * $ExpectedTickMS / 1000.0
     $started = Select-Events $events "server_started"
     if ($started.Count -ne 1) {
@@ -610,10 +390,6 @@ try {
         $perTick = [double]$boot.walk_speed * [int]$boot.tick_ms / 1000.0
     }
 
-    # The seed's coordinates. Nothing in this repository has ever asserted
-    # item_spawned's x or z, and a verifier logged them zeroed while the store
-    # and the wire stayed truthful and every Go test stayed green. This is the
-    # seed half of that gap; the drop below is the other half.
     $spawns = Select-Events $events "item_spawned"
     $seedItem = -1
     if ($spawns.Count -lt 1) {
@@ -634,9 +410,6 @@ try {
         }
     }
 
-    # Two intents, one per player. Both clients clicked the item body, so a run
-    # in which either click was classified as a click on the *ground* under the
-    # item shows up here as a missing pickup and, below, as a stray move_to.
     $pickups = Select-Events $events "pickup" -1 $seedItem
     $intentTicks = @{}
     foreach ($event in $pickups) { $intentTicks[[int]$event.player] = [int]$event.t }
@@ -651,8 +424,6 @@ try {
             "$($intentTicks.Keys.Count) distinct player(s), want 2")
     }
 
-    # The contest, and this is the milestone. One winner, one loser, different
-    # players, and no third outcome.
     $resolved = Select-Events $events "pickup_resolved" -1 $seedItem
     $lost = Select-Events $events "pickup_lost" -1 $seedItem
     $rejected = Select-Events $events "pickup_rejected"
@@ -696,22 +467,11 @@ try {
         }
     }
 
-    # ------------------------------------------------------------------
-    # A same-tick race, not a sequence.
-    #
-    # Both players spawn at the origin and walk at one speed, so two players
-    # clicking one item are equidistant and enter PickupRange together -- but
-    # only if their paths were assigned on the same tick. That is the number
-    # that decides whether this run was a dead heat or a queue, and it is
-    # printed whether or not it holds.
-    # ------------------------------------------------------------------
     $contestPaths = @{}
     foreach ($player in $intentTicks.Keys) {
         $tick = $intentTicks[$player]
         $match = $null
         foreach ($path in (Select-Events $events "path_assigned" $player)) {
-            # Assigned inside the same handler as the intent, so the same tick,
-            # never a later one: a later path is the halt the loser is sent.
             if ([int]$path.t -ne $tick) { continue }
             $match = $path
             break
@@ -757,21 +517,6 @@ try {
         $gap = [int]$lost[0].t - [int]$resolved[0].t
         Write-Host ("==> server: the contest resolved on tick {0} and was lost on tick {1}; gap {2} tick(s)" -f `
             $resolved[0].t, $lost[0].t, $gap)
-        # This gap does not back up the start_tick check above, and it is worth
-        # saying so where someone would otherwise assume it. resolvePickup tests
-        # liveness before range, so a loser is condemned at whatever distance it
-        # is standing at, on the tick the winner takes the item. That is gap 0,
-        # and it holds only because the loser is later in join order than the
-        # winner: step() resolves over w.order, so the later joiner is visited
-        # second, in the same pass the item changes hands. An earlier-joining
-        # loser would be visited first, see the item still live and itself out
-        # of range, and return unresolved; it is condemned on the next tick
-        # instead, at gap 1. The loser is always the later joiner here, because
-        # both players enter PickupRange on the same tick and whichever of them
-        # w.order reaches first is by construction the winner. Measured at M1j:
-        # 0 on all 21 idle runs, including all 8 whose paths started a tick
-        # apart. It catches a condemnation deferred to a later tick, and nothing
-        # about the skew.
         if ($gap -ne 0) {
             Add-Failure ("the item was taken on tick $($resolved[0].t) and lost on tick $($lost[0].t), " +
                 "$gap tick(s) apart. A same-tick contest is decided inside one pass of the tick loop; " +
@@ -779,32 +524,8 @@ try {
         }
     }
 
-    # ------------------------------------------------------------------
-    # Where the loser stopped.
-    #
-    # Every other assertion here about the loser is about what it did not
-    # receive: no pickup_resolved, no slot. A build that condemned the loser
-    # while it still stood at the origin satisfies all of them, and one did.
-    # `pickup_lost` carries `player` and `item` and no coordinates, so the halt
-    # losePickup assigns on the same tick is the only server-side record of
-    # where the loser was: a path of one point, at the position it stopped at.
-    #
-    # The loser is not standing on the item. resolvePickup tests liveness before
-    # range, so the loser is condemned wherever it happens to be, and here that
-    # is within PickupRange and one tick short of arriving. It reads that way
-    # only because the loser is later in join order than the winner: step()
-    # resolves over w.order, so the later joiner is visited in the same pass the
-    # winner closes the last fraction of a unit. An earlier-joining loser would
-    # be visited while the item was still live, return unresolved, and be
-    # condemned a tick later, one step further along its own walk. Either way,
-    # asserting the loser reached the item's coordinates would fail every
-    # healthy run.
-    # ------------------------------------------------------------------
     if ($loser -ge 1 -and $lost.Count -eq 1 -and $seedItem -ge 1) {
         $lossTick = [int]$lost[0].t
-        # Not a pipe. Select-Events returns its List through `return , $hits` to
-        # stop a single hit unrolling, so piping it hands Where-Object the list
-        # itself as one object rather than its elements.
         $halts = New-Object System.Collections.Generic.List[object]
         foreach ($candidate in (Select-Events $events "path_assigned" $loser)) {
             if ([int]$candidate.t -ne $lossTick) { continue }
@@ -831,26 +552,13 @@ try {
         }
     }
 
-    # The winner's walk, checked for plausibility as well as for completion.
-    # This is what a teleporting tick loop fails.
     if ($winner -ge 1 -and $contestPaths.ContainsKey($winner)) {
         $null = Test-Walk $events $winner $contestPaths[$winner] "the walk to the item" $perTick
     }
 
-    # ------------------------------------------------------------------
-    # The drop, and the coordinate gap it closes.
-    #
-    # The winner walked somewhere it chose and dropped the item there. Nothing
-    # in this repository has ever asserted item_spawned's x or z, so this is
-    # where the log's account of where an item is gets checked against an
-    # independent account of where its dropper stood.
-    # ------------------------------------------------------------------
     $moves = Select-Events $events "move_to"
     Write-Host "==> server: $($moves.Count) move_to intent(s) in the whole run"
     if ($moves.Count -ne 1) {
-        # Two item clicks and one ground click. A second move_to means a click
-        # meant for the item resolved to the ground under it, which is the
-        # picker's one-ray rule failing live.
         Add-Failure ("the server logged $($moves.Count) move_to intent(s), want exactly 1 -- the " +
             "winner's walk away before dropping. Both clicks on the item must have resolved to the " +
             "item and not to the ground beneath it.")
@@ -876,15 +584,6 @@ try {
                 Add-Failure "the server logged $($drops.Count) drop(s) by player $winner, want exactly 1"
             } elseif ($null -ne $arrived) {
                 $drop = $drops[0]
-                # Strictly before, not "before or on". Arriving and dropping in
-                # the same tick is the ordinary case and the correct one: the
-                # tick loop steps movement and then drains intents, so a drop
-                # handled in the arrival tick uses the arrival position. This
-                # measured 83 and 83 on a healthy run with the coordinates
-                # matching exactly. What would be wrong is a drop on an *earlier*
-                # tick, which lands the item under a walker somewhere along the
-                # path, and the coordinate check below is what actually catches
-                # it; this only says so in the reader's language.
                 if ([int]$drop.t -lt [int]$arrived.t) {
                     Add-Failure ("player $winner dropped on tick $($drop.t) but did not arrive until " +
                         "tick $($arrived.t); the item landed under a walker, so its coordinates say " +
@@ -917,9 +616,6 @@ try {
                             "$([math]::Round($stoodGap, 6)) units apart. The log is not recording where " +
                             "dropped items land.")
                     }
-                    # The assertion above is satisfied by a server that zeroed
-                    # both numbers, if the walk also ended at the origin. These
-                    # two are what make it evidence.
                     if ($fromOrigin -lt $MinDropDisplacement) {
                         Add-Failure ("the drop landed $([math]::Round($fromOrigin, 3)) units from the origin, " +
                             "under $MinDropDisplacement. A coordinate this close to zero cannot be told " +
@@ -940,18 +636,6 @@ try {
             "seed and the drop")
     }
 
-    # ------------------------------------------------------------------
-    # Layer two: what each client saw. "By observation" is what the milestone
-    # says, and a server-side ledger nobody was shown is not an observation.
-    #
-    # A client removes an item body only on receiving item_despawn and fills a
-    # slot only on receiving inventory, so these three captures are this run's
-    # proof that both frames reached both clients.
-    # ------------------------------------------------------------------
-    # $winner is -1 when the contest did not resolve to one player, which is
-    # exactly the sabotage this script exists to catch. Every message below then
-    # has to say that rather than print the sentinel, or a reader chasing a real
-    # failure spends their time wondering who player -1 is.
     $winnerLabel = "player $winner"
     if ($winner -lt 1) { $winnerLabel = "nobody -- the contest resolved to no single winner" }
 
@@ -975,9 +659,6 @@ try {
             }
         }
 
-        # Shot 1: one item on the ground, nothing carried, in both worlds.
-        # Shot 2: no item anywhere, and exactly the winner carrying one.
-        # Shot 3: one item on the ground again, nothing carried.
         $expectedItems = @{ 1 = 1; 2 = 0; 3 = 1 }
         $expectedCarried = @{ 1 = 0; 2 = $(if ($won) { 1 } else { 0 }); 3 = 0 }
         foreach ($index in 1, 2, 3) {
@@ -1021,10 +702,6 @@ try {
         }
     }
 
-    # ------------------------------------------------------------------
-    # Layer three: the two tied together. Displacement and a ledger each say
-    # something happened; this says they are describing the same thing.
-    # ------------------------------------------------------------------
     if ($null -ne $dropSpawn) {
         $droppedId = [int]$dropSpawn.item
         foreach ($client in $running) {
@@ -1054,8 +731,6 @@ try {
 } finally {
     if ($null -ne $server) {
         if ($server.HasExited) {
-            # A server that died after the last frame the clients awaited would
-            # otherwise be reported as a clean run.
             Add-Failure "marqued exited on its own with code $($server.ExitCode); it must outlive the clients"
         } else {
             Write-Host "==> stopping marqued (pid $($server.Id))"
@@ -1071,9 +746,6 @@ try {
         }
     }
     Show-File "marqued event log ($serverOut)" $serverOut
-    # Scratch only: the built binary. Every observable is in $OutDir and stays
-    # there, because the GAMELOG this run's server-side assertions read is the
-    # only copy of the server's account of it.
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
 

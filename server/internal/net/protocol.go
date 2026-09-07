@@ -1,6 +1,3 @@
-// Package net carries the Marque wire protocol and the WebSocket hub that
-// speaks it. It knows nothing about the game. PROTOCOL.md at the repository
-// root is the contract.
 package net
 
 import (
@@ -11,50 +8,29 @@ import (
 	"strings"
 )
 
-// PlayerID identifies a connected player for the lifetime of one server
-// process. Ids are assigned sequentially from 1 and are never reused.
 type PlayerID int64
 
-// Point is one ground-plane waypoint, encoded as [x, z].
 type Point [2]float64
 
-// Pt builds a Point from ground-plane coordinates.
 func Pt(x, z float64) Point { return Point{x, z} }
 
-// X returns the point's x coordinate.
 func (p Point) X() float64 { return p[0] }
 
-// Z returns the point's z coordinate.
 func (p Point) Z() float64 { return p[1] }
 
-// ItemID identifies one item for the lifetime of one server process: a separate
-// sequence from PlayerID, assigned from 1, never reused (PROTOCOL.md, "Entity
-// naming").
 type ItemID int64
 
-// NodeID identifies one resource node for the lifetime of one server process: a
-// separate sequence from PlayerID and ItemID, assigned from 1, never reused
-// (PROTOCOL.md, "Entity naming", M4a).
 type NodeID int64
 
-// NodeFull and NodeDepleted are the two live states a resource node carries on
-// the wire (PROTOCOL.md, "node_state").
 const (
 	NodeFull     = "full"
 	NodeDepleted = "depleted"
 )
 
-// Seq is one intent's sequence number (PROTOCOL.md, "Sequence numbers"). Zero
-// means the frame carried none.
 type Seq int64
 
-// EquipSlot names one worn equipment slot. Worn slots are named rather than
-// indexed, which is the whole reason `unequip` says "worn" where `drop` and
-// `equip` say "slot" (PROTOCOL.md, "Worn slots").
 type EquipSlot string
 
-// Client-to-server message names. Each is the key in the envelope and the value
-// of an error's "re" field.
 const (
 	MsgMoveTo  = "move_to"
 	MsgMove    = "move"
@@ -69,7 +45,6 @@ const (
 	MsgCast    = "cast"
 )
 
-// PlayerState is one player's position and public vitals, as it appears inside welcome.
 type PlayerState struct {
 	ID      PlayerID `json:"id"`
 	X       float64  `json:"x"`
@@ -80,7 +55,6 @@ type PlayerState struct {
 	MaxMana int      `json:"max_mana"`
 }
 
-// ItemState is one ground item, as it appears inside welcome and item_spawn.
 type ItemState struct {
 	ID   ItemID  `json:"id"`
 	Kind string  `json:"kind"`
@@ -88,8 +62,6 @@ type ItemState struct {
 	Z    float64 `json:"z"`
 }
 
-// NodeState is one resource node, as it appears inside welcome and node frames
-// (PROTOCOL.md, "Gathering", M4a / M7c).
 type NodeState struct {
 	ID    NodeID  `json:"id"`
 	Kind  string  `json:"kind"`
@@ -99,8 +71,6 @@ type NodeState struct {
 	State string  `json:"state"`
 }
 
-// NpcState is one practice NPC, as it appears inside welcome (PROTOCOL.md, M6e).
-// Ids use a reserved high band so cast/attack can name them with `player`.
 type NpcState struct {
 	ID      PlayerID `json:"id"`
 	Kind    string   `json:"kind"`
@@ -111,27 +81,18 @@ type NpcState struct {
 	MaxHP   int      `json:"max_hp"`
 }
 
-// InventorySlot is one occupied slot of one player's inventory; empty slots are
-// absent from the list (PROTOCOL.md, "inventory").
 type InventorySlot struct {
 	Slot int    `json:"slot"`
 	Kind string `json:"kind"`
 }
 
-// EquipmentSlot is one occupied worn slot of one player's equipment; empty slots
-// are absent from the list (PROTOCOL.md, "equipment").
 type EquipmentSlot struct {
 	Slot EquipSlot `json:"slot"`
 	Kind string    `json:"kind"`
 }
 
-// ServerMessage is one message the server can send. Every frame is a JSON
-// object with exactly one key, which names the message.
 type ServerMessage interface{ isServerMessage() }
 
-// Welcome is the first message a client receives: You and Session name the
-// receiver, LastSeq is the highest seq accepted from it, and Players, Items,
-// Nodes, and Npcs are the world as of Tick (PROTOCOL.md, "welcome").
 type Welcome struct {
 	You            PlayerID      `json:"you"`
 	Session        string        `json:"session"`
@@ -145,18 +106,12 @@ type Welcome struct {
 	Npcs           []NpcState   `json:"npcs"`
 }
 
-// Spawn announces a player who just joined. Broadcast to everyone except the
-// joining player, who learns about itself through welcome.
 type Spawn PlayerState
 
-// Despawn announces a player who left. Broadcast to everyone except the leaver.
 type Despawn struct {
 	ID PlayerID `json:"id"`
 }
 
-// Path assigns a polyline to a player; broadcast to everyone including the
-// mover. Points[0] is the player's position at StartTick, Points is never
-// empty, and Speed is world units per second (PROTOCOL.md, "path").
 type Path struct {
 	ID        PlayerID `json:"id"`
 	StartTick int64    `json:"start_tick"`
@@ -164,104 +119,72 @@ type Path struct {
 	Speed     float64  `json:"speed"`
 }
 
-// Error tells one client that what it just sent was refused. Re names the
-// message, omitted when unattributable; Msg is for humans, not for branching.
 type Error struct {
 	Re  string `json:"re,omitempty"`
 	Msg string `json:"msg"`
 }
 
-// ItemSpawn announces an item that has appeared on the ground. Broadcast to
-// everyone including the player who caused it.
 type ItemSpawn ItemState
 
-// ItemDespawn announces an item that has left the ground. Broadcast to everyone
-// including the player who caused it, for ItemSpawn's reason.
 type ItemDespawn struct {
 	ID ItemID `json:"id"`
 }
 
-// NodeSpawn announces a resource node that has entered the world (PROTOCOL.md,
-// "node_spawn", M4a).
 type NodeSpawn NodeState
 
-// NodeDespawn announces a resource node that has left the world.
 type NodeDespawn struct {
 	ID NodeID `json:"id"`
 }
 
-// NodeUpdate announces a resource node's current record after a state change.
-// Named NodeUpdate in Go because NodeState is already the wire record type.
 type NodeUpdate NodeState
 
-// Inventory is one player's whole inventory, sent to that player only. Size is
-// the slot count; Slots lists the occupied slots.
 type Inventory struct {
 	Size  int             `json:"size"`
 	Slots []InventorySlot `json:"slots"`
 }
 
-// Equipment is one player's whole worn equipment, sent to that player only.
-// Worn is the closed, ordered list of slot names this server has, which is
-// Inventory.Size's analogue; Slots lists the occupied ones.
 type Equipment struct {
 	Worn  []EquipSlot     `json:"worn"`
 	Slots []EquipmentSlot `json:"slots"`
 }
 
-// NamedSlot is one worn slot that must hold one kind, as carried in a class
-// frame's missing list (PROTOCOL.md, "class", M7c). Slot is the worn-slot
-// name; Kind is the item kind the class needs there.
 type NamedSlot struct {
 	Slot string `json:"slot"`
 	Kind string `json:"kind"`
 }
 
-// ClassMissing names what keeps a class from being active. Slots lists the
-// worn slots that must hold a kind, in WornSlots order; Tools lists the tool
-// kinds a complete-but-tool-less class needs. Both are present only when
-// Class is empty and a closest partial class exists.
 type ClassMissing struct {
 	Slots []NamedSlot `json:"slots,omitempty"`
 	Tools []string    `json:"tools,omitempty"`
 }
 
-// Class restates one player's active class, derived from worn equipment
-// (PROTOCOL.md, "class", M7c). Class is "" when no class is active, in which
-// case Missing explains what is needed.
 type Class struct {
 	Player  PlayerID     `json:"player"`
 	Class   string       `json:"class"`
 	Missing ClassMissing `json:"missing,omitempty"`
 }
 
-// SkillXP is one skill's restated XP and derived level (PROTOCOL.md, "skills", M7c).
 type SkillXP struct {
 	ID    string `json:"id"`
 	XP    int64  `json:"xp"`
 	Level int    `json:"level"`
 }
 
-// Skills restates every skill one player holds, sent to that player only.
 type Skills struct {
 	Player PlayerID  `json:"player"`
 	Skills []SkillXP `json:"skills"`
 }
 
-// Tick is the server's clock heartbeat, broadcast every heartbeat_ticks ticks.
-// T is the tick being stepped.
 type Tick struct {
 	T int64 `json:"t"`
 }
 
-// HP restates one player's hit points (PROTOCOL.md, "hp", M5a).
 type HP struct {
 	ID    PlayerID `json:"id"`
 	HP    int      `json:"hp"`
 	MaxHP int      `json:"max_hp"`
 }
 
-// Mana restates one player's mana (PROTOCOL.md, "mana", M6b).
 type Mana struct {
 	ID      PlayerID `json:"id"`
 	Mana    int      `json:"mana"`
@@ -286,73 +209,52 @@ func (Tick) isServerMessage()        {}
 func (HP) isServerMessage()          {}
 func (Mana) isServerMessage()        {}
 
-// ClientMessage is one message a client can send: an intent, never a fact.
-// Name is its wire name, the same string an error carries as "re".
 type ClientMessage interface {
 	isClientMessage()
 	Name() string
 }
 
-// MoveTo is a click on the ground: the player wants to walk to (X, Z).
 type MoveTo struct {
 	X float64 `json:"x"`
 	Z float64 `json:"z"`
 }
 
-// Move is a sticky world-space walk direction (PROTOCOL.md, "move", M6g).
-// Zero after normalisation clears the steer.
 type Move struct {
 	DX float64 `json:"dx"`
 	DZ float64 `json:"dz"`
 }
 
-// Pickup is a request to take the ground item with id Item.
 type Pickup struct {
 	Item ItemID `json:"item"`
 }
 
-// Drop is a request to drop whatever is in the sender's inventory slot Slot at
-// the player's feet (PROTOCOL.md, "drop").
 type Drop struct {
 	Slot int `json:"slot"`
 }
 
-// Equip is a request to wear whatever is in the sender's inventory slot Slot.
-// The intent names a bag index and never a worn slot: the server resolves the
-// destination from the kind (PROTOCOL.md, "equip").
 type Equip struct {
 	Slot int `json:"slot"`
 }
 
-// Unequip is a request to take off whatever is in worn slot Worn and put it
-// back in the bag (PROTOCOL.md, "unequip").
 type Unequip struct {
 	Worn EquipSlot `json:"worn"`
 }
 
-// Gather is a request to chop the resource node with id Node (PROTOCOL.md,
-// "gather").
 type Gather struct {
 	Node NodeID `json:"node"`
 }
 
-// Use is a request to use the item in bag slot Slot on the item in bag slot On
-// (PROTOCOL.md, "use").
 type Use struct {
 	Slot int `json:"slot"`
 	On   int `json:"on"`
 }
 
-// Attack is a request to engage another player in melee (PROTOCOL.md, "attack", M5a).
 type Attack struct {
 	Player PlayerID `json:"player"`
 }
 
-// Respawn is a request to leave the dead state (PROTOCOL.md, "respawn", M5a).
 type Respawn struct{}
 
-// Cast is a request to cast an ability from shared/abilities.json (PROTOCOL.md, "cast", M6d).
-// Player is 0 when the body omitted the field. Ability stats never ride on this intent.
 type Cast struct {
 	Ability string
 	Player  PlayerID
@@ -402,9 +304,6 @@ type serverEnvelope struct {
 	Mana        *Mana        `json:"mana,omitempty"`
 }
 
-// Encode renders one server message as a single WebSocket text frame payload.
-// It fails on an unhandled message type, or on a handled one whose values JSON
-// cannot represent, such as a non-finite coordinate.
 func Encode(m ServerMessage) ([]byte, error) {
 	var env serverEnvelope
 	switch v := m.(type) {
@@ -452,98 +351,49 @@ func Encode(m ServerMessage) ([]byte, error) {
 	return b, nil
 }
 
-// RejectReason is the closed set of reasons an inbound frame is refused. The
-// values are log field contents and test assertions, so they are stable.
 type RejectReason string
 
 const (
-	// ReasonMalformedJSON: the frame is not a JSON object, or a known field has
-	// the wrong type.
 	ReasonMalformedJSON RejectReason = "malformed_json"
-	// ReasonProtocolError: zero or more than one top-level key.
 	ReasonProtocolError RejectReason = "protocol_error"
-	// ReasonUnknownMessage: one top-level key naming a message this server does
-	// not know. Logged and ignored.
 	ReasonUnknownMessage RejectReason = "unknown_message"
-	// ReasonMissingField: a required field was absent.
 	ReasonMissingField RejectReason = "missing_field"
-	// ReasonNonFinite: a coordinate decoded to NaN or +/-Inf.
 	ReasonNonFinite RejectReason = "non_finite"
-	// ReasonOutOfBounds: a destination outside the world.
 	ReasonOutOfBounds RejectReason = "out_of_bounds"
-	// ReasonDegenerate: a path too short to assign.
 	ReasonDegenerate RejectReason = "degenerate"
-	// ReasonUnknownItem: a pickup naming no live ground item, whether stale,
-	// taken, or invented (PROTOCOL.md, "Pickup").
 	ReasonUnknownItem RejectReason = "unknown_item"
-	// ReasonNoSuchSlot: a drop naming an index outside the inventory.
 	ReasonNoSuchSlot RejectReason = "no_such_slot"
-	// ReasonEmptySlot: a drop naming a legal index that holds nothing.
 	ReasonEmptySlot RejectReason = "empty_slot"
-	// ReasonNotEquippable: an equip naming a slot whose kind belongs to no worn
-	// slot (PROTOCOL.md, "equip").
 	ReasonNotEquippable RejectReason = "not_equippable"
-	// ReasonNoSuchWornSlot: an unequip naming a worn slot this server does not
-	// have.
 	ReasonNoSuchWornSlot RejectReason = "no_such_worn_slot"
-	// ReasonEmptyWornSlot: an unequip naming a worn slot that holds nothing.
 	ReasonEmptyWornSlot RejectReason = "empty_worn_slot"
-	// ReasonInventoryFull: an unequip with no free bag slot to put the item in.
-	// A pickup that arrives at a full bag is not this: it fails on arrival
-	// rather than on receipt, so it logs pickup_no_room and never reaches the
-	// refusal path (PROTOCOL.md, "Log vocabulary", M3a).
 	ReasonInventoryFull RejectReason = "inventory_full"
-	// ReasonUnknownNode: a gather naming no live resource node.
 	ReasonUnknownNode RejectReason = "unknown_node"
-	// ReasonNodeDepleted: a gather naming a live node that is not full.
 	ReasonNodeDepleted RejectReason = "node_depleted"
-	// ReasonNeedsClass: a gather without an active class whose skill matches the
-	// node's skill (PROTOCOL.md, "Classes and skill XP", M7c).
 	ReasonNeedsClass RejectReason = "needs_class"
-	// ReasonNoRecipe: a use whose slots or kinds do not match the one craft
-	// recipe (PROTOCOL.md, "Crafting").
 	ReasonNoRecipe RejectReason = "no_recipe"
-	// ReasonUnknownPlayer: an attack naming no live player (PROTOCOL.md, M5a).
 	ReasonUnknownPlayer RejectReason = "unknown_player"
-	// ReasonSelf: an attack naming the attacker's own id.
 	ReasonSelf RejectReason = "self"
-	// ReasonTargetDead: an attack naming a player whose HP is already 0.
 	ReasonTargetDead RejectReason = "target_dead"
-	// ReasonDead: an ordinary intent from a player whose HP is 0.
 	ReasonDead RejectReason = "dead"
-	// ReasonNotDead: a respawn from a living player.
 	ReasonNotDead RejectReason = "not_dead"
-	// ReasonUnknownAbility: a cast naming no id in shared/abilities.json (PROTOCOL.md, M6d).
 	ReasonUnknownAbility RejectReason = "unknown_ability"
-	// ReasonNoTarget: a cast that needs a player id and did not name one.
 	ReasonNoTarget RejectReason = "no_target"
-	// ReasonWrongTarget: a cast whose target rule rejects the named player (faction / self).
 	ReasonWrongTarget RejectReason = "wrong_target"
-	// ReasonInsufficientMana: a cast whose mana_cost exceeds the caster's current mana.
 	ReasonInsufficientMana RejectReason = "insufficient_mana"
-	// ReasonOutOfRange: a cast whose target is farther than the ability's range.
 	ReasonOutOfRange RejectReason = "out_of_range"
-	// ReasonUnknownSender: a frame from a connection with no player.
 	ReasonUnknownSender RejectReason = "unknown_sender"
-	// ReasonBinaryFrame: a WebSocket binary frame.
 	ReasonBinaryFrame RejectReason = "binary_frame"
 )
 
-// Disposition is what the server does about a refused frame, beyond logging it.
 type Disposition int
 
 const (
-	// Ignore: log and carry on (PROTOCOL.md, "Compatibility").
 	Ignore Disposition = iota
-	// ReplyError: send the sender one error message. The connection survives.
 	ReplyError
-	// ReplyErrorAndClose: send the sender one error message, then close.
 	ReplyErrorAndClose
 )
 
-// RejectError explains why a frame was refused. Reason goes in the event log,
-// Detail becomes the error message's "msg", and Re names the message being
-// rejected, empty when the frame could not be attributed to one.
 type RejectError struct {
 	Reason      RejectReason
 	Detail      string
@@ -558,8 +408,6 @@ func (e *RejectError) Error() string {
 	return string(e.Reason) + ": " + e.Detail
 }
 
-// Rejection extracts the rejection from an error, or reports false if the error
-// is not one.
 func Rejection(err error) (*RejectError, bool) {
 	var re *RejectError
 	if errors.As(err, &re) {
@@ -577,8 +425,6 @@ func rejectIntent(reason RejectReason, re, format string, args ...any) error {
 	}
 }
 
-// The wire types use pointer fields because encoding/json zero-fills an absent
-// field, and absent must be rejected rather than read as 0.
 type moveToWire struct {
 	X *float64 `json:"x"`
 	Z *float64 `json:"z"`
@@ -627,9 +473,6 @@ type seqWire struct {
 	Seq *int64 `json:"seq"`
 }
 
-// Decode parses one inbound frame into its message and its sequence number.
-// Every failure is a *RejectError. A seq the envelope accepted is returned even
-// when the body is then refused (PROTOCOL.md, "Sequence numbers").
 func Decode(frame []byte) (ClientMessage, Seq, error) {
 	var keys map[string]json.RawMessage
 	if err := json.Unmarshal(frame, &keys); err != nil {
@@ -694,8 +537,6 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 	panic("unreachable: map of length 1 yielded no entries")
 }
 
-// decodeSeq unmarshals into *int64 so a fractional, quoted, or overflowing seq
-// fails as malformed; 0 is refused rather than read as absent.
 func decodeSeq(payload []byte, re string) (Seq, error) {
 	var wire seqWire
 	if err := json.Unmarshal(payload, &wire); err != nil {
@@ -713,8 +554,6 @@ func decodeSeq(payload []byte, re string) (Seq, error) {
 }
 
 func decodeMoveTo(payload []byte) (ClientMessage, error) {
-	// Not DisallowUnknownFields: senders may add fields (PROTOCOL.md,
-	// "Compatibility" rule 2).
 	var wire moveToWire
 	if err := json.Unmarshal(payload, &wire); err != nil {
 		return nil, rejectIntent(ReasonMalformedJSON, MsgMoveTo, "move_to: %v", err)
@@ -775,10 +614,6 @@ func decodeEquip(payload []byte) (ClientMessage, error) {
 	return Equip{Slot: *wire.Slot}, nil
 }
 
-// decodeUnequip guards the shape and not the membership: whether a name is one
-// of this server's worn slots is the game's question, and it answers it with
-// no_such_worn_slot. An empty string is a name nothing has, so it needs no case
-// of its own here.
 func decodeUnequip(payload []byte) (ClientMessage, error) {
 	var wire unequipWire
 	if err := json.Unmarshal(payload, &wire); err != nil {

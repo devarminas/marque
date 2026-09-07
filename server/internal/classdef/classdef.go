@@ -1,8 +1,3 @@
-// Package classdef loads the shared class-system content tables: set → worn
-// slot → item kind, the five class definitions, and the skill list. It mirrors
-// abilitydef: one table, one parse, fail closed. ClassOf, the pure derivation
-// from worn equipment, lives here so the class table and the function that
-// reads it cannot disagree.
 package classdef
 
 import (
@@ -27,17 +22,11 @@ const (
 	HandedTwo = "two"
 )
 
-// Tool is one entry in a set's tools table. Handed is "one" or "two". Slot is
-// required when Handed is "one" ("left hand" or "right hand"); two-handed tools
-// must omit Slot.
 type Tool struct {
 	Handed string `json:"handed"`
 	Slot   string `json:"slot,omitempty"`
 }
 
-// Set maps worn slots to the item kinds that complete it, plus the tool kinds
-// it is used with. Slots is keyed by the same worn-slot names as classes.json
-// and the wire (helmet, chest, trousers, feet, …).
 type Set struct {
 	ID    string            `json:"id"`
 	Name  string            `json:"name"`
@@ -51,10 +40,6 @@ type Skill struct {
 	MaxLevel int    `json:"max_level"`
 }
 
-// Class is one of the five class definitions in shared/classes.json. Requires
-// maps each worn slot the class needs to the item kind that must sit in it;
-// the tool slots (right hand / left hand) are entries like any other, so a
-// class is complete when every Requires entry is worn.
 type Class struct {
 	ID       string            `json:"id"`
 	Name     string            `json:"name"`
@@ -62,21 +47,14 @@ type Class struct {
 	Requires map[string]string `json:"requires"`
 }
 
-// ClassResult is the pure output of ClassOf: which class the worn equipment
-// composes, if a complete one, and what keeps the closest class from being
-// active. Missing maps each worn slot that lacks its required kind to the kind
-// that must sit there.
 type ClassResult struct {
 	Class   *Class
 	Missing map[string]string
 }
 
-// XPPerLevel is the XP a level costs, the one number of the skill curve. A
-// level is a pure function of XP (see SkillLevel); this constant is that
-// curve's single knob. Tuning: ARM-122.
+// Tuning: ARM-122.
 const XPPerLevel = 100
 
-// Catalog is the validated, read-only form of the content tables.
 type Catalog struct {
 	sets    map[string]Set
 	skills  map[string]Skill
@@ -294,10 +272,6 @@ func (c *Catalog) GetClass(id string) (Class, bool) {
 
 const defaultSkillMaxLevel = 99
 
-// SkillLevel is the level for xp, the pure function the brief demands: level
-// 1 at zero XP, one level per XPPerLevel, never above max. The max is the
-// skill's max_level when the catalog carries the skill, else the shared
-// default; both are data, never per-player state.
 func SkillLevel(xp int64, max int) int {
 	if xp < 0 {
 		xp = 0
@@ -342,14 +316,6 @@ func (c *Catalog) classOrder() []Class {
 	return out
 }
 
-// ClassOf derives the class worn equipment composes.
-//
-// A class is active when every slot its Requires names is worn with the named
-// kind. The tool slots are entries like any other, so "full set + tool" falls
-// out of one table. Otherwise no class is active (Class is nil) and Missing
-// names what the closest class still needs: every slot that lacks its required
-// kind, keyed by slot name. Nil worn (or nil Catalog) returns an empty result;
-// a non-nil empty map still reports the closest class's Missing.
 func ClassOf(worn map[string]string, classes *Catalog) ClassResult {
 	if classes == nil || worn == nil {
 		return ClassResult{}
@@ -377,10 +343,6 @@ func ClassOf(worn map[string]string, classes *Catalog) ClassResult {
 	return ClassResult{Missing: bestMissing}
 }
 
-// WireMissing splits a ClassResult's Missing map the way the wire carries it:
-// slot entries that name a worn slot, and tool kinds that name no worn slot.
-// Slots sorts by WornSlots order, then any remainder by kind; Tools sorts by
-// kind. A nil or empty Missing yields empty slices, never nil.
 func WireMissing(missing map[string]string, wornSlots []mnet.EquipSlot) (slots []mnet.NamedSlot, tools []string) {
 	slots = make([]mnet.NamedSlot, 0, len(missing))
 	tools = make([]string, 0, len(missing))
@@ -427,8 +389,6 @@ func wornSlotOrder(name string, wornSlots []mnet.EquipSlot) (int, bool) {
 	return 0, false
 }
 
-// ResolveClassesPath finds shared/classes.json from cwd or parents, or from
-// MARQUE_CLASSES when set.
 func ResolveClassesPath() (string, error) {
 	if env := strings.TrimSpace(os.Getenv("MARQUE_CLASSES")); env != "" {
 		return env, nil
@@ -436,11 +396,6 @@ func ResolveClassesPath() (string, error) {
 	return resolvePath(ClassesRelPath, "classdef")
 }
 
-// LoadAll composes the three shared content files — sets, skills, classes —
-// into one Catalog, resolved from cwd or parents (or the MARQUE_* env vars).
-// The world's SetClasses wants one catalog carrying both the class table and
-// the skills table, because ClassOf reads the classes and the level function
-// reads the skills. A load failure fails closed.
 func LoadAll() (*Catalog, error) {
 	setsPath, err := ResolveSetsPath()
 	if err != nil {
@@ -583,8 +538,6 @@ func ValidateClassWearables(c *Catalog, wearables map[string][]mnet.EquipSlot) e
 	return nil
 }
 
-// ResolveSetsPath finds shared/sets.json from cwd or parents, or from
-// MARQUE_SETS when set.
 func ResolveSetsPath() (string, error) {
 	if env := strings.TrimSpace(os.Getenv("MARQUE_SETS")); env != "" {
 		return env, nil
@@ -592,8 +545,6 @@ func ResolveSetsPath() (string, error) {
 	return resolvePath(SetsRelPath, "classdef")
 }
 
-// ResolveSkillsPath finds shared/skills.json from cwd or parents, or from
-// MARQUE_SKILLS when set.
 func ResolveSkillsPath() (string, error) {
 	if env := strings.TrimSpace(os.Getenv("MARQUE_SKILLS")); env != "" {
 		return env, nil

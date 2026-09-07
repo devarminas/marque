@@ -1,20 +1,8 @@
 extends Node3D
 
-## The M0 milestone, asserted: network state drives avatars, avatars walk their
-## paths, and a ground click moves the player who clicked.
-##
-## The thing under test is [code]main.tscn[/code] itself, instanced once per
-## client. The clients therefore share one [World3D]: harmless here, since all
-## four grounds are coincident planes, but unhandled input reaches every
-## client's picker, so all pickers but the clicking one are switched off.
-##
-## [b]It must run after [code]test_interop.gd[/code][/b], which asserts on
-## sequentially assigned ids and on a world holding only its own clients.
 
 const URL_ENV := "MARQUE_WS_URL"
 
-## Frame cap for the live half (NOTES.md, "Godot authoring traps": headless
-## Godot runs uncapped).
 const MAX_FPS := 30
 
 const WAIT_FRAMES := 240
@@ -30,15 +18,8 @@ const Assertions := preload("res://tests/assertions.gd")
 const EXACT_EPSILON := 0.002
 const SEGMENT_EPSILON := 0.01
 
-## How far two clients' opinions of one walker may differ, in world units. Two
-## ticks of travel: 150ms at 3.0 units per second, twice.
 const CLOCK_SKEW_TOLERANCE := 0.95
 
-## Where the scripted click lands, in fractions of the viewport. It must miss
-## every opaque panel the UI can have open at once;
-## [method _test_the_scripted_click_misses_the_opaque_panel] and
-## [method _test_the_scripted_click_misses_an_open_equipment_panel] are the only
-## guards on that (NOTES.md, "Godot authoring traps").
 const CLICK_AT := Vector2(0.30, 0.88)
 const MIN_WALK_DISTANCE := 3.0
 
@@ -48,10 +29,6 @@ const FIRST_SAMPLE_MSEC := 400
 const PATH_SPEED := 3.0
 
 
-## One client: an instance of `main.tscn` and everything it has heard.
-##
-## An inner class cannot see the outer script's constants, so its preloads are
-## repeated rather than shared.
 class Client:
 	extends RefCounted
 
@@ -137,15 +114,12 @@ class Client:
 				out.append(path)
 		return out
 
-	## Ground-plane position, or null when this client has no body for them.
 	func ground_of(id: int) -> Variant:
 		var avatar: PlayerAvatarScript = session.avatar_for(id)
 		if avatar == null:
 			return null
 		return Vector2(avatar.position.x, avatar.position.z)
 
-	## Hands one frame to this client's decoder as if it had arrived on the
-	## socket.
 	func feed(text: String) -> void:
 		net.ingest_text_frame(text)
 
@@ -176,8 +150,6 @@ func _process(_delta: float) -> void:
 
 
 func _ready() -> void:
-	# NOTES.md, "Godot authoring traps": a raycast needs the physics space to
-	# have stepped at least once.
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 
@@ -208,11 +180,6 @@ func _ready() -> void:
 	_finished = true
 
 
-# --------------------------------------------------------------------------
-# Offline half: every applier, driven by hand-written frames.
-# --------------------------------------------------------------------------
-
-
 func _test_appliers_without_a_server() -> void:
 	var client := Client.new("Offline")
 	_clients_node.add_child(client.root)
@@ -225,15 +192,12 @@ func _test_appliers_without_a_server() -> void:
 	_test_unknown_ids_are_ignored(client)
 	_test_paths_reach_the_right_body(client)
 	await _test_a_halted_player_is_placed_and_never_waited_for(client)
-	# Leaves the panel drawn, which the two click tests below depend on.
 	await _test_the_scripted_click_misses_the_opaque_panel(client)
 	await _test_the_scripted_click_misses_an_open_equipment_panel(client)
 	await _test_a_click_becomes_an_intent(client)
 	await _test_a_dead_url_backs_off_without_freeing_bodies(client)
 	await _test_a_refused_url_backs_off_without_freeing_bodies(client)
 
-	# Freed before the live half exists, so its picker cannot see the live
-	# half's clicks and its socket cannot join the live half's world.
 	client.root.queue_free()
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -296,7 +260,6 @@ func _test_welcome_builds_the_world(client: Client) -> void:
 	)
 
 
-## PROTOCOL.md, "Ordering and the join race".
 func _test_spawn_is_idempotent(client: Client) -> void:
 	client.feed('{"spawn":{"id":3,"x":1.0,"z":2.0}}')
 	_check(client.session.known_ids() == [1, 2, 3], "a spawn adds a body")
@@ -347,7 +310,6 @@ func _test_paths_reach_the_right_body(client: Client) -> void:
 	_check(walker != null, "the named body exists")
 	if walker == null:
 		return
-	# 6.0 units at 3.0 u/s is 13.33 ticks of 150ms.
 	_check(
 		not walker.is_idle_at_tick(start_tick),
 		"the body has a path to walk at the tick it starts",
@@ -365,7 +327,6 @@ func _test_paths_reach_the_right_body(client: Client) -> void:
 	)
 
 
-## PROTOCOL.md, `path`: a halted player gets no path replay on a join.
 func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> void:
 	client.feed(
 		'{"welcome":{"you":1,"tick_ms":150,"tick":300,'
@@ -403,7 +364,6 @@ func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> voi
 	_check_ground(client, 5, Vector2(3.5, -1.25), "a one-element halt path holds at its point")
 
 
-## The inventory dock is opaque when open, and [constant CLICK_AT] has to miss it.
 func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
 	client.equipment.visible = true
 	client.feed('{"inventory":{"size":28,"slots":[]}}')
@@ -445,8 +405,6 @@ func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
 	)
 
 
-## A point inside the dock's drawn rect, inside the viewport, and on no slot
-## widget, or null when the dock draws no such point.
 static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> Variant:
 	var slots: Array[Rect2] = []
 	for index in client.panel.slot_count():
@@ -472,8 +430,6 @@ static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> V
 	return null
 
 
-## [b]ARM-105 geometry guard.[/b] With the right dock open, [constant CLICK_AT]
-## still has to miss it so world clicks keep working.
 func _test_the_scripted_click_misses_an_open_equipment_panel(client: Client) -> void:
 	if not client.equipment.visible:
 		client.equipment.visible = true
@@ -636,11 +592,6 @@ func _test_a_refused_url_backs_off_without_freeing_bodies(client: Client) -> voi
 	)
 
 
-# --------------------------------------------------------------------------
-# Live half: real server, real sockets, real walking.
-# --------------------------------------------------------------------------
-
-
 func _run_live(url: String) -> void:
 	var a := await _join(url, "A")
 	if a == null:
@@ -759,7 +710,6 @@ func _run_live(url: String) -> void:
 	var d := await _join(url, "D")
 	if d == null:
 		return
-	# Asserted with no waiting in between, on purpose (PROTOCOL.md, `path`).
 	_check(
 		d.session.avatar_for(a_id) != null,
 		"a body for the halted player exists as soon as welcome is applied",
@@ -866,8 +816,6 @@ func _test_stale_token_joins_as_someone_else(url: String) -> void:
 	)
 
 
-## Samples one walker on two clients at the same instant. Returns the watching
-## client's opinion, or null when it has none.
 func _sample(
 	mover: Client,
 	watcher: Client,
@@ -900,8 +848,6 @@ func _join(url: String, label: String) -> Client:
 	var client := Client.new(label)
 	_live_clients.append(client)
 	_clients_node.add_child(client.root)
-	# Every picker but the clicker's is switched off: the clients share one
-	# tree, so unhandled input reaches all of them.
 	client.picker.set_process_unhandled_input(false)
 	await get_tree().process_frame
 
@@ -916,7 +862,6 @@ func _join(url: String, label: String) -> Client:
 	return client
 
 
-## Returns the ground point the picker resolved, or null.
 func _click_ground(client: Client) -> Variant:
 	var viewport := client.camera.get_viewport()
 	var screen_position := viewport.get_visible_rect().size * CLICK_AT
@@ -954,8 +899,6 @@ func _is_idle(client: Client, id: int) -> bool:
 	return avatar.is_idle_at_tick(client.session.tick_clock().estimated_tick())
 
 
-## Presses and releases the left button at a viewport position. Both, so that a
-## press landing on the panel cannot leave it holding mouse focus for the next.
 static func _push_left_click(viewport: Viewport, screen_position: Vector2) -> void:
 	for pressed: bool in [true, false]:
 		var event := InputEventMouseButton.new()
@@ -963,11 +906,6 @@ static func _push_left_click(viewport: Viewport, screen_position: Vector2) -> vo
 		event.pressed = pressed
 		event.position = screen_position
 		viewport.push_input(event)
-
-
-# --------------------------------------------------------------------------
-# Waiting, measuring, reporting.
-# --------------------------------------------------------------------------
 
 
 func _wait_until(predicate: Callable, what: String) -> bool:

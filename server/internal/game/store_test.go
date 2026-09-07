@@ -1,9 +1,5 @@
 package game
 
-// In-package: memStore is unexported by design, and the properties worth
-// pinning here are the ones a Postgres implementation will have to reproduce.
-// Every one of these tests is a sentence about the Store interface, not about
-// the map behind it.
 
 import (
 	"errors"
@@ -12,14 +8,9 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// TestItemIdsComeFromTheirOwnSequence is the id-space rule: from 1, ascending,
-// and unrelated to any player id. The distinct Go types stop the two being
-// confused at compile time; this pins that they are also not accidentally
-// numbered from a shared counter.
 func TestItemIdsComeFromTheirOwnSequence(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 
-	// Players first, so a shared counter would show up as items starting at 3.
 	s.AddPlayer(1)
 	s.AddPlayer(2)
 
@@ -30,9 +21,6 @@ func TestItemIdsComeFromTheirOwnSequence(t *testing.T) {
 	}
 }
 
-// TestItemIdsAreNeverReused matters because a client caches item ids. If a
-// taken id came back on a later item, an M1c client would be told to spawn a
-// body it thinks it already has.
 func TestItemIdsAreNeverReused(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
@@ -48,9 +36,6 @@ func TestItemIdsAreNeverReused(t *testing.T) {
 	}
 }
 
-// TestTakeIsOneMove is the interface's reason to exist. One call moves the item
-// from the ground into a slot; afterwards it is in exactly one of the two
-// places, never both and never neither.
 func TestTakeIsOneMove(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(7)
@@ -71,9 +56,6 @@ func TestTakeIsOneMove(t *testing.T) {
 	}
 }
 
-// TestSecondTakeOfTheSameItemFails is the contested pickup, at the layer that
-// decides it. The second caller learns the item is gone and nothing about the
-// world moves.
 func TestSecondTakeOfTheSameItemFails(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
@@ -93,8 +75,6 @@ func TestSecondTakeOfTheSameItemFails(t *testing.T) {
 	}
 }
 
-// TestTakingWhatIsNotThereFails covers a fabricated id, which the world answers
-// identically to a stale one.
 func TestTakingWhatIsNotThereFails(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
@@ -104,8 +84,6 @@ func TestTakingWhatIsNotThereFails(t *testing.T) {
 	}
 }
 
-// TestSlotsFillLowestFirst is RuneScape's rule, and it is the store's to keep
-// because the caller cannot name a slot without reading the inventory first.
 func TestSlotsFillLowestFirst(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
@@ -122,8 +100,6 @@ func TestSlotsFillLowestFirst(t *testing.T) {
 	}
 }
 
-// TestAFullInventoryRefusesAndKeepsTheItemOnTheGround is the other half of
-// atomicity: a move that cannot complete does not half-complete.
 func TestAFullInventoryRefusesAndKeepsTheItemOnTheGround(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
@@ -147,8 +123,6 @@ func TestAFullInventoryRefusesAndKeepsTheItemOnTheGround(t *testing.T) {
 	}
 }
 
-// TestTakingForAnUnknownPlayerFails guards the invariant addPlayer keeps. It is
-// a broken caller rather than a game condition, so it must be loud.
 func TestTakingForAnUnknownPlayerFails(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	item := s.SpawnGroundItem(KindAcorn, 0, 0)
@@ -161,9 +135,6 @@ func TestTakingForAnUnknownPlayerFails(t *testing.T) {
 	}
 }
 
-// TestGroundItemsAreListedOldestFirst is what makes two identical runs produce
-// identical welcomes. Go randomises map iteration, so the order has to come
-// from somewhere else.
 func TestGroundItemsAreListedOldestFirst(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
@@ -171,8 +142,6 @@ func TestGroundItemsAreListedOldestFirst(t *testing.T) {
 	for i := range 6 {
 		s.SpawnGroundItem(KindAcorn, float64(i), 0)
 	}
-	// Take one from the middle: the survivors must keep their order, and the
-	// hole must not become a gap in the ids the list reports.
 	if _, err := s.TakeGroundItem(3, 1); err != nil {
 		t.Fatalf("taking item 3: %v", err)
 	}
@@ -189,9 +158,6 @@ func TestGroundItemsAreListedOldestFirst(t *testing.T) {
 	}
 }
 
-// TestRemovingAPlayerTakesTheirItemsWithThem records the M1 decision, so that
-// changing it later is a decision rather than an accident. There is no
-// persistence and no drop-on-logout.
 func TestRemovingAPlayerTakesTheirItemsWithThem(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
@@ -208,6 +174,5 @@ func TestRemovingAPlayerTakesTheirItemsWithThem(t *testing.T) {
 	if _, onGround := s.GroundItem(item.ID); onGround {
 		t.Fatal("what they were carrying reappeared on the ground; M1 has no drop-on-logout")
 	}
-	// Removing twice is how a connection that dies in two ways is retired.
 	s.RemovePlayer(1)
 }

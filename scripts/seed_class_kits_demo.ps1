@@ -1,11 +1,3 @@
-<#
-.SYNOPSIS
-    Server-only M7g check: marqued -seed-class-kits places sets-derived kit
-    kinds on the ground and leaves DefaultJoinKit empty.
-
-.PARAMETER OutDir
-    Evidence directory. Default `$env:TEMP\marque-seed-class-kits`.
-#>
 [CmdletBinding()]
 param(
     [string] $OutDir = (Join-Path ([System.IO.Path]::GetTempPath()) "marque-seed-class-kits"),

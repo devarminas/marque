@@ -1,9 +1,5 @@
 extends Node3D
 
-## Equip, unequip, and worn restatement on the equipment panel. **M3c.**
-##
-## No server. Frames go through `net_client.gd`'s public [code]ingest_text_frame[/code]
-## and clicks are real [InputEventMouseButton] events through a real viewport.
 
 const MainScene := preload("res://scenes/main.tscn")
 const SessionScript := preload("res://scripts/session.gd")
@@ -207,8 +203,6 @@ func _test_activate_worn_unequips() -> void:
 	_check(worn != null and worn.is_occupied(), "the weapon slot holds an axe to unequip")
 
 	_watch()
-	# Direct press: on the 64x64 harness the worn cross can sit above the
-	# viewport edge while still being the wired unequip target.
 	worn.activated.emit(worn.worn_name)
 	await get_tree().process_frame
 	_check(

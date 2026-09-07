@@ -1,15 +1,5 @@
 extends RefCounted
 
-## Never instantiated. Typed by [code]preload[/code]:
-##
-## [codeblock]
-## const ClassDefs := preload("res://scripts/class_defs.gd")
-## var defs := ClassDefs.load_default()
-## [/codeblock]
-##
-## Reads the same shared tables as the Go server: shared/sets.json,
-## shared/skills.json, and shared/classes.json. The client is cache-only, so
-## every loader fails closed to an empty catalog rather than inventing content.
 
 const SETS_REL_PATH := "shared/sets.json"
 const SKILLS_REL_PATH := "shared/skills.json"

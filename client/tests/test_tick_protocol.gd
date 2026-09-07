@@ -1,15 +1,9 @@
 extends RefCounted
 
-## The heartbeat's wire layer: frames fed to [code]net_client.gd[/code]'s public
-## [code]ingest_text_frame[/code], no scene tree and no server. **M2c.**
-##
-## What the heartbeat does to a session is the other half, and lives in
-## [code]test_heartbeat.gd[/code], which needs a tree because the session does.
 
 const NetClientScript := preload("res://scripts/net_client.gd")
 
 
-## One client and everything it emitted, in order.
 class Recorder:
 	extends RefCounted
 
@@ -229,9 +223,6 @@ func _test_an_unusable_heartbeat_ticks_reads_as_zero_without_losing_the_welcome(
 	recorder.release()
 
 
-## Whether the transport really goes without a close frame is a claim about
-## [WebSocketPeer] that only a server can settle; `test_interop.gd`'s live half
-## is where it is settled. What is left to assert here is the reporting.
 func _test_abandon_drops_the_transport_and_reports_it() -> void:
 	var recorder := Recorder.new()
 	_check(not recorder.net.is_open(), "a client with no socket is not open")

@@ -1,8 +1,5 @@
 extends RefCounted
 
-## M4e milestone: equip the join-kit axe, race another client for the seeded
-## tree, craft logs→sticks on a win. Prints greppable `DEMO ` lines;
-## `scripts/gather_craft_demo.ps1` owns the assertions.
 
 const SessionScript := preload("res://scripts/session.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")

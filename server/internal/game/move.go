@@ -7,8 +7,6 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// SteerEpsilon is how near a move vector must be to zero before it clears the
-// sticky steer (PROTOCOL.md, "move").
 const SteerEpsilon = 1e-6
 
 const (

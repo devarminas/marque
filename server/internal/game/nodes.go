@@ -21,7 +21,6 @@ const (
 	KindLogs = "logs"
 )
 
-// SkillXPGather is the XP one completed gather grants to the node's skill.
 // Tuning: ARM-122.
 const SkillXPGather = 10
 

@@ -1,51 +1,23 @@
 class_name CameraRig
 extends Node3D
 
-## Orbiting third-person camera rig. Pure client presentation.
-##
-## The rig is a pivot that sits on [member target]; the camera is its child,
-## offset backwards along the pivot's local +Z. Orbiting rotates the pivot,
-## zooming slides the camera along that axis.
-##
-## Two invariants this file exists to keep:
-##
-## 1. The rig reads [member target] and never writes to it. The camera follows
-##    the player; it never drives the player.
-## 2. Nothing here reaches the server. The protocol has no facing and no view
-##    direction, and it never will (NOTES.md, "Camera").
-##
-## Yaw, pitch and distance are stored as plain floats and the transform is
-## rebuilt from them. Reading Euler angles back out of a [Basis] fights the
-## wrap at +-180 degrees and makes the pitch clamp unreliable.
-##
-## The rig is authored in [code]main.tscn[/code], including its default framing.
-## Every number below is a placeholder chosen to be usable, not good; they are
-## exported so a human can tune them in the inspector (Linear ARM-12).
 
-## The node the rig follows. Read-only to this script.
 @export var target: Node3D
-## The camera this rig owns. Its local position is overwritten on every zoom.
 @export var camera: Camera3D
 
 @export_group("Feel")
-## Degrees of rotation per pixel of mouse travel while orbiting.
+# Linear ARM-12.
 @export var orbit_degrees_per_pixel := 0.35
-## World units the camera moves per wheel notch.
 @export var zoom_step := 1.5
-## How hard the rig chases the target. Higher is snappier; 0 pins it in place.
 @export var follow_damping := 12.0
 
 @export_group("Limits")
-## Most downward pitch. Keeps the camera from passing through the ground.
 @export var pitch_min_degrees := -80.0
-## Most level pitch. Keeps the camera above the horizon, never under it.
 @export var pitch_max_degrees := -12.0
 @export var distance_min := 4.0
 @export var distance_max := 32.0
 
 @export_group("Default framing")
-## Authoritative starting framing. The node transforms in [code]main.tscn[/code]
-## are authored to match these so the editor viewport shows what the game shows.
 @export var default_yaw_degrees := 30.0
 @export var default_pitch_degrees := -35.0
 @export var default_distance := 14.0
@@ -68,7 +40,6 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if target == null:
 		return
-	# Exponential smoothing, so the feel does not change with framerate.
 	var weight := 1.0 - exp(-follow_damping * delta)
 	global_position = global_position.lerp(target.global_position, weight)
 
@@ -92,9 +63,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		orbit_by(motion.relative.x, motion.relative.y)
 
 
-## Orbits the rig. Both deltas are in mouse pixels and are scaled by
-## [member orbit_degrees_per_pixel]. Yaw wraps into [code][0, 360)[/code];
-## pitch is clamped and stays clamped no matter how far it is pushed.
 func orbit_by(yaw_pixels: float, pitch_pixels: float) -> void:
 	_yaw_degrees = fposmod(_yaw_degrees - yaw_pixels * orbit_degrees_per_pixel, 360.0)
 	_pitch_degrees = clampf(
@@ -105,8 +73,6 @@ func orbit_by(yaw_pixels: float, pitch_pixels: float) -> void:
 	_apply()
 
 
-## Moves the camera along its local Z. Positive [param steps] pulls back.
-## The result is clamped to [member distance_min] .. [member distance_max].
 func zoom_by(steps: float) -> void:
 	_distance = clampf(_distance + steps * zoom_step, distance_min, distance_max)
 	_apply()
@@ -125,7 +91,6 @@ func get_distance() -> float:
 
 
 func _apply() -> void:
-	# Euler order YXZ: yaw about world Y, then pitch about the rig's own X.
 	transform.basis = Basis.from_euler(
 		Vector3(deg_to_rad(_pitch_degrees), deg_to_rad(_yaw_degrees), 0.0)
 	)

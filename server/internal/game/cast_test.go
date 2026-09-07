@@ -195,8 +195,6 @@ func TestCastJSONOnlyDamageAndMana(t *testing.T) {
 }
 
 func TestCastIgnoresClientAuthoredDamage(t *testing.T) {
-	// Wire Cast has no damage field. Decode drops unknown keys; this pins that
-	// the effect amount comes from the catalog only.
 	pw := newProbeWorld(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
 	alice := pw.join()
