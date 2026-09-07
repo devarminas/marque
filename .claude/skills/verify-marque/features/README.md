@@ -84,3 +84,5 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
   right-click attack, WASD in one DEMO/GAMELOG pass.
 - [Server liveness](./heartbeat-liveness.md) — the M2c milestone: heartbeat ticks,
   the three-interval liveness window, and the loud abandon of a silent server.
+- [Seed class kits on the ground](./seed-class-kits.md) — M7g: `-seed-class-kits`
+  places sets-derived wearable kinds on a grid near spawn; join kit stays empty.

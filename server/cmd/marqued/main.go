@@ -79,8 +79,9 @@ func run() error {
 	enableLog := flag.Bool("gamelog", true, "write the NDJSON event log to stdout")
 	abilitiesPath := flag.String("abilities", "", "path to shared/abilities.json (default: search from cwd, or MARQUE_ABILITIES)")
 	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
+	seedClassKits := flag.Bool("seed-class-kits", false, "place one ground item per unique kind from shared/sets.json (armor + tools) on a grid near spawn for class demo/test; does not change DefaultJoinKit")
 	var seeds itemSeeds
-	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world.")
+	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world. Combines with -seed-class-kits.")
 	flag.Parse()
 
 	path := strings.TrimSpace(*abilitiesPath)
@@ -111,6 +112,18 @@ func run() error {
 	world.SetAbilities(abilities)
 	world.SetClasses(classes)
 
+	var groundSeeds itemSeeds
+	var classKitFields []gamelog.Fields
+	if *seedClassKits {
+		for _, s := range game.ClassKitSeeds(classes) {
+			groundSeeds = append(groundSeeds, itemSeed{kind: s.Kind, x: s.X, z: s.Z})
+			classKitFields = append(classKitFields, gamelog.Fields{
+				"kind": s.Kind, "x": s.X, "z": s.Z,
+			})
+		}
+	}
+	groundSeeds = append(groundSeeds, seeds...)
+
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", *addr, err)
@@ -120,7 +133,7 @@ func run() error {
 	mux.Handle(wsPath, hub)
 	srv := &http.Server{Handler: mux}
 
-	log.Event(0, game.EvServerStarted, gamelog.Fields{
+	started := gamelog.Fields{
 		"addr":              listener.Addr().String(),
 		"path":              wsPath,
 		"tick_ms":           int(game.TickDuration.Milliseconds()),
@@ -128,16 +141,21 @@ func run() error {
 		"world_half_extent": game.WorldHalfExtent,
 		"inventory_size":    game.InventorySize,
 		"resume_grace":      game.ResumeGraceTicks,
-		"seeded_items":      len(seeds),
+		"seeded_items":      len(groundSeeds),
+		"seed_class_kits":   *seedClassKits,
 		"join_kit":          game.DefaultJoinKit,
 		"worn_slots":        game.WornSlots,
 		"abilities":         abilities.Len(),
 		"abilities_path":    path,
 		"classes":           classes.ClassLen(),
 		"skills":            classes.SkillLen(),
-	})
+	}
+	if *seedClassKits {
+		started["class_kit_seeds"] = classKitFields
+	}
+	log.Event(0, game.EvServerStarted, started)
 
-	for _, seed := range seeds {
+	for _, seed := range groundSeeds {
 		if err := world.SeedGroundItem(seed.kind, seed.x, seed.z); err != nil {
 			return err
 		}
