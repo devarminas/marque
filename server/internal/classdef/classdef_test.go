@@ -36,11 +36,11 @@ func TestLoadSharedSets(t *testing.T) {
 	if miner.Slots["helmet"] != "prospector_helm" {
 		t.Fatalf("miner helmet %q", miner.Slots["helmet"])
 	}
-	if miner.Slots["boots"] != "prospector_boots" {
-		t.Fatalf("miner boots %q", miner.Slots["boots"])
+	if miner.Slots["feet"] != "prospector_boots" {
+		t.Fatalf("miner feet %q", miner.Slots["feet"])
 	}
-	if p, ok := miner.Tools["pickaxe"]; !ok || p.Handed != HandedOne {
-		t.Fatalf("miner pickaxe missing or wrong handed: %+v", p)
+	if p, ok := miner.Tools["pickaxe"]; !ok || p.Handed != HandedOne || p.Slot != "right hand" {
+		t.Fatalf("miner pickaxe missing or wrong: %+v", p)
 	}
 	lj, ok := cat.GetSet("lumberjack")
 	if !ok {
@@ -49,7 +49,7 @@ func TestLoadSharedSets(t *testing.T) {
 	if lj.Slots["chest"] != "forester_shirt" {
 		t.Fatalf("lumberjack chest %q", lj.Slots["chest"])
 	}
-	if a, ok := lj.Tools["axe"]; !ok || a.Handed != HandedTwo {
+	if a, ok := lj.Tools["lumberjack axe"]; !ok || a.Handed != HandedTwo {
 		t.Fatalf("lumberjack axe missing or wrong handed: %+v", a)
 	}
 }
@@ -89,6 +89,13 @@ func TestMalformedFailsClosed(t *testing.T) {
 	}
 	if _, err := ParseSkills([]byte(`{"skills":[`)); err == nil {
 		t.Fatal("expected malformed skills error")
+	}
+}
+
+func TestUnknownSlotKeyFailsClosed(t *testing.T) {
+	raw := []byte(`{"sets":[{"id":"x","name":"X","slots":{"helmett":"helm"},"tools":{}}]}`)
+	if _, err := ParseSets(raw); err == nil {
+		t.Fatal("expected unknown worn slot error")
 	}
 }
 
@@ -342,5 +349,83 @@ func TestWireMissingSplitsSlotsAndTools(t *testing.T) {
 	}
 	if s, tt := WireMissing(nil, nil); len(s) != 0 || len(tt) != 0 {
 		t.Fatalf("WireMissing(nil)=%v,%v, want empty slices", s, tt)
+	}
+}
+
+func TestWearablesFromSharedCatalog(t *testing.T) {
+	cat, err := LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	wearables, err := cat.Wearables()
+	if err != nil {
+		t.Fatalf("Wearables: %v", err)
+	}
+	if got := wearables["prospector_boots"]; len(got) != 1 || got[0] != "feet" {
+		t.Fatalf("prospector_boots → %v, want [feet]", got)
+	}
+	if got := wearables["lumberjack axe"]; len(got) != 2 || got[0] != "left hand" || got[1] != "right hand" {
+		t.Fatalf("lumberjack axe → %v, want both hands", got)
+	}
+	if got := wearables["sword"]; len(got) != 1 || got[0] != "right hand" {
+		t.Fatalf("sword → %v, want [right hand]", got)
+	}
+	if got := wearables["shield"]; len(got) != 1 || got[0] != "left hand" {
+		t.Fatalf("shield → %v, want [left hand]", got)
+	}
+	if _, ok := wearables["axe"]; ok {
+		t.Fatal("prototype axe must not be wearable")
+	}
+}
+
+func TestWearablesRejectsMissingClassRequire(t *testing.T) {
+	cat, err := ParseSets([]byte(`{
+		"sets":[{
+			"id":"miner","name":"Miner",
+			"slots":{"helmet":"prospector_helm"},
+			"tools":{"pickaxe":{"handed":"one","slot":"right hand"}}
+		}]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseSets: %v", err)
+	}
+	classes, err := ParseClasses([]byte(`{
+		"classes":[{
+			"id":"miner","name":"Miner","skill":"mining",
+			"requires":{"helmet":"prospector_helm","right hand":"pickaxe","feet":"prospector_boots"}
+		}]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseClasses: %v", err)
+	}
+	cat.classes = classes.classes
+	if _, err := cat.Wearables(); err == nil {
+		t.Fatal("expected missing require kind error")
+	}
+}
+
+func TestOneHandedToolRequiresSlot(t *testing.T) {
+	_, err := ParseSets([]byte(`{
+		"sets":[{
+			"id":"miner","name":"Miner",
+			"slots":{},
+			"tools":{"pickaxe":{"handed":"one"}}
+		}]
+	}`))
+	if err == nil {
+		t.Fatal("expected missing 1H slot error")
+	}
+}
+
+func TestTwoHandedToolRejectsSlot(t *testing.T) {
+	_, err := ParseSets([]byte(`{
+		"sets":[{
+			"id":"mage","name":"Mage",
+			"slots":{},
+			"tools":{"staff":{"handed":"two","slot":"right hand"}}
+		}]
+	}`))
+	if err == nil {
+		t.Fatal("expected 2H with slot error")
 	}
 }

@@ -9,8 +9,8 @@
         "trousers": "plate_legs"
       },
       "tools": {
-        "sword": {"handed": "one"},
-        "shield": {"handed": "one"}
+        "sword": {"handed": "one", "slot": "right hand"},
+        "shield": {"handed": "one", "slot": "left hand"}
       }
     },
     {
@@ -44,10 +44,10 @@
         "helmet": "prospector_helm",
         "chest": "prospector_jacket",
         "trousers": "prospector_legs",
-        "boots": "prospector_boots"
+        "feet": "prospector_boots"
       },
       "tools": {
-        "pickaxe": {"handed": "one"}
+        "pickaxe": {"handed": "one", "slot": "right hand"}
       }
     },
     {
@@ -59,7 +59,7 @@
         "trousers": "forester_trousers"
       },
       "tools": {
-        "axe": {"handed": "two"}
+        "lumberjack axe": {"handed": "two"}
       }
     }
   ]

@@ -27,15 +27,17 @@ const (
 	HandedTwo = "two"
 )
 
-// Tool is one entry in a set's tools table. Handed is unused by classdef; it
-// is load-only transport for the 1H/2H equip unit (ARM-121).
+// Tool is one entry in a set's tools table. Handed is "one" or "two". Slot is
+// required when Handed is "one" ("left hand" or "right hand"); two-handed tools
+// must omit Slot.
 type Tool struct {
 	Handed string `json:"handed"`
+	Slot   string `json:"slot,omitempty"`
 }
 
 // Set maps worn slots to the item kinds that complete it, plus the tool kinds
-// it is used with. Slots is keyed by worn-slot name (helmet, chest, trousers,
-// boots). Boots has no worn slot today; the key is data, not slot support.
+// it is used with. Slots is keyed by the same worn-slot names as classes.json
+// and the wire (helmet, chest, trousers, feet, …).
 type Set struct {
 	ID    string            `json:"id"`
 	Name  string            `json:"name"`
@@ -174,6 +176,9 @@ func validateSet(s Set) error {
 		if slot == "" {
 			return fmt.Errorf("%q: empty slot name", s.ID)
 		}
+		if _, ok := wornVocabulary[slot]; !ok {
+			return fmt.Errorf("%q: unknown worn slot %q", s.ID, slot)
+		}
 		if kind == "" {
 			return fmt.Errorf("%q: slot %q has no kind", s.ID, slot)
 		}
@@ -183,7 +188,16 @@ func validateSet(s Set) error {
 			return fmt.Errorf("%q: empty tool kind", s.ID)
 		}
 		switch tool.Handed {
-		case HandedOne, HandedTwo:
+		case HandedOne:
+			switch tool.Slot {
+			case "left hand", "right hand":
+			default:
+				return fmt.Errorf("%q: one-handed tool %q needs slot left hand or right hand, got %q", s.ID, kind, tool.Slot)
+			}
+		case HandedTwo:
+			if tool.Slot != "" {
+				return fmt.Errorf("%q: two-handed tool %q must not set slot (got %q)", s.ID, kind, tool.Slot)
+			}
 		default:
 			return fmt.Errorf("%q: unknown handed %q for tool %q", s.ID, tool.Handed, kind)
 		}
@@ -481,6 +495,92 @@ func (c *Catalog) SetLen() int {
 
 func (c *Catalog) SkillLen() int {
 	return len(c.skills)
+}
+
+var wornVocabulary = map[string]struct{}{
+	"helmet": {}, "left hand": {}, "chest": {}, "right hand": {}, "feet": {}, "trousers": {},
+}
+
+func wornSlot(name string) (mnet.EquipSlot, error) {
+	if _, ok := wornVocabulary[name]; !ok {
+		return "", fmt.Errorf("unknown worn slot %q", name)
+	}
+	return mnet.EquipSlot(name), nil
+}
+
+func slotsEqual(a, b []mnet.EquipSlot) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func putWearable(out map[string][]mnet.EquipSlot, kind string, slots []mnet.EquipSlot) error {
+	if prev, exists := out[kind]; exists {
+		if !slotsEqual(prev, slots) {
+			return fmt.Errorf("kind %q maps to both %v and %v", kind, prev, slots)
+		}
+		return nil
+	}
+	out[kind] = slots
+	return nil
+}
+
+func (c *Catalog) Wearables() (map[string][]mnet.EquipSlot, error) {
+	if c == nil {
+		return nil, fmt.Errorf("classdef: nil catalog")
+	}
+	out := make(map[string][]mnet.EquipSlot)
+	for _, id := range c.SetIDs() {
+		s, _ := c.GetSet(id)
+		for slot, kind := range s.Slots {
+			worn, err := wornSlot(slot)
+			if err != nil {
+				return nil, fmt.Errorf("classdef: set %q: %w", s.ID, err)
+			}
+			if err := putWearable(out, kind, []mnet.EquipSlot{worn}); err != nil {
+				return nil, fmt.Errorf("classdef: set %q: %w", s.ID, err)
+			}
+		}
+		for kind, tool := range s.Tools {
+			var slots []mnet.EquipSlot
+			switch tool.Handed {
+			case HandedTwo:
+				slots = []mnet.EquipSlot{"left hand", "right hand"}
+			case HandedOne:
+				slots = []mnet.EquipSlot{mnet.EquipSlot(tool.Slot)}
+			default:
+				return nil, fmt.Errorf("classdef: set %q: tool %q: unknown handed %q", s.ID, kind, tool.Handed)
+			}
+			if err := putWearable(out, kind, slots); err != nil {
+				return nil, fmt.Errorf("classdef: set %q: %w", s.ID, err)
+			}
+		}
+	}
+	if err := ValidateClassWearables(c, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func ValidateClassWearables(c *Catalog, wearables map[string][]mnet.EquipSlot) error {
+	if c == nil {
+		return fmt.Errorf("classdef: nil catalog")
+	}
+	for _, id := range c.ClassIDs() {
+		cl, _ := c.GetClass(id)
+		for _, kind := range cl.Requires {
+			if _, ok := wearables[kind]; !ok {
+				return fmt.Errorf("classdef: class %q requires %q which is not in wearables", cl.ID, kind)
+			}
+		}
+	}
+	return nil
 }
 
 // ResolveSetsPath finds shared/sets.json from cwd or parents, or from

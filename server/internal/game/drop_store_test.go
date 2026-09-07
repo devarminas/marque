@@ -17,7 +17,7 @@ import (
 // the slot and onto the ground; afterwards it is in exactly one of the two
 // places, never both and never neither.
 func TestDropIsOneMove(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(7)
 	taken := s.SpawnGroundItem(KindAcorn, 3, -2)
 	if _, err := s.TakeGroundItem(taken.ID, 7); err != nil {
@@ -53,7 +53,7 @@ func TestDropIsOneMove(t *testing.T) {
 // despawned, and must be told about the new body under a name it has never
 // heard.
 func TestADroppedItemGetsANewId(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 	taken := s.SpawnGroundItem(KindAcorn, 0, 0)
 	if _, err := s.TakeGroundItem(taken.ID, 1); err != nil {
@@ -78,7 +78,7 @@ func TestADroppedItemGetsANewId(t *testing.T) {
 // item on the ground and an empty inventory, exactly as it started, and the
 // only difference is the id.
 func TestTakeAndDropRoundTripReturnsTheStoreToItsShape(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 	first := s.SpawnGroundItem(KindAcorn, 2, 2)
 
@@ -109,7 +109,7 @@ func TestTakeAndDropRoundTripReturnsTheStoreToItsShape(t *testing.T) {
 // same one TestAFullInventoryRefusesAndKeepsTheItemOnTheGround holds for take:
 // a move that cannot complete does not half-complete.
 func TestDroppingAnEmptySlotChangesNothing(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 	item := s.SpawnGroundItem(KindAcorn, 0, 0)
 	if _, err := s.TakeGroundItem(item.ID, 1); err != nil {
@@ -136,7 +136,7 @@ func TestDroppingAnEmptySlotChangesNothing(t *testing.T) {
 // gets its own error for that reason.
 func TestDroppingAnIndexOutsideTheInventoryChangesNothing(t *testing.T) {
 	for _, slot := range []int{-1, InventorySize, InventorySize + 1000} {
-		s := NewMemoryStore()
+		s := NewMemoryStore(NoWearables)
 		s.AddPlayer(1)
 		item := s.SpawnGroundItem(KindAcorn, 0, 0)
 		if _, err := s.TakeGroundItem(item.ID, 1); err != nil {
@@ -160,7 +160,7 @@ func TestDroppingAnIndexOutsideTheInventoryChangesNothing(t *testing.T) {
 // a condition; the store still refuses rather than panicking, because the
 // interface answers questions and the caller decides what is fatal.
 func TestDroppingForAnUnknownPlayerFails(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(NoWearables)
 
 	if _, err := s.DropInventorySlot(mnet.PlayerID(42), 0, 0, 0); !errors.Is(err, ErrNoSuchPlayer) {
 		t.Fatalf("dropping for a player with no inventory returned %v, want ErrNoSuchPlayer", err)
@@ -174,7 +174,7 @@ func TestDroppingForAnUnknownPlayerFails(t *testing.T) {
 // deterministic once drops exist. GroundItems is ordered by when items entered
 // the world, and a dropped item entered now.
 func TestADroppedItemJoinsTheBackOfTheGroundOrder(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 
 	first := s.SpawnGroundItem(KindAcorn, 1, 0)

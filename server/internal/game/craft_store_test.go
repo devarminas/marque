@@ -6,7 +6,7 @@ import (
 )
 
 func TestCraftLogsToSticksIsOneMove(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 	if _, err := s.SpawnInventoryItem(1, KindLogs); err != nil {
 		t.Fatalf("seeding logs: %v", err)
@@ -26,7 +26,7 @@ func TestCraftLogsToSticksIsOneMove(t *testing.T) {
 }
 
 func TestCraftRefusesWrongKindWithoutMutating(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 	if _, err := s.SpawnInventoryItem(1, KindAcorn); err != nil {
 		t.Fatalf("seeding acorn: %v", err)
@@ -42,7 +42,7 @@ func TestCraftRefusesWrongKindWithoutMutating(t *testing.T) {
 }
 
 func TestCraftRefusesAFullBagWithoutMutating(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 	if _, err := s.SpawnInventoryItem(1, KindLogs); err != nil {
 		t.Fatalf("seeding logs: %v", err)
@@ -66,7 +66,7 @@ func TestCraftRefusesAFullBagWithoutMutating(t *testing.T) {
 }
 
 func TestCraftFillsTheLowestFreeSlotAfterConsume(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 	if _, err := s.SpawnInventoryItem(1, KindAcorn); err != nil {
 		t.Fatalf("seeding acorn: %v", err)

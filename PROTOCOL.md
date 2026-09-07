@@ -19,13 +19,13 @@ that listed the live units by name, which put every later unit in the position o
 status line that was about somebody else.
 
 **M3 is in progress**, and the marker convention above governs it unchanged. **M3a** is the
-server half of equipment and is shipped with this file: worn slots, `equip`, `unequip`, the
-`equipment` restatement, and the kind `axe`. A marker reading plain **M3** is reserved. The
+server half of equipment and is shipped with this file: worn slots, `equip`, `unequip`, and the
+`equipment` restatement. A marker reading plain **M3** is reserved. The
 client panel is M3b onward and nothing under an **M3a** marker describes it.
 
-**M7 is in progress.** **M7b** is the 1H/2H server equip model and is shipped with this
-file: one- and two-handed tools, six worn slot names including `feet`, and the nine wearable
-kinds. **M7c** is the server half of class derivation, skill XP, and the gather class gate, and
+**M7 is in progress.** **M7b** is the 1H/2H server equip model. **M7f** derives wearables from
+`shared/sets.json` (worn-slot keys including `feet`, authored 1H `slot`, empty join kit, no prototype `axe`) and is
+shipped with this file. **M7c** is the server half of class derivation, skill XP, and the gather class gate, and
 is shipped with this file: five classes in `shared/classes.json`, the `class` and `skills`
 restatements, `ClassOf` from worn equipment with missing-piece reporting, per-skill XP with a
 level function, and gather gated on the active class's skill rather than a hardcoded tool kind.
@@ -676,8 +676,9 @@ Broadcast to **everyone, including the player who caused it**. This is `path`'s 
 have to conjure the body from its own intent, which is the client inventing state the server
 never announced.
 
-`kind` is an item type name. M1 ships exactly one, `acorn`. **M3a** adds `axe`. **M4a** adds
-`logs`, the gather yield. **M4c** adds `sticks`, the craft product. **A client that does not know a `kind` renders it magenta and keeps
+`kind` is an item type name. M1 ships exactly one, `acorn`. **M3a** introduced a prototype
+`axe` join-kit kind; **M7f** removed it. Wearable kinds now come from `shared/sets.json`.
+**M4a** adds `logs`, the gather yield. **M4c** adds `sticks`, the craft product. **A client that does not know a `kind` renders it magenta and keeps
 going** (`NOTES.md`, the palette), because a missing asset must scream rather than render
 nothing, and because unknown kinds are how content is added without a client release.
 
@@ -746,7 +747,7 @@ never otherwise.
 
 ### `equipment`. **M3a** / **M7b**
 
-    {"equipment":{"worn":["helmet","left hand","chest","right hand","feet","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}
+    {"equipment":{"worn":["helmet","left hand","chest","right hand","feet","trousers"],"slots":[{"slot":"right hand","kind":"sword"}]}}
 
 Sent to **one player only**, never broadcast. A full restatement of that player's worn
 equipment, on `inventory`'s doctrine and for its reason: a restatement cannot drift, and a
@@ -989,55 +990,47 @@ in" a question every intent had to answer.
 copy of the closed set as authority. The client authors fixed chrome for those names; it does
 not grow worn widgets from the restatement list.
 
-**A kind belongs to at most one worn slot, and the server owns that mapping.** `axe` belongs to
-`right hand`. A kind that belongs to no slot cannot be worn, which is how `acorn` is refused: it
+**A kind belongs to at most one worn slot (or both hands when two-handed), and the server
+owns that mapping from `shared/sets.json`.** Wearability is derived at boot into a kind → worn
+slots table; a kind that belongs to no slot cannot be worn, which is how `acorn` is refused: it
 is a lookup that misses, not a special case naming the kinds that are not wearable. The client
 is never told the mapping and never needs it, because `equip` names a bag slot and the server
 resolves the destination.
 
-### Handedness. **M7b**
+### Handedness. **M7b** → **M7f**
 
 **A kind is one-handed or two-handed, names the slot or slots it occupies, and the server owns
-both facts from one table.** Handedness is the exclusivity mechanism, and it couples the hand
+both facts from the sets-derived wearables table.** Handedness is the exclusivity mechanism, and it couples the hand
 slots into one exchange: a two-handed kind occupies `left hand` and `right hand` at once, and a
 one-handed kind occupies exactly one of them. Handedness and slot come from the same table, so
 they cannot disagree.
 
-- **`axe`, `pickaxe`, `sword` are one-handed, and each occupies `right hand`.**
-- **`staff`, `bow`, `lumberjack axe` are two-handed, and occupy `left hand` and `right hand`.**
+- **`pickaxe` and `sword` are one-handed and occupy `right hand`; `shield` is one-handed and occupies `left hand`.**
+- **`staff`, `bow`, and `lumberjack axe` are two-handed, and occupy `left hand` and `right hand`.**
 
-The two axes differ: the lumberjack axe is a distinct kind from the one-handed `axe`, and it is
-the two-handed one. `kind` names the item; handedness is a property of the kind. **A kind cannot
-be both one- and two-handed.**
+`kind` names the item; handedness is a property of the kind. **A kind cannot
+be both one- and two-handed.** One-handed tools declare their hand in `sets.json` (`slot`);
+two-handed tools omit `slot`. Set `slots` keys are the same worn-slot names as
+`classes.json` requires and the wire (`feet`, not a separate `boots` key).
 
 **The hand slots couple into one exchange, exactly as a swap couples the bag and one worn slot.**
 When a two-handed kind goes on, whatever was in `left hand` and `right hand` comes off in the
 same move. When a two-handed kind comes off, it clears both hands in the same move. A kind's
 handedness is the whole reason a slot is left alone: nothing displaces a hand it does not occupy.
 
-### `kind axe`. **M3a** → **M7b**
+### Wearable kinds. **M7b** → **M7f**
 
-One new kind, `axe`, joining M1's `acorn`. It is the only equippable kind in M3a and it exists so
-that equipment has something to carry before gathering exists to earn one. **A client that does
-not know it renders it magenta and keeps going**, which is the *item_spawn* rule and not a new
-one. **M7b makes `axe` one of nine wearable kinds; it is no longer the only one.**
-
-**M7b adds the wearable kinds the classes will hold.** `sword` (knight), `staff` (mage), `bow`
-(archer), `lumberjack axe` (lumberjack), `pickaxe` (miner), and `prospector boots` (prospector).
-Handedness and slot per *Handedness*. The kind table names them; whichever class draws them
-later is M7c ahead. A class that will draw these arrives in M7c; **no class logic is described
-or shipped under an **M7b** marker.**
+Wearable kinds are the armor and tools authored in `shared/sets.json`, including class require
+kinds such as `sword`, `shield`, `staff`, `bow`, `lumberjack axe`, `pickaxe`, and
+`prospector_boots`. The prototype one-handed `axe` join-kit kind is gone. Handedness and slot
+per *Handedness*. Boot fails closed if any `classes.json` require kind is missing from the
+sets-derived wearables map.
 
 ### The join kit
 
-**A joining player is given one `axe` in the lowest free bag slot**, and it arrives in the first
-`inventory` of the join step like anything else the player is holding. It is not a ground item:
-nothing is placed in the world, no id is minted, and **no `item_spawn` is broadcast**, because
-nothing entered the world for anyone else to see. An inventory holds kinds rather than ids
+**A joining player's bag starts empty.** Class gear is not seeded at join; gathering and later
+seed stories supply wearable kinds. An inventory holds kinds rather than ids
 (*Drop*), so an item that was never on the ground has nothing an id could name.
-
-This exists so a client can reach `equip` without gathering content, and it is revisitable the
-moment gathering can produce an axe.
 
 ### `equip`
 

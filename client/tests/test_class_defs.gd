@@ -26,14 +26,14 @@ func _test_shared_starters(assertions: Assertions) -> void:
 		var m: Dictionary = miner
 		assertions.check(String(m["name"]) == "Miner", "miner set names Miner")
 		assertions.check(String(m["slots"]["chest"]) == "prospector_jacket", "miner chest is prospector_jacket")
-		assertions.check(String(m["slots"]["boots"]) == "prospector_boots", "miner boots is prospector_boots")
+		assertions.check(String(m["slots"]["feet"]) == "prospector_boots", "miner feet is prospector_boots")
 		assertions.check(String(m["tools"]["pickaxe"]["handed"]) == ClassDefs.HANDED_ONE, "miner pickaxe is one-handed")
 	var lumberjack: Variant = ClassDefs.get_set(cat, "lumberjack")
 	assertions.check(lumberjack != null, "lumberjack set is present")
 	if lumberjack != null:
 		var lj: Dictionary = lumberjack
 		assertions.check(String(lj["slots"]["chest"]) == "forester_shirt", "lumberjack chest is forester_shirt")
-		assertions.check(String(lj["tools"]["axe"]["handed"]) == ClassDefs.HANDED_TWO, "lumberjack axe is two-handed")
+		assertions.check(String(lj["tools"]["lumberjack axe"]["handed"]) == ClassDefs.HANDED_TWO, "lumberjack axe is two-handed")
 	assertions.check(id_list.has("knight"), "knight set present")
 	assertions.check(id_list.has("mage"), "mage set present")
 	assertions.check(id_list.has("archer"), "archer set present")
