@@ -186,6 +186,9 @@ signal class_changed(
 	missing_tools: PackedStringArray,
 )
 
+## [param skill_ids] and [param levels] are index aligned.
+signal skills_changed(player: int, skill_ids: PackedStringArray, levels: PackedInt32Array)
+
 signal hp_changed(id: int, hp: int, max_hp: int)
 
 signal mana_changed(id: int, mana: int, max_mana: int)
@@ -570,6 +573,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_equipment(body, text)
 		"class":
 			_on_class(body, text)
+		"skills":
+			_on_skills(body, text)
 		"hp":
 			_on_hp(body, text)
 		"mana":
@@ -1025,6 +1030,31 @@ func _on_class(body: Dictionary, text: String) -> void:
 		missing_slot_kinds,
 		missing_tools,
 	)
+
+
+func _on_skills(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["player"], text):
+		return
+	if typeof(body.get("skills")) != TYPE_ARRAY:
+		push_error("net_client: skills.skills is missing or not an array: %s" % text)
+		return
+
+	var skill_ids := PackedStringArray()
+	var levels := PackedInt32Array()
+	for entry: Variant in body["skills"] as Array:
+		if typeof(entry) != TYPE_DICTIONARY:
+			push_error("net_client: skills.skills entry is not an object: %s" % text)
+			return
+		var skill_entry: Dictionary = entry
+		if typeof(skill_entry.get("id", null)) != TYPE_STRING:
+			push_error("net_client: skills.skills entry has no id string: %s" % text)
+			return
+		if not _has_numbers(skill_entry, ["xp", "level"], text):
+			return
+		skill_ids.append(String(skill_entry["id"]))
+		levels.append(int(skill_entry["level"]))
+
+	skills_changed.emit(int(body["player"]), skill_ids, levels)
 
 
 func _on_hp(body: Dictionary, text: String) -> void:

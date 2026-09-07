@@ -52,6 +52,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "tick edges", "script": preload("res://tests/test_tick_edges.gd")},
 	{"name": "hp protocol", "script": preload("res://tests/test_hp_protocol.gd")},
 	{"name": "class protocol", "script": preload("res://tests/test_class_protocol.gd")},
+	{"name": "skills protocol", "script": preload("res://tests/test_skills_protocol.gd")},
 	{"name": "ability defs", "script": preload("res://tests/test_ability_defs.gd")},
 	{"name": "class defs", "script": preload("res://tests/test_class_defs.gd")},
 ]
@@ -85,6 +86,7 @@ const SCENE_SUITES: Array = [
 	{"name": "equipment wiring", "scene": "res://tests/test_equipment_wiring.tscn"},
 	{"name": "hp", "scene": "res://tests/test_hp.tscn"},
 	{"name": "class", "scene": "res://tests/test_class.tscn"},
+	{"name": "class debug", "scene": "res://tests/test_class_debug.tscn"},
 	{"name": "hotbar", "scene": "res://tests/test_hotbar.tscn"},
 	{"name": "npcs", "scene": "res://tests/test_npcs.tscn"},
 	{"name": "cast effect", "scene": "res://tests/test_cast_effect.tscn"},
