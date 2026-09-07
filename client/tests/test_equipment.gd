@@ -3,6 +3,7 @@ extends Node3D
 
 const MainScene := preload("res://scenes/main.tscn")
 const SessionScript := preload("res://scripts/session.gd")
+const NetClientScript := preload("res://scripts/net_client.gd")
 const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
@@ -17,6 +18,8 @@ const TOGGLE_KEY := KEY_I
 const EDGE_INSET := 16.0
 
 const CAMERA_HEIGHT := 20.0
+
+const CLICK_ITEM_ID := 5
 
 const LAYOUT_EPSILON := 0.5
 
@@ -34,12 +37,13 @@ var _assertions := Assertions.new()
 var _finished := false
 var _root: Node3D = null
 var _session: SessionScript = null
+var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
 var _camera: Camera3D = null
 var _panel: EquipmentPanelScript = null
 var _inventory: InventoryPanelScript = null
 
-var _move_to_intents := PackedVector2Array()
+var _pickup_intents := PackedInt32Array()
 
 var _click_point := Vector2.INF
 
@@ -64,6 +68,7 @@ func _ready() -> void:
 	_root.name = "EquipmentClient"
 	_world.add_child(_root)
 	_session = _root.get_node("Session") as SessionScript
+	_net = _root.get_node("Session/Net") as NetClientScript
 	_picker = _root.get_node("GroundPicker") as GroundPickerScript
 	_camera = _root.get_node("CameraRig/Camera3D") as Camera3D
 	_panel = _root.get_node("UI/RightDock") as EquipmentPanelScript
@@ -73,9 +78,7 @@ func _ready() -> void:
 	if rig != null:
 		rig.set_process(false)
 
-	_session.move_to_requested.connect(func(x: float, z: float) -> void:
-		_move_to_intents.append(Vector2(x, z))
-	)
+	_session.pickup_requested.connect(func(id: int) -> void: _pickup_intents.append(id))
 
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -283,18 +286,27 @@ func _test_an_open_panel_swallows_a_click() -> void:
 	)
 	if _click_point == Vector2.INF:
 		return
+
+	var under: Variant = _picker.pick_ground(_click_point)
+	_check(under != null, "there is ground under %v to stand an item on" % _click_point)
+	if under == null:
+		_click_point = Vector2.INF
+		return
+	var here: Vector2 = under
+	await _stand_an_item_at(here)
+	var resolved := _picker.pick(_click_point)
 	_check(
-		_picker.pick_ground(_click_point) != null,
-		"there is ground under %v, so a click that got through would walk the player"
-		% _click_point,
+		resolved["target"] == GroundPickerScript.Target.ITEM,
+		"and item %d stands on it, so a click that got through would pick it up, got target %d"
+		% [CLICK_ITEM_ID, resolved["target"]],
 	)
 
-	_move_to_intents.clear()
+	_pickup_intents.clear()
 	await _push_left_click(_click_point)
 	_check(
-		_move_to_intents.is_empty(),
-		"but a click on the open dock at %v sends no move_to, got %s"
-		% [_click_point, _move_to_intents],
+		_pickup_intents.is_empty(),
+		"but a click on the open dock at %v sends no pickup, got %s"
+		% [_click_point, _pickup_intents],
 	)
 
 
@@ -305,12 +317,12 @@ func _test_a_closed_panel_lets_the_same_click_through() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	_move_to_intents.clear()
+	_pickup_intents.clear()
 	await _push_left_click(_click_point)
 	_check(
-		_move_to_intents.size() == 1,
-		"with the panel closed the very same click at %v walks the player, got %d intent(s)"
-		% [_click_point, _move_to_intents.size()],
+		_pickup_intents.size() == 1 and _pickup_intents[0] == CLICK_ITEM_ID,
+		"with the panel closed the very same click at %v picks item %d up, got %s"
+		% [_click_point, CLICK_ITEM_ID, _pickup_intents],
 	)
 
 
@@ -331,6 +343,22 @@ func _point_inside_the_panel() -> Vector2:
 	if not covered.has_area():
 		return Vector2.INF
 	return covered.get_center()
+
+
+func _stand_an_item_at(ground: Vector2) -> void:
+	_net.ingest_text_frame(
+		'{"welcome":{"you":1,"tick_ms":150,"tick":900,'
+		+ '"players":[{"id":1,"x":0.0,"z":0.0}],"items":[]}}'
+	)
+	_net.ingest_text_frame(
+		'{"item_spawn":{"id":%d,"kind":"acorn","x":%f,"z":%f}}'
+		% [CLICK_ITEM_ID, ground.x, ground.y]
+	)
+	await get_tree().process_frame
+	# A body added this frame is invisible to a ray until the space has stepped,
+	# and a query before that looks exactly like a broken raycast.
+	await get_tree().physics_frame
+	await get_tree().physics_frame
 
 
 func _push_toggle_key() -> void:
