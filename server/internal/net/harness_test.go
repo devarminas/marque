@@ -138,12 +138,16 @@ func newHarnessWith(t *testing.T, grace int64, kit []string, seeds ...seed) *har
 
 	logs := &syncBuffer{}
 	hub := mnet.NewHub()
-	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore(), grace, kit)
 
 	classes, err := classdef.LoadAll()
 	if err != nil {
 		t.Fatalf("load shared class tables: %v", err)
 	}
+	wearables, err := classes.Wearables()
+	if err != nil {
+		t.Fatalf("derive wearables: %v", err)
+	}
+	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore(wearables), grace, kit)
 	world.SetClasses(classes)
 
 	// Before Run, which is the only time seeding is safe: after it, the world

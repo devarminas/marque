@@ -81,9 +81,9 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			name: "equipment",
 			msg: mnet.Equipment{
 				Worn:  []mnet.EquipSlot{"helmet", "left hand", "chest", "right hand", "feet", "trousers"},
-				Slots: []mnet.EquipmentSlot{{Slot: "right hand", Kind: "axe"}},
+				Slots: []mnet.EquipmentSlot{{Slot: "right hand", Kind: "sword"}},
 			},
-			want: `{"equipment":{"worn":["helmet","left hand","chest","right hand","feet","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}`,
+			want: `{"equipment":{"worn":["helmet","left hand","chest","right hand","feet","trousers"],"slots":[{"slot":"right hand","kind":"sword"}]}}`,
 		},
 		{
 			// A worn slot's name is a string on the wire and the only "slot"

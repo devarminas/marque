@@ -195,8 +195,15 @@ func TestSkillXPPersistsAcrossUnequip(t *testing.T) {
 		t.Fatalf("pre-unequip xp=%d, want %d", alice.skillXP["woodcutting"], SkillXPGather)
 	}
 
-	ms := pw.w.items.(*memStore)
-	ms.held[alice.id].worn = map[mnet.EquipSlot]string{}
+	for {
+		worn := pw.w.items.Worn(alice.id)
+		if len(worn) == 0 {
+			break
+		}
+		if _, err := pw.w.items.UnequipWornSlot(alice.id, worn[0].Slot); err != nil {
+			t.Fatalf("unequip %q: %v", worn[0].Slot, err)
+		}
+	}
 
 	res := classdef.ClassOf(pw.w.wornKinds(alice), pw.w.classes)
 	if res.Class != nil {
@@ -327,14 +334,20 @@ func (pw *gatherProbe) joinBare() *player {
 
 func (pw *gatherProbe) equipLumberjack(p *player) *player {
 	pw.t.Helper()
-	ms := pw.w.items.(*memStore)
-	held := ms.held[p.id]
-	held.worn = map[mnet.EquipSlot]string{
-		SlotHelmet:    "forester_cap",
-		SlotChest:     "forester_shirt",
-		SlotTrousers:  "forester_trousers",
-		SlotLeftHand:  KindLumberjackAxe,
-		SlotRightHand: KindLumberjackAxe,
+	kinds := []string{
+		"forester_cap",
+		"forester_shirt",
+		"forester_trousers",
+		KindLumberjackAxe,
+	}
+	for _, kind := range kinds {
+		slot, err := pw.w.items.SpawnInventoryItem(p.id, kind)
+		if err != nil {
+			pw.t.Fatalf("seed %q: %v", kind, err)
+		}
+		if _, err := pw.w.items.EquipInventorySlot(p.id, slot.Index); err != nil {
+			pw.t.Fatalf("equip %q from bag %d: %v", kind, slot.Index, err)
+		}
 	}
 	return p
 }

@@ -14,22 +14,20 @@ const InventorySize = 28
 // Item kinds. Kinds are opaque strings on the wire.
 const (
 	KindAcorn = "acorn"
-	// KindAxe is M3a's equippable kind. Tuning: ARM-81.
-	KindAxe = "axe"
 	// KindSword is the knight's one-handed tool. M7b.
 	KindSword = "sword"
 	// KindStaff is the mage's two-handed tool. M7b.
 	KindStaff = "staff"
 	// KindBow is the archer's two-handed tool. M7b.
 	KindBow = "bow"
-	// KindLumberjackAxe is the lumberjack's two-handed tool, a distinct kind
-	// from the one-handed KindAxe. M7b.
+	// KindLumberjackAxe is the lumberjack's two-handed tool. M7b.
 	KindLumberjackAxe = "lumberjack axe"
 	// KindPickaxe is the miner's one-handed tool. M7b.
 	KindPickaxe = "pickaxe"
-	// KindProspectorBoots is the prospector's footwear, and the reason the
-	// feet slot exists. M7b.
-	KindProspectorBoots = "prospector boots"
+	// KindProspectorBoots is the miner's footwear (sets/classes string). M7f.
+	KindProspectorBoots = "prospector_boots"
+	// KindShield is the knight's offhand. M7f.
+	KindShield = "shield"
 )
 
 // Worn slot names on the wire (PROTOCOL.md, "Worn slots"). Exact strings,
@@ -51,26 +49,9 @@ var WornSlots = []mnet.EquipSlot{
 	SlotHelmet, SlotLeftHand, SlotChest, SlotRightHand, SlotFeet, SlotTrousers,
 }
 
-// kindSlotsOf says which worn slots a kind occupies, one-handed kinds a single
-// slot and two-handed kinds the left and right hands. A kind absent from the
-// table cannot be worn, which is how acorn is refused: a lookup that misses,
-// not a rule naming the kinds that are not wearable. Adding a wearable kind is
-// one entry here; every slot it names must already be in WornSlots.
-// Handedness is the exclusivity mechanism (PROTOCOL.md, "Handedness", M7b).
-var kindSlotsOf = map[string][]mnet.EquipSlot{
-	KindAxe:             {SlotRightHand},
-	KindSword:           {SlotRightHand},
-	KindStaff:           {SlotLeftHand, SlotRightHand},
-	KindBow:             {SlotLeftHand, SlotRightHand},
-	KindLumberjackAxe:   {SlotLeftHand, SlotRightHand},
-	KindPickaxe:         {SlotRightHand},
-	KindProspectorBoots: {SlotFeet},
-}
-
-// DefaultJoinKit is what a joining player is given, in the order it is placed:
-// one axe. Gathering produces logs, not an axe, so the kit does not earn one
-// back. Tuning: ARM-81.
-var DefaultJoinKit = []string{KindAxe}
+// DefaultJoinKit is what a joining player is given. Empty after M7f: class gear
+// is not seeded at join.
+var DefaultJoinKit []string
 
 var (
 	// ErrNoSuchItem: the id names nothing on the ground, whether stale, taken,
@@ -233,17 +214,22 @@ func (p *playerItems) free() (int, bool) {
 type memStore struct {
 	nextItemID mnet.ItemID
 
+	wearables map[string][]mnet.EquipSlot
+
 	ground map[mnet.ItemID]GroundItem
 	order  []mnet.ItemID
 
 	held map[mnet.PlayerID]*playerItems
 }
 
-// NewMemoryStore returns an empty in-memory Store. Item ids start at 1.
-func NewMemoryStore() Store {
+// NewMemoryStore returns an empty in-memory Store that trusts wearables for
+// equip/unequip lookups. Nil or empty means nothing is equippable. Item ids
+// start at 1.
+func NewMemoryStore(wearables map[string][]mnet.EquipSlot) Store {
 	return &memStore{
-		ground: make(map[mnet.ItemID]GroundItem),
-		held:   make(map[mnet.PlayerID]*playerItems),
+		wearables: wearables,
+		ground:    make(map[mnet.ItemID]GroundItem),
+		held:      make(map[mnet.PlayerID]*playerItems),
 	}
 }
 
@@ -355,7 +341,7 @@ func (s *memStore) EquipInventorySlot(player mnet.PlayerID, slot int) (Equipped,
 	if kind == "" {
 		return Equipped{}, fmt.Errorf("equip slot %d for player %d: %w", slot, player, ErrEmptySlot)
 	}
-	worn, wearable := kindSlotsOf[kind]
+	worn, wearable := s.wearables[kind]
 	if !wearable {
 		return Equipped{}, fmt.Errorf("equip %q from slot %d for player %d: %w", kind, slot, player, ErrNotEquippable)
 	}
@@ -376,7 +362,7 @@ func (s *memStore) EquipInventorySlot(player mnet.PlayerID, slot int) (Equipped,
 	displaced := held.worn[primary]
 	held.bag[slot] = displaced
 	if displaced != "" {
-		if prev, known := kindSlotsOf[displaced]; known {
+		if prev, known := s.wearables[displaced]; known {
 			for _, w := range prev {
 				delete(held.worn, w)
 			}
@@ -407,9 +393,9 @@ func (s *memStore) UnequipWornSlot(player mnet.PlayerID, slot mnet.EquipSlot) (U
 	// half of it. One-handed kinds clear the one slot they occupy. The kind
 	// came from a worn slot, so equip has installed it and it is in the table;
 	// a miss here is an invariant break, not a refusal.
-	worn, known := kindSlotsOf[kind]
+	worn, known := s.wearables[kind]
 	if !known {
-		panic(fmt.Sprintf("game: unequip %q, a worn kind that is in no kind table", kind))
+		panic(fmt.Sprintf("game: unequip %q, a worn kind that is in no wearables map", kind))
 	}
 
 	index, room := held.free()

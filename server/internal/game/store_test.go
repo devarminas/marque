@@ -17,7 +17,7 @@ import (
 // confused at compile time; this pins that they are also not accidentally
 // numbered from a shared counter.
 func TestItemIdsComeFromTheirOwnSequence(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(nil)
 
 	// Players first, so a shared counter would show up as items starting at 3.
 	s.AddPlayer(1)
@@ -34,7 +34,7 @@ func TestItemIdsComeFromTheirOwnSequence(t *testing.T) {
 // taken id came back on a later item, an M1c client would be told to spawn a
 // body it thinks it already has.
 func TestItemIdsAreNeverReused(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(nil)
 	s.AddPlayer(1)
 
 	taken := s.SpawnGroundItem(KindAcorn, 1, 1)
@@ -52,7 +52,7 @@ func TestItemIdsAreNeverReused(t *testing.T) {
 // from the ground into a slot; afterwards it is in exactly one of the two
 // places, never both and never neither.
 func TestTakeIsOneMove(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(nil)
 	s.AddPlayer(7)
 	item := s.SpawnGroundItem(KindAcorn, 3, -2)
 
@@ -75,7 +75,7 @@ func TestTakeIsOneMove(t *testing.T) {
 // decides it. The second caller learns the item is gone and nothing about the
 // world moves.
 func TestSecondTakeOfTheSameItemFails(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(nil)
 	s.AddPlayer(1)
 	s.AddPlayer(2)
 	item := s.SpawnGroundItem(KindAcorn, 0, 0)
@@ -96,7 +96,7 @@ func TestSecondTakeOfTheSameItemFails(t *testing.T) {
 // TestTakingWhatIsNotThereFails covers a fabricated id, which the world answers
 // identically to a stale one.
 func TestTakingWhatIsNotThereFails(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(nil)
 	s.AddPlayer(1)
 
 	if _, err := s.TakeGroundItem(mnet.ItemID(99), 1); !errors.Is(err, ErrNoSuchItem) {
@@ -107,7 +107,7 @@ func TestTakingWhatIsNotThereFails(t *testing.T) {
 // TestSlotsFillLowestFirst is RuneScape's rule, and it is the store's to keep
 // because the caller cannot name a slot without reading the inventory first.
 func TestSlotsFillLowestFirst(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(nil)
 	s.AddPlayer(1)
 
 	for want := range 3 {
@@ -125,7 +125,7 @@ func TestSlotsFillLowestFirst(t *testing.T) {
 // TestAFullInventoryRefusesAndKeepsTheItemOnTheGround is the other half of
 // atomicity: a move that cannot complete does not half-complete.
 func TestAFullInventoryRefusesAndKeepsTheItemOnTheGround(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(nil)
 	s.AddPlayer(1)
 
 	for i := range InventorySize {
@@ -150,7 +150,7 @@ func TestAFullInventoryRefusesAndKeepsTheItemOnTheGround(t *testing.T) {
 // TestTakingForAnUnknownPlayerFails guards the invariant addPlayer keeps. It is
 // a broken caller rather than a game condition, so it must be loud.
 func TestTakingForAnUnknownPlayerFails(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(nil)
 	item := s.SpawnGroundItem(KindAcorn, 0, 0)
 
 	if _, err := s.TakeGroundItem(item.ID, 42); !errors.Is(err, ErrNoSuchPlayer) {
@@ -165,7 +165,7 @@ func TestTakingForAnUnknownPlayerFails(t *testing.T) {
 // identical welcomes. Go randomises map iteration, so the order has to come
 // from somewhere else.
 func TestGroundItemsAreListedOldestFirst(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(nil)
 	s.AddPlayer(1)
 
 	for i := range 6 {
@@ -193,7 +193,7 @@ func TestGroundItemsAreListedOldestFirst(t *testing.T) {
 // changing it later is a decision rather than an accident. There is no
 // persistence and no drop-on-logout.
 func TestRemovingAPlayerTakesTheirItemsWithThem(t *testing.T) {
-	s := NewMemoryStore()
+	s := NewMemoryStore(nil)
 	s.AddPlayer(1)
 	item := s.SpawnGroundItem(KindAcorn, 0, 0)
 	if _, err := s.TakeGroundItem(item.ID, 1); err != nil {

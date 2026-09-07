@@ -100,10 +100,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	wearables, err := classes.Wearables()
+	if err != nil {
+		return err
+	}
 
 	log := gamelog.New(os.Stdout, *enableLog)
 	hub := mnet.NewHub()
-	world := game.NewWorld(hub, log, game.NewMemoryStore(), game.ResumeGraceTicks, game.DefaultJoinKit)
+	world := game.NewWorld(hub, log, game.NewMemoryStore(wearables), game.ResumeGraceTicks, game.DefaultJoinKit)
 	world.SetAbilities(abilities)
 	world.SetClasses(classes)
 

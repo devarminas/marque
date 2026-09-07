@@ -33,7 +33,7 @@ func _test_shared_starters(assertions: Assertions) -> void:
 	if lumberjack != null:
 		var lj: Dictionary = lumberjack
 		assertions.check(String(lj["slots"]["chest"]) == "forester_shirt", "lumberjack chest is forester_shirt")
-		assertions.check(String(lj["tools"]["axe"]["handed"]) == ClassDefs.HANDED_TWO, "lumberjack axe is two-handed")
+		assertions.check(String(lj["tools"]["lumberjack axe"]["handed"]) == ClassDefs.HANDED_TWO, "lumberjack axe is two-handed")
 	assertions.check(id_list.has("knight"), "knight set present")
 	assertions.check(id_list.has("mage"), "mage set present")
 	assertions.check(id_list.has("archer"), "archer set present")

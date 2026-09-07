@@ -4,7 +4,7 @@ package net_test
 // restatement, driven through real sockets against a world configured the way
 // the shipped server configures itself.
 //
-// Every test here uses newHarnessWithKit with game.DefaultJoinKit, so the axe
+// Every test here uses newHarnessWithKit with []string{game.KindSword}, so the sword
 // under test is the one a real player joins holding rather than one the test
 // arranged for itself.
 
@@ -16,11 +16,11 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-// fullBagKit is a join kit that fills the bag: the axe M3a equips, and acorns
+// fullBagKit is a join kit that fills the bag: the sword M3a equips, and acorns
 // in every remaining slot.
 func fullBagKit() []string {
 	kit := make([]string, 0, game.InventorySize)
-	kit = append(kit, game.KindAxe)
+	kit = append(kit, game.KindSword)
 	for len(kit) < game.InventorySize {
 		kit = append(kit, game.KindAcorn)
 	}
@@ -57,12 +57,12 @@ func countKinds(frames []frame) map[string]int {
 	return kinds
 }
 
-// TestDefaultJoinKitIsOneAxe pins the tunable the rest of this file is written
-// against. Every test below configures its world with DefaultJoinKit, so a kit
-// that quietly grew a second item would move every bag index they assert.
-func TestDefaultJoinKitIsOneAxe(t *testing.T) {
-	if len(game.DefaultJoinKit) != 1 || game.DefaultJoinKit[0] != game.KindAxe {
-		t.Fatalf("DefaultJoinKit is %v, want exactly one %q", game.DefaultJoinKit, game.KindAxe)
+// TestDefaultJoinKitIsEmpty pins the lean join kit after M7f: no seeded axe.
+// Equipment tests below pass an explicit sword kit when they need something
+// wearable in the bag.
+func TestDefaultJoinKitIsEmpty(t *testing.T) {
+	if len(game.DefaultJoinKit) != 0 {
+		t.Fatalf("DefaultJoinKit is %v, want empty", game.DefaultJoinKit)
 	}
 	wantWorn := []mnet.EquipSlot{
 		game.SlotHelmet, game.SlotLeftHand, game.SlotChest, game.SlotRightHand, game.SlotFeet, game.SlotTrousers,
@@ -80,12 +80,12 @@ func TestDefaultJoinKitIsOneAxe(t *testing.T) {
 // TestTheJoinKitPutsOneAxeInTheLowestFreeBagSlot is the precondition for
 // equipping anything: a client can reach equip without gathering content.
 //
-// It also holds the kit to being a bag item and not a world item. An axe placed
-// on the ground and picked up would satisfy "the player has an axe" and would
+// It also holds the kit to being a bag item and not a world item. a sword placed
+// on the ground and picked up would satisfy "the player has a sword" and would
 // mint an item id, broadcast an item_spawn to everybody, and leave a second
-// client drawing an axe nobody can see.
+// client drawing a sword nobody can see.
 func TestTheJoinKitPutsOneAxeInTheLowestFreeBagSlot(t *testing.T) {
-	h := newHarnessWithKit(t, game.DefaultJoinKit)
+	h := newHarnessWithKit(t, []string{game.KindSword})
 
 	alice := h.dial("alice")
 	world := alice.welcomeFrame()
@@ -97,13 +97,13 @@ func TestTheJoinKitPutsOneAxeInTheLowestFreeBagSlot(t *testing.T) {
 	if len(held.Slots) != 1 {
 		t.Fatalf("a joining player holds %+v, want exactly the one axe of the kit", held.Slots)
 	}
-	if got := held.Slots[0]; got.Slot != 0 || got.Kind != game.KindAxe {
-		t.Fatalf("the kit landed as %q in slot %d, want an axe in slot 0, the lowest free one", got.Kind, got.Slot)
+	if got := held.Slots[0]; got.Slot != 0 || got.Kind != game.KindSword {
+		t.Fatalf("the kit landed as %q in slot %d, want a sword in slot 0, the lowest free one", got.Kind, got.Slot)
 	}
 
 	seeded := h.awaitEvents(game.EvJoinSeeded, 1)
-	if got := seeded[0]["kind"]; got != game.KindAxe {
-		t.Errorf("%s names kind %v, want %q", game.EvJoinSeeded, got, game.KindAxe)
+	if got := seeded[0]["kind"]; got != game.KindSword {
+		t.Errorf("%s names kind %v, want %q", game.EvJoinSeeded, got, game.KindSword)
 	}
 	if got := seeded[0]["slot"]; got != float64(0) {
 		t.Errorf("%s names slot %v, want 0", game.EvJoinSeeded, got)
@@ -120,7 +120,7 @@ func TestTheJoinKitPutsOneAxeInTheLowestFreeBagSlot(t *testing.T) {
 // A strict client reading "slots":null as "not an array" drops the whole frame
 // and never draws its panel, with nothing wrong-looking on either side.
 func TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty(t *testing.T) {
-	h := newHarnessWithKit(t, game.DefaultJoinKit)
+	h := newHarnessWithKit(t, []string{game.KindSword})
 
 	alice := h.dial("alice")
 	alice.welcomeFrame()
@@ -168,10 +168,10 @@ func TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty(t *testing.T) {
 // TestEquippingAnAxeIsOneMoveFromBagToWeapon is AC1.
 //
 // The hazards it exists for are the three ways one transaction can be written as
-// two: the axe in both containers, in neither, or on the ground. A get-then-put
-// implementation passes "the axe is worn" and fails at least one of the others.
+// two: the sword in both containers, in neither, or on the ground. A get-then-put
+// implementation passes "the sword is worn" and fails at least one of the others.
 func TestEquippingAnAxeIsOneMoveFromBagToWeapon(t *testing.T) {
-	h := newHarnessWithKit(t, game.DefaultJoinKit)
+	h := newHarnessWithKit(t, []string{game.KindSword})
 
 	alice := h.dial("alice")
 	alice.welcome()
@@ -208,18 +208,18 @@ func TestEquippingAnAxeIsOneMoveFromBagToWeapon(t *testing.T) {
 	}
 
 	kind, wearing := wornKind(worn, game.SlotRightHand)
-	if !wearing || kind != game.KindAxe {
-		t.Fatalf("alice is wearing %+v, want an axe in %q", worn.Slots, game.SlotRightHand)
+	if !wearing || kind != game.KindSword {
+		t.Fatalf("alice is wearing %+v, want a sword in %q", worn.Slots, game.SlotRightHand)
 	}
 	if _, occupied := bagKind(held, 0); occupied {
-		t.Fatalf("bag slot 0 still holds something after the axe left it: %+v; the axe is in both places at once", held.Slots)
+		t.Fatalf("bag slot 0 still holds something after the sword left it: %+v; the sword is in both places at once", held.Slots)
 	}
 	if len(held.Slots) != 0 {
 		t.Fatalf("alice's bag holds %+v, want it emptied by the equip", held.Slots)
 	}
 
 	// The other half of "in exactly one place". A world snapshot composed by the
-	// server itself is the authoritative answer to "is the axe on the ground",
+	// server itself is the authoritative answer to "is the sword on the ground",
 	// and it is not a list the test assembled.
 	charlie := h.dial("charlie")
 	if world := charlie.welcomeFrame(); len(world.Items) != 0 {
@@ -239,8 +239,8 @@ func TestEquippingAnAxeIsOneMoveFromBagToWeapon(t *testing.T) {
 		t.Fatalf("logged %d %s events, want 1: %+v", len(equipped), game.EvEquip, equipped)
 	}
 	ev := equipped[0]
-	if ev["kind"] != game.KindAxe || ev["worn"] != string(game.SlotRightHand) || ev["slot"] != float64(0) {
-		t.Errorf("%s reads %+v, want the axe going from slot 0 to %q", game.EvEquip, ev, game.SlotRightHand)
+	if ev["kind"] != game.KindSword || ev["worn"] != string(game.SlotRightHand) || ev["slot"] != float64(0) {
+		t.Errorf("%s reads %+v, want the sword going from slot 0 to %q", game.EvEquip, ev, game.SlotRightHand)
 	}
 	if _, swapped := ev["displaced"]; swapped {
 		t.Errorf("%s carries \"displaced\" for an equip into a free slot: %+v", game.EvEquip, ev)
@@ -250,7 +250,7 @@ func TestEquippingAnAxeIsOneMoveFromBagToWeapon(t *testing.T) {
 // TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot is AC2, and it is AC1's
 // transaction read backwards: the same three hazards in the other direction.
 func TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot(t *testing.T) {
-	h := newHarnessWithKit(t, game.DefaultJoinKit)
+	h := newHarnessWithKit(t, []string{game.KindSword})
 
 	alice := h.dial("alice")
 	alice.welcome()
@@ -284,8 +284,8 @@ func TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot(t *testing.T) {
 	if len(held.Slots) != 1 {
 		t.Fatalf("alice's bag holds %+v, want exactly the one axe back: more than one is a dupe", held.Slots)
 	}
-	if got := held.Slots[0]; got.Slot != 0 || got.Kind != game.KindAxe {
-		t.Fatalf("the axe came back as %q in slot %d, want an axe in slot 0, the lowest free one", got.Kind, got.Slot)
+	if got := held.Slots[0]; got.Slot != 0 || got.Kind != game.KindSword {
+		t.Fatalf("the sword came back as %q in slot %d, want a sword in slot 0, the lowest free one", got.Kind, got.Slot)
 	}
 
 	if world := h.dial("charlie").welcomeFrame(); len(world.Items) != 0 {
@@ -296,8 +296,8 @@ func TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot(t *testing.T) {
 	if len(unequipped) != 1 {
 		t.Fatalf("logged %d %s events, want 1: %+v", len(unequipped), game.EvUnequip, unequipped)
 	}
-	if ev := unequipped[0]; ev["kind"] != game.KindAxe || ev["worn"] != string(game.SlotRightHand) || ev["slot"] != float64(0) {
-		t.Errorf("%s reads %+v, want the axe coming from %q into slot 0", game.EvUnequip, ev, game.SlotRightHand)
+	if ev := unequipped[0]; ev["kind"] != game.KindSword || ev["worn"] != string(game.SlotRightHand) || ev["slot"] != float64(0) {
+		t.Errorf("%s reads %+v, want the sword coming from %q into slot 0", game.EvUnequip, ev, game.SlotRightHand)
 	}
 }
 
@@ -305,12 +305,12 @@ func TestUnequippingReturnsTheAxeToTheLowestFreeBagSlot(t *testing.T) {
 // RuneScape's rule and the one every path into the bag uses, so an unequip must
 // not remember where the item came from.
 func TestUnequipFillsTheLowestFreeSlotRatherThanTheOneItLeft(t *testing.T) {
-	h := newHarnessWithKit(t, []string{game.KindAcorn, game.KindAxe})
+	h := newHarnessWithKit(t, []string{game.KindAcorn, game.KindSword})
 
 	alice := h.dial("alice")
 	alice.welcome()
 
-	// The axe is in slot 1, behind an acorn. Equipping it and dropping the acorn
+	// the sword is in slot 1, behind an acorn. Equipping it and dropping the acorn
 	// leaves slot 0 as the lowest free slot and slot 1 as the one it left.
 	alice.equip(1)
 	h.awaitEvents(game.EvEquip, 1)
@@ -323,10 +323,10 @@ func TestUnequipFillsTheLowestFreeSlotRatherThanTheOneItLeft(t *testing.T) {
 
 	held := alice.awaitInventory()
 	if len(held.Slots) != 1 {
-		t.Fatalf("alice holds %+v, want just the axe", held.Slots)
+		t.Fatalf("alice holds %+v, want just the sword", held.Slots)
 	}
 	if got := held.Slots[0]; got.Slot != 0 {
-		t.Fatalf("the axe came back to slot %d, want slot 0: an unequip fills the lowest free slot, not the one it vacated", got.Slot)
+		t.Fatalf("the sword came back to slot %d, want slot 0: an unequip fills the lowest free slot, not the one it vacated", got.Slot)
 	}
 }
 
@@ -392,7 +392,7 @@ func TestEquipRefusalsNameTheirReasonAndChangeNothing(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := newHarnessWithKit(t, game.DefaultJoinKit)
+			h := newHarnessWithKit(t, []string{game.KindSword})
 			alice := h.dial("alice")
 			alice.welcome()
 			alice.drain()
@@ -414,7 +414,7 @@ func TestEquipRefusalsNameTheirReasonAndChangeNothing(t *testing.T) {
 // TestUnequippingIntoAFullBagIsRefusedAndTheAxeStaysWorn is AC4.
 //
 // The failure this forbids is not a crash. It is the server helpfully dropping
-// the axe at the player's feet, where this protocol gives ground items no owner
+// the sword at the player's feet, where this protocol gives ground items no owner
 // and no visibility rules, so anybody standing there takes it. Losing the item
 // outright is the other way to pass "the worn slot is empty".
 func TestUnequippingIntoAFullBagIsRefusedAndTheAxeStaysWorn(t *testing.T) {
@@ -461,19 +461,19 @@ func TestUnequippingIntoAFullBagIsRefusedAndTheAxeStaysWorn(t *testing.T) {
 		t.Errorf("a refused unequip sent alice a %s frame: %s", f.kind(), f.raw)
 	}
 	if snapshot := h.dial("charlie").welcomeFrame(); len(snapshot.Items) != 0 {
-		t.Fatalf("the world holds %+v after a refused unequip; the axe was dropped rather than kept", snapshot.Items)
+		t.Fatalf("the world holds %+v after a refused unequip; the sword was dropped rather than kept", snapshot.Items)
 	}
 	if spawns := h.eventsNamed(game.EvItemSpawned); len(spawns) != 1 {
 		t.Fatalf("logged %d %s events, want only the one seeded acorn: %+v", len(spawns), game.EvItemSpawned, spawns)
 	}
 
-	// And the axe is still worn, not lost. Read from a resumed join step, which
+	// And the sword is still worn, not lost. Read from a resumed join step, which
 	// is the server restating what it holds rather than the test remembering.
 	alice.destroy()
 	resumed := readJoinStep(h.dialResume("alice-again", world.Session))
 	kind, wearing := wornKind(resumed.equipment, game.SlotRightHand)
-	if !wearing || kind != game.KindAxe {
-		t.Fatalf("alice is wearing %+v after the refusal, want the axe still on", resumed.equipment.Slots)
+	if !wearing || kind != game.KindSword {
+		t.Fatalf("alice is wearing %+v after the refusal, want the sword still on", resumed.equipment.Slots)
 	}
 	if len(resumed.inventory.Slots) != game.InventorySize {
 		t.Fatalf("alice's bag holds %d slots after the refusal, want the same full %d", len(resumed.inventory.Slots), game.InventorySize)
@@ -498,7 +498,7 @@ func TestUnequipRefusalsNameTheirReasonAndChangeNothing(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := newHarnessWithKit(t, game.DefaultJoinKit)
+			h := newHarnessWithKit(t, []string{game.KindSword})
 			alice := h.dial("alice")
 			alice.welcome()
 			alice.drain()
@@ -521,7 +521,7 @@ func TestUnequipRefusalsNameTheirReasonAndChangeNothing(t *testing.T) {
 // name exists to prevent, held to producing a refusal rather than an accident.
 // A client that sends drop's field to unequip has named no worn slot at all.
 func TestUnequipNamingABagIndexIsRefusedAsAMissingField(t *testing.T) {
-	h := newHarnessWithKit(t, game.DefaultJoinKit)
+	h := newHarnessWithKit(t, []string{game.KindSword})
 	alice := h.dial("alice")
 	alice.welcome()
 	alice.equip(0)
@@ -544,7 +544,7 @@ func TestUnequipNamingABagIndexIsRefusedAsAMissingField(t *testing.T) {
 // swap is also what makes equip total: it needs no free slot, because the slot
 // the new item is leaving is the one the old item lands in.
 func TestEquippingOntoAWornAxeSwapsThroughTheVacatedSlot(t *testing.T) {
-	h := newHarnessWithKit(t, []string{game.KindAxe, game.KindAxe})
+	h := newHarnessWithKit(t, []string{game.KindSword, game.KindSword})
 
 	alice := h.dial("alice")
 	alice.welcome()
@@ -571,19 +571,19 @@ func TestEquippingOntoAWornAxeSwapsThroughTheVacatedSlot(t *testing.T) {
 		}
 	}
 
-	if len(worn.Slots) != 1 || worn.Slots[0].Kind != game.KindAxe {
+	if len(worn.Slots) != 1 || worn.Slots[0].Kind != game.KindSword {
 		t.Fatalf("alice is wearing %+v, want the one axe the swap put on", worn.Slots)
 	}
 	if len(held.Slots) != 1 {
 		t.Fatalf("alice's bag holds %+v, want exactly the displaced axe: two axes went in, two must come out", held.Slots)
 	}
-	if got := held.Slots[0]; got.Slot != 1 || got.Kind != game.KindAxe {
-		t.Fatalf("the displaced axe is %q in slot %d, want an axe in slot 1, the one the new axe left", got.Kind, got.Slot)
+	if got := held.Slots[0]; got.Slot != 1 || got.Kind != game.KindSword {
+		t.Fatalf("the displaced axe is %q in slot %d, want a sword in slot 1, the one the new axe left", got.Kind, got.Slot)
 	}
 
 	swapped := h.eventsNamed(game.EvEquip)
-	if got := swapped[1]["displaced"]; got != game.KindAxe {
-		t.Errorf("%s reads displaced %v, want %q: the field is the whole record that a swap happened", game.EvEquip, got, game.KindAxe)
+	if got := swapped[1]["displaced"]; got != game.KindSword {
+		t.Errorf("%s reads displaced %v, want %q: the field is the whole record that a swap happened", game.EvEquip, got, game.KindSword)
 	}
 }
 
@@ -594,7 +594,7 @@ func TestEquippingOntoAWornAxeSwapsThroughTheVacatedSlot(t *testing.T) {
 // of its own. It is the regression test for somebody later moving worn slots
 // onto the connection, where it would look correct until a cable came out.
 func TestWornEquipmentSurvivesSuspendAndResume(t *testing.T) {
-	h := newHarnessWithKit(t, game.DefaultJoinKit)
+	h := newHarnessWithKit(t, []string{game.KindSword})
 
 	alice := h.dial("alice")
 	first := alice.welcome()
@@ -615,7 +615,7 @@ func TestWornEquipmentSurvivesSuspendAndResume(t *testing.T) {
 
 	kind, wearing := wornKind(resumed.equipment, game.SlotRightHand)
 	if !wearing {
-		t.Fatalf("the resumed player is wearing %+v, want the axe it had on when the socket died", resumed.equipment.Slots)
+		t.Fatalf("the resumed player is wearing %+v, want the sword it had on when the socket died", resumed.equipment.Slots)
 	}
 	if kind != before {
 		t.Fatalf("the resumed player is wearing %q, want the %q it had on before", kind, before)
@@ -624,7 +624,7 @@ func TestWornEquipmentSurvivesSuspendAndResume(t *testing.T) {
 		t.Fatalf("the resumed player is wearing %+v, want exactly one thing: a resume that duplicates is as wrong as one that loses", resumed.equipment.Slots)
 	}
 	if len(resumed.inventory.Slots) != 0 {
-		t.Fatalf("the resumed bag holds %+v, want it empty: the axe is worn, and a copy in the bag is a dupe", resumed.inventory.Slots)
+		t.Fatalf("the resumed bag holds %+v, want it empty: the sword is worn, and a copy in the bag is a dupe", resumed.inventory.Slots)
 	}
 	if len(resumed.equipment.Worn) != len(game.WornSlots) {
 		t.Errorf("the resumed equipment names slots %v, want the server's list %v", resumed.equipment.Worn, game.WornSlots)
@@ -653,7 +653,7 @@ func (c *client) awaitEquipmentBeforeDeath(t *testing.T) string {
 // TestWornEquipmentDiesWithThePlayer is AC5's boundary. A clean logout retires
 // the player, and worn equipment goes with everything else it was holding.
 func TestWornEquipmentDiesWithThePlayer(t *testing.T) {
-	h := newHarnessWithKit(t, game.DefaultJoinKit)
+	h := newHarnessWithKit(t, []string{game.KindSword})
 
 	alice := h.dial("alice")
 	first := alice.welcome()
@@ -673,7 +673,7 @@ func TestWornEquipmentDiesWithThePlayer(t *testing.T) {
 	if len(fresh.equipment.Slots) != 0 {
 		t.Fatalf("a fresh player is wearing %+v, want nothing: worn equipment dies with the player", fresh.equipment.Slots)
 	}
-	if len(fresh.inventory.Slots) != 1 || fresh.inventory.Slots[0].Kind != game.KindAxe {
+	if len(fresh.inventory.Slots) != 1 || fresh.inventory.Slots[0].Kind != game.KindSword {
 		t.Fatalf("a fresh player holds %+v, want the one axe of its own kit", fresh.inventory.Slots)
 	}
 }
@@ -682,7 +682,7 @@ func TestWornEquipmentDiesWithThePlayer(t *testing.T) {
 // PROTOCOL.md's "Sequence numbers" states once at the envelope for all of them.
 // A retried equip must not equip twice.
 func TestASequencedEquipIsDedupedAndLogsItsSeq(t *testing.T) {
-	h := newHarnessWithKit(t, game.DefaultJoinKit)
+	h := newHarnessWithKit(t, []string{game.KindSword})
 
 	alice := h.dial("alice")
 	alice.welcome()
