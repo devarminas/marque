@@ -138,7 +138,8 @@ func _ready() -> void:
 
 	await _build_the_node_click_world()
 	_test_the_picker_separates_a_node_from_the_ground()
-	await _test_a_click_on_a_node_is_a_gather_and_nothing_else()
+	await _test_a_right_click_on_a_node_is_a_gather_and_nothing_else()
+	await _test_a_left_click_on_a_node_sends_no_gather()
 	await _test_a_click_on_bare_ground_beside_a_node_sends_nothing()
 	await _test_a_click_on_an_item_still_picks_up_beside_a_node()
 
@@ -586,16 +587,31 @@ func _test_the_picker_separates_a_node_from_the_ground() -> void:
 	)
 
 
-func _test_a_click_on_a_node_is_a_gather_and_nothing_else() -> void:
+func _test_a_right_click_on_a_node_is_a_gather_and_nothing_else() -> void:
 	_watch()
-	await _left_click(_viewport_centre())
+	await _right_click(_viewport_centre())
 	_check(
 		_gather_intents.size() == 1,
-		"a click on a node sends one gather, got %d" % _gather_intents.size(),
+		"a right click on a node sends one gather, got %d" % _gather_intents.size(),
 	)
 	_check(
 		_gather_intents.size() == 1 and _gather_intents[0] == NODE_ID,
 		"naming node %d, got %s" % [NODE_ID, _gather_intents],
+	)
+	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
+	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
+
+
+func _test_a_left_click_on_a_node_sends_no_gather() -> void:
+	_watch()
+	await _left_click(_viewport_centre())
+	_check(
+		_gather_intents.is_empty(),
+		"a left click on a node sends no gather, got %s" % [_gather_intents],
+	)
+	_check(
+		_move_to_intents.is_empty(),
+		"and no move_to, got %s" % [_move_to_intents],
 	)
 	_check(_pickup_intents.is_empty(), "and no pickup, got %s" % [_pickup_intents])
 	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])

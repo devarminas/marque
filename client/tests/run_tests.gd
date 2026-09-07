@@ -26,6 +26,7 @@ const SCENE_SUITES: Array = [
 	{"name": "hp", "scene": "res://tests/test_hp.tscn"},
 	{"name": "class", "scene": "res://tests/test_class.tscn"},
 	{"name": "class debug", "scene": "res://tests/test_class_debug.tscn"},
+	{"name": "error hud", "scene": "res://tests/test_error_hud.tscn"},
 	{"name": "hotbar", "scene": "res://tests/test_hotbar.tscn"},
 	{"name": "npcs", "scene": "res://tests/test_npcs.tscn"},
 	{"name": "cast effect", "scene": "res://tests/test_cast_effect.tscn"},

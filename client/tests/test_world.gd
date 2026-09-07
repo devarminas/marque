@@ -199,7 +199,7 @@ func _test_a_left_click_on_bare_ground_emits_no_signal() -> void:
 	)
 
 	_picker.item_clicked.connect(_on_picker_signal.bind("item_clicked"))
-	_picker.node_clicked.connect(_on_picker_signal.bind("node_clicked"))
+	_picker.node_gather_clicked.connect(_on_picker_signal.bind("node_gather_clicked"))
 	_picker.player_clicked.connect(_on_picker_signal.bind("player_clicked"))
 	_picker.player_attack_clicked.connect(_on_picker_signal.bind("player_attack_clicked"))
 	_picker_signals.clear()

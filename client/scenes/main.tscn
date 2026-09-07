@@ -1,4 +1,4 @@
-[gd_scene load_steps=26 format=3 uid="uid://bbk0w4hee5gof"]
+[gd_scene load_steps=27 format=3 uid="uid://bbk0w4hee5gof"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="2_checker"]
@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://scripts/hp_hud.gd" id="11_hp_hud"]
 [ext_resource type="Script" path="res://scripts/class_hud.gd" id="15_class_hud"]
 [ext_resource type="Script" path="res://scripts/class_debug.gd" id="16_class_debug"]
+[ext_resource type="Script" path="res://scripts/error_hud.gd" id="17_error_hud"]
 [ext_resource type="Script" path="res://scripts/death_overlay.gd" id="12_death_overlay"]
 [ext_resource type="Script" path="res://scripts/hotbar.gd" id="13_hotbar"]
 [ext_resource type="PackedScene" path="res://scenes/hotbar_slot.tscn" id="14_hotbar_slot"]
@@ -432,6 +433,45 @@ text = "—"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="ErrorHud" type="Control" parent="UI" node_paths=PackedStringArray("message_label", "linger")]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -240.0
+offset_top = -108.0
+offset_right = 240.0
+offset_bottom = -76.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+visible = false
+script = ExtResource("17_error_hud")
+message_label = NodePath("MessageLabel")
+linger = NodePath("Linger")
+
+[node name="MessageLabel" type="Label" parent="UI/ErrorHud"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.98, 0.74, 0.36, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 16
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Linger" type="Timer" parent="UI/ErrorHud"]
+wait_time = 4.0
+one_shot = true
+
 [node name="DeathOverlay" type="Control" parent="UI" node_paths=PackedStringArray("respawn_button")]
 visible = false
 layout_mode = 3
@@ -520,7 +560,7 @@ layout_mode = 2
 [node name="Slot2" parent="UI/Hotbar/Bar/Slots" instance=ExtResource("14_hotbar_slot")]
 layout_mode = 2
 
-[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "class_hud", "class_debug", "death_overlay", "hotbar", "camera_rig")]
+[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "class_hud", "class_debug", "error_hud", "death_overlay", "hotbar", "camera_rig")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
@@ -534,6 +574,7 @@ equipment_panel = NodePath("../UI/RightDock")
 hp_hud = NodePath("../UI/HpHud")
 class_hud = NodePath("../UI/ClassHud")
 class_debug = NodePath("../UI/ClassDebug")
+error_hud = NodePath("../UI/ErrorHud")
 death_overlay = NodePath("../UI/DeathOverlay")
 hotbar = NodePath("../UI/Hotbar")
 camera_rig = NodePath("../CameraRig")
@@ -542,3 +583,4 @@ camera_rig = NodePath("../CameraRig")
 script = ExtResource("7_net_client")
 
 [connection signal="pressed" from="UI/InventoryToggle" to="UI/RightDock" method="toggle"]
+[connection signal="timeout" from="UI/ErrorHud/Linger" to="UI/ErrorHud" method="clear"]
