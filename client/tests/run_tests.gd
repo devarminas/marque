@@ -30,6 +30,7 @@ const SCENE_SUITES: Array = [
 	{"name": "hotbar", "scene": "res://tests/test_hotbar.tscn"},
 	{"name": "npcs", "scene": "res://tests/test_npcs.tscn"},
 	{"name": "cast effect", "scene": "res://tests/test_cast_effect.tscn"},
+	{"name": "cursor hint", "scene": "res://tests/test_cursor_hint.tscn"},
 	{"name": "heartbeat", "scene": "res://tests/test_heartbeat.tscn"},
 	{"name": "heartbeat edges", "scene": "res://tests/test_heartbeat_edges.tscn"},
 	{"name": "interop", "scene": "res://tests/test_interop.tscn"},
@@ -40,8 +41,7 @@ const Assertions := preload("res://tests/assertions.gd")
 
 const STARTUP_GRACE_FRAMES := 10
 
-# Raised from 850 for the move-chord suite (ARM-130).
-const WATCHDOG_FRAMES := 1000
+const WATCHDOG_FRAMES := 1250
 
 var _frames := 0
 var _suite_frames := 0
