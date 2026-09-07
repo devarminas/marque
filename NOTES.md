@@ -293,7 +293,7 @@ The game is a database with a game attached; Go has the ecosystem for that (pgx)
   the only writer.
 - Shared data (items, recipes, XP tables, map) = JSON in one folder, read by both. One source of truth, two languages.
 
-## Movement — client sends click, server returns polyline
+## Movement. The client sends an intent, the server returns a polyline
 
 ```
 → {"move_to":{"x":42.3,"z":17.8}}

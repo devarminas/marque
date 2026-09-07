@@ -8,8 +8,8 @@ description: Drive Project Marque the way a player does — the real marqued Go 
 Project Marque is a Go WebSocket server (`server/`, binary `marqued`) and a Godot 4.7
 Forward+ desktop client (`client/`) speaking one-key JSON messages (`PROTOCOL.md`).
 This skill is how an agent launches the real stack, drives it like a player, and reads
-back what actually happened. It was written against M0 (connect, click to move, see
-each other walk) and now covers M1 (items, pickup, drop, the contested-pickup demo,
+back what actually happened. It was written against M0 (connect, walk, see each other
+walk) and now covers M1 (items, pickup, drop, the contested-pickup demo,
 disconnect classification) and M2c (the client's `tick` handling and heartbeat
 liveness); `features/README.md` is the maintained map of what is verifiable.
 
@@ -302,7 +302,10 @@ a read error provoked by a client that was already dropped for being slow is sti
 **DEMO line grammar** (client stdout, written to be grepped):
 
     DEMO joined <player-id>
+    DEMO groundclick <px> <py> <x> <z>
     DEMO clicked <px> <py>
+    DEMO groundclick_ignored <x> <z>
+    DEMO walkto <px> <py> <x> <z>
     DEMO shot <n> <abs-path>
     DEMO pos <shot-n> <player-id> <x> <z>
     DEMO done

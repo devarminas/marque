@@ -4,6 +4,7 @@ extends Node3D
 const SessionScript := preload("res://scripts/session.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const NetClientScript := preload("res://scripts/net_client.gd")
+const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const PickupDemoScript := preload("res://scripts/pickup_demo.gd")
@@ -50,6 +51,10 @@ const SCREENSHOT_WARMUP_FRAMES := 15
 const DEMO_MIN_PLAYERS := 2
 
 const DEMO_JOIN_TIMEOUT_MSEC := 20000
+
+const DEMO_GROUND_CLICK_PROBE_MSEC := 1500
+
+const DEMO_STILL_EPSILON := 0.05
 
 const DEMO_SETTLE_MSEC := 400
 
@@ -290,8 +295,9 @@ func _run_demo(args: Array) -> void:
 		return
 
 	var session := get_node_or_null("Session") as SessionScript
-	if session == null:
-		push_error("main.tscn has no Session node to drive")
+	var picker := get_node_or_null("GroundPicker") as GroundPickerScript
+	if session == null or picker == null:
+		push_error("main.tscn has no Session or GroundPicker node to drive")
 		get_tree().quit(1)
 		return
 
@@ -307,11 +313,21 @@ func _run_demo(args: Array) -> void:
 	var my_phase := _argument_after(args, PHASE_FLAG).to_int()
 	var shot := 0
 
+	# Ahead of the phases, and on every client that was given a fraction rather
+	# than only on the walker. Both clients then pay the same wall clock here, so
+	# the phase schedules they keep independently stay in step.
+	if not click.is_empty():
+		if not await _probe_ground_click_ignored(session, picker, _parse_fraction(click)):
+			get_tree().quit(1)
+			return
+
 	for phase in range(1, DEMO_PHASES + 1):
 		if phase > 1:
 			await _wait_msec(DEMO_PHASE_GAP_MSEC)
 		if phase == my_phase and not click.is_empty():
-			_click_ground_at(_parse_fraction(click))
+			if not _walk_to_fraction(session, picker, _parse_fraction(click)):
+				get_tree().quit(1)
+				return
 
 		await _wait_msec(DEMO_SETTLE_MSEC)
 		shot += 1
@@ -359,14 +375,66 @@ func _capture(session: SessionScript, prefix: String, index: int) -> bool:
 	return true
 
 
-func _click_ground_at(fraction: Vector2) -> void:
+func _walk_to_fraction(
+	session: SessionScript, picker: GroundPickerScript, fraction: Vector2
+) -> bool:
+	var pixel := get_viewport().get_visible_rect().size * fraction
+	var found: Variant = picker.pick_ground(pixel)
+	if found == null:
+		push_error(
+			"%s %s puts the walk at (%f, %f), where no ray meets the ground"
+			% [CLICK_FLAG, fraction, pixel.x, pixel.y]
+		)
+		return false
+
+	var point: Vector2 = found
+	session.request_move_to(point.x, point.y)
+	print("DEMO walkto %f %f %f %f" % [pixel.x, pixel.y, point.x, point.y])
+	return true
+
+
+func _probe_ground_click_ignored(
+	session: SessionScript, picker: GroundPickerScript, fraction: Vector2
+) -> bool:
 	var viewport := get_viewport()
+	var pixel := viewport.get_visible_rect().size * fraction
+	var picked := picker.pick(pixel)
+	if picked["target"] != GroundPickerScript.Target.GROUND:
+		push_error(
+			"the ray at (%f, %f) met target %d rather than bare ground, so a ground-click "
+			% [pixel.x, pixel.y, picked["target"]]
+			+ "probe there would pass no matter what a ground click does"
+		)
+		return false
+
+	var avatar := session.avatar_for(session.own_id())
+	if avatar == null:
+		push_error("this client has no body of its own to watch, so it cannot tell whether it moved")
+		return false
+	var before := avatar.position
+	var ground: Vector2 = picked["ground"]
+	print("DEMO groundclick %f %f %f %f" % [pixel.x, pixel.y, ground.x, ground.y])
+
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
 	press.pressed = true
-	press.position = viewport.get_visible_rect().size * fraction
+	press.position = pixel
 	viewport.push_input(press)
 	print("DEMO clicked %f %f" % [press.position.x, press.position.y])
+
+	await _wait_msec(DEMO_GROUND_CLICK_PROBE_MSEC)
+	var after := avatar.position
+	if before.distance_to(after) > DEMO_STILL_EPSILON:
+		push_error(
+			"a left click on bare ground at (%f, %f) walked this client from (%f, %f) to "
+			% [pixel.x, pixel.y, before.x, before.z]
+			+ "(%f, %f) in %dms; the gesture is still wired to move_to"
+			% [after.x, after.z, DEMO_GROUND_CLICK_PROBE_MSEC]
+		)
+		return false
+
+	print("DEMO groundclick_ignored %f %f" % [ground.x, ground.y])
+	return true
 
 
 func _wait_msec(duration: int) -> void:

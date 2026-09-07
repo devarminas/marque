@@ -51,8 +51,8 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
 ## Features
 
 - [Joining the world](./join-welcome.md) — connect, be welcomed, see every player.
-- [Click to move](./click-to-move.md) — the ground click, the path, the walk, the
-  arrival.
+- [Move-to walk](./move-to-walk.md) — the `move_to` intent, the path, the walk, the
+  arrival, and the counterfactual that a left click on bare ground sends nothing.
 - [Two clients see each other walk](./two-clients-see-each-other.md) — the M0
   milestone, both directions, with the still-camera pixel control and the server's
   own `arrived` events.
@@ -77,7 +77,8 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
   hostile engages pending melee and selects; friendly dummy refuses; left-click
   stays select-only.
 - [WASD direction move](./wasd-move.md) — M6g: server-authoritative `move`
-  intents, sticky steer, short path segments; click-to-move remains.
+  intents, sticky steer, short path segments. WASD is the only movement gesture;
+  ARM-145 removed click-to-move.
 - [Cast effect on target](./cast-effect-on-target.md) — M6h: placeholder flash on
   the cast target after server mana success; refuse stays silent.
 - [Tab combat loop](./tab-combat-loop.md) — M6i milestone: fireball, heal,
