@@ -99,21 +99,6 @@ func TestUnknownSlotKeyFailsClosed(t *testing.T) {
 	}
 }
 
-func TestSpacedItemKindFailsClosed(t *testing.T) {
-	raw := []byte(`{"sets":[{"id":"x","name":"X","slots":{"helmet":"spaced helm"},"tools":{}}]}`)
-	if _, err := ParseSets(raw); err == nil {
-		t.Fatal("expected spaced item kind error")
-	}
-	raw = []byte(`{"sets":[{"id":"x","name":"X","slots":{},"tools":{"bad tool":{"handed":"two"}}}]}`)
-	if _, err := ParseSets(raw); err == nil {
-		t.Fatal("expected spaced tool kind error")
-	}
-	raw = []byte(`{"classes":[{"id":"x","name":"X","skill":"mining","requires":{"helmet":"spaced helm"}}]}`)
-	if _, err := ParseClasses(raw); err == nil {
-		t.Fatal("expected spaced require kind error")
-	}
-}
-
 func TestEmptyTablesFailClosed(t *testing.T) {
 	if _, err := ParseSets([]byte(`{"sets":[]}`)); err == nil {
 		t.Fatal("expected empty sets error")

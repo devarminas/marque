@@ -165,13 +165,6 @@ func ParseSkills(raw []byte) (*Catalog, error) {
 	return &Catalog{skills: skills}, nil
 }
 
-func validateItemKind(kind string) error {
-	if strings.Contains(kind, " ") {
-		return fmt.Errorf("item kind %q must not contain spaces", kind)
-	}
-	return nil
-}
-
 func validateSet(s Set) error {
 	if s.ID == "" {
 		return fmt.Errorf("missing id")
@@ -189,16 +182,10 @@ func validateSet(s Set) error {
 		if kind == "" {
 			return fmt.Errorf("%q: slot %q has no kind", s.ID, slot)
 		}
-		if err := validateItemKind(kind); err != nil {
-			return fmt.Errorf("%q: %w", s.ID, err)
-		}
 	}
 	for kind, tool := range s.Tools {
 		if kind == "" {
 			return fmt.Errorf("%q: empty tool kind", s.ID)
-		}
-		if err := validateItemKind(kind); err != nil {
-			return fmt.Errorf("%q: %w", s.ID, err)
 		}
 		switch tool.Handed {
 		case HandedOne:
@@ -285,9 +272,6 @@ func validateClass(c Class) error {
 		}
 		if kind == "" {
 			return fmt.Errorf("%q: slot %q has no kind", c.ID, slot)
-		}
-		if err := validateItemKind(kind); err != nil {
-			return fmt.Errorf("%q: %w", c.ID, err)
 		}
 	}
 	return nil
