@@ -25,7 +25,8 @@ client panel is M3b onward and nothing under an **M3a** marker describes it.
 
 **M7 is in progress.** **M7b** is the 1H/2H server equip model. **M7f** derives wearables from
 `shared/sets.json` (worn-slot keys including `feet`, authored 1H `slot`, empty join kit, no prototype `axe`) and is
-shipped with this file. **M7c** is the server half of class derivation, skill XP, and the gather class gate, and
+shipped with this file. **M7g** seeds those set kinds on the ground via `-seed-class-kits` for
+demo/test without expanding `DefaultJoinKit`. **M7c** is the server half of class derivation, skill XP, and the gather class gate, and
 is shipped with this file: five classes in `shared/classes.json`, the `class` and `skills`
 restatements, `ClassOf` from worn equipment with missing-piece reporting, per-skill XP with a
 level function, and gather gated on the active class's skill rather than a hardcoded tool kind.
@@ -1031,6 +1032,13 @@ sets-derived wearables map.
 **A joining player's bag starts empty.** Class gear is not seeded at join; gathering and later
 seed stories supply wearable kinds. An inventory holds kinds rather than ids
 (*Drop*), so an item that was never on the ground has nothing an id could name.
+
+**`-seed-class-kits` (M7g).** Optional marqued flag. When set, the server places one ground item
+per unique kind from `shared/sets.json` (armor slots and tools — the same source as Wearables)
+on a grid near spawn before the world opens. Layout: sorted set id → Z row, kinds within a set
+spaced along X from origin `(1, 2)` with spacing `(1.5, 2.0)`. See `game.ClassKitSeeds`. The
+flag does not expand `DefaultJoinKit`. Repeated `-item` seeds still apply and append after the
+class-kit grid. `server_started` carries `seed_class_kits` and `class_kit_seeds`.
 
 ### `equip`
 
