@@ -24,7 +24,7 @@ server half of equipment and is shipped with this file: worn slots, `equip`, `un
 client panel is M3b onward and nothing under an **M3a** marker describes it.
 
 **M7 is in progress.** **M7b** is the 1H/2H server equip model. **M7f** derives wearables from
-`shared/sets.json` (boots→feet, authored 1H `slot`, empty join kit, no prototype `axe`) and is
+`shared/sets.json` (worn-slot keys including `feet`, authored 1H `slot`, empty join kit, no prototype `axe`) and is
 shipped with this file. **M7c** is the server half of class derivation, skill XP, and the gather class gate, and
 is shipped with this file: five classes in `shared/classes.json`, the `class` and `skills`
 restatements, `ClassOf` from worn equipment with missing-piece reporting, per-skill XP with a
@@ -1009,7 +1009,8 @@ they cannot disagree.
 
 `kind` names the item; handedness is a property of the kind. **A kind cannot
 be both one- and two-handed.** One-handed tools declare their hand in `sets.json` (`slot`);
-two-handed tools omit `slot`. Set key `boots` remaps to worn slot `feet`.
+two-handed tools omit `slot`. Set `slots` keys are the same worn-slot names as
+`classes.json` requires and the wire (`feet`, not a separate `boots` key).
 
 **The hand slots couple into one exchange, exactly as a swap couples the bag and one worn slot.**
 When a two-handed kind goes on, whatever was in `left hand` and `right hand` comes off in the

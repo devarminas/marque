@@ -26,7 +26,7 @@ func _test_shared_starters(assertions: Assertions) -> void:
 		var m: Dictionary = miner
 		assertions.check(String(m["name"]) == "Miner", "miner set names Miner")
 		assertions.check(String(m["slots"]["chest"]) == "prospector_jacket", "miner chest is prospector_jacket")
-		assertions.check(String(m["slots"]["boots"]) == "prospector_boots", "miner boots is prospector_boots")
+		assertions.check(String(m["slots"]["feet"]) == "prospector_boots", "miner feet is prospector_boots")
 		assertions.check(String(m["tools"]["pickaxe"]["handed"]) == ClassDefs.HANDED_ONE, "miner pickaxe is one-handed")
 	var lumberjack: Variant = ClassDefs.get_set(cat, "lumberjack")
 	assertions.check(lumberjack != null, "lumberjack set is present")

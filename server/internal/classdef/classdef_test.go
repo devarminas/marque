@@ -36,8 +36,8 @@ func TestLoadSharedSets(t *testing.T) {
 	if miner.Slots["helmet"] != "prospector_helm" {
 		t.Fatalf("miner helmet %q", miner.Slots["helmet"])
 	}
-	if miner.Slots["boots"] != "prospector_boots" {
-		t.Fatalf("miner boots %q", miner.Slots["boots"])
+	if miner.Slots["feet"] != "prospector_boots" {
+		t.Fatalf("miner feet %q", miner.Slots["feet"])
 	}
 	if p, ok := miner.Tools["pickaxe"]; !ok || p.Handed != HandedOne || p.Slot != "right hand" {
 		t.Fatalf("miner pickaxe missing or wrong: %+v", p)

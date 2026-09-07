@@ -36,8 +36,8 @@ type Tool struct {
 }
 
 // Set maps worn slots to the item kinds that complete it, plus the tool kinds
-// it is used with. Slots is keyed by set-side names (helmet, chest, trousers,
-// boots); Wearables remaps boots → feet.
+// it is used with. Slots is keyed by the same worn-slot names as classes.json
+// and the wire (helmet, chest, trousers, feet, …).
 type Set struct {
 	ID    string            `json:"id"`
 	Name  string            `json:"name"`
@@ -175,6 +175,9 @@ func validateSet(s Set) error {
 	for slot, kind := range s.Slots {
 		if slot == "" {
 			return fmt.Errorf("%q: empty slot name", s.ID)
+		}
+		if _, ok := wornVocabulary[slot]; !ok {
+			return fmt.Errorf("%q: unknown worn slot %q", s.ID, slot)
 		}
 		if kind == "" {
 			return fmt.Errorf("%q: slot %q has no kind", s.ID, slot)
@@ -498,13 +501,9 @@ var wornVocabulary = map[string]struct{}{
 	"helmet": {}, "left hand": {}, "chest": {}, "right hand": {}, "feet": {}, "trousers": {},
 }
 
-func remapSetSlot(setSlot string) (mnet.EquipSlot, error) {
-	name := setSlot
-	if setSlot == "boots" {
-		name = "feet"
-	}
+func wornSlot(name string) (mnet.EquipSlot, error) {
 	if _, ok := wornVocabulary[name]; !ok {
-		return "", fmt.Errorf("unknown set slot %q", setSlot)
+		return "", fmt.Errorf("unknown worn slot %q", name)
 	}
 	return mnet.EquipSlot(name), nil
 }
@@ -541,8 +540,8 @@ func (c *Catalog) Wearables() (map[string][]mnet.EquipSlot, error) {
 	out := make(map[string][]mnet.EquipSlot)
 	for _, id := range c.SetIDs() {
 		s, _ := c.GetSet(id)
-		for setSlot, kind := range s.Slots {
-			worn, err := remapSetSlot(setSlot)
+		for slot, kind := range s.Slots {
+			worn, err := wornSlot(slot)
 			if err != nil {
 				return nil, fmt.Errorf("classdef: set %q: %w", s.ID, err)
 			}

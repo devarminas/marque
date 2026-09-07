@@ -44,7 +44,7 @@
         "helmet": "prospector_helm",
         "chest": "prospector_jacket",
         "trousers": "prospector_legs",
-        "boots": "prospector_boots"
+        "feet": "prospector_boots"
       },
       "tools": {
         "pickaxe": {"handed": "one", "slot": "right hand"}
