@@ -423,7 +423,6 @@ func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
 		'{"item_spawn":{"id":%d,"kind":"acorn","x":%f,"z":%f}}'
 		% [CHROME_ITEM_ID, here.x, here.y]
 	)
-	# A body added this frame is invisible to a ray until the space has stepped.
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	var resolved := client.picker.pick(at)
