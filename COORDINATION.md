@@ -129,8 +129,11 @@ worker lost real time to its absence.
 - Never run timing-sensitive Godot work concurrently with other Godot agents.
 - Split a verification when checks exceed roughly four, or span re-running, reading, and adversarial probing. Give each half its own verdict.
 - A new head SHA voids a verdict unless the delta is shown disjoint from what the verdict covered.
-- Contested-demo `:541` / `:718` tick skew and sky-band still-camera flake: see Recipe W and
-  `.claude/skills/verify-marque/SKILL.md` Known flake.
+- Contested-demo `:541` / `:718` tick skew: see Recipe W.
+- A sky-band still-camera failure in `two_client_demo.ps1` is a finding, never a flake. ARM-183
+  gave the band a measured tolerance that ordinary GPU noise sits inside, so the only failure
+  left is a camera that moved. See `.claude/skills/verify-marque/SKILL.md`, *The still-camera
+  control*.
 
 ## Picking this up in a new session
 
@@ -243,8 +246,6 @@ acceptance criteria are read from it.
 
 Pass: exit 0 and last lines `TWO CLIENT DEMO OK` and `CONTESTED PICKUP DEMO OK`. A contested run
 that fails only on `:541` or `:718` is tick-skew baseline, not a regression; rerun up to three
-times. If `two_client_demo.ps1` fails only on the sky-band still-camera control, treat it as the
-Known flake in `.claude/skills/verify-marque/SKILL.md`, not a finding, unless idle-machine
-control or geometry also fails. Any other failing line is a finding.
+times. Any other failing line is a finding.
 
 [ARM-107](https://linear.app/arminas/issue/ARM-107/fix-wrong-one-way-latency-comment-in-tick-clockgd).

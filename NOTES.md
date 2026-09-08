@@ -359,8 +359,11 @@ imports `.obj` natively as a bare `Mesh`, so the sidecar offers only `scale_mesh
 scene importer to normalise. ARM-170 therefore corrects the two tool-pack meshes on their
 authored nodes in `client/scenes/player_avatar.tscn`: `lumberjack_axe` at 0.1357 for a 0.90 m
 axe from 6.631 u, and `pickaxe` at 0.0588 for a 0.85 m pickaxe from 14.466 u. The four Weapons
-pack `.glb` files are on contract and take scale 1. Converting both tools to glTF and moving the
-correction back to the import is still the right end state; ARM-173 owns the asset tree.
+pack `.glb` files are on contract and take scale 1. `client/scenes/ground_item_lumberjack_axe.tscn`
+carries the same 0.1357 for the dropped axe, so the correction is now stated in two authored
+nodes plus the ground prop. Converting both tools to glTF and moving the correction back to the
+import is still the right end state, and no unit owns it yet. ARM-173 retired the KayKit tree
+and did not take it on, because a vendor reconversion is new art, not a deletion.
 
 ## Hand sockets. Tools follow the rig from outside the girth scale
 
@@ -798,3 +801,30 @@ screen-space AA either. What remains is the shadow pass: the tree is a double-si
 shadow-casting receiver, and the other client's avatar walks through that pass between the two
 frames. Turning the tree's shadow off would settle the band and is exactly the wrong trade,
 since a cast shadow is this repo's standard anti-false-pass assertion.
+
+**Resolved by ARM-183.** The heading above is the state of ARM-171's branch, not of `main`. The
+band is a control again, and a stricter one than it was: at most 0.5% of its pixels may differ
+and no channel of any pixel by more than 2 of 255, with the walking pair put through the same
+test and required to fail it. The intermittent flake this section contrasts itself against no
+longer exists as a category, because the noise it named sits inside the tolerance. **A sky-band
+failure is a finding.** `.claude/skills/verify-marque/SKILL.md`, *The still-camera control*,
+carries the measurements.
+
+### Retiring the KayKit tree (ARM-173)
+
+`client/assets/kaykit/` is deleted, not tombstoned. ARM-168, ARM-169 and ARM-170 had already
+moved the player body, the outfits and the hand tools onto Quaternius and the tool pack, so
+nothing loaded the directory except one prop scene.
+
+The deciding fact is licensing, not tidiness. The pack's `License.txt` lived in the itch.io
+bundle and was never copied into the repo, that bundle path is gone from this machine, and this
+repository is public. A tombstone README that asserts CC0 leaves unlicensed binaries in a public
+tree, which is the exposure the ARM-167 audit existed to find, so the files went and the record
+stayed. `client/assets/README.md`, finding 5, names what was deleted and what replaced it.
+
+`client/scenes/ground_item_lumberjack_axe.tscn` was the last consumer. It now draws
+`tools/axe.obj` at 0.1357, the same correction the hand socket applies, laid flat along Z and
+centred on the body origin. Measured through `GroundItem.local_bounds()`: 0.900 u long, 0.106 u
+tall, resting on y 0.00007. The KayKit prop stood upright and read 1.244 u tall, which is most
+of a player for a dropped hand tool, so the new prop is both correct art and a better read. The
+`StaticBody3D` box collider is untouched, so the click target is unchanged.
