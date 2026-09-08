@@ -555,6 +555,7 @@ func _on_welcomed(
 	_forget_everyone()
 	_clear_hit_points()
 	_clear_class_state()
+	_clear_grip()
 	if _panel != null:
 		_panel.clear()
 	_you = you
@@ -1046,6 +1047,8 @@ func _on_inventory_changed(
 func _on_equipment_changed(
 	worn_names: PackedStringArray, slot_names: PackedStringArray, slot_kinds: PackedStringArray
 ) -> void:
+	if _local != null:
+		_local.apply_equipment(worn_names, slot_names, slot_kinds)
 	if _equipment == null:
 		push_error("session: equipment arrived with no panel to draw it")
 		return
@@ -1343,6 +1346,11 @@ func _clear_hit_points() -> void:
 		_hp_hud.clear()
 	if _death_overlay != null:
 		_death_overlay.visible = false
+
+
+func _clear_grip() -> void:
+	if _local != null:
+		_local.clear_grip()
 
 
 func _clear_class_state() -> void:

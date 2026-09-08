@@ -12,6 +12,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "skills protocol", "script": preload("res://tests/test_skills_protocol.gd")},
 	{"name": "ability defs", "script": preload("res://tests/test_ability_defs.gd")},
 	{"name": "class defs", "script": preload("res://tests/test_class_defs.gd")},
+	{"name": "grip defs", "script": preload("res://tests/test_grip_defs.gd")},
 ]
 
 const SCENE_SUITES: Array = [
@@ -19,6 +20,7 @@ const SCENE_SUITES: Array = [
 	{"name": "move chord", "scene": "res://tests/test_move_chord.tscn"},
 	{"name": "player avatar", "scene": "res://tests/test_avatar.tscn"},
 	{"name": "outfit", "scene": "res://tests/test_outfit.tscn"},
+	{"name": "grip", "scene": "res://tests/test_grip.tscn"},
 	{"name": "ground items", "scene": "res://tests/test_items.tscn"},
 	{"name": "resource nodes", "scene": "res://tests/test_nodes.tscn"},
 	{"name": "interaction", "scene": "res://tests/test_interaction.tscn"},
