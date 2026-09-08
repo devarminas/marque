@@ -37,6 +37,9 @@ adding a headless test.
   that way pointed at the sky, and the scene still looked lit because sky ambient was doing the
   work. Generate the string instead of hand-writing it:
   `print(var_to_str(Transform3D(Basis.from_euler(...), origin)))`.
+  ARM-170 walked into this again with this bullet already written, so the guard is now
+  mechanical rather than another sentence: `test_grip.gd` asserts each held tool's world AABB
+  contains its socket origin, and the transposed grips missed by 0.53 u.
 - **`@export var camera: Camera3D` needs `node_paths=PackedStringArray("camera")` on the
   `[node]` header.** Without it the assigned `NodePath` resolves to `null`. Nothing warns.
 - **Do not put `uid="uid://..."` on `ext_resource` lines.** Resolving them needs
@@ -350,6 +353,53 @@ sign the import is wrong.
 
 Per-asset authored heights, the sources that are off contract today, the root-scale
 arithmetic, and the import settings per format live in `client/assets/README.md`.
+
+**Hand tools are the one sanctioned exception, because OBJ has no root-scale knob.** Godot
+imports `.obj` natively as a bare `Mesh`, so the sidecar offers only `scale_mesh` and there is no
+scene importer to normalise. ARM-170 therefore corrects the two tool-pack meshes on their
+authored nodes in `client/scenes/player_avatar.tscn`: `lumberjack_axe` at 0.1357 for a 0.90 m
+axe from 6.631 u, and `pickaxe` at 0.0588 for a 0.85 m pickaxe from 14.466 u. The four Weapons
+pack `.glb` files are on contract and take scale 1. Converting both tools to glTF and moving the
+correction back to the import is still the right end state; ARM-173 owns the asset tree.
+
+## Hand sockets. Tools follow the rig from outside the girth scale
+
+**`Grip/left hand` and `Grip/right hand` are unscaled siblings of `Body`, not `BoneAttachment3D`
+children of the skeleton.** They follow their bone by setting their own local transform on
+`Skeleton3D.skeleton_updated`:
+
+    transform = body.global_transform.affine_inverse() * skeleton.global_transform
+        * skeleton.get_bone_global_pose(bone)
+
+The reason is ARM-169. `apply_class` sets `Body.scale` to `(0.78, 1.0, 0.78)` so the bare skin
+shrinks inside the outfit, and `Body` is the skeleton's ancestor, so anything parented under the
+skeleton inherits that squash. The outfit sleeves do not: they are unscaled siblings rebound to
+the same rig, so they render at full girth. A tool on a plain `BoneAttachment3D` therefore lands
+**5.8 cm inside the sleeve it is supposed to be held by**, measured on `hand_r` in
+`ual2/Walk_Carry`, and the offset breathes with the animation. `use_external_skeleton` is not a
+way out; it multiplies by the skeleton's full global transform, girth included.
+
+The expression above cancels the girth algebraically rather than approximately, because
+`body.global` is `W·R·Sg` and `skeleton.global` is `W·R·Sg·A·K`, so the product is exactly `A·K`.
+It also survives girth moving somewhere else later, which is why it is written as an inverse
+times a global instead of dividing by `DRESSED_GIRTH`. Setting the **local** transform, not the
+global one, is what keeps the socket inheriting the avatar's own position and yaw for free.
+
+`Grip` carries the same 180 degree yaw `Body` and every `Outfit/*` part carry, and it has to:
+the expression cancels `Body`'s transform down to `A·K`, so the socket's parent must supply the
+yaw that `Body` was supplying. `test_grip.gd` pins that against the sleeve rather than against
+the number, so a `Grip` authored at identity fails the suite instead of drawing tools behind the
+player.
+
+**Which mesh is shown is the only runtime part.** All six kinds are authored hidden under each
+socket and toggled by name, exactly as `Outfit/*` parts are, so there is no instantiate path and
+no way to end up holding two of anything.
+
+**Handedness is never copied to the client.** A two-handed kind arrives occupying both hands
+(`PROTOCOL.md`, *Handedness*), so `grip_defs.gd` infers it from the restatement with one string
+comparison and collapses the pair onto the right hand. `equipment` is sent to one player and
+never broadcast, so only the local avatar can hold anything; remote avatars are empty-handed by
+protocol, not by bug.
 
 ## Backend — Go
 
