@@ -164,13 +164,16 @@ func _run_pickup_demo(args: Array) -> void:
 
 	var session := get_node_or_null("Session") as SessionScript
 	var panel := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
-	if session == null or panel == null:
+	var dock := get_node_or_null("UI/RightDock") as EquipmentPanelScript
+	if session == null or panel == null or dock == null:
 		push_error("main.tscn is missing the Session or UI/RightDock inventory panel to drive")
 		get_tree().quit(1)
 		return
 
 	var demo := PickupDemoScript.new()
-	var code: int = await demo.run(self, session, panel, prefix, _parse_fraction(drop_click))
+	var code: int = await demo.run(
+		self, session, panel, dock, prefix, _parse_fraction(drop_click)
+	)
 	get_tree().quit(code)
 
 

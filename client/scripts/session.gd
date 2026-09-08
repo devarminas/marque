@@ -195,6 +195,7 @@ func _ready() -> void:
 	else:
 		_panel.slot_activated.connect(_on_slot_activated)
 		_panel.equip_requested.connect(_on_equip_requested)
+		_panel.drop_requested.connect(request_drop)
 
 	_equipment = equipment_panel as EquipmentPanelScript
 	if _equipment == null:

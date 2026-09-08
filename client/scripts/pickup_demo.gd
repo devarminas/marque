@@ -7,6 +7,7 @@ const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const GroundItemScript := preload("res://scripts/ground_item.gd")
 const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
+const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 
 const SCREENSHOT_WARMUP_FRAMES := 15
 
@@ -28,12 +29,15 @@ const HOLD_UNTIL_OFFSET_TICKS := 88
 
 const TICK_WAIT_BACKSTOP_MSEC := 60000
 
+const BAG_LAYOUT_DEADLINE_MSEC := 2000
+
 const SPIN_USEC := 20000
 
 var _tree: SceneTree
 var _root: Node
 var _session: SessionScript
 var _panel: InventoryPanelScript
+var _dock: EquipmentPanelScript
 var _prefix: String
 var _drop_click: Vector2
 
@@ -42,6 +46,7 @@ func run(
 	root: Node,
 	session: SessionScript,
 	panel: InventoryPanelScript,
+	dock: EquipmentPanelScript,
 	prefix: String,
 	drop_click: Vector2,
 ) -> int:
@@ -49,6 +54,7 @@ func run(
 	_tree = root.get_tree()
 	_session = session
 	_panel = panel
+	_dock = dock
 	_prefix = prefix
 	_drop_click = drop_click
 
@@ -175,9 +181,56 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 	if widget == null:
 		_fail("the panel draws no widget for slot %d" % slot)
 		return false
-	print("DEMO dropclick %d %d" % [_session.tick_clock().estimated_tick(), slot])
-	_click_at(widget.get_global_rect().get_center())
+
+	var opened: Variant = await _open_the_bag_onto(slot, widget)
+	if opened == null:
+		return false
+	var centre: Vector2 = opened
+	print("DEMO dropclick %d %d %f %f" % [
+		_session.tick_clock().estimated_tick(), slot, centre.x, centre.y
+	])
+	_click_at(centre, true)
 	return true
+
+
+func _open_the_bag_onto(slot: int, widget: Control) -> Variant:
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_I
+	key.pressed = true
+	_root.get_viewport().push_input(key)
+	if not _dock.visible:
+		_fail(
+			"the toggle_inventory key left the bag closed; a slot that is not visible in the "
+			+ "tree takes no click, so the drop would go nowhere"
+		)
+		return null
+
+	var deadline := Time.get_ticks_msec() + BAG_LAYOUT_DEADLINE_MSEC
+	var settled := widget.get_global_rect()
+	await _tree.process_frame
+	while widget.get_global_rect() != settled:
+		if Time.get_ticks_msec() > deadline:
+			_fail(
+				"slot %d was still moving after %dms, %s then %s; the bag never finished "
+				% [slot, BAG_LAYOUT_DEADLINE_MSEC, settled, widget.get_global_rect()]
+				+ "laying out and any rect read now is stale"
+			)
+			return null
+		settled = widget.get_global_rect()
+		await _tree.process_frame
+
+	var centre := settled.get_center()
+	var screen := _root.get_viewport().get_visible_rect()
+	if not screen.has_point(centre):
+		_fail(
+			"the open bag settled slot %d at %s, outside the viewport %s; the drop click would "
+			% [slot, settled, screen]
+			+ "land on the world behind it"
+		)
+		return null
+
+	print("DEMO bagopen %d" % _session.tick_clock().estimated_tick())
+	return centre
 
 
 func _wait_for_scenario() -> int:
@@ -294,12 +347,13 @@ func _first_occupied_slot() -> int:
 	return -1
 
 
-func _click_at(position: Vector2) -> void:
+func _click_at(position: Vector2, shift := false) -> void:
 	var viewport := _root.get_viewport()
 	for pressed: bool in [true, false]:
 		var event := InputEventMouseButton.new()
 		event.button_index = MOUSE_BUTTON_LEFT
 		event.pressed = pressed
+		event.shift_pressed = shift
 		event.position = position
 		viewport.push_input(event)
 

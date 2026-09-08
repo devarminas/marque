@@ -463,3 +463,30 @@ selectable as hostile targets.
 Right-click on a hostile (remote player or enemy practice dummy) sets selection to the clicked
 actor and sends `attack`. Friendly dummies are selected but refused (no pending attack).
 Left-click stays select-only.
+
+### Bag slot gestures (ARM-151)
+
+A bag slot carries three gestures, and every one of them needs the bag open. Left-click is the
+two-click use-on chain: the first names the source slot, the second sends `use`. Right-click
+sends `equip`. **Shift + left-click sends `drop`**, which is RuneScape's own shortcut and the
+tiebreaker for a client with no right-click menu to hang a Drop entry off.
+
+Drop had no gesture at all between the two-click use-on landing and ARM-151. Use-on took the
+plain left-click that used to drop, nothing replaced it, and `Session.request_drop` sat with
+zero production callers for four milestones. Nothing caught it because the only proof that
+drop works end to end is `contested_pickup_demo.ps1`, which was red for an unrelated-looking
+reason and waived.
+
+The bag starts closed and `toggle_inventory` (`I`) opens it. A slot widget under a closed dock
+is still laid out at a plausible on-screen rect, so `get_global_rect()` reads healthy while
+`push_input` at its centre reaches nothing: the viewport skips controls that are not visible in
+the tree, and the click falls through to the ground picker, which since ARM-145 does nothing at
+all.
+
+**Showing a `Control` does not lay it out, and the stale rect it leaves behind is on screen.**
+`_dock.visible = true` (or the toggle key) flips visibility synchronously, but the container
+re-sorts on the next layout pass, so a `get_global_rect()` read on the same frame returns where
+the widget sat while hidden. Measured at 1280x720: bag slot 0 read `(1050, 126)` on the frame
+the bag opened and `(1050, 332)` once it settled. **Both are inside the viewport**, so a bounds
+check passes on the stale one and the click lands on empty chrome, silently. Wait for the rect
+to stop changing between frames before reading a centre to click.
