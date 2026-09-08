@@ -3,6 +3,8 @@ extends StaticBody3D
 
 const NodeKinds := preload("res://scripts/node_kinds.gd")
 
+enum Look { TREE, STUMP, MISSING }
+
 var node_id := 0
 
 var kind := ""
@@ -10,12 +12,13 @@ var kind := ""
 var state := ""
 
 @export var ground_y := 0.0
-@export var trunk: MeshInstance3D
-@export var foliage: MeshInstance3D
-@export var known_trunk_material: StandardMaterial3D
-@export var known_foliage_material: StandardMaterial3D
-@export var unknown_material: StandardMaterial3D
-@export var depleted_trunk_material: StandardMaterial3D
+@export var tree_visual: Node3D
+@export var stump_visual: MeshInstance3D
+@export var missing_visual: MeshInstance3D
+@export var trunk_shape: CollisionShape3D
+@export var canopy_shape: CollisionShape3D
+
+var _look: Look = Look.TREE
 
 
 func configure(id: int, node_kind: String, node_state: String) -> void:
@@ -43,13 +46,16 @@ func is_depleted() -> bool:
 	return state == "depleted"
 
 
-func drawn_color() -> Color:
-	if trunk == null or trunk.material_override == null:
-		return Color.BLACK
-	var material := trunk.material_override as StandardMaterial3D
-	if material == null:
-		return Color.BLACK
-	return material.albedo_color
+func showing() -> Look:
+	return _look
+
+
+static func look_for(kind_known: bool, node_state: String) -> Look:
+	if not kind_known:
+		return Look.MISSING
+	if node_state == "depleted":
+		return Look.STUMP
+	return Look.TREE
 
 
 func _apply_state(node_state: String) -> void:
@@ -60,27 +66,31 @@ func _apply_state(node_state: String) -> void:
 		)
 		return
 	state = node_state
-	if trunk == null or foliage == null:
-		push_error("ResourceNode: the scene did not assign trunk and foliage meshes")
-		return
-
 	var known := is_kind_known()
 	if not known:
 		push_warning(
 			'ResourceNode: node %d has unknown kind "%s"; drawing it magenta' % [node_id, kind]
 		)
-		trunk.material_override = unknown_material
-		foliage.material_override = unknown_material
-		foliage.visible = state == "full"
-		scale = Vector3.ONE if state == "full" else Vector3(0.7, 0.55, 0.7)
-		return
+	_show(look_for(known, state))
 
-	if state == "depleted":
-		trunk.material_override = depleted_trunk_material
-		foliage.visible = false
-		scale = Vector3(0.7, 0.55, 0.7)
-	else:
-		trunk.material_override = known_trunk_material
-		foliage.material_override = known_foliage_material
-		foliage.visible = true
-		scale = Vector3.ONE
+
+func _show(next: Look) -> void:
+	var unassigned := PackedStringArray()
+	if tree_visual == null:
+		unassigned.append("tree_visual")
+	if stump_visual == null:
+		unassigned.append("stump_visual")
+	if missing_visual == null:
+		unassigned.append("missing_visual")
+	if trunk_shape == null:
+		unassigned.append("trunk_shape")
+	if canopy_shape == null:
+		unassigned.append("canopy_shape")
+	if not unassigned.is_empty():
+		push_error("ResourceNode: the scene did not assign %s" % ", ".join(unassigned))
+		return
+	tree_visual.visible = next == Look.TREE
+	stump_visual.visible = next == Look.STUMP
+	missing_visual.visible = next == Look.MISSING
+	canopy_shape.disabled = next != Look.TREE
+	_look = next

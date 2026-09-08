@@ -702,3 +702,99 @@ The probe now crops each avatar and compares the crops **pixel for pixel**, so a
 and a silhouette difference both register. Every pair lands between 0.203 and 0.281 against a
 0.12 floor. It prints the crop size and refuses a zero-pixel crop, because a comparison over no
 input passes vacuously.
+
+### Gather node trees (ARM-171)
+
+A woodcutting node is `client/scenes/resource_node.tscn`, and it draws the Quaternius Stylized
+Nature MegaKit `CommonTree_1.gltf` instead of a cylinder and a sphere. The tree is instanced at
+`root_scale` 1.0 and carries no instance scale. It measures **6.819 u** of drawn silhouette in
+`client/tests/gather_tree_probe.tscn`, beside a 1.736 u player and a 1.7 u control box that the
+same frame reads as 1.694 u. Nearly four times the player is the right size for a tree.
+
+Read the mesh bound carefully, because two different numbers both describe this tree. The AABB
+spans **7.265 u**, and `client/assets/README.md` lists it under that figure, but it runs from
+y −0.243 to y **7.022**: a quarter metre of root sits under the ground plane the node stands on.
+So 7.022 u is what a player sees, and the silhouette falls 0.203 u short of that because the
+topmost leaf cards are edge-on and cover no pixels. Against 7.265 the same gap looks like half a
+metre of missing tree. `test_nodes.gd` asserts the 7.265 u extent, since that is what
+`get_aabb()` returns.
+
+The probe refuses a measurement over nothing. `_silhouette_height` returns 0.0 when every pixel
+in its band is background, which would have printed `TREE PROBE full 0.000 u` and exited 0, so
+each height must clear a floor, the 1.7 u control must read back within 5 cm before any other
+number is believed, and the tree must stand over both the player and its own stump.
+
+**The node shows exactly one of three authored visuals, chosen by an enum.**
+
+| `Look` | When | What is authored |
+| -- | -- | -- |
+| `TREE` | known kind, `full` | the `CommonTree_1.gltf` instance |
+| `STUMP` | known kind, `depleted` | a 2.0 u tapered cylinder in the weathered depleted brown |
+| `MISSING` | unknown kind, either state | a 2.2 u magenta capsule, the palette's loud failure |
+
+`look_for(kind_known, state)` is pure and total, and `_show` is the only thing that writes
+visibility. The old code spread depletion across three channels at once. It hid `Foliage`,
+swapped `Trunk.material_override`, and squashed the whole body's `scale` to `(0.7, 0.55, 0.7)`.
+That is eight reachable combinations of which three were legal, and no variable answered "what is
+this node showing". The proof is that the old test could only assert a disjunction, "depleted
+changes scale, color, or foliage visibility". The enum gives that question one answer and makes
+the illegal combinations unreachable. `resource_node.gd` never writes `scale` now, and
+`test_nodes.gd` asserts it stays `Vector3.ONE` through a depletion.
+
+**Foliage cannot be hidden by hiding a node.** Every `CommonTree_*.gltf` is one glTF node holding
+one mesh with two primitives, bark and leaves, so there is no canopy child to toggle, and
+`material_override` would recolour both surfaces together. That is why depletion swaps whole
+visuals instead of editing the tree.
+
+**The stump is a scene primitive because no stump asset is staged.** `DeadTree_*` and
+`TwistedTree_*` were deliberately left out of the tree; `client/assets/README.md` records why.
+When one is staged, `StumpVisual` becomes an instance and no script changes.
+
+**Two colliders, because the canopy is most of what a player aims at.** `TrunkShape` is a
+cylinder of radius 0.6 spanning y 0 to 2.6 and is never disabled, so it always contains the
+y = 1.8 point the gather demos click and always catches a ray dropped from straight above.
+`CanopyShape` is a sphere of radius 2.2 spanning y 2.48 to 6.88 and is disabled outside `TREE`,
+so a stump carries no invisible hitbox where its canopy used to be.
+
+Neither of the first two rays ever touched the canopy. A ray dropped from y 6.0 starts inside the
+sphere, and `intersect_ray` skips a shape containing its origin unless asked otherwise, so it fell
+through to the trunk; the y = 1.8 ray sits below the sphere's 2.48 floor. `canopy_shape.disabled`
+was therefore asserted only as a boolean. `test_nodes.gd` now casts a third ray at canopy height,
+1.5 u off the trunk axis where nothing but `CanopyShape` sits, and requires it to find the tree
+while full and to find nothing once depleted. It also reads the mesh AABB and asserts the trunk
+reaches the ground, the two hitboxes overlap rather than leaving an unclickable band between
+2.48 and 2.6, and the canopy sphere covers the drawn crown's 7.022 u height and 2.29 u
+half-width to within 0.3 u. Swapping in `CommonTree_3` at 9.425 u without moving the collider
+fails those.
+
+#### The two-client demo's sky band is no longer a control
+
+`scripts/two_client_demo.ps1` asserts that the top quarter of a still client's two frames is
+byte-identical, on the premise that the top quarter is sky. A 7 m tree draws there, so
+**`two_client_demo.ps1` exits 1 on this branch**. It is red, not merely noisy, and ARM-183 has to
+land before anything depends on that harness being green.
+
+Measured on client a's still pair, **13 pixels out of 230,400 differ: 12 by one step in one
+channel and one by 46**. All are canopy green, inside x 1006..1161, y 26..176. Client b's still
+pair differs by **0 of 230,400** in the same band, because its camera does not frame the tree up
+there, which is why only one of the two clients fails.
+
+Two details matter for whoever writes the fix. The count is not stable: an earlier run of the
+same build read 8 differing pixels over a smaller box, so a tolerance needs headroom rather than
+a threshold fitted to one run. And the 46-step pixel is not rounding noise, it is a leaf edge
+crossing the material's 0.2 alpha-scissor threshold, so a per-pixel tolerance small enough to
+stay meaningful will not cover it. A band chosen to exclude world geometry is the better fix
+than a tolerance.
+
+None of this is the intermittent sky-band flake, and none of it is a walk regression. The flake
+clusters under GPU load; this reproduces on an idle machine and only with the tree. Geometry is
+identical to the merge base to the digit: both walks 6.204 u, destinations 8.435 u apart, both
+arrivals at (-1.378, 6.049) and (5.928, 1.831) 14 ticks after their paths. Every behavioural
+assertion in the demo still passes; only the control fails.
+
+The cause is not the leaf material, which already imports as alpha-scissor with alpha
+antialiasing off, so its coverage is deterministic. The project sets no MSAA, TAA or
+screen-space AA either. What remains is the shadow pass: the tree is a double-sided
+shadow-casting receiver, and the other client's avatar walks through that pass between the two
+frames. Turning the tree's shadow off would settle the band and is exactly the wrong trade,
+since a cast shadow is this repo's standard anti-false-pass assertion.

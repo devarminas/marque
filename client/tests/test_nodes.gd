@@ -8,7 +8,12 @@ const ResourceNodeScript := preload("res://scripts/resource_node.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
 const EXACT_EPSILON := 0.002
-const CHANNEL_EPSILON := 0.25
+const CHANNEL_EPSILON := 0.02
+const AUTHORED_TREE_AABB_HEIGHT := 7.265
+const TREE_HEIGHT_EPSILON := 0.05
+const CROWN_SLACK := 0.3
+const CANOPY_RAY_OFFSET := 1.5
+const NODE_MASK := 8
 
 @onready var _world: Node3D = $World
 
@@ -49,8 +54,12 @@ func _ready() -> void:
 	_test_node_ids_are_a_separate_space()
 	_test_node_spawn_and_state()
 	_test_node_despawn()
+	_test_look_for_is_total()
 	_test_depleted_is_visually_distinct()
 	_test_an_unknown_kind_is_magenta()
+	_test_the_tree_art_resolved()
+	_test_the_click_target_covers_the_art()
+	await _test_a_click_ray_reaches_the_body()
 	_test_a_second_welcome_frees_nodes()
 
 	print(
@@ -92,14 +101,19 @@ func _test_welcome_builds_node_bodies() -> void:
 			"at the welcome position",
 		)
 		_check(full.state == "full", 'state is "full"')
-		_check(full.foliage != null and full.foliage.visible, "full tree shows foliage")
+		_check(
+			full.showing() == ResourceNodeScript.Look.TREE,
+			"full tree shows the tree, got %s" % _look_name(full.showing()),
+		)
+		_check(_visible_visuals(full) == 1, "and exactly one of the three visuals is visible")
 	var depleted: ResourceNodeScript = _session.node_for(2)
 	_check(depleted != null and depleted.is_depleted(), "node 2 starts depleted")
 	if depleted != null:
 		_check(
-			depleted.foliage != null and not depleted.foliage.visible,
-			"depleted tree hides foliage",
+			depleted.showing() == ResourceNodeScript.Look.STUMP,
+			"depleted tree shows the stump, got %s" % _look_name(depleted.showing()),
 		)
+		_check(_visible_visuals(depleted) == 1, "and exactly one of the three visuals is visible")
 
 
 func _test_node_ids_are_a_separate_space() -> void:
@@ -122,18 +136,19 @@ func _test_node_spawn_and_state() -> void:
 	_feed('{"node_spawn":{"id":7,"kind":"tree","x":3.0,"z":-2.0,"state":"full"}}')
 	var body: ResourceNodeScript = _session.node_for(7)
 	_check(body != null, "node_spawn builds a body")
-	if body != null:
-		_check(body.state == "full", "full on spawn")
+	if body == null:
+		return
+	_check(body.state == "full", "full on spawn")
 	_feed('{"node_state":{"id":7,"kind":"tree","x":3.0,"z":-2.0,"state":"depleted"}}')
-	_check(
-		_session.node_for(7) != null and _session.node_for(7).is_depleted(),
-		"node_state depleted switches the visual state",
-	)
+	_check(body.is_depleted(), "node_state depleted switches the visual state")
+	_check(body.showing() == ResourceNodeScript.Look.STUMP, "down to the stump")
 	_feed('{"node_state":{"id":7,"kind":"tree","x":3.0,"z":-2.0,"state":"full"}}')
-	_check(
-		_session.node_for(7) != null and not _session.node_for(7).is_depleted(),
-		"and full restores it",
-	)
+	_check(not body.is_depleted(), "and full restores it")
+	_check(body.showing() == ResourceNodeScript.Look.TREE, "back to the tree on respawn")
+	_check(body.tree_visual.visible, "with the tree art drawn again")
+	_check(not body.stump_visual.visible, "and the stump gone")
+	_check(_visible_visuals(body) == 1, "still exactly one visual visible")
+	_check(not body.canopy_shape.disabled, "and the canopy clickable again")
 
 
 func _test_node_despawn() -> void:
@@ -148,6 +163,25 @@ func _test_node_despawn() -> void:
 	)
 
 
+func _test_look_for_is_total() -> void:
+	_check(
+		ResourceNodeScript.look_for(true, "full") == ResourceNodeScript.Look.TREE,
+		"look_for(known, full) is TREE",
+	)
+	_check(
+		ResourceNodeScript.look_for(true, "depleted") == ResourceNodeScript.Look.STUMP,
+		"look_for(known, depleted) is STUMP",
+	)
+	_check(
+		ResourceNodeScript.look_for(false, "full") == ResourceNodeScript.Look.MISSING,
+		"look_for(unknown, full) is MISSING",
+	)
+	_check(
+		ResourceNodeScript.look_for(false, "depleted") == ResourceNodeScript.Look.MISSING,
+		"look_for(unknown, depleted) is MISSING too, the kind outranks the state",
+	)
+
+
 func _test_depleted_is_visually_distinct() -> void:
 	_feed(_welcome_empty())
 	_feed('{"node_spawn":{"id":4,"kind":"tree","x":0.0,"z":0.0,"state":"full"}}')
@@ -155,17 +189,23 @@ func _test_depleted_is_visually_distinct() -> void:
 	_check(body != null, "full tree exists")
 	if body == null:
 		return
-	var full_scale := body.scale
-	var full_color := body.drawn_color()
-	var foliage_was_visible := body.foliage != null and body.foliage.visible
+	_check(body.showing() == ResourceNodeScript.Look.TREE, "showing TREE while full")
+	_check(body.tree_visual != null and body.tree_visual.visible, "tree visual on while full")
+	_check(body.stump_visual != null and not body.stump_visual.visible, "stump off while full")
+	_check(body.scale == Vector3.ONE, "and the body carries no scale while full")
+	_check(
+		body.canopy_shape != null and not body.canopy_shape.disabled,
+		"the canopy is clickable while full",
+	)
+	_check(body.trunk_shape != null and not body.trunk_shape.disabled, "and so is the trunk")
 	_feed('{"node_state":{"id":4,"kind":"tree","x":0.0,"z":0.0,"state":"depleted"}}')
 	_check(body.is_depleted(), "now depleted")
-	var foliage_hidden := body.foliage != null and not body.foliage.visible
-	_check(
-		body.scale != full_scale or body.drawn_color() != full_color
-		or (foliage_was_visible and foliage_hidden),
-		"depleted changes scale, color, or foliage visibility",
-	)
+	_check(body.showing() == ResourceNodeScript.Look.STUMP, "showing STUMP once depleted")
+	_check(not body.tree_visual.visible, "the tree visual went off")
+	_check(body.stump_visual.visible, "the stump visual came on")
+	_check(body.scale == Vector3.ONE, "and depletion still did not touch the body scale")
+	_check(body.canopy_shape.disabled, "the canopy hitbox is gone with the canopy")
+	_check(not body.trunk_shape.disabled, "while the trunk stays clickable")
 
 
 func _test_an_unknown_kind_is_magenta() -> void:
@@ -176,12 +216,121 @@ func _test_an_unknown_kind_is_magenta() -> void:
 	if body == null:
 		return
 	_check(not body.is_kind_known(), "kind is unknown")
-	var color := body.drawn_color()
+	_check(
+		body.showing() == ResourceNodeScript.Look.MISSING,
+		"showing MISSING, got %s" % _look_name(body.showing()),
+	)
+	_check(body.missing_visual != null and body.missing_visual.visible, "the marker is visible")
+	_check(body.tree_visual != null and not body.tree_visual.visible, "and the tree art is not")
+	var color := _override_color(body.missing_visual)
 	_check(
 		absf(color.r - 0.95) < CHANNEL_EPSILON
 		and absf(color.g - 0.08) < CHANNEL_EPSILON
 		and absf(color.b - 0.85) < CHANNEL_EPSILON,
-		"and draws magenta, got %s" % color,
+		"and the marker draws magenta, got %s" % color,
+	)
+	_feed('{"node_state":{"id":11,"kind":"crystal","x":0.0,"z":0.0,"state":"depleted"}}')
+	_check(body.is_depleted(), "an unknown kind still tracks its state")
+	_check(
+		body.showing() == ResourceNodeScript.Look.MISSING,
+		"but stays MISSING when depleted, got %s" % _look_name(body.showing()),
+	)
+	_check(_visible_visuals(body) == 1, "with exactly one visual visible")
+
+
+func _test_the_tree_art_resolved() -> void:
+	_feed(_welcome_empty())
+	_feed('{"node_spawn":{"id":12,"kind":"tree","x":0.0,"z":0.0,"state":"full"}}')
+	var body: ResourceNodeScript = _session.node_for(12)
+	_check(body != null and body.tree_visual != null, "the tree body has a tree visual")
+	if body == null or body.tree_visual == null:
+		return
+	_check(
+		body.tree_visual.scale == Vector3.ONE,
+		"which carries no scale, got %s" % body.tree_visual.scale,
+	)
+	var meshes := body.tree_visual.find_children("*", "MeshInstance3D", true, false)
+	_check(meshes.size() >= 1, "and holds vendor mesh art, found %d MeshInstance3D" % meshes.size())
+	if meshes.is_empty():
+		return
+	var art := meshes[0] as MeshInstance3D
+	var surfaces := 0 if art.mesh == null else art.mesh.get_surface_count()
+	_check(surfaces == 2, "with bark and leaves as two surfaces, got %d" % surfaces)
+	if art.mesh == null:
+		return
+	_assertions.check_near(
+		art.get_aabb().size.y,
+		AUTHORED_TREE_AABB_HEIGHT,
+		TREE_HEIGHT_EPSILON,
+		"and spans its authored bounding height, root tip to crown",
+	)
+
+
+func _test_the_click_target_covers_the_art() -> void:
+	_feed(_welcome_empty())
+	_feed('{"node_spawn":{"id":14,"kind":"tree","x":0.0,"z":0.0,"state":"full"}}')
+	var body: ResourceNodeScript = _session.node_for(14)
+	_check(body != null, "the tree to measure exists")
+	if body == null:
+		return
+	var meshes := body.tree_visual.find_children("*", "MeshInstance3D", true, false)
+	_check(not meshes.is_empty(), "and holds the mesh art to measure the hitboxes against")
+	if meshes.is_empty():
+		return
+	var art: AABB = (meshes[0] as MeshInstance3D).get_aabb()
+	var trunk := body.trunk_shape.shape as CylinderShape3D
+	var canopy := body.canopy_shape.shape as SphereShape3D
+	_check(trunk != null and canopy != null, "the hitboxes are a cylinder and a sphere")
+	if trunk == null or canopy == null:
+		return
+	var trunk_bottom := body.trunk_shape.position.y - trunk.height / 2.0
+	var trunk_top := body.trunk_shape.position.y + trunk.height / 2.0
+	var canopy_bottom := body.canopy_shape.position.y - canopy.radius
+	var canopy_top := body.canopy_shape.position.y + canopy.radius
+	var art_top := art.position.y + art.size.y
+	var art_half_width := maxf(art.size.x, art.size.z) / 2.0
+	_check(
+		trunk_bottom <= 0.0,
+		"the trunk hitbox reaches the ground, starting at %.2f" % trunk_bottom,
+	)
+	_check(
+		trunk_top >= canopy_bottom,
+		"and meets the canopy hitbox with no unclickable band, %.2f against %.2f"
+			% [trunk_top, canopy_bottom],
+	)
+	_check(
+		canopy_top >= art_top - CROWN_SLACK,
+		"the hitbox reaches the drawn crown, %.2f against art top %.2f" % [canopy_top, art_top],
+	)
+	_check(
+		canopy.radius >= art_half_width - CROWN_SLACK,
+		"and is as wide as the drawn canopy, %.2f against art half-width %.2f"
+			% [canopy.radius, art_half_width],
+	)
+
+
+func _test_a_click_ray_reaches_the_body() -> void:
+	_feed(_welcome_empty())
+	_feed('{"node_spawn":{"id":13,"kind":"tree","x":0.0,"z":0.0,"state":"full"}}')
+	var body: ResourceNodeScript = _session.node_for(13)
+	_check(body != null, "the clickable tree exists")
+	if body == null:
+		return
+	await get_tree().physics_frame
+	_check(_hit_from_above(body), "a straight-down ray on mask 8 finds the full tree")
+	_check(_hit_at_aim_height(body), "and so does a ray through the demos' y=1.8 aim point")
+	_check(
+		_hit_through_canopy(body) == body,
+		"and so does a ray %.1f u off the trunk axis at canopy height, where only CanopyShape sits"
+			% CANOPY_RAY_OFFSET,
+	)
+	_feed('{"node_state":{"id":13,"kind":"tree","x":0.0,"z":0.0,"state":"depleted"}}')
+	await get_tree().physics_frame
+	_check(_hit_from_above(body), "the depleted stump is still hit from straight above")
+	_check(_hit_at_aim_height(body), "and still hit at the demos' y=1.8 aim point")
+	_check(
+		_hit_through_canopy(body) == null,
+		"while the canopy ray now hits nothing, so depletion removed the hitbox, not just a flag",
 	)
 
 
@@ -199,6 +348,60 @@ func _test_a_second_welcome_frees_nodes() -> void:
 	)
 	_check(_session.node_for(1) == null, "second welcome drops the old node")
 	_check(_session.node_for(8) != null, "and builds the new one")
+
+
+func _hit_from_above(body: ResourceNodeScript) -> bool:
+	var origin := body.global_position
+	return _cast(origin + Vector3(0.0, 6.0, 0.0), origin - Vector3(0.0, 1.0, 0.0)) == body
+
+
+func _hit_at_aim_height(body: ResourceNodeScript) -> bool:
+	var aim := body.global_position + Vector3(0.0, 1.8, 0.0)
+	return _cast(aim + Vector3(6.0, 0.6, 0.0), aim + Vector3(-6.0, -0.6, 0.0)) == body
+
+
+func _hit_through_canopy(body: ResourceNodeScript) -> Object:
+	var aim := body.global_position + Vector3(
+		0.0, body.canopy_shape.position.y, CANOPY_RAY_OFFSET
+	)
+	return _cast(aim - Vector3(6.0, 0.0, 0.0), aim + Vector3(6.0, 0.0, 0.0))
+
+
+func _cast(from: Vector3, to: Vector3) -> Object:
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(from, to, NODE_MASK)
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		return null
+	return hit["collider"]
+
+
+func _visible_visuals(body: ResourceNodeScript) -> int:
+	var count := 0
+	for visual in [body.tree_visual, body.stump_visual, body.missing_visual]:
+		if visual != null and visual.visible:
+			count += 1
+	return count
+
+
+static func _override_color(visual: MeshInstance3D) -> Color:
+	if visual == null:
+		return Color.BLACK
+	var material := visual.material_override as StandardMaterial3D
+	if material == null:
+		return Color.BLACK
+	return material.albedo_color
+
+
+static func _look_name(look: ResourceNodeScript.Look) -> String:
+	match look:
+		ResourceNodeScript.Look.TREE:
+			return "TREE"
+		ResourceNodeScript.Look.STUMP:
+			return "STUMP"
+		ResourceNodeScript.Look.MISSING:
+			return "MISSING"
+	return "UNKNOWN(%d)" % look
 
 
 func _welcome_empty() -> String:
