@@ -9,8 +9,10 @@ const Assertions := preload("res://tests/assertions.gd")
 
 const EXACT_EPSILON := 0.002
 const CHANNEL_EPSILON := 0.02
-const AUTHORED_TREE_HEIGHT := 7.265
+const AUTHORED_TREE_AABB_HEIGHT := 7.265
 const TREE_HEIGHT_EPSILON := 0.05
+const CROWN_SLACK := 0.3
+const CANOPY_RAY_OFFSET := 1.5
 const NODE_MASK := 8
 
 @onready var _world: Node3D = $World
@@ -56,6 +58,7 @@ func _ready() -> void:
 	_test_depleted_is_visually_distinct()
 	_test_an_unknown_kind_is_magenta()
 	_test_the_tree_art_resolved()
+	_test_the_click_target_covers_the_art()
 	await _test_a_click_ray_reaches_the_body()
 	_test_a_second_welcome_frees_nodes()
 
@@ -257,9 +260,52 @@ func _test_the_tree_art_resolved() -> void:
 		return
 	_assertions.check_near(
 		art.get_aabb().size.y,
-		AUTHORED_TREE_HEIGHT,
+		AUTHORED_TREE_AABB_HEIGHT,
 		TREE_HEIGHT_EPSILON,
-		"and stands at its authored height",
+		"and spans its authored bounding height, root tip to crown",
+	)
+
+
+func _test_the_click_target_covers_the_art() -> void:
+	_feed(_welcome_empty())
+	_feed('{"node_spawn":{"id":14,"kind":"tree","x":0.0,"z":0.0,"state":"full"}}')
+	var body: ResourceNodeScript = _session.node_for(14)
+	_check(body != null, "the tree to measure exists")
+	if body == null:
+		return
+	var meshes := body.tree_visual.find_children("*", "MeshInstance3D", true, false)
+	_check(not meshes.is_empty(), "and holds the mesh art to measure the hitboxes against")
+	if meshes.is_empty():
+		return
+	var art: AABB = (meshes[0] as MeshInstance3D).get_aabb()
+	var trunk := body.trunk_shape.shape as CylinderShape3D
+	var canopy := body.canopy_shape.shape as SphereShape3D
+	_check(trunk != null and canopy != null, "the hitboxes are a cylinder and a sphere")
+	if trunk == null or canopy == null:
+		return
+	var trunk_bottom := body.trunk_shape.position.y - trunk.height / 2.0
+	var trunk_top := body.trunk_shape.position.y + trunk.height / 2.0
+	var canopy_bottom := body.canopy_shape.position.y - canopy.radius
+	var canopy_top := body.canopy_shape.position.y + canopy.radius
+	var art_top := art.position.y + art.size.y
+	var art_half_width := maxf(art.size.x, art.size.z) / 2.0
+	_check(
+		trunk_bottom <= 0.0,
+		"the trunk hitbox reaches the ground, starting at %.2f" % trunk_bottom,
+	)
+	_check(
+		trunk_top >= canopy_bottom,
+		"and meets the canopy hitbox with no unclickable band, %.2f against %.2f"
+			% [trunk_top, canopy_bottom],
+	)
+	_check(
+		canopy_top >= art_top - CROWN_SLACK,
+		"the hitbox reaches the drawn crown, %.2f against art top %.2f" % [canopy_top, art_top],
+	)
+	_check(
+		canopy.radius >= art_half_width - CROWN_SLACK,
+		"and is as wide as the drawn canopy, %.2f against art half-width %.2f"
+			% [canopy.radius, art_half_width],
 	)
 
 
@@ -273,10 +319,19 @@ func _test_a_click_ray_reaches_the_body() -> void:
 	await get_tree().physics_frame
 	_check(_hit_from_above(body), "a straight-down ray on mask 8 finds the full tree")
 	_check(_hit_at_aim_height(body), "and so does a ray through the demos' y=1.8 aim point")
+	_check(
+		_hit_through_canopy(body) == body,
+		"and so does a ray %.1f u off the trunk axis at canopy height, where only CanopyShape sits"
+			% CANOPY_RAY_OFFSET,
+	)
 	_feed('{"node_state":{"id":13,"kind":"tree","x":0.0,"z":0.0,"state":"depleted"}}')
 	await get_tree().physics_frame
 	_check(_hit_from_above(body), "the depleted stump is still hit from straight above")
 	_check(_hit_at_aim_height(body), "and still hit at the demos' y=1.8 aim point")
+	_check(
+		_hit_through_canopy(body) == null,
+		"while the canopy ray now hits nothing, so depletion removed the hitbox, not just a flag",
+	)
 
 
 func _test_a_second_welcome_frees_nodes() -> void:
@@ -303,6 +358,13 @@ func _hit_from_above(body: ResourceNodeScript) -> bool:
 func _hit_at_aim_height(body: ResourceNodeScript) -> bool:
 	var aim := body.global_position + Vector3(0.0, 1.8, 0.0)
 	return _cast(aim + Vector3(6.0, 0.6, 0.0), aim + Vector3(-6.0, -0.6, 0.0)) == body
+
+
+func _hit_through_canopy(body: ResourceNodeScript) -> Object:
+	var aim := body.global_position + Vector3(
+		0.0, body.canopy_shape.position.y, CANOPY_RAY_OFFSET
+	)
+	return _cast(aim - Vector3(6.0, 0.0, 0.0), aim + Vector3(6.0, 0.0, 0.0))
 
 
 func _cast(from: Vector3, to: Vector3) -> Object:
