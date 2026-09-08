@@ -76,7 +76,7 @@ func _ready() -> void:
 
 func _test_the_sockets_author_every_tool_the_server_ships() -> void:
 	var avatar := _spawn(1)
-	var kinds := _server_tool_kinds()
+	var kinds := ClassDefs.tool_kinds(ClassDefs.load_sets())
 	_assertions.check(
 		kinds.size() > 0,
 		"shared/sets.json resolved %d tool kind(s) through class_defs.gd" % kinds.size(),
@@ -421,7 +421,7 @@ func _test_every_tool_reads_against_a_player_sized_avatar() -> void:
 		avatar.queue_free()
 		return
 
-	var kinds := _server_tool_kinds()
+	var kinds := ClassDefs.tool_kinds(ClassDefs.load_sets())
 	var measured := 0
 	for hand: String in _hands:
 		for kind: String in kinds:
@@ -628,23 +628,6 @@ func _drawn_bounds(avatar: PlayerAvatar, hand: String) -> Array[AABB]:
 	if merged == 0:
 		return []
 	return [bounds]
-
-
-func _server_tool_kinds() -> PackedStringArray:
-	var catalog := ClassDefs.load_sets()
-	var kinds := PackedStringArray()
-	for set_id: String in ClassDefs.set_ids(catalog):
-		var entry: Variant = ClassDefs.get_set(catalog, set_id)
-		if typeof(entry) != TYPE_DICTIONARY:
-			continue
-		var tools: Variant = (entry as Dictionary).get("tools")
-		if typeof(tools) != TYPE_DICTIONARY:
-			continue
-		for kind: String in (tools as Dictionary).keys():
-			if not kinds.has(kind):
-				kinds.append(kind)
-	kinds.sort()
-	return kinds
 
 
 static func _distance_outside(box: AABB, point: Vector3) -> float:
