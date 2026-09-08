@@ -70,6 +70,10 @@ func slot_at(worn: String) -> WornSlotScript:
 	return slot
 
 
+func worn_names() -> PackedStringArray:
+	return PackedStringArray(_slots.keys())
+
+
 func kind_in_slot(worn: String) -> String:
 	var slot := slot_at(worn)
 	return "" if slot == null else slot.kind

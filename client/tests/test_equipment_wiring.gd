@@ -26,6 +26,7 @@ var _net: NetClientScript = null
 var _inventory: InventoryPanelScript = null
 var _equipment: EquipmentPanelScript = null
 var _camera: Camera3D = null
+var _worn_slots := PackedStringArray()
 
 var _drop_intents := PackedInt32Array()
 var _use_intents: Array[Vector2i] = []
@@ -56,6 +57,7 @@ func _ready() -> void:
 	_inventory = _root.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
 	_equipment = _root.get_node("UI/RightDock") as EquipmentPanelScript
 	_camera = _root.get_node("CameraRig/Camera3D") as Camera3D
+	_worn_slots = ClassDefs.worn_slots(ClassDefs.load_sets())
 
 	var rig := _root.get_node("CameraRig") as Node3D
 	if rig != null:
@@ -73,6 +75,7 @@ func _ready() -> void:
 	await get_tree().physics_frame
 
 	_test_every_wearable_kind_is_known()
+	await _test_every_worn_slot_is_authored()
 	await _test_equipment_restatement_draws_and_clears()
 	await _test_left_click_uses_not_drops()
 	await _test_right_click_equips()
@@ -108,12 +111,50 @@ func _test_every_wearable_kind_is_known() -> void:
 	)
 
 
+func _test_every_worn_slot_is_authored() -> void:
+	_check(
+		_worn_slots.size() > 0,
+		"shared/sets.json resolved %d worn slot name(s), so this cannot pass vacuously"
+		% _worn_slots.size(),
+	)
+	var unauthored := PackedStringArray()
+	for name: String in _worn_slots:
+		if _equipment.slot_at(name) == null:
+			unauthored.append(name)
+	_check(
+		unauthored.is_empty(),
+		"main.tscn authors a worn slot for every name sets.json equips into, missing [%s]"
+		% ", ".join(unauthored),
+	)
+	var unnamed := PackedStringArray()
+	for name: String in _equipment.worn_names():
+		if not _worn_slots.has(name):
+			unnamed.append(name)
+	_check(
+		unnamed.is_empty(),
+		"and authors none sets.json never equips into, extra [%s]" % ", ".join(unnamed),
+	)
+
+	await _feed(
+		'{"equipment":{"worn":%s,"slots":[{"slot":"feet","kind":"prospector_boots"}]}}'
+		% _worn_wire()
+	)
+	_check(
+		_equipment.kind_in_slot("feet") == "prospector_boots",
+		'a frame naming feet draws prospector_boots there, got "%s"'
+		% _equipment.kind_in_slot("feet"),
+	)
+
+
 func _test_equipment_restatement_draws_and_clears() -> void:
 	_equipment.visible = true
-	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}')
+	await _feed('{"equipment":{"worn":%s,"slots":[]}}' % _worn_wire())
 	_check(_equipment.kind_in_slot("right hand") == "", "an empty equipment frame clears the weapon slot")
 
-	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"sword"}]}}')
+	await _feed(
+		'{"equipment":{"worn":%s,"slots":[{"slot":"right hand","kind":"sword"}]}}'
+		% _worn_wire()
+	)
 	_check(
 		_equipment.kind_in_slot("right hand") == "sword",
 		'an equipment frame with a sword draws it in weapon, got "%s"' % _equipment.kind_in_slot("right hand"),
@@ -126,7 +167,7 @@ func _test_equipment_restatement_draws_and_clears() -> void:
 			"and draws sword green like a known inventory kind, got %s" % [slot.display_color()],
 		)
 
-	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}')
+	await _feed('{"equipment":{"worn":%s,"slots":[]}}' % _worn_wire())
 	_check(
 		_equipment.kind_in_slot("right hand") == "",
 		"a later empty equipment frame clears the slot again",
@@ -183,7 +224,7 @@ func _test_drag_bag_to_weapon_equips() -> void:
 		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"sword"}]}}'
 		% [WIRE_SIZE, SWORD_SLOT]
 	)
-	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}')
+	await _feed('{"equipment":{"worn":%s,"slots":[]}}' % _worn_wire())
 	_equipment.visible = true
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -211,7 +252,10 @@ func _test_drag_bag_to_weapon_equips() -> void:
 
 
 func _test_activate_worn_unequips() -> void:
-	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"sword"}]}}')
+	await _feed(
+		'{"equipment":{"worn":%s,"slots":[{"slot":"right hand","kind":"sword"}]}}'
+		% _worn_wire()
+	)
 	_equipment.visible = true
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -247,6 +291,10 @@ func _test_intent_frames_match_the_protocol() -> void:
 		and (NetClientScript.unequip_frame("right hand")["unequip"] as Dictionary).has("worn"),
 		"equip names a bag slot and unequip names a worn slot",
 	)
+
+
+func _worn_wire() -> String:
+	return JSON.stringify(_worn_slots)
 
 
 func _feed(text: String) -> void:
