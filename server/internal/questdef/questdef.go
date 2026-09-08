@@ -147,9 +147,6 @@ func setRewardKinds(s classdef.Set) ([]string, error) {
 		}
 		out = append(out, kind)
 	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("no reward kinds")
-	}
 	return out, nil
 }
 
