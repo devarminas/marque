@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/test_grip.gd" id="1_grip"]
+
+[node name="TestGrip" type="Node3D"]
+script = ExtResource("1_grip")
+
+[node name="Avatars" type="Node3D" parent="."]
+
+[node name="World" type="Node3D" parent="."]

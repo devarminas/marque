@@ -4,6 +4,8 @@ extends Node3D
 const PolylineWalker := preload("res://scripts/polyline_walker.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 const OutfitDefs := preload("res://scripts/outfit_defs.gd")
+const GripDefs := preload("res://scripts/grip_defs.gd")
+const GripSocket := preload("res://scripts/grip_socket.gd")
 
 const WALK_ANIM := "ual2/Walk_Carry"
 const IDLE_ANIM := "ual2/Idle_FoldArms"
@@ -77,6 +79,57 @@ func apply_class(class_id: String) -> void:
 
 func worn_outfit() -> String:
 	return _worn_outfit
+
+
+func apply_equipment(
+	worn_names: PackedStringArray,
+	slot_names: PackedStringArray,
+	slot_kinds: PackedStringArray,
+) -> void:
+	if not GripDefs.names_the_hands(worn_names):
+		push_error(
+			"PlayerAvatar.apply_equipment: equipment.worn does not name both hands; it lists [%s]"
+			% ", ".join(worn_names)
+		)
+		return
+	var plan := GripDefs.grip_plan(slot_names, slot_kinds)
+	for hand: String in GripDefs.hands():
+		var socket := _grip_socket(hand)
+		if socket == null:
+			continue
+		socket.show_kind(String(plan[hand]))
+
+
+func clear_grip() -> void:
+	for hand: String in GripDefs.hands():
+		var socket := _grip_socket(hand)
+		if socket == null:
+			continue
+		socket.show_kind("")
+
+
+func gripped(worn: String) -> String:
+	var socket := _grip_socket(worn)
+	return "" if socket == null else socket.shown_kind()
+
+
+func visible_grip_nodes() -> PackedStringArray:
+	var shown := PackedStringArray()
+	var grip := get_node_or_null("Grip") as Node3D
+	if grip == null:
+		push_error("PlayerAvatar.visible_grip_nodes: player_avatar.tscn authors no Grip node")
+		return shown
+	for socket in grip.get_children():
+		for child in socket.get_children():
+			var mounted := child as Node3D
+			if mounted != null and mounted.is_visible_in_tree():
+				shown.append("%s/%s" % [socket.name, mounted.name])
+	return shown
+
+
+func grip_transform(worn: String) -> Transform3D:
+	var socket := _grip_socket(worn)
+	return Transform3D.IDENTITY if socket == null else socket.global_transform
 
 
 func configure(id: int, tick_ms: int) -> void:
@@ -161,6 +214,13 @@ func _set_walking(walking: bool) -> void:
 	if _animation.current_animation != IDLE_ANIM:
 		_animation.play(IDLE_ANIM)
 	_animation.speed_scale = 1.0
+
+
+func _grip_socket(worn: String) -> GripSocket:
+	var socket := get_node_or_null(NodePath("Grip/%s" % worn)) as GripSocket
+	if socket == null:
+		push_error("PlayerAvatar: player_avatar.tscn authors no Grip/%s socket" % worn)
+	return socket
 
 
 func _bind_outfit_to(skeleton: Skeleton3D) -> void:
