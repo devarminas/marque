@@ -543,11 +543,13 @@ the new fields under compatibility rule 2 and is exactly as correct as it was be
 rule and integer types as `hp` / `max_hp`. A fresh join seeds mana at `MaxMana`. A pre-M6b client
 ignores the new fields under compatibility rule 2.
 
-**M6e.** `welcome` gains `npcs`, listing every practice dummy as of the same tick:
+**M6e.** `welcome` gains `npcs`, listing every seeded NPC as of the same tick (two practice
+dummies; **M9b** also includes the quest giver):
 
     {"welcome":{...,"npcs":[
       {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100,"max_hp":100},
-      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100}
+      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100},
+      {"id":1000003,"kind":"quest_giver","faction":"neutral","x":0,"z":-4,"hp":100,"max_hp":100}
     ]}}
 
 A pre-M6e client ignores `npcs` under compatibility rule 2. See *Practice dummies*.
@@ -1208,7 +1210,7 @@ Named constants, revisitable:
   first in-range tick when the duration is greater than zero.
 - **Leaving range, losing the active class, or `move_to` cancels** the pending gather (clear
   pending; no yield). A second `gather` replaces the first. A player has at most one pending
-  gather. **A player has at most one pending action among pickup, gather, and attack.** Starting
+  gather. **A player has at most one pending action among pickup, gather, attack, and talk.** Starting
   one clears the others.
 - **A depleted node does not accept new gathers** until respawn. After `NodeRespawnTicks` it
   returns to full: GAMELOG plus `node_state`.
@@ -1942,28 +1944,31 @@ own `mana` restatement, and there is no world-visible cast-impact frame.
 
 ## Practice dummies. **M6e**
 
-The server seeds exactly two stationary NPCs when it starts: one `faction: "friendly"` and one
-`faction: "hostile"`, both `kind: "dummy"`. Their ids sit in a reserved band at and above
-`1000001` so dense player ids stay untouched; `cast.player` and `attack.player` still name them.
-They never path, never attack, and never despawn.
+The server seeds two stationary practice dummies when it starts: one `faction: "friendly"` and
+one `faction: "hostile"`, both `kind: "dummy"`. **M9b** also seeds one `kind: "quest_giver"`
+with `faction: "neutral"` (see *Quests dialog*). Their ids sit in a reserved band at and above
+`1000001` so dense player ids stay untouched; `cast.player`, `attack.player`, and `talk.npc`
+still name them. Dummies never path, never attack, and never despawn.
 
 `welcome` carries them as `npcs`:
 
     {"welcome":{...,"npcs":[
       {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100,"max_hp":100},
-      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100}
+      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100},
+      {"id":1000003,"kind":"quest_giver","faction":"neutral","x":0,"z":-4,"hp":100,"max_hp":100}
     ]}}
 
-HP restatements for dummies reuse the existing `hp` frame with the NPC's id. There is no separate
-`npc_spawn` in M6e: the dummies exist for the life of the process and every joiner learns them
+HP restatements for NPCs reuse the existing `hp` frame with the NPC's id. There is no separate
+`npc_spawn` in M6e: seeded NPCs exist for the life of the process and every joiner learns them
 from `welcome`.
 
 Client left-click selects a living dummy with the same local chrome as a remote player. Faction
-rules for cast are above. Attack may engage a hostile dummy; a friendly dummy is `wrong_target`.
+rules for cast are above. Attack may engage a hostile dummy; a friendly or neutral NPC is
+`wrong_target`.
 
 ### Deliberately absent (dummies). **M6e**
 
-- No AI, loot, respawn camps, or additional kinds.
+- No AI, loot, respawn camps, or additional dummy kinds beyond the two practice dummies.
 - No client-authoritative NPC spawn.
 - No separate NPC message family beyond `welcome.npcs` and reused `hp` frames.
 
@@ -2077,6 +2082,12 @@ is closed. The client must not invent quest text; it renders what the server sen
 
 When the quest is already `active` or `complete`, re-talk still opens dialog but omits
 `accept_quest` so accept cannot duplicate.
+
+GAMELOG refuse reasons for dialog (never on the wire; the player sees `error.msg`) include
+`no_dialog`, `unknown_option`, `quest_active`, `quest_complete`, `wrong_target`,
+`unknown_player`, and `out_of_range`.
+
+Death clears a pending talk and closes an open dialog the same way it clears a pending pickup.
 
 ### Deliberately absent (dialog). **M9b**
 

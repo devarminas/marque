@@ -240,6 +240,31 @@ func TestTalkRefusesDummy(t *testing.T) {
 	}
 }
 
+func TestDeathClearsPendingTalkAndDialog(t *testing.T) {
+	pw, giver := newDialogProbe(t)
+	alice := pw.join()
+	bob := pw.join()
+	pw.w.talk(alice, mnet.Talk{NPC: giver.id}, 1)
+	if alice.pendingTalk != giver.id {
+		t.Fatalf("pendingTalk=%d", alice.pendingTalk)
+	}
+	alice.pos = giver.pos
+	pw.w.step()
+	if alice.dialogNPC != giver.id {
+		t.Fatalf("dialogNPC=%d", alice.dialogNPC)
+	}
+	bob.pos = alice.pos
+	alice.hp = AttackDamage
+	pw.w.beginAttack(bob, alice.id, alice.pos, 2)
+	pw.stepN(AttackPeriodTicks)
+	if !alice.dead() {
+		t.Fatalf("alice hp=%d, want dead", alice.hp)
+	}
+	if alice.pendingTalk != 0 || alice.dialogNPC != 0 {
+		t.Fatalf("pendingTalk=%d dialogNPC=%d after death", alice.pendingTalk, alice.dialogNPC)
+	}
+}
+
 func mustQuest(t *testing.T, w *World) questdef.Quest {
 	t.Helper()
 	q, ok := w.questForTalkNPC(KindQuestGiver)

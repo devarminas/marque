@@ -229,6 +229,8 @@ func (w *World) kill(victim, killer *player) {
 		"killer": killer.id,
 	})
 	victim.pending = 0
+	w.clearPendingTalk(victim)
+	w.closeDialog(victim)
 	w.cancelGather(victim)
 	w.cancelAttack(victim, CauseAttackerDied)
 	w.clearAttacksOn(victim.id)
