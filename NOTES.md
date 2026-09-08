@@ -346,30 +346,29 @@ band is 1.6 to 1.8. Environment, enemies, and tools are sized against that playe
 mesh. The orbiting camera reads scale off the player, so a 2.5 m player makes a correctly sized
 tree look like a shrub.
 
-Normalise at import, not per scene. The knob is the `.import` sidecar's
-`nodes/apply_root_scale=true` plus `nodes/root_scale=<factor>`, which every scene importer in
-this repo already writes. An instance node that needs its own scale to be on contract is a
-sign the import is wrong.
+Normalise at import, not per scene. For a scene-imported format the knob is the `.import`
+sidecar's `nodes/apply_root_scale=true` plus `nodes/root_scale=<factor>`, which every scene
+importer in this repo already writes. An instance node that needs its own scale to be on
+contract is a sign the import is wrong.
 
 Per-asset authored heights, the sources that are off contract today, the root-scale
 arithmetic, and the import settings per format live in `client/assets/README.md`.
 
-**Hand tools are the one sanctioned exception, because OBJ has no root-scale knob.** Godot
-imports `.obj` natively as a bare `Mesh`, so the sidecar offers only `scale_mesh` and there is no
-scene importer to normalise. ARM-170 therefore corrects the two tool-pack meshes on their
-authored nodes in `client/scenes/player_avatar.tscn`: `lumberjack_axe` at 0.1357 for a 0.90 m
-axe from 6.631 u, and `pickaxe` at 0.0588 for a 0.85 m pickaxe from 14.466 u. The four Weapons
-pack `.glb` files are on contract and take scale 1. `client/scenes/ground_item_lumberjack_axe.tscn`
-carries the same 0.1357 for the dropped axe, so one factor is now restated in three authored
-nodes, which is the shape this section's own rule calls a sign the import is wrong.
+**Hand tools are no longer an exception.** Godot imports `.obj` natively as a bare `Mesh`, so
+there is no scene importer and no `nodes/root_scale`, but the sidecar's `scale_mesh` reaches the
+vertices and is that knob under another name. `axe.obj.import` carries
+`scale_mesh=Vector3(0.1357, 0.1357, 0.1357)` for a 0.90 m axe from 6.631 u and
+`pickaxe.obj.import` carries 0.0588 for a 0.85 m pickaxe from 14.466 u. Each factor is stated
+once, on the mesh, and the five nodes that used to restate it keep only rotation and offset:
+four under `Grip` in `client/scenes/player_avatar.tscn`, and `Model` in
+`client/scenes/ground_item_lumberjack_axe.tscn`. The four Weapons pack `.glb` files are on
+contract and take scale 1. Converting the tool pack to glTF is now a materials question alone.
 
-**The sidecar's `scale_mesh` would fix that without a glTF conversion**, and no unit owns it.
-Setting `axe.obj.import` to `scale_mesh=Vector3(0.1357, 0.1357, 0.1357)` and `pickaxe.obj.import`
-to 0.0588 normalises each mesh once and drops the factor from all three nodes; every consumer
-wants the identical number, so there is nothing to reconcile. ARM-173 declined it only because
-it changes what ARM-170's hand sockets render and is not a deletion, so it needs its own pin and
-its own verification of `test_grip.gd`'s per-tool extent band. Converting both tools to glTF
-remains the end state after that; `scale_mesh` is the cheap step available today.
+Every offset on those five nodes kept its old number, and that is not an oversight. A
+`Transform3D`'s origin lives in its parent's space and is never multiplied by that node's own
+basis, so the sockets' 0.4071 and 0.5586 and the dropped axe's `(0.067839, 0.052991, 0.569979)`
+were metres already. They were each derived as mesh units times the factor, which is the only
+reason they look like they should scale with it.
 
 ## Hand sockets. Tools follow the rig from outside the girth scale
 

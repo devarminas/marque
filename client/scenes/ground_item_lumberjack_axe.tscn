@@ -5,5 +5,5 @@
 [node name="GroundItemLumberjackAxe" type="Node3D"]
 
 [node name="Model" type="MeshInstance3D" parent="."]
-transform = Transform3D(0.1357, 0, 0, 0, 0, 0.1357, 0, -0.1357, 0, 0.067839, 0.052991, 0.569979)
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0.067839, 0.052991, 0.569979)
 mesh = ExtResource("1_axe")

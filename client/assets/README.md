@@ -19,20 +19,20 @@ Heights are the Y extent of the mesh as the vendor shipped it, in Godot units, b
 | `weapons/Shield_1_A.glb` | 0.708 | |
 | `weapons/Bow_1_1_A_001.glb` | 1.683 | measured along Z, the bow's long axis |
 | `weapons/DruidStaff_1_1_A.glb` | 1.354 | |
-| `tools/axe.obj` | 6.631 | longest axis, off contract |
-| `tools/pickaxe.obj` | 14.466 | longest axis, off contract |
+| `tools/axe.obj` | 6.631 | longest axis, authored; imports at 0.900 |
+| `tools/pickaxe.obj` | 14.466 | longest axis, authored; imports at 0.851 |
 
-Every Quaternius pack and the Weapons pack are authored at roughly 1 unit = 1 metre. They import at `nodes/root_scale=1.0` and need no correction. The tool pack OBJ files are the one source off contract, 8x to 17x too large.
+Every Quaternius pack and the Weapons pack are authored at roughly 1 unit = 1 metre. They import at `nodes/root_scale=1.0` and need no correction. The tool pack OBJ files are the one source authored off contract, 8x to 17x too large, and their sidecars correct that with `scale_mesh`.
 
 ARM-168 replaced the 2.543 u KayKit Knight, which had made the player render about 2.5 m tall. `client/scenes/player_avatar.tscn` instances `Superhero_Male_FullBody.gltf` at `root_scale` 1.0 and stands 1.733 u in idle, measured by `client/tests/avatar_height_probe.tscn` against a 1.7 u box in the same frame, which that run read back as 1.702 u. The bind pose is 1.820 u and the idle pose stands 8.7 cm shorter, which is why no sidecar correction was needed. `ClickBody/CollisionShape3D` stays a `CapsuleShape3D` with `height = 1.6` and `radius = 0.4` centred at y 0.8. `HpLabel` moved from y 2.4 to y 2.0. ARM-173 deleted `kaykit/` once nothing instanced it; finding 5 records why deletion rather than a tombstone.
 
 Root scale is target height divided by authored height. Worked examples:
 
 - Player base at 1.7 u from `Superhero_Male_FullBody.gltf`. 1.7 / 1.820 = 0.934. ARM-168 measured the animated idle before applying it and left the scale at 1.0; see the paragraph above.
-- A 0.75 m axe from `tools/axe.obj`. 0.75 / 6.631 = 0.113.
-- A 0.85 m pickaxe from `tools/pickaxe.obj`. 0.85 / 14.466 = 0.059.
+- A 0.90 m axe from `tools/axe.obj`. 0.90 / 6.631 = 0.1357, and `axe.obj.import` carries it as `scale_mesh`.
+- A 0.85 m pickaxe from `tools/pickaxe.obj`. 0.85 / 14.466 = 0.0588, likewise in `pickaxe.obj.import`.
 
-The tool lengths are examples of the arithmetic, not decisions. ARM-170 picks the hand-tool lengths.
+ARM-170 picked those two lengths.
 
 ## Which unit consumes which directory
 
@@ -143,7 +143,7 @@ The tradeoff is that an embedded texture cannot be tuned per-texture in the impo
 
 ### `.obj` plus `.mtl`
 
-Tool pack. Godot imports OBJ natively as a `Mesh` with no rig and no scene hierarchy, so there is no `root_scale` knob, only `scale_mesh=Vector3(1, 1, 1)` in the sidecar. Two problems. The vendor `.mtl` points at absolute paths on the author's machine, so materials do not bind and the mesh imports with a default material. And the meshes are 8x to 17x off contract. ARM-170 owns the conversion to glTF and sets a root scale then.
+Tool pack. Godot imports OBJ natively as a `Mesh` with no rig and no scene hierarchy, so there is no `root_scale` knob. `scale_mesh` in the sidecar is the equivalent: it scales the vertices at import, and both tools carry their contract factor there rather than on an instance node. The remaining problem is materials. The vendor `.mtl` points at absolute paths on the author's machine, so materials do not bind and the mesh imports with a default material. Converting the pack to glTF is what fixes that, and it no longer has scale riding on it.
 
 ### `.fbx`
 
