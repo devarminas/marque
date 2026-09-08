@@ -1,4 +1,4 @@
-[gd_scene load_steps=28 format=3 uid="uid://bbk0w4hee5gof"]
+[gd_scene load_steps=47 format=3 uid="uid://bbk0w4hee5gof"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="2_checker"]
@@ -18,6 +18,20 @@
 [ext_resource type="Script" path="res://scripts/hotbar.gd" id="13_hotbar"]
 [ext_resource type="PackedScene" path="res://scenes/hotbar_slot.tscn" id="14_hotbar_slot"]
 [ext_resource type="Script" path="res://scripts/cursor_hint.gd" id="18_cursor_hint"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/basic_bar.png" id="19_bar_bg"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_line2.png" id="20_hp_line"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/mana_line2.png" id="21_mana_line"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_frame.png" id="22_hp_frame"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/inventory_frame.png" id="23_inv_frame"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/skill_bar.png" id="24_skill_bar"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/inventory_button.png" id="25_inv_btn"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/inventory_button2.png" id="26_inv_btn2"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/icons/inventory.png" id="27_inv_icon"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/frame_backgrounds/helm_background.png" id="28_helm"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/frame_backgrounds/chest_background.png" id="29_chest"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/frame_backgrounds/pants_background.png" id="30_pants"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/frame_backgrounds/shield_background.png" id="31_shield"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/frame_backgrounds/melee_background.png" id="32_melee"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.38, 0.5, 0.68, 1)
@@ -44,37 +58,87 @@ size = Vector2(100, 100)
 [sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
 size = Vector3(100, 1, 100)
 
-[sub_resource type="StyleBoxFlat" id="style_hp_bg"]
-bg_color = Color(0.08, 0.1, 0.1, 0.85)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0, 0, 0, 1)
+[sub_resource type="StyleBoxTexture" id="style_hp_bg"]
+content_margin_left = 4.0
+content_margin_top = 3.0
+content_margin_right = 4.0
+content_margin_bottom = 3.0
+texture = ExtResource("19_bar_bg")
+texture_margin_left = 16.0
+texture_margin_top = 12.0
+texture_margin_right = 16.0
+texture_margin_bottom = 12.0
 
-[sub_resource type="StyleBoxFlat" id="style_hp_fill"]
-bg_color = Color(0.22, 0.78, 0.28, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0, 0, 0, 1)
+[sub_resource type="StyleBoxTexture" id="style_hp_fill"]
+texture = ExtResource("20_hp_line")
+texture_margin_left = 8.0
+texture_margin_top = 6.0
+texture_margin_right = 8.0
+texture_margin_bottom = 6.0
 
-[sub_resource type="StyleBoxFlat" id="style_mana_bg"]
-bg_color = Color(0.08, 0.1, 0.14, 0.85)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0, 0, 0, 1)
+[sub_resource type="StyleBoxTexture" id="style_mana_bg"]
+content_margin_left = 4.0
+content_margin_top = 3.0
+content_margin_right = 4.0
+content_margin_bottom = 3.0
+texture = ExtResource("19_bar_bg")
+texture_margin_left = 16.0
+texture_margin_top = 12.0
+texture_margin_right = 16.0
+texture_margin_bottom = 12.0
 
-[sub_resource type="StyleBoxFlat" id="style_mana_fill"]
-bg_color = Color(0.2, 0.45, 0.95, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0, 0, 0, 1)
+[sub_resource type="StyleBoxTexture" id="style_mana_fill"]
+texture = ExtResource("21_mana_line")
+texture_margin_left = 8.0
+texture_margin_top = 6.0
+texture_margin_right = 8.0
+texture_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxTexture" id="style_dock_panel"]
+content_margin_left = 6.0
+content_margin_top = 6.0
+content_margin_right = 6.0
+content_margin_bottom = 6.0
+texture = ExtResource("23_inv_frame")
+texture_margin_left = 28.0
+texture_margin_top = 28.0
+texture_margin_right = 28.0
+texture_margin_bottom = 28.0
+
+[sub_resource type="StyleBoxEmpty" id="style_inv_panel_clear"]
+
+[sub_resource type="StyleBoxTexture" id="style_hotbar_bar"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+texture = ExtResource("24_skill_bar")
+texture_margin_left = 48.0
+texture_margin_top = 24.0
+texture_margin_right = 48.0
+texture_margin_bottom = 24.0
+
+[sub_resource type="StyleBoxTexture" id="style_inv_toggle"]
+content_margin_left = 2.0
+content_margin_top = 2.0
+content_margin_right = 2.0
+content_margin_bottom = 2.0
+texture = ExtResource("25_inv_btn")
+texture_margin_left = 12.0
+texture_margin_top = 12.0
+texture_margin_right = 12.0
+texture_margin_bottom = 12.0
+
+[sub_resource type="StyleBoxTexture" id="style_inv_toggle_hover"]
+content_margin_left = 2.0
+content_margin_top = 2.0
+content_margin_right = 2.0
+content_margin_bottom = 2.0
+texture = ExtResource("26_inv_btn2")
+texture_margin_left = 12.0
+texture_margin_top = 12.0
+texture_margin_right = 12.0
+texture_margin_bottom = 12.0
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -165,6 +229,7 @@ grow_horizontal = 0
 grow_vertical = 0
 visible = false
 mouse_filter = 0
+theme_override_styles/panel = SubResource("style_dock_panel")
 script = ExtResource("9_equipment_panel")
 helmet_slot = NodePath("Margin/Rows/WornCross/HelmetRow/HelmetSlot")
 left_hand_slot = NodePath("Margin/Rows/WornCross/HandsRow/LeftHandSlot")
@@ -199,6 +264,9 @@ theme_override_constants/separation = 4
 [node name="HelmetSlot" parent="UI/RightDock/Margin/Rows/WornCross/HelmetRow" instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
+[node name="EmptyArt" parent="UI/RightDock/Margin/Rows/WornCross/HelmetRow/HelmetSlot" index="0"]
+texture = ExtResource("28_helm")
+
 [node name="HandsRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross"]
 layout_mode = 2
 mouse_filter = 2
@@ -208,11 +276,20 @@ theme_override_constants/separation = 4
 [node name="LeftHandSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
+[node name="EmptyArt" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow/LeftHandSlot" index="0"]
+texture = ExtResource("31_shield")
+
 [node name="ChestSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
+[node name="EmptyArt" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow/ChestSlot" index="0"]
+texture = ExtResource("29_chest")
+
 [node name="RightHandSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" instance=ExtResource("10_worn_slot")]
 layout_mode = 2
+
+[node name="EmptyArt" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow/RightHandSlot" index="0"]
+texture = ExtResource("32_melee")
 
 [node name="TrousersRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross"]
 layout_mode = 2
@@ -223,9 +300,13 @@ theme_override_constants/separation = 4
 [node name="TrousersSlot" parent="UI/RightDock/Margin/Rows/WornCross/TrousersRow" instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
+[node name="EmptyArt" parent="UI/RightDock/Margin/Rows/WornCross/TrousersRow/TrousersSlot" index="0"]
+texture = ExtResource("30_pants")
+
 [node name="InventoryPanel" type="PanelContainer" parent="UI/RightDock/Margin/Rows" node_paths=PackedStringArray("slot_grid", "heading")]
 layout_mode = 2
 mouse_filter = 2
+theme_override_styles/panel = SubResource("style_inv_panel_clear")
 script = ExtResource("8_inventory_panel")
 slot_grid = NodePath("Margin/Rows/Slots")
 heading = NodePath("Margin/Rows/Heading")
@@ -271,7 +352,13 @@ grow_horizontal = 0
 grow_vertical = 0
 custom_minimum_size = Vector2(16, 16)
 mouse_filter = 0
-text = "I"
+theme_override_styles/normal = SubResource("style_inv_toggle")
+theme_override_styles/pressed = SubResource("style_inv_toggle_hover")
+theme_override_styles/hover = SubResource("style_inv_toggle_hover")
+theme_override_styles/disabled = SubResource("style_inv_toggle")
+theme_override_styles/focus = SubResource("style_inv_toggle")
+icon = ExtResource("27_inv_icon")
+expand_icon = true
 
 [node name="ClassHud" type="Control" parent="UI" node_paths=PackedStringArray("name_label", "hint_label")]
 layout_mode = 3
@@ -360,6 +447,20 @@ hp_bar = NodePath("Stack/HpRow/Bar")
 hp_label = NodePath("Stack/HpRow/Label")
 mana_bar = NodePath("Stack/ManaRow/Bar")
 mana_label = NodePath("Stack/ManaRow/Label")
+
+[node name="Frame" type="NinePatchRect" parent="UI/HpHud"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("22_hp_frame")
+patch_margin_left = 12
+patch_margin_top = 8
+patch_margin_right = 12
+patch_margin_bottom = 8
 
 [node name="Stack" type="VBoxContainer" parent="UI/HpHud"]
 layout_mode = 1
@@ -559,6 +660,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+theme_override_styles/panel = SubResource("style_hotbar_bar")
 
 [node name="Slots" type="HBoxContainer" parent="UI/Hotbar/Bar"]
 layout_mode = 2
