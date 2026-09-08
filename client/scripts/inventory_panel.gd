@@ -8,6 +8,8 @@ signal slot_activated(slot: int)
 
 signal equip_requested(slot: int)
 
+signal drop_requested(slot: int)
+
 @export var slot_grid: GridContainer
 @export var heading: Label
 @export var unknown_heading := "Inventory —"
@@ -89,6 +91,7 @@ func _rebuild(size: int) -> void:
 		slot.configure(index)
 		slot.pressed.connect(_on_slot_pressed.bind(index))
 		slot.equip_requested.connect(_on_slot_equip_requested)
+		slot.drop_requested.connect(drop_requested.emit)
 		slot_grid.add_child(slot)
 		_slots[index] = slot
 
