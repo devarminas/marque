@@ -336,6 +336,21 @@ Fixed palette:
 - Readable from a screenshot at a glance — by me and by an agent reading a captured PNG.
 - Pair with a world-space checker material (1m squares, driven by world pos, no UVs) so scale is readable on untextured primitives.
 
+## World scale
+
+**One Godot unit is one metre, and the player stands about 1.7 units tall.** The acceptable
+band is 1.6 to 1.8. Environment, enemies, and tools are sized against that player, never per
+mesh. The orbiting camera reads scale off the player, so a 2.5 m player makes a correctly sized
+tree look like a shrub.
+
+Normalise at import, not per scene. The knob is the `.import` sidecar's
+`nodes/apply_root_scale=true` plus `nodes/root_scale=<factor>`, which every scene importer in
+this repo already writes. An instance node that needs its own scale to be on contract is a
+sign the import is wrong.
+
+Per-asset authored heights, the sources that are off contract today, the root-scale
+arithmetic, and the import settings per format live in `client/assets/README.md`.
+
 ## Backend — Go
 
 No physics to share with the client, so no reason to run Godot on the server.
