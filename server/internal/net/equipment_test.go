@@ -1,6 +1,5 @@
 package net_test
 
-
 import (
 	"strings"
 	"testing"
@@ -129,6 +128,9 @@ func TestAFreshPlayerIsToldItsWornSlotsAndThatTheyAreEmpty(t *testing.T) {
 		if sk.XP != 0 || sk.Level != 1 {
 			t.Fatalf("fresh skill %q reports xp=%d level=%d, want 0 and 1", sk.ID, sk.XP, sk.Level)
 		}
+	}
+	if log := alice.questLogFrame(); len(log.Quests) != 0 {
+		t.Fatalf("a fresh player's quest_log is %+v, want empty", log)
 	}
 
 	alice.expectSilence()

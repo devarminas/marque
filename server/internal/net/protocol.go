@@ -206,6 +206,17 @@ type Dialog struct {
 	Options []DialogOption `json:"options"`
 }
 
+type QuestLogEntry struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Objective string `json:"objective"`
+	Status    string `json:"status"`
+}
+
+type QuestLog struct {
+	Quests []QuestLogEntry `json:"quests"`
+}
+
 func (Welcome) isServerMessage()     {}
 func (Spawn) isServerMessage()       {}
 func (Despawn) isServerMessage()     {}
@@ -224,6 +235,7 @@ func (Tick) isServerMessage()        {}
 func (HP) isServerMessage()          {}
 func (Mana) isServerMessage()        {}
 func (Dialog) isServerMessage()      {}
+func (QuestLog) isServerMessage()    {}
 
 type ClientMessage interface {
 	isClientMessage()
@@ -332,6 +344,7 @@ type serverEnvelope struct {
 	HP          *HP          `json:"hp,omitempty"`
 	Mana        *Mana        `json:"mana,omitempty"`
 	Dialog      *Dialog      `json:"dialog,omitempty"`
+	QuestLog    *QuestLog    `json:"quest_log,omitempty"`
 }
 
 func Encode(m ServerMessage) ([]byte, error) {
@@ -373,6 +386,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.Mana = &v
 	case Dialog:
 		env.Dialog = &v
+	case QuestLog:
+		env.QuestLog = &v
 	default:
 		return nil, fmt.Errorf("net: encode: unhandled server message %T", m)
 	}
