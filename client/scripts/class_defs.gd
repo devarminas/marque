@@ -8,6 +8,9 @@ const CLASSES_REL_PATH := "shared/classes.json"
 const HANDED_ONE := "one"
 const HANDED_TWO := "two"
 
+const SLOT_LEFT_HAND := "left hand"
+const SLOT_RIGHT_HAND := "right hand"
+
 
 static func load_sets() -> Dictionary:
 	var path := resolve_path(SETS_REL_PATH, "MARQUE_SETS")
@@ -145,6 +148,31 @@ static func wearable_kinds(catalog: Dictionary) -> PackedStringArray:
 				kinds.append(String(kind))
 	kinds.sort()
 	return kinds
+
+
+static func worn_slots(catalog: Dictionary) -> PackedStringArray:
+	var slots := PackedStringArray()
+	for record: Dictionary in _sets(catalog):
+		var armor: Variant = record.get("slots")
+		if typeof(armor) == TYPE_DICTIONARY:
+			for slot: Variant in (armor as Dictionary).keys():
+				if typeof(slot) == TYPE_STRING and not slots.has(slot):
+					slots.append(String(slot))
+		var tools: Variant = record.get("tools")
+		if typeof(tools) != TYPE_DICTIONARY:
+			continue
+		for entry: Variant in (tools as Dictionary).values():
+			if typeof(entry) != TYPE_DICTIONARY:
+				continue
+			var tool: Dictionary = entry
+			var reach := PackedStringArray([String(tool.get("slot", ""))])
+			if String(tool.get("handed", "")) == HANDED_TWO:
+				reach = PackedStringArray([SLOT_LEFT_HAND, SLOT_RIGHT_HAND])
+			for slot: String in reach:
+				if not slot.is_empty() and not slots.has(slot):
+					slots.append(slot)
+	slots.sort()
+	return slots
 
 
 static func skill_ids(catalog: Dictionary) -> PackedStringArray:

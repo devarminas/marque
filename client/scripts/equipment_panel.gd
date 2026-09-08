@@ -13,6 +13,7 @@ signal equip_from_bag(bag_slot: int)
 @export var left_hand_slot: WornSlotScript
 @export var chest_slot: WornSlotScript
 @export var right_hand_slot: WornSlotScript
+@export var feet_slot: WornSlotScript
 @export var trousers_slot: WornSlotScript
 
 var _slots := {}
@@ -23,6 +24,7 @@ func _ready() -> void:
 	_bind_authored(left_hand_slot, "left hand")
 	_bind_authored(chest_slot, "chest")
 	_bind_authored(right_hand_slot, "right hand")
+	_bind_authored(feet_slot, "feet")
 	_bind_authored(trousers_slot, "trousers")
 
 
@@ -68,6 +70,10 @@ func apply(
 func slot_at(worn: String) -> WornSlotScript:
 	var slot: WornSlotScript = _slots.get(worn)
 	return slot
+
+
+func worn_names() -> PackedStringArray:
+	return PackedStringArray(_slots.keys())
 
 
 func kind_in_slot(worn: String) -> String:

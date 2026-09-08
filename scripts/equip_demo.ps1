@@ -9,10 +9,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$AxeKind = "axe"
-$WeaponWorn = "weapon"
-$AxeBagSlot = 0
-$PanelLeftInsetMax = 80.0
+$KitKind = "sword"
+$WeaponWorn = "right hand"
+$KitBagSlot = 0
+$PanelRightInsetMax = 40.0
 
 $repo = Split-Path -Parent $PSScriptRoot
 $serverDir = Join-Path $repo "server"
@@ -77,11 +77,15 @@ function Read-ClientReport([string] $path) {
                 if (-not $report.Slots.ContainsKey($shot)) { $report.Slots[$shot] = @{} }
                 $report.Slots[$shot][[int]$Matches[2]] = $Matches[3]
             }
-            '^DEMO worn (\d+) (\S+)\s*$' {
-                $report.Worn[[int]$Matches[1]] = @{ Slot = $Matches[2]; Kind = "" }
-            }
-            '^DEMO worn (\d+) (\S+) (\S+)\s*$' {
-                $report.Worn[[int]$Matches[1]] = @{ Slot = $Matches[2]; Kind = $Matches[3] }
+            '^DEMO worn (\d+) (.+)$' {
+                $rest = $Matches[2].Trim()
+                $slot = $rest
+                $kind = ""
+                if ($rest.StartsWith("$WeaponWorn ")) {
+                    $slot = $WeaponWorn
+                    $kind = $rest.Substring($WeaponWorn.Length).Trim()
+                }
+                $report.Worn[[int]$Matches[1]] = @{ Slot = $slot; Kind = $kind }
             }
         }
     }
@@ -146,12 +150,13 @@ try {
 
     Write-Host "==> starting marqued on a free port"
     $server = Start-Process -FilePath $binary `
-        -ArgumentList "-addr", "127.0.0.1:0" `
+        -ArgumentList "-addr", "127.0.0.1:0", "-join-kit", $KitKind `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
     $null = $server.Handle
 
     $address = $null
+    $started = $null
     $deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         if ($server.HasExited) {
@@ -160,6 +165,7 @@ try {
         if (Test-Path $serverOut) {
             $line = Select-String -Path $serverOut -Pattern '"ev":"server_started"' -List
             if ($null -ne $line) {
+                $started = ($line.Line -replace '^GAMELOG ', '') | ConvertFrom-Json
                 if ($line.Line -match '"addr":"([^"]+)"') { $address = $Matches[1]; break }
                 throw "server_started carried no addr: $($line.Line)"
             }
@@ -169,6 +175,13 @@ try {
     if ($null -eq $address) { throw "marqued never logged server_started within $ReadyTimeoutSeconds seconds" }
     $url = "ws://$address/ws"
     Write-Host "==> marqued listening at $url (pid $($server.Id))"
+
+    $joinKit = @($started.join_kit)
+    if ($joinKit.Count -ne 1 -or $joinKit[0] -ne $KitKind) {
+        Add-Failure "server_started.join_kit is [$($joinKit -join ',')], want [$KitKind]"
+    } else {
+        Write-Host "==> server: -join-kit put $KitKind in every joining player's bag"
+    }
 
     $prefix = Join-Path $OutDir "client"
     $stdout = Join-Path $OutDir "client.stdout.log"
@@ -236,15 +249,15 @@ try {
         if ($open.Visible -ne 1) {
             Add-Failure "shot 1 equipment panel was not visible"
         }
-        if ($open.Left -gt $PanelLeftInsetMax) {
-            Add-Failure ("shot 1 equipment panel left edge is at $($open.Left), want within " +
-                "$PanelLeftInsetMax px of the left edge")
+        if (($open.ViewportW - $open.EndX) -gt $PanelRightInsetMax) {
+            Add-Failure ("shot 1 equipment panel ends at $($open.EndX) in viewport " +
+                "$($open.ViewportW), want within $PanelRightInsetMax px of the right edge")
         }
-        if ($open.EndX -ge ($open.ViewportW / 2.0)) {
-            Add-Failure ("shot 1 equipment panel ends at $($open.EndX), want left of viewport " +
+        if ($open.Left -le ($open.ViewportW / 2.0)) {
+            Add-Failure ("shot 1 equipment panel starts at $($open.Left), want right of viewport " +
                 "centre $($open.ViewportW / 2.0)")
         }
-        Write-Host ("==> client: equipment panel open on the left (x=$($open.Left)..$($open.EndX) " +
+        Write-Host ("==> client: equipment panel open on the right (x=$($open.Left)..$($open.EndX) " +
             "in viewport $($open.ViewportW))")
     }
 
@@ -255,10 +268,12 @@ try {
     }
     if (-not $report.Worn.ContainsKey(2)) {
         Add-Failure "client reported no worn state for shot 2"
-    } elseif ($report.Worn[2].Kind -ne $AxeKind) {
-        Add-Failure ("shot 2 weapon slot holds '$($report.Worn[2].Kind)', want '$AxeKind'")
+    } elseif ($report.Worn[2].Slot -ne $WeaponWorn) {
+        Add-Failure ("shot 2 reported worn slot '$($report.Worn[2].Slot)', want '$WeaponWorn'")
+    } elseif ($report.Worn[2].Kind -ne $KitKind) {
+        Add-Failure ("shot 2 weapon slot holds '$($report.Worn[2].Kind)', want '$KitKind'")
     } else {
-        Write-Host "==> client: weapon slot shows $AxeKind after equip"
+        Write-Host "==> client: weapon slot shows $KitKind after equip"
     }
 
     if (-not $report.Worn.ContainsKey(3)) {
@@ -268,12 +283,12 @@ try {
     }
     $bagAfter = $null
     if ($report.Slots.ContainsKey(3)) { $bagAfter = $report.Slots[3] }
-    if ($null -eq $bagAfter -or -not $bagAfter.ContainsKey($AxeBagSlot)) {
-        Add-Failure "shot 3 bag slot $AxeBagSlot does not show the axe after unequip"
-    } elseif ($bagAfter[$AxeBagSlot] -ne $AxeKind) {
-        Add-Failure ("shot 3 bag slot $AxeBagSlot holds '$($bagAfter[$AxeBagSlot])', want '$AxeKind'")
+    if ($null -eq $bagAfter -or -not $bagAfter.ContainsKey($KitBagSlot)) {
+        Add-Failure "shot 3 bag slot $KitBagSlot does not show the $KitKind after unequip"
+    } elseif ($bagAfter[$KitBagSlot] -ne $KitKind) {
+        Add-Failure ("shot 3 bag slot $KitBagSlot holds '$($bagAfter[$KitBagSlot])', want '$KitKind'")
     } else {
-        Write-Host "==> client: axe returned to bag slot $AxeBagSlot after unequip"
+        Write-Host "==> client: $KitKind returned to bag slot $KitBagSlot after unequip"
     }
 
     $events = Read-GameLog $serverOut
@@ -284,21 +299,35 @@ try {
 
     $player = $report.Joined
     if ($player -ge 1) {
+        $seeded = Select-PlayerEvents $events "join_seeded" $player
+        if ($seeded.Count -ne 1) {
+            Add-Failure "the server logged $($seeded.Count) join_seeded event(s) for player $player, want 1"
+        } else {
+            $ev = $seeded[0]
+            if ([string]$ev.kind -ne $KitKind) {
+                Add-Failure "join_seeded named kind '$($ev.kind)', want '$KitKind'"
+            }
+            if ([int]$ev.slot -ne $KitBagSlot) {
+                Add-Failure "join_seeded filled bag slot $($ev.slot), want slot $KitBagSlot"
+            }
+            Write-Host "==> server: the join kit gave player $player $KitKind in slot $KitBagSlot"
+        }
+
         $equips = Select-PlayerEvents $events "equip" $player
         if ($equips.Count -ne 1) {
             Add-Failure "the server logged $($equips.Count) equip event(s) for player $player, want 1"
         } else {
             $ev = $equips[0]
-            if ([int]$ev.slot -ne $AxeBagSlot) {
-                Add-Failure "equip emptied bag slot $($ev.slot), want slot $AxeBagSlot"
+            if ([int]$ev.slot -ne $KitBagSlot) {
+                Add-Failure "equip emptied bag slot $($ev.slot), want slot $KitBagSlot"
             }
-            if ([string]$ev.kind -ne $AxeKind) {
-                Add-Failure "equip moved kind '$($ev.kind)', want '$AxeKind'"
+            if ([string]$ev.kind -ne $KitKind) {
+                Add-Failure "equip moved kind '$($ev.kind)', want '$KitKind'"
             }
             if ([string]$ev.worn -ne $WeaponWorn) {
                 Add-Failure "equip wore slot '$($ev.worn)', want '$WeaponWorn'"
             }
-            Write-Host "==> server: player $player equipped $AxeKind from slot $AxeBagSlot onto $WeaponWorn"
+            Write-Host "==> server: player $player equipped $KitKind from slot $KitBagSlot onto $WeaponWorn"
         }
 
         $unequips = Select-PlayerEvents $events "unequip" $player
@@ -309,13 +338,13 @@ try {
             if ([string]$ev.worn -ne $WeaponWorn) {
                 Add-Failure "unequip named worn '$($ev.worn)', want '$WeaponWorn'"
             }
-            if ([string]$ev.kind -ne $AxeKind) {
-                Add-Failure "unequip moved kind '$($ev.kind)', want '$AxeKind'"
+            if ([string]$ev.kind -ne $KitKind) {
+                Add-Failure "unequip moved kind '$($ev.kind)', want '$KitKind'"
             }
-            if ([int]$ev.slot -ne $AxeBagSlot) {
-                Add-Failure "unequip returned to bag slot $($ev.slot), want slot $AxeBagSlot"
+            if ([int]$ev.slot -ne $KitBagSlot) {
+                Add-Failure "unequip returned to bag slot $($ev.slot), want slot $KitBagSlot"
             }
-            Write-Host "==> server: player $player unequipped $AxeKind from $WeaponWorn into slot $AxeBagSlot"
+            Write-Host "==> server: player $player unequipped $KitKind from $WeaponWorn into slot $KitBagSlot"
         }
 
         foreach ($kind in @("equip_rejected", "unequip_rejected")) {

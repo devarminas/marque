@@ -208,10 +208,6 @@ func _test_the_worn_weapon_slot_is_drawn_empty() -> void:
 	reference.queue_free()
 
 	_check(slot.worn_name == "right hand", "and named for the slot it is")
-	_check(_panel.slot_at("helmet") != null, "with helmet authored")
-	_check(_panel.slot_at("left hand") != null, "with left hand authored")
-	_check(_panel.slot_at("chest") != null, "with chest authored")
-	_check(_panel.slot_at("trousers") != null, "with trousers authored")
 	_panel.visible = false
 
 

@@ -1073,6 +1073,14 @@ spaced along X from origin `(1, 2)` with spacing `(1.5, 2.0)`. See `game.ClassKi
 flag does not expand `DefaultJoinKit`. Repeated `-item` seeds still apply and append after the
 class-kit grid. `server_started` carries `seed_class_kits` and `class_kit_seeds`.
 
+**`-join-kit`.** Optional marqued flag, for demo harnesses that need a player to join already
+holding something. Each occurrence names one kind to spawn in every joining player's bag, in
+flag order, and the flag repeats. Omitted, the join kit stays the shipped empty
+`DefaultJoinKit`, so nothing about a normal server changes. The kinds are not checked against
+the wearables map: an unwearable kind seeds and then earns `equip_rejected` like any other.
+`server_started` carries the resulting list as `join_kit`, and each seeded item is logged as
+`join_seeded`.
+
 ### `equip`
 
 `equip` is immediate. No walk, no pending action, exactly as `drop` is.

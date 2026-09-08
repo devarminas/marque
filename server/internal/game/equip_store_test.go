@@ -30,11 +30,13 @@ func wornKindIn(s Store, player mnet.PlayerID, slot mnet.EquipSlot) (string, boo
 }
 
 func TestWornSlotsAndTheKindTableAgree(t *testing.T) {
+	equipped := make(map[mnet.EquipSlot]bool, len(WornSlots))
 	for kind, slots := range testWearables(t) {
 		for _, slot := range slots {
 			if !wornSlotExists(slot) {
 				t.Errorf("kind %q equips into %q, which is not in WornSlots %v: it could be worn and never removed", kind, slot, WornSlots)
 			}
+			equipped[slot] = true
 		}
 	}
 	seen := make(map[mnet.EquipSlot]bool, len(WornSlots))
@@ -43,6 +45,9 @@ func TestWornSlotsAndTheKindTableAgree(t *testing.T) {
 			t.Errorf("WornSlots lists %q twice: %v", slot, WornSlots)
 		}
 		seen[slot] = true
+		if !equipped[slot] {
+			t.Errorf("WornSlots lists %q, which no kind in shared/sets.json equips into: the client derives its worn vocabulary from sets.json, so it can never see %q and would reject every equipment frame naming it", slot, slot)
+		}
 	}
 }
 

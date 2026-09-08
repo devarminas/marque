@@ -7,7 +7,7 @@ const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 const WornSlotScript := preload("res://scripts/worn_slot.gd")
 
-const AXE_KIND := "axe"
+const KIT_KIND := "sword"
 const WEAPON_WORN := "right hand"
 const TOGGLE_KEY := KEY_I
 
@@ -38,12 +38,12 @@ func run(
 	_prefix = prefix
 
 	if not await _wait_for_join():
-		return _fail("no join-kit axe in inventory after %dms" % JOIN_TIMEOUT_MSEC)
+		return _fail("no join-kit %s in inventory after %dms" % [KIT_KIND, JOIN_TIMEOUT_MSEC])
 	print("DEMO joined %d" % _session.own_id())
 
-	var axe_slot := _find_bag_axe_slot()
-	if axe_slot < 0:
-		return _fail("the join kit never placed an axe in the bag")
+	var kit_slot := _find_bag_kit_slot()
+	if kit_slot < 0:
+		return _fail("the join kit never placed a %s in the bag" % KIT_KIND)
 
 	await _push_toggle_key()
 	if not _equipment.visible:
@@ -55,10 +55,10 @@ func run(
 		return 1
 	_print_equipment_layout(1)
 
-	await _right_click_bag_slot(axe_slot)
-	print("DEMO equipclick %d" % axe_slot)
+	await _right_click_bag_slot(kit_slot)
+	print("DEMO equipclick %d" % kit_slot)
 	if not await _wait_for_equipped():
-		return _fail("the weapon slot never showed the axe after equip")
+		return _fail("the weapon slot never showed the %s after equip" % KIT_KIND)
 
 	if not await _capture(2):
 		return 1
@@ -68,8 +68,8 @@ func run(
 		return _fail("shot 2 has no occupied weapon slot to unequip")
 	await _click_control(weapon)
 	print("DEMO unequipclick %s" % WEAPON_WORN)
-	if not await _wait_for_unequipped(axe_slot):
-		return _fail("the axe never returned to bag slot %d after unequip" % axe_slot)
+	if not await _wait_for_unequipped(kit_slot):
+		return _fail("the %s never returned to bag slot %d after unequip" % [KIT_KIND, kit_slot])
 
 	if not await _capture(3):
 		return 1
@@ -81,15 +81,15 @@ func run(
 func _wait_for_join() -> bool:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		if _session.own_id() > 0 and _find_bag_axe_slot() >= 0:
+		if _session.own_id() > 0 and _find_bag_kit_slot() >= 0:
 			return true
 		await _tree.process_frame
 	return false
 
 
-func _find_bag_axe_slot() -> int:
+func _find_bag_kit_slot() -> int:
 	for slot in _inventory.slot_count():
-		if _inventory.kind_in_slot(slot) == AXE_KIND:
+		if _inventory.kind_in_slot(slot) == KIT_KIND:
 			return slot
 	return -1
 
@@ -98,8 +98,8 @@ func _wait_for_equipped() -> bool:
 	return await _wait_until(
 		func() -> bool:
 			return (
-				_equipment.kind_in_slot(WEAPON_WORN) == AXE_KIND
-				and _find_bag_axe_slot() < 0
+				_equipment.kind_in_slot(WEAPON_WORN) == KIT_KIND
+				and _find_bag_kit_slot() < 0
 			),
 		RESTATE_TIMEOUT_MSEC,
 	)
@@ -110,7 +110,7 @@ func _wait_for_unequipped(expected_slot: int) -> bool:
 		func() -> bool:
 			return (
 				_equipment.kind_in_slot(WEAPON_WORN).is_empty()
-				and _inventory.kind_in_slot(expected_slot) == AXE_KIND
+				and _inventory.kind_in_slot(expected_slot) == KIT_KIND
 			),
 		RESTATE_TIMEOUT_MSEC,
 	)

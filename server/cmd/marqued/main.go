@@ -62,6 +62,21 @@ func (s *itemSeeds) Set(value string) error {
 	return nil
 }
 
+type kindList []string
+
+func (k *kindList) String() string {
+	return strings.Join(*k, " ")
+}
+
+func (k *kindList) Set(value string) error {
+	kind := strings.TrimSpace(value)
+	if kind == "" {
+		return fmt.Errorf("kind in %q is empty", value)
+	}
+	*k = append(*k, kind)
+	return nil
+}
+
 const shutdownGrace = 5 * time.Second
 
 const wsPath = "/ws"
@@ -82,6 +97,8 @@ func run() error {
 	seedClassKits := flag.Bool("seed-class-kits", false, "place one ground item per unique kind from shared/sets.json (armor + tools) on a grid near spawn for class demo/test; does not change DefaultJoinKit")
 	var seeds itemSeeds
 	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world. Combines with -seed-class-kits.")
+	joinKit := append(kindList(nil), game.DefaultJoinKit...)
+	flag.Var(&joinKit, "join-kit", "seed this kind into the bag of every joining player (demo harness).\nRepeat the flag for more kinds. Omit it entirely to keep the shipped DefaultJoinKit.")
 	flag.Parse()
 
 	path := strings.TrimSpace(*abilitiesPath)
@@ -121,7 +138,7 @@ func run() error {
 
 	log := gamelog.New(os.Stdout, *enableLog)
 	hub := mnet.NewHub()
-	world := game.NewWorld(hub, log, game.NewMemoryStore(wearables), game.ResumeGraceTicks, game.DefaultJoinKit)
+	world := game.NewWorld(hub, log, game.NewMemoryStore(wearables), game.ResumeGraceTicks, joinKit)
 	world.SetAbilities(abilities)
 	world.SetClasses(classes)
 	world.SetQuests(quests)
@@ -157,7 +174,7 @@ func run() error {
 		"resume_grace":      game.ResumeGraceTicks,
 		"seeded_items":      len(groundSeeds),
 		"seed_class_kits":   *seedClassKits,
-		"join_kit":          game.DefaultJoinKit,
+		"join_kit":          joinKit,
 		"worn_slots":        game.WornSlots,
 		"abilities":         abilities.Len(),
 		"abilities_path":    path,
