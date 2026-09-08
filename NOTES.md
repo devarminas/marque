@@ -45,6 +45,9 @@ adding a headless test.
 - **Do not put `uid="uid://..."` on `ext_resource` lines.** Resolving them needs
   `.godot/uid_cache.bin`, which only an editor scan writes, and `.godot/` is gitignored. A fresh
   clone prints `invalid UID` warnings and falls back to the path. Reference by path.
+  ARM-181 found `main.tscn` carrying them anyway, so the guard is now mechanical rather than
+  another sentence. `test_scene_files.gd` fails on any `ext_resource` line under `res://scenes`
+  or `res://tests` that names a uid.
 - **Global `class_name` types do not resolve without the editor cache.** On a fresh clone,
   `godot --headless --path client --script ...` fails to *parse* any script that names such a
   type and then cascades into a wall of unrelated inference errors. Use

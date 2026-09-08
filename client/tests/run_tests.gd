@@ -13,6 +13,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "ability defs", "script": preload("res://tests/test_ability_defs.gd")},
 	{"name": "class defs", "script": preload("res://tests/test_class_defs.gd")},
 	{"name": "grip defs", "script": preload("res://tests/test_grip_defs.gd")},
+	{"name": "scene files", "script": preload("res://tests/test_scene_files.gd")},
 ]
 
 const SCENE_SUITES: Array = [
