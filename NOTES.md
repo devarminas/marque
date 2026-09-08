@@ -702,3 +702,56 @@ The probe now crops each avatar and compares the crops **pixel for pixel**, so a
 and a silhouette difference both register. Every pair lands between 0.203 and 0.281 against a
 0.12 floor. It prints the crop size and refuses a zero-pixel crop, because a comparison over no
 input passes vacuously.
+
+### Gather node trees (ARM-171)
+
+A woodcutting node is `client/scenes/resource_node.tscn`, and it draws the Quaternius Stylized
+Nature MegaKit `CommonTree_1.gltf` instead of a cylinder and a sphere. The tree is instanced at
+`root_scale` 1.0 and carries no instance scale. It measures **6.819 u** of drawn silhouette in
+`client/tests/gather_tree_probe.tscn`, against an authored AABB of 7.265 u and a 1.7 u control
+box that the same frame reads as 1.694 u. The gap is the vendor art, not the method: the topmost
+leaf cards are edge-on and cover no pixels, so the silhouette ends 20 cm below the mesh bound.
+Beside a 1.733 u player, a 7 m tree is the right size for a tree.
+
+**The node shows exactly one of three authored visuals, chosen by an enum.**
+
+| `Look` | When | What is authored |
+| -- | -- | -- |
+| `TREE` | known kind, `full` | the `CommonTree_1.gltf` instance |
+| `STUMP` | known kind, `depleted` | a 2.0 u tapered cylinder in the weathered depleted brown |
+| `MISSING` | unknown kind, either state | a 2.2 u magenta capsule, the palette's loud failure |
+
+`look_for(kind_known, state)` is pure and total, and `_show` is the only thing that writes
+visibility. The old code spread depletion across three channels at once. It hid `Foliage`,
+swapped `Trunk.material_override`, and squashed the whole body's `scale` to `(0.7, 0.55, 0.7)`.
+That is eight reachable combinations of which three were legal, and no variable answered "what is
+this node showing". The proof is that the old test could only assert a disjunction, "depleted
+changes scale, color, or foliage visibility". The enum gives that question one answer and makes
+the illegal combinations unreachable. `resource_node.gd` never writes `scale` now, and
+`test_nodes.gd` asserts it stays `Vector3.ONE` through a depletion.
+
+**Foliage cannot be hidden by hiding a node.** Every `CommonTree_*.gltf` is one glTF node holding
+one mesh with two primitives, bark and leaves, so there is no canopy child to toggle, and
+`material_override` would recolour both surfaces together. That is why depletion swaps whole
+visuals instead of editing the tree.
+
+**The stump is a scene primitive because no stump asset is staged.** `DeadTree_*` and
+`TwistedTree_*` were deliberately left out of the tree; `client/assets/README.md` records why.
+When one is staged, `StumpVisual` becomes an instance and no script changes.
+
+**Two colliders, because the canopy is most of what a player aims at.** `TrunkShape` is a
+cylinder of radius 0.6 spanning y 0 to 2.6 and is never disabled, so it always contains the
+y = 1.8 point the gather demos click and always catches a ray dropped from straight above.
+`CanopyShape` is a sphere of radius 2.2 spanning y 2.48 to 6.88 and is disabled outside `TREE`,
+so a stump carries no invisible hitbox where its canopy used to be.
+
+#### The two-client demo's sky band is no longer a control
+
+`scripts/two_client_demo.ps1` asserts that the top quarter of a still client's two frames is
+byte-identical, on the premise that the top quarter is sky. A 7 m tree draws there. Measured on
+client a's still pair, **8 pixels out of 230,400 differ, each by one step in one channel, all of
+them canopy green inside x 969..1161, y 97..176**. The same pair on the merge base differs by
+zero. Three idle runs reproduce it, so it is not the intermittent sky-band flake. Geometry is
+unaffected and matches the base exactly, both walks 4.404 u with destinations 8.435 u apart, so
+every behavioural assertion in that demo still passes. The control needs a tolerance or a
+different band. `scripts/` was outside ARM-171's fence, so ARM-183 owns the fix.
