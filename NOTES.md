@@ -205,6 +205,12 @@ adding a headless test.
   nobody has established that, and the table above is what was actually observed. It is written
   as behaviour precisely because the last three times somebody here paired a correct behaviour
   with a confident mechanism, the mechanism was wrong.
+- **A `static func` cannot take its own script's enum as a parameter type.** Reproduced against
+  4.7.2 in `client/tools/build_world_map.gd`: `static func house_spec(door: Side)` called from an
+  instance method of the same script fails to parse with `argument 6 should be "Side" but is
+  "build_world_map.gd.Side"`. The enum resolves to two different types depending on which side
+  of the call it is named from, and nothing warns until the whole script refuses to load. Type
+  those parameters as `int` and keep the enum for the call sites and the lookup tables.
 
 **Verify a Godot API exists in 4.7 before writing it into a brief or a gotcha list.** Two
 briefs have now named plausible APIs that do not exist in the target version, and both cost a
@@ -838,3 +844,85 @@ instead. Nothing observed has broken on it: `gather_error_demo.ps1` clicks a see
 `lumberjack_axe` at the body origin and the server resolves the pickup. Sizing the collider to
 the drawn model belongs to whoever gives ground items their own per-kind shape, which no unit
 owns yet.
+
+### Open-world map with three towns
+
+`client/scenes/world_map.tscn` is a 256 x 256 u world, the same square the server already
+clamps movement to (`WorldHalfExtent` 128), with three towns on a triangle and a Y of dirt roads
+meeting at a hub. It is a separate scene on purpose. `main.tscn` still draws its 100 x 100 u
+checker plane, and wiring the map in is its own unit; see the follow-ups below.
+
+**The scene is generated, then committed, and the generator is the thing to edit.**
+`client/tools/build_world_map.gd` writes the `.tscn` text from a fixed seed:
+
+```powershell
+godot --headless --path client --script res://tools/build_world_map.gd
+```
+
+Two runs produce a byte-identical file, so a regenerated scene with no diff is proof that the
+generator did not change. The scene-authoring rule in `CLAUDE.md` still holds: the committed
+`.tscn` is what the editor opens, what diffs, and what the game loads, and nothing at runtime
+builds it. The generator exists because 3,029 instanced nodes are not hand-placeable, and it
+stays because a hand edit to the scene is lost on the next run. Move a house by moving its lot
+in `town_table()`, not by dragging it in the editor.
+
+**The world is a set of tables, and one placer reads them.** `town_table()` holds three towns
+and 22 hand-designed lots, each a `house_spec` at an offset and yaw in town-local space, where
+local +z is the side that faces the hub; the whole town is then yawed to face the hub, so a lot
+table is designed once with the road entering from the south. `region_table()` holds the nine
+forest regions (a rim band past |x| or |z| > 100, three elliptical woods, five copses) with their
+keep chance. `scatter_table()` holds four rules keyed by an `Allow` enum. Forests and scatter
+both come from a jittered grid filtered by pure predicates over `Vector2`: `inside_world`,
+`outside_towns`, `road_clearance`, `inside_region`, `scatter_allows`. The alternative, a loop
+per category with its own exclusion arithmetic, is what the delegate first wrote and then
+collapsed.
+
+**Houses are assembled from the Medieval Village MegaKit's 2 u modules.** `add_house` takes a
+footprint in modules, a storey count, a ground and an upper `Style` (plaster or brick), and a
+door side, and emits floor tiles, one wall module per 2 u of perimeter per storey, corner
+posts, a `Roof_RoundTiles_WxL` matched to the footprint, `Roof_Front_Brick{W}` gables at both
+ends, and a chimney on the slope. The kit's wall module is 2 u wide by 3 u tall with its wood
+trim on the -z face, so a wall's yaw is a function of which side of the house it closes and
+nothing else (`SIDE_YAW`). Windows are drawn by the seeded RNG at `WINDOW_CHANCE`, and a door
+is one module on the door side with the frame and a `Door_1_Flat` hinged at the wall's local
+x -0.51, ajar by up to 0.35 rad on three houses in ten. The probe render that settled the
+recipe (trim outward, roof seated on the wall top, gable under the ridge) is in the PR.
+
+Paving sits at y 0.05 and roads at y 0.03. Each road segment is a unit `PlaneMesh` scaled to
+(width, 1, length + width) so consecutive segments overlap at the bends instead of leaving a
+wedge of grass; the price is that the last segment overruns its end by half a road width, which
+is why the plaza and hub bricks are raised over the road rather than the road shortened.
+
+**Measured on this machine**, RTX 2070 SUPER, 1280 x 720, Forward+:
+
+| What | Value |
+|---|---|
+| instanced nodes (roads, towns, forests, scatter) | 297, 1282, 989, 461; 3,029 of a 4,500 budget |
+| scene tree after load | 6,130 nodes |
+| `world_map.tscn` | 597,559 bytes |
+| probe fps after a 40-frame settle | 56 to 63 across two runs |
+| headless suite | `PASS: 1777 assertion(s) held across 34 suite(s)` |
+
+Every forest tree is its own instanced scene rather than a `MultiMeshInstance3D`, which is the
+choice that keeps each tree selectable and diffable. 989 trees at 56 fps is fine for a desktop
+target. The budget constant is the tripwire: if a later unit wants denser woods, that is the
+number that says whether to switch the forest bulk to a MultiMesh.
+
+`client/tests/test_world_map.gd` proves the layout invariants headlessly: three `Center`
+markers 140 to 175 u apart and at least 85 u from `Roads/Hub`, every `Node3D` inside +-128, no
+two House footprints overlapping (rectangles from `metadata/footprint` and the house yaw), no
+House within its half-diagonal plus 2 u of a spoke, no forest tree within 4 u of a spoke, at
+least 600 forest instances, and a 256 x 256 ground. `client/tests/world_map_probe.tscn` renders
+the real scene windowed, saves an aerial and four ground-level shots, and asserts the aerial
+shows roof-red over each town centre and dirt-brown on the Northmere road 9 u out of the hub,
+against a sky-box control that must read zero of both.
+
+**Follow-ups, none owned yet.** Instance the map into `main.tscn` in place of the checker plane
+and remove the duplicate sun and environment from whichever scene loses. The server spawn at
+(0, 0) already lands on the Northmere road just south of the hub, and the seeded tree at (5, 0)
+stands beside it; the plaza centres are the natural respawn points once towns mean something.
+The server paths in a straight line and knows nothing of houses, so a player walks through
+walls until the navmesh unit lands; the house footprints the test reads are the obstacle list
+that unit needs, and the generator is where to emit them. The nature kit ships no water and the
+village kit's free cut ships no well or stall, so the plazas are bare brick; `Wall_Arch` and
+`Stairs_Exterior_Straight` are staged and unused for whoever dresses them.
