@@ -3,6 +3,7 @@ package abilitydef
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,6 +93,9 @@ func validate(a Ability) error {
 	}
 	if a.ManaCost < 0 {
 		return fmt.Errorf("%q: mana_cost must be >= 0", a.ID)
+	}
+	if int(math.Round(a.ManaCost)) < 1 {
+		return fmt.Errorf("%q: mana_cost must round to at least 1", a.ID)
 	}
 	if a.CooldownTicks < 0 {
 		return fmt.Errorf("%q: cooldown_ticks must be >= 0", a.ID)

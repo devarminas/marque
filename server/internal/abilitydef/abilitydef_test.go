@@ -74,6 +74,32 @@ func TestEmptyAbilitiesFailsClosed(t *testing.T) {
 	}
 }
 
+func TestZeroManaCostFailsClosed(t *testing.T) {
+	_, err := Parse([]byte(`{
+		"abilities":[{
+			"id":"x","name":"X","mana_cost":0,"cooldown_ticks":0,"range":0,
+			"target":"self","effect":{"kind":"heal","amount":1},
+			"ui":{"hotbar_slot":1,"color":"green"}
+		}]
+	}`))
+	if err == nil {
+		t.Fatal("expected zero mana_cost error")
+	}
+}
+
+func TestSubHalfManaCostFailsClosed(t *testing.T) {
+	_, err := Parse([]byte(`{
+		"abilities":[{
+			"id":"x","name":"X","mana_cost":0.4,"cooldown_ticks":0,"range":0,
+			"target":"self","effect":{"kind":"heal","amount":1},
+			"ui":{"hotbar_slot":1,"color":"green"}
+		}]
+	}`))
+	if err == nil {
+		t.Fatal("expected sub-0.5 mana_cost error")
+	}
+}
+
 func TestUnknownEffectFailsClosed(t *testing.T) {
 	_, err := Parse([]byte(`{
 		"abilities":[{

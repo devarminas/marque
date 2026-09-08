@@ -386,13 +386,11 @@ func request_cast(ability_id: String) -> void:
 		push_warning("session: cast %s dropped, the socket is not open" % ability_id)
 		return
 	if target_id < 1:
-		await_mana_for_cast(ability_id, 0)
-		if _net.send_cast(ability_id, 0) != OK:
-			_casts_awaiting_mana.pop_back()
+		if _net.send_cast(ability_id, 0) == OK:
+			await_mana_for_cast(ability_id, 0)
 		return
-	await_mana_for_cast(ability_id, target_id)
-	if _net.send_cast(ability_id, target_id) != OK:
-		_casts_awaiting_mana.pop_back()
+	if _net.send_cast(ability_id, target_id) == OK:
+		await_mana_for_cast(ability_id, target_id)
 
 
 func await_mana_for_cast(ability_id: String, target_id: int) -> void:
@@ -556,6 +554,7 @@ func _on_welcomed(
 	_clear_hit_points()
 	_clear_class_state()
 	_clear_grip()
+	_casts_awaiting_mana.clear()
 	if _panel != null:
 		_panel.clear()
 	_you = you
@@ -1105,8 +1104,10 @@ func _play_cast_effect_on_target(target_id: int, ability_id: String) -> void:
 	if host == null:
 		host = _npcs.get(target_id)
 	var color := CastHitFx.color_for_ui(_ability_ui_color(ability_id))
-	if host != null:
-		CastHitFx.play(host, color)
+	if host == null:
+		return
+	if CastHitFx.play(host, color) == null:
+		return
 	cast_effect_played.emit(target_id, ability_id)
 
 
@@ -1287,7 +1288,6 @@ func _forget_npc(id: int) -> void:
 
 
 func _forget_everyone() -> void:
-	_casts_awaiting_mana.clear()
 	for id: int in _avatars.keys():
 		_forget(id)
 	for id: int in _items.keys():
@@ -1434,3 +1434,4 @@ static func _server_from_command_line() -> String:
 		push_error("session: %s needs a websocket url after it" % SERVER_ARG)
 		return ""
 	return args[index + 1]
+
