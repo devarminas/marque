@@ -708,10 +708,21 @@ input passes vacuously.
 A woodcutting node is `client/scenes/resource_node.tscn`, and it draws the Quaternius Stylized
 Nature MegaKit `CommonTree_1.gltf` instead of a cylinder and a sphere. The tree is instanced at
 `root_scale` 1.0 and carries no instance scale. It measures **6.819 u** of drawn silhouette in
-`client/tests/gather_tree_probe.tscn`, against an authored AABB of 7.265 u and a 1.7 u control
-box that the same frame reads as 1.694 u. The gap is the vendor art, not the method: the topmost
-leaf cards are edge-on and cover no pixels, so the silhouette ends 20 cm below the mesh bound.
-Beside a 1.733 u player, a 7 m tree is the right size for a tree.
+`client/tests/gather_tree_probe.tscn`, beside a 1.736 u player and a 1.7 u control box that the
+same frame reads as 1.694 u. Nearly four times the player is the right size for a tree.
+
+Read the mesh bound carefully, because two different numbers both describe this tree. The AABB
+spans **7.265 u**, and `client/assets/README.md` lists it under that figure, but it runs from
+y −0.243 to y **7.022**: a quarter metre of root sits under the ground plane the node stands on.
+So 7.022 u is what a player sees, and the silhouette falls 0.203 u short of that because the
+topmost leaf cards are edge-on and cover no pixels. Against 7.265 the same gap looks like half a
+metre of missing tree. `test_nodes.gd` asserts the 7.265 u extent, since that is what
+`get_aabb()` returns.
+
+The probe refuses a measurement over nothing. `_silhouette_height` returns 0.0 when every pixel
+in its band is background, which would have printed `TREE PROBE full 0.000 u` and exited 0, so
+each height must clear a floor, the 1.7 u control must read back within 5 cm before any other
+number is believed, and the tree must stand over both the player and its own stump.
 
 **The node shows exactly one of three authored visuals, chosen by an enum.**
 
@@ -744,6 +755,17 @@ cylinder of radius 0.6 spanning y 0 to 2.6 and is never disabled, so it always c
 y = 1.8 point the gather demos click and always catches a ray dropped from straight above.
 `CanopyShape` is a sphere of radius 2.2 spanning y 2.48 to 6.88 and is disabled outside `TREE`,
 so a stump carries no invisible hitbox where its canopy used to be.
+
+Neither of the first two rays ever touched the canopy. A ray dropped from y 6.0 starts inside the
+sphere, and `intersect_ray` skips a shape containing its origin unless asked otherwise, so it fell
+through to the trunk; the y = 1.8 ray sits below the sphere's 2.48 floor. `canopy_shape.disabled`
+was therefore asserted only as a boolean. `test_nodes.gd` now casts a third ray at canopy height,
+1.5 u off the trunk axis where nothing but `CanopyShape` sits, and requires it to find the tree
+while full and to find nothing once depleted. It also reads the mesh AABB and asserts the trunk
+reaches the ground, the two hitboxes overlap rather than leaving an unclickable band between
+2.48 and 2.6, and the canopy sphere covers the drawn crown's 7.022 u height and 2.29 u
+half-width to within 0.3 u. Swapping in `CommonTree_3` at 9.425 u without moving the collider
+fails those.
 
 #### The two-client demo's sky band is no longer a control
 
