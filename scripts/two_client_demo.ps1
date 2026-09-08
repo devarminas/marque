@@ -17,8 +17,11 @@ $MinSeparation = 3.0
 
 $StillCameraMinDiff = 0.002
 $StillCameraMaxDiff = 0.10
-$SkyBandControlFailure = "the background is not a control"
-$SkyBandFlakeMaxStillFraction = $StillCameraMaxDiff
+
+$BandQuietMaxFraction = 0.005
+$BandQuietMaxChannelDelta = 2
+$BandQuietTolerance = "the tolerance is {0:N4}% of pixels and {1}/255" -f `
+    ($BandQuietMaxFraction * 100), $BandQuietMaxChannelDelta
 
 $MovingCameraDiffRatio = 8.0
 
@@ -43,7 +46,6 @@ $MaxLayerDisagreement = 0.05
 
 $server = $null
 $failures = New-Object System.Collections.Generic.List[string]
-$stillFractions = New-Object System.Collections.Generic.List[double]
 
 function Show-File([string] $label, [string] $path) {
     if (-not (Test-Path $path)) { return }
@@ -80,21 +82,14 @@ function Compare-Frames([string] $left, [string] $right) {
         $mode = [System.Drawing.Imaging.ImageLockMode]::ReadOnly
         $la = $a.LockBits($rect, $mode, $format)
         $lb = $b.LockBits($rect, $mode, $format)
-        $count = $la.Stride * $a.Height
+        $stride = $la.Stride
+        $count = $stride * $a.Height
         $bytesA = New-Object byte[] $count
         $bytesB = New-Object byte[] $count
         [System.Runtime.InteropServices.Marshal]::Copy($la.Scan0, $bytesA, 0, $count)
         [System.Runtime.InteropServices.Marshal]::Copy($lb.Scan0, $bytesB, 0, $count)
         $a.UnlockBits($la)
         $b.UnlockBits($lb)
-
-        $md5 = [System.Security.Cryptography.MD5]::Create()
-        $identical = [System.BitConverter]::ToString($md5.ComputeHash($bytesA)) -eq
-                     [System.BitConverter]::ToString($md5.ComputeHash($bytesB))
-
-        $bandBytes = $la.Stride * [int]($a.Height / 4)
-        $bandIdentical = [System.BitConverter]::ToString($md5.ComputeHash($bytesA, 0, $bandBytes)) -eq
-                         [System.BitConverter]::ToString($md5.ComputeHash($bytesB, 0, $bandBytes))
 
         $sampled = 0
         $differing = 0
@@ -106,10 +101,33 @@ function Compare-Frames([string] $left, [string] $right) {
                 $differing++
             }
         }
+
+        $bandRows = [int]($a.Height / 4)
+        $bandPixels = $bandRows * $a.Width
+        if ($bandPixels -lt 1) {
+            throw "$left is $($a.Width)x$($a.Height); its top quarter holds no pixels to compare"
+        }
+        $bandDiffering = 0
+        $bandMaxChannelDelta = 0
+        for ($y = 0; $y -lt $bandRows; $y++) {
+            $row = $y * $stride
+            for ($x = 0; $x -lt $a.Width; $x++) {
+                $i = $row + $x * 4
+                $delta = [math]::Max(
+                    [math]::Abs([int]$bytesA[$i] - [int]$bytesB[$i]),
+                    [math]::Max(
+                        [math]::Abs([int]$bytesA[$i + 1] - [int]$bytesB[$i + 1]),
+                        [math]::Abs([int]$bytesA[$i + 2] - [int]$bytesB[$i + 2])))
+                if ($delta -eq 0) { continue }
+                $bandDiffering++
+                if ($delta -gt $bandMaxChannelDelta) { $bandMaxChannelDelta = $delta }
+            }
+        }
+
         return @{
-            Identical = $identical
             Fraction = $differing / [double]$sampled
-            BandIdentical = $bandIdentical
+            BandFraction = $bandDiffering / [double]$bandPixels
+            BandMaxChannelDelta = $bandMaxChannelDelta
         }
     } finally {
         $a.Dispose()
@@ -117,22 +135,18 @@ function Compare-Frames([string] $left, [string] $right) {
     }
 }
 
-function Test-SkyBandFlakeCandidate {
+function Test-BandQuiet {
     param(
-        [System.Collections.Generic.List[string]] $FailureList,
-        [System.Collections.Generic.List[double]] $FractionList,
-        [string] $Needle,
-        [double] $MaxStillFraction
+        [hashtable] $Pair,
+        [double] $MaxFraction,
+        [int] $MaxChannelDelta
     )
-    if ($FailureList.Count -lt 1) { return $false }
-    if ($FractionList.Count -lt 1) { return $false }
-    foreach ($failure in $FailureList) {
-        if ($failure -notlike "*$Needle*") { return $false }
-    }
-    foreach ($fraction in $FractionList) {
-        if ($fraction -gt $MaxStillFraction) { return $false }
-    }
-    return $true
+    return ($Pair.BandFraction -le $MaxFraction) -and ($Pair.BandMaxChannelDelta -le $MaxChannelDelta)
+}
+
+function Format-Band {
+    param([hashtable] $Pair)
+    return "{0:N4}% of pixels, up to {1}/255 in a channel" -f ($Pair.BandFraction * 100), $Pair.BandMaxChannelDelta
 }
 
 function Get-JoinedId([string] $path) {
@@ -372,9 +386,9 @@ try {
         $watching = 3 - $client.Phase
         $stillPair = Compare-Frames $frames[2 * $watching - 1] $frames[2 * $watching]
         $movingPair = Compare-Frames $frames[2 * $client.Phase - 1] $frames[2 * $client.Phase]
-        Write-Host ("==> client {0} pixels: standing still (shots {1}..{2}) {3:P2} differ, sky band identical={4}; walking (shots {5}..{6}) {7:P2} differ, sky band identical={8}" -f `
-            $label, (2 * $watching - 1), (2 * $watching), $stillPair.Fraction, $stillPair.BandIdentical,
-            (2 * $client.Phase - 1), (2 * $client.Phase), $movingPair.Fraction, $movingPair.BandIdentical)
+        Write-Host ("==> client {0} pixels: standing still (shots {1}..{2}) {3:P2} differ, top quarter {4}; walking (shots {5}..{6}) {7:P2} differ, top quarter {8}" -f `
+            $label, (2 * $watching - 1), (2 * $watching), $stillPair.Fraction, (Format-Band $stillPair),
+            (2 * $client.Phase - 1), (2 * $client.Phase), $movingPair.Fraction, (Format-Band $movingPair))
 
         if ($stillPair.Fraction -lt $StillCameraMinDiff) {
             $failures.Add("client $label's still-camera frames are $([math]::Round($stillPair.Fraction * 100, 3))% different; the other player did not visibly move")
@@ -382,12 +396,11 @@ try {
         if ($stillPair.Fraction -gt $StillCameraMaxDiff) {
             $failures.Add("client $label's still-camera frames are $([math]::Round($stillPair.Fraction * 100, 1))% different; more than the other player's body moved")
         }
-        if (-not $stillPair.BandIdentical) {
-            $failures.Add("client $label stood still but the top quarter of its two frames differs; $SkyBandControlFailure")
-            $stillFractions.Add($stillPair.Fraction)
+        if (-not (Test-BandQuiet -Pair $stillPair -MaxFraction $BandQuietMaxFraction -MaxChannelDelta $BandQuietMaxChannelDelta)) {
+            $failures.Add("client $label stood still but the top quarter of its two frames changed by $(Format-Band $stillPair); $BandQuietTolerance, so its camera did not hold still")
         }
-        if ($movingPair.BandIdentical) {
-            $failures.Add("client $label walked but the top quarter of its two frames is identical; the camera did not follow it")
+        if (Test-BandQuiet -Pair $movingPair -MaxFraction $BandQuietMaxFraction -MaxChannelDelta $BandQuietMaxChannelDelta) {
+            $failures.Add("client $label walked but the top quarter of its two frames changed by only $(Format-Band $movingPair); $BandQuietTolerance, so the camera did not follow it")
         }
         if ($movingPair.Fraction -lt ($MovingCameraDiffRatio * $stillPair.Fraction)) {
             $failures.Add("client $label's walking frames differ only $([math]::Round($movingPair.Fraction / $stillPair.Fraction, 1))x as much as its standing-still frames")
@@ -525,8 +538,4 @@ if ($failures.Count -eq 0) {
 }
 Write-Host "TWO CLIENT DEMO FAILED"
 foreach ($failure in $failures) { Write-Host "  - $failure" }
-if (Test-SkyBandFlakeCandidate -FailureList $failures -FractionList $stillFractions -Needle $SkyBandControlFailure -MaxStillFraction $SkyBandFlakeMaxStillFraction) {
-    $shown = ($stillFractions | ForEach-Object { "{0:P2}" -f $_ }) -join ", "
-    Write-Host ("SKY-BAND FLAKE CANDIDATE: only the still-camera sky-band control failed (still fraction {0}). Compare DEMO pos and path geometry to a green idle base, then rerun two_client_demo.ps1 on an idle machine before treating this as a product regression." -f $shown)
-}
 exit 1

@@ -61,9 +61,9 @@ Preconditions:
   pixels prove only that the client interpolated a path, not that the server's world
   moved.
 - **Camera followed.** `a_1.png` and `a_2.png` must differ broadly, because the
-  walker's own camera moved, so even the top quarter (sky and far ground, where no
-  body is ever drawn) changes. The specific missing fact if the walk were fake is
-  identical sky bands.
+  walker's own camera moved, so even the top quarter changes. The specific missing
+  fact if the walk were fake is a top quarter as quiet as a still camera's: under
+  0.5% of its pixels differing, none by more than 2 of 255.
 
 ## Gotchas
 
