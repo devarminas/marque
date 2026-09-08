@@ -1,6 +1,5 @@
 package net_test
 
-
 import (
 	"bytes"
 	"context"
@@ -9,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -19,13 +20,14 @@ import (
 	"github.com/devarminas/marque/server/internal/game"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/questdef"
 )
 
 const (
-	readTimeout = 5 * time.Second
+	readTimeout   = 5 * time.Second
 	silenceWindow = 5 * game.TickDuration
-	awaitPoll = 5 * time.Millisecond
-	frameBuffer = 1024
+	awaitPoll     = 5 * time.Millisecond
+	frameBuffer   = 1024
 )
 
 type syncBuffer struct {
@@ -76,6 +78,16 @@ type seed struct {
 
 func acornAt(x, z float64) seed { return seed{kind: game.KindAcorn, x: x, z: z} }
 
+func mustResolveQuests(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	return filepath.Join(root, filepath.FromSlash(questdef.RelPath))
+}
+
 func newHarness(t *testing.T, seeds ...seed) *harness {
 	t.Helper()
 	return newHarnessWith(t, game.ResumeGraceTicks, nil, seeds...)
@@ -107,6 +119,14 @@ func newHarnessWith(t *testing.T, grace int64, kit []string, seeds ...seed) *har
 	}
 	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore(wearables), grace, kit)
 	world.SetClasses(classes)
+	quests, err := questdef.Load(mustResolveQuests(t), classes)
+	if err != nil {
+		t.Fatalf("load quests: %v", err)
+	}
+	world.SetQuests(quests)
+	if err := world.SeedQuestGiver(); err != nil {
+		t.Fatalf("seed quest giver: %v", err)
+	}
 
 	for _, s := range seeds {
 		if err := world.SeedGroundItem(s.kind, s.x, s.z); err != nil {
@@ -197,7 +217,7 @@ func (h *harness) churnOnce() error {
 		return fmt.Errorf("churn: got a %s frame, want welcome: %s", f.kind(), f.raw)
 	}
 
-	wants := []string{"inventory", "equipment", "class", "skills"}
+	wants := []string{"inventory", "equipment", "class", "skills", "quest_log"}
 	for _, name := range wants {
 		for {
 			typ, data, err := ws.Read(ctx)
@@ -327,6 +347,8 @@ type frame struct {
 	Equipment   *mnet.Equipment   `json:"equipment"`
 	Class       *mnet.Class       `json:"class"`
 	Skills      *mnet.Skills      `json:"skills"`
+	Dialog      *mnet.Dialog      `json:"dialog"`
+	QuestLog    *mnet.QuestLog    `json:"quest_log"`
 	Tick        *mnet.Tick        `json:"tick"`
 
 	raw string
@@ -363,6 +385,10 @@ func (f frame) kind() string {
 		return "class"
 	case f.Skills != nil:
 		return "skills"
+	case f.Dialog != nil:
+		return "dialog"
+	case f.QuestLog != nil:
+		return "quest_log"
 	case f.Tick != nil:
 		return "tick"
 	default:
@@ -470,6 +496,48 @@ func (c *client) use(slot, on int) {
 	c.sendRaw(fmt.Sprintf(`{"use":{"slot":%d,"on":%d}}`, slot, on))
 }
 
+func (c *client) talk(npc mnet.PlayerID) {
+	c.t.Helper()
+	c.sendRaw(fmt.Sprintf(`{"talk":{"npc":%d}}`, npc))
+}
+
+func (c *client) dialogOption(npc mnet.PlayerID, option string) {
+	c.t.Helper()
+	c.sendRaw(fmt.Sprintf(`{"dialog_option":{"npc":%d,"option":%q}}`, npc, option))
+}
+
+func (c *client) awaitDialog() mnet.Dialog {
+	c.t.Helper()
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(time.Until(deadline))
+		if !ok {
+			break
+		}
+		if f.Dialog != nil && len(f.Dialog.Lines) > 0 {
+			return *f.Dialog
+		}
+	}
+	c.t.Fatalf("client %s: no open dialog within %v", c.name, readTimeout)
+	return mnet.Dialog{}
+}
+
+func (c *client) awaitQuestLog() mnet.QuestLog {
+	c.t.Helper()
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(time.Until(deadline))
+		if !ok {
+			break
+		}
+		if f.QuestLog != nil {
+			return *f.QuestLog
+		}
+	}
+	c.t.Fatalf("client %s: no quest_log within %v", c.name, readTimeout)
+	return mnet.QuestLog{}
+}
+
 func (c *client) next() frame {
 	c.t.Helper()
 
@@ -531,6 +599,7 @@ func (c *client) welcome() mnet.Welcome {
 	c.equipment()
 	c.classFrame()
 	c.skillsFrame()
+	c.questLogFrame()
 	return got
 }
 
@@ -636,6 +705,15 @@ func (c *client) skillsFrame() mnet.Skills {
 		c.t.Fatalf("client %s: got a %s frame, want skills: %s", c.name, f.kind(), f.raw)
 	}
 	return *f.Skills
+}
+
+func (c *client) questLogFrame() mnet.QuestLog {
+	c.t.Helper()
+	f := c.next()
+	if f.QuestLog == nil {
+		c.t.Fatalf("client %s: got a %s frame, want quest_log: %s", c.name, f.kind(), f.raw)
+	}
+	return *f.QuestLog
 }
 
 func (c *client) awaitInventoryFrame() frame {

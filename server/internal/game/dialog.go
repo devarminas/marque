@@ -16,9 +16,9 @@ const (
 	questStatusActive   questStatus = "active"
 	questStatusComplete questStatus = "complete"
 
-	EvTalk               = "talk"
-	EvTalkRejected       = "talk_rejected"
-	EvTalkResolved       = "talk_resolved"
+	EvTalk                 = "talk"
+	EvTalkRejected         = "talk_rejected"
+	EvTalkResolved         = "talk_resolved"
 	EvDialogOption         = "dialog_option"
 	EvDialogOptionRejected = "dialog_option_rejected"
 	EvQuestAccepted        = "quest_accepted"
@@ -185,6 +185,7 @@ func (w *World) acceptQuest(p *player, n *npc) {
 		"npc":    n.id,
 	})
 	w.closeDialog(p)
+	w.sendQuestLog(p)
 }
 
 func (w *World) openDialog(p *player, n *npc, q questdef.Quest) {

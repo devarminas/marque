@@ -65,8 +65,9 @@ server-authoritative WASD `move` intents. **M6h** is the cast-success flash on t
 `shared/quests.json`. The server refuses to start if that file is missing, malformed, or
 names a reward set that is absent or incomplete in `shared/sets.json`. **M9b** (ARM-185) is
 the talkable quest NPC and thin dialog wire: `talk`, `dialog_option`, and private `dialog`
-restatement. Turn-in and full quest-log restatement are later M9 units; nothing under an
-**M9a** marker describes them. A marker reading plain **M9** is reserved.
+restatement. **M9c** (ARM-187) is the private `quest_log` restatement on accept and on the
+join/reconnect catch-up step. Turn-in remains a later M9 unit; nothing under an **M9a** or
+**M9b** marker describes it. A marker reading plain **M9** is reserved.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -836,9 +837,10 @@ Sent to **one player only**, never broadcast. A full restatement of every skill 
 `xp` by a pure server function (`level = 1 + xp / XPPerLevel`, capped at the skill's
 `max_level`). **Skill XP persists across unequip** that ends a class; it is never subtracted.
 
-The first `skills` is sent inside the atomic `welcome` step, after `class`, and is the last
-frame of the join. Thereafter one is sent to a player when that player's XP in any skill
-changes, and never otherwise. **M7c** grants XP only on a completed gather (see *Gathering*).
+The first `skills` is sent inside the atomic `welcome` step, after `class`. Thereafter one
+is sent to a player when that player's XP in any skill changes, and never otherwise. **M7c**
+grants XP only on a completed gather (see *Gathering*). **M9c** appends `quest_log` after
+`skills` in the join step.
 
 ### `dialog`. **M9b**
 
@@ -846,6 +848,24 @@ changes, and never otherwise. **M7c** grants XP only on a completed gather (see 
 
 Private restatement of one player's open NPC dialog. Sent only to that player. Empty `lines`
 and empty `options` closes the dialog. Semantics are in *Quests dialog*.
+
+### `quest_log`. **M9c**
+
+    {"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick","objective":"Deliver 1 stick","status":"active"}]}}
+
+Sent to **one player only**, never broadcast. A full restatement of that player's quest
+statuses, on `inventory`'s doctrine and for its reason: a restatement cannot drift, and a
+handful of quests is nothing on the wire.
+
+`quests` lists **only quests the player has a recorded status for** (`active` or `complete`),
+each carrying its content `id`, `title` (`name` from `shared/quests.json`), `objective`
+(derived from that quest's `deliver` requirement as `Deliver <qty> <kind>`), and `status`.
+Unknown content still restates `id` and `status` with empty `title` and `objective`. An empty
+log is `{"quest_log":{"quests":[]}}`. The list is never `null`.
+
+The first `quest_log` is sent inside the atomic `welcome` step, after `skills`, and is the
+last frame of the join. Thereafter one is sent to a player when that player's quest status
+set changes (accept in **M9c**; turn-in in a later unit), and never otherwise.
 
 ### `error`
 
@@ -2049,7 +2069,7 @@ M9a does not put talk, deliver, or reward on the wire.
 ## Quests dialog. **M9b**
 
 Thin talk against a seeded `quest_giver` NPC. The client names the NPC id and option ids;
-the server authors lines and records accept. No quest-log panel restatement here (ARM-187).
+the server authors lines and records accept. Quest-log restatement is **M9c**.
 
 ### `talk`. **M9b**
 
@@ -2099,10 +2119,24 @@ Death clears a pending talk and closes an open dialog the same way it clears a p
 
 ### Deliberately absent (dialog). **M9b**
 
-- No quest-log / journal restatement frames (ARM-187).
+- No quest-log panel chrome (ARM-188). Server `quest_log` restatement is **M9c**.
 - No turn-in, give-item, or reward grant (ARM-189 / ARM-191).
 - No branching dialog trees beyond accept / stop.
 - No client-authored dialog lines.
+
+## Quests log. **M9c**
+
+Private quest status restatement for the journal. The client caches what the server sends;
+it never invents title or objective text. Accept already records `active` under **M9b**;
+**M9c** puts that map on the wire and includes it in the join catch-up step beside
+`inventory`. `complete` is set only by a successful turn-in unit later; **M9c** restates it
+when present and refuses double-accept of a complete quest the way **M9b** already does.
+
+### Deliberately absent (quest log). **M9c**
+
+- No quest log UI or J keybind (ARM-188).
+- No turn-in consume or reward grant (ARM-189).
+- No inventing `complete` outside refuse-path tests and the later turn-in unit.
 
 ## Deliberately absent
 

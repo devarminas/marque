@@ -480,6 +480,7 @@ func (w *World) sendJoinStep(p *player) {
 	w.sendEquipment(p)
 	w.sendClass(p)
 	w.sendSkills(p)
+	w.sendQuestLog(p)
 }
 
 func suspends(reason string) bool {

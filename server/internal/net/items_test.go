@@ -1,6 +1,5 @@
 package net_test
 
-
 import (
 	"math"
 	"strings"
@@ -49,6 +48,9 @@ func TestWelcomeCarriesTheWorldAndThenTheInventory(t *testing.T) {
 	}
 	if skills := alice.skillsFrame(); len(skills.Skills) == 0 {
 		t.Fatal("a fresh player's skills frame lists no skills")
+	}
+	if log := alice.questLogFrame(); log.Quests == nil || len(log.Quests) != 0 {
+		t.Fatalf("a fresh player's quest_log is %+v, want empty quests", log)
 	}
 
 	alice.expectSilence()

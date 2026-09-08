@@ -1,6 +1,5 @@
 package net_test
 
-
 import (
 	"net"
 	"regexp"
@@ -26,6 +25,7 @@ type joinStep struct {
 	equipment mnet.Equipment
 	class     mnet.Class
 	skills    mnet.Skills
+	questLog  mnet.QuestLog
 }
 
 func (s joinStep) pathFor(id mnet.PlayerID) (mnet.Path, bool) {
@@ -59,6 +59,11 @@ func readJoinStep(c *client) joinStep {
 				step.skills = *sk.Skills
 			} else {
 				c.t.Fatalf("client %s: got a %s frame, want skills after class: %s", c.name, sk.kind(), sk.raw)
+			}
+			if ql := c.next(); ql.QuestLog != nil {
+				step.questLog = *ql.QuestLog
+			} else {
+				c.t.Fatalf("client %s: got a %s frame, want quest_log after skills: %s", c.name, ql.kind(), ql.raw)
 			}
 			return step
 		case f.Inventory != nil:

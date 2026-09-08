@@ -141,6 +141,23 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			want: `{"dialog":{"npc":1000003,"lines":[],"options":[]}}`,
 		},
 		{
+			name: "quest_log",
+			msg: mnet.QuestLog{
+				Quests: []mnet.QuestLogEntry{{
+					ID:        "bring_a_stick",
+					Title:     "Bring a Stick",
+					Objective: "Deliver 1 stick",
+					Status:    "active",
+				}},
+			},
+			want: `{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick","objective":"Deliver 1 stick","status":"active"}]}}`,
+		},
+		{
+			name: "empty quest_log",
+			msg:  mnet.QuestLog{Quests: []mnet.QuestLogEntry{}},
+			want: `{"quest_log":{"quests":[]}}`,
+		},
+		{
 			name: "error with nothing to attribute it to",
 			msg:  mnet.Error{Msg: "text frames only"},
 			want: `{"error":{"msg":"text frames only"}}`,
