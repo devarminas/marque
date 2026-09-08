@@ -1,8 +1,18 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://scripts/player_avatar.gd" id="1_avatar"]
 [ext_resource type="PackedScene" path="res://assets/quaternius/base_characters/Superhero_Male_FullBody.gltf" id="2_body"]
 [ext_resource type="AnimationLibrary" path="res://assets/quaternius/animations/locomotion_library.tres" id="3_locomotion"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Peasant_Body.gltf" id="4_peasant_body"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Peasant_Arms.gltf" id="5_peasant_arms"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Peasant_Legs.gltf" id="6_peasant_legs"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Peasant_Feet.gltf" id="7_peasant_feet"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Body.gltf" id="8_ranger_body"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Arms.gltf" id="9_ranger_arms"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Legs.gltf" id="10_ranger_legs"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Feet_Boots.gltf" id="11_ranger_feet"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Head_Hood.gltf" id="12_ranger_hood"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Acc_Pauldron.gltf" id="13_ranger_pauldron"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_click"]
 radius = 0.4
@@ -34,6 +44,48 @@ turn_degrees_per_second = 540.0
 
 [node name="Body" parent="." instance=ExtResource("2_body")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+
+[node name="Outfit" type="Node3D" parent="."]
+
+[node name="PeasantBody" parent="Outfit" instance=ExtResource("4_peasant_body")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+visible = false
+
+[node name="PeasantArms" parent="Outfit" instance=ExtResource("5_peasant_arms")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+visible = false
+
+[node name="PeasantLegs" parent="Outfit" instance=ExtResource("6_peasant_legs")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+visible = false
+
+[node name="PeasantFeet" parent="Outfit" instance=ExtResource("7_peasant_feet")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+visible = false
+
+[node name="RangerBody" parent="Outfit" instance=ExtResource("8_ranger_body")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+visible = false
+
+[node name="RangerArms" parent="Outfit" instance=ExtResource("9_ranger_arms")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+visible = false
+
+[node name="RangerLegs" parent="Outfit" instance=ExtResource("10_ranger_legs")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+visible = false
+
+[node name="RangerFeet" parent="Outfit" instance=ExtResource("11_ranger_feet")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+visible = false
+
+[node name="RangerHood" parent="Outfit" instance=ExtResource("12_ranger_hood")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+visible = false
+
+[node name="RangerPauldron" parent="Outfit" instance=ExtResource("13_ranger_pauldron")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+visible = false
 
 [node name="MissingBody" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)

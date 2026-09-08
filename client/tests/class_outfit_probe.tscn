@@ -1,0 +1,85 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://tests/class_outfit_probe.gd" id="1_probe"]
+[ext_resource type="PackedScene" path="res://scenes/player_avatar.tscn" id="2_avatar"]
+[ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="3_checker"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+sky_top_color = Color(0.38, 0.5, 0.68, 1)
+sky_horizon_color = Color(0.68, 0.72, 0.76, 1)
+ground_bottom_color = Color(0.24, 0.24, 0.26, 1)
+ground_horizon_color = Color(0.68, 0.72, 0.76, 1)
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+
+[sub_resource type="ShaderMaterial" id="GroundMat"]
+shader = ExtResource("3_checker")
+shader_parameter/color_a = Color(0.44, 0.44, 0.45, 1)
+shader_parameter/color_b = Color(0.33, 0.33, 0.34, 1)
+shader_parameter/square_size = 1.0
+
+[sub_resource type="PlaneMesh" id="GroundMesh"]
+size = Vector2(100, 100)
+
+[node name="ClassOutfitProbe" type="Node3D"]
+script = ExtResource("1_probe")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.81915206, 0.43938506, -0.36868784, 0, 0.64278764, 0.76604444, 0.57357645, -0.62750685, 0.5265408, 0, 12, 0)
+light_energy = 1.2
+shadow_enabled = true
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("GroundMesh")
+material_override = SubResource("GroundMat")
+
+[node name="GameCamera" type="Camera3D" parent="."]
+transform = Transform3D(0.8660254, -0.28678823, 0.40957603, 0, 0.81915206, 0.57357645, -0.5, -0.49673176, 0.7094065, 5.7340645, 8.0300703, 9.931691)
+current = true
+fov = 60.0
+
+[node name="Stand" type="Node3D" parent="."]
+
+[node name="Archer" type="Node3D" parent="Stand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.629165, 0, 3.25)
+metadata/class_id = "archer"
+
+[node name="Avatar" parent="Stand/Archer" instance=ExtResource("2_avatar")]
+
+[node name="Knight" type="Node3D" parent="Stand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.377499, 0, 1.95)
+metadata/class_id = "knight"
+
+[node name="Avatar" parent="Stand/Knight" instance=ExtResource("2_avatar")]
+
+[node name="Mage" type="Node3D" parent="Stand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.125833, 0, 0.65)
+metadata/class_id = "mage"
+
+[node name="Avatar" parent="Stand/Mage" instance=ExtResource("2_avatar")]
+
+[node name="Miner" type="Node3D" parent="Stand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.125833, 0, -0.65)
+metadata/class_id = "miner"
+
+[node name="Avatar" parent="Stand/Miner" instance=ExtResource("2_avatar")]
+
+[node name="Lumberjack" type="Node3D" parent="Stand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.377499, 0, -1.95)
+metadata/class_id = "lumberjack"
+
+[node name="Avatar" parent="Stand/Lumberjack" instance=ExtResource("2_avatar")]
+
+[node name="Bare" type="Node3D" parent="Stand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.629165, 0, -3.25)
+metadata/class_id = ""
+
+[node name="Avatar" parent="Stand/Bare" instance=ExtResource("2_avatar")]

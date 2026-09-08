@@ -3,10 +3,15 @@ extends Node3D
 
 const PolylineWalker := preload("res://scripts/polyline_walker.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
+const OutfitDefs := preload("res://scripts/outfit_defs.gd")
 
 const WALK_ANIM := "ual2/Walk_Carry"
 const IDLE_ANIM := "ual2/Idle_FoldArms"
 const WALK_CLIP_SPEED := 0.65
+
+const OUTFIT_MATERIAL_PREFIXES := ["MI_Peasant", "MI_Ranger"]
+
+static var _tinted_materials := {}
 
 var player_id := 0
 
@@ -21,6 +26,7 @@ var clock: TickClock = null
 
 var _walker: PolylineWalker = null
 var _desired_yaw := 0.0
+var _worn_outfit := ""
 
 @onready var _animation: AnimationPlayer = $AnimationPlayer
 @onready var _hp_label: Label3D = $HpLabel
@@ -29,13 +35,48 @@ var _desired_yaw := 0.0
 
 
 func _ready() -> void:
-	if get_node_or_null("Body/Armature/Skeleton3D") != null:
+	var skeleton := get_node_or_null("Body/Armature/Skeleton3D") as Skeleton3D
+	if skeleton == null:
+		push_error(
+			"PlayerAvatar: the Universal Base body did not instance under"
+			+ " Body/Armature/Skeleton3D; drawing it magenta"
+		)
+		_missing_body.visible = true
 		return
-	push_error(
-		"PlayerAvatar: the Universal Base body did not instance under"
-		+ " Body/Armature/Skeleton3D; drawing it magenta"
-	)
-	_missing_body.visible = true
+	_bind_outfit_to(skeleton)
+
+
+func apply_class(class_id: String) -> void:
+	var outfit := get_node_or_null("Outfit") as Node3D
+	if outfit == null:
+		push_error("PlayerAvatar.apply_class: player_avatar.tscn authors no Outfit node")
+		return
+	var body := get_node_or_null("Body") as Node3D
+	if body == null:
+		push_error("PlayerAvatar.apply_class: no Body to fit the outfit around")
+		return
+
+	_worn_outfit = OutfitDefs.outfit_for(class_id)
+	var tint := OutfitDefs.tint_for(class_id)
+	var worn := OutfitDefs.parts_for(class_id)
+	for part_name: String in OutfitDefs.part_names():
+		var part := outfit.get_node_or_null(NodePath(part_name)) as Node3D
+		if part == null:
+			push_error(
+				"PlayerAvatar.apply_class: player_avatar.tscn authors no Outfit/%s" % part_name
+			)
+			continue
+		var shown := worn.has(part_name)
+		part.visible = shown
+		for mesh in _meshes_under(part):
+			_tint_surfaces(mesh, tint if shown else Color.WHITE)
+
+	var girth := OutfitDefs.girth_for(class_id)
+	body.scale = Vector3(girth, 1.0, girth)
+
+
+func worn_outfit() -> String:
+	return _worn_outfit
 
 
 func configure(id: int, tick_ms: int) -> void:
@@ -120,6 +161,63 @@ func _set_walking(walking: bool) -> void:
 	if _animation.current_animation != IDLE_ANIM:
 		_animation.play(IDLE_ANIM)
 	_animation.speed_scale = 1.0
+
+
+func _bind_outfit_to(skeleton: Skeleton3D) -> void:
+	var outfit := get_node_or_null("Outfit") as Node3D
+	if outfit == null:
+		push_error("PlayerAvatar: player_avatar.tscn authors no Outfit node")
+		return
+	for mesh in _meshes_under(outfit):
+		mesh.skeleton = mesh.get_path_to(skeleton)
+
+
+static func _meshes_under(root: Node) -> Array[MeshInstance3D]:
+	var found: Array[MeshInstance3D] = []
+	var mesh := root as MeshInstance3D
+	if mesh != null:
+		found.append(mesh)
+	for child in root.get_children():
+		found.append_array(_meshes_under(child))
+	return found
+
+
+static func _tint_surfaces(mesh: MeshInstance3D, tint: Color) -> void:
+	if mesh.mesh == null:
+		return
+	for surface in mesh.mesh.get_surface_count():
+		var source := mesh.mesh.surface_get_material(surface)
+		if source == null or not _is_outfit_material(source):
+			continue
+		if tint == Color.WHITE:
+			mesh.set_surface_override_material(surface, null)
+			continue
+		mesh.set_surface_override_material(surface, _tinted_material(source, tint))
+
+
+static func _is_outfit_material(source: Material) -> bool:
+	for prefix: String in OUTFIT_MATERIAL_PREFIXES:
+		if source.resource_name.begins_with(prefix):
+			return true
+	return false
+
+
+static func _tinted_material(source: Material, tint: Color) -> Material:
+	var by_tint: Dictionary = _tinted_materials.get(source, {})
+	var cached: Material = by_tint.get(tint)
+	if cached != null:
+		return cached
+	var tinted := source.duplicate() as BaseMaterial3D
+	if tinted == null:
+		push_error(
+			"PlayerAvatar: outfit material %s is not a BaseMaterial3D, so it cannot be tinted"
+			% source.resource_name
+		)
+		return source
+	tinted.albedo_color = tint
+	by_tint[tint] = tinted
+	_tinted_materials[source] = by_tint
+	return tinted
 
 
 func _turn_toward_desired_yaw(delta: float) -> void:
