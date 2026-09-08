@@ -39,6 +39,7 @@ func _ready() -> void:
 	_assertions = Assertions.new()
 
 	_test_scene_instantiates_and_configures()
+	_test_a_vanished_body_draws_magenta()
 	_test_position_tracks_the_walker_over_simulated_time()
 	_test_two_avatars_do_not_share_state()
 	_test_a_pathless_avatar_idles()
@@ -196,6 +197,39 @@ func _test_scene_instantiates_and_configures() -> void:
 		hp_label != null and is_equal_approx(hp_label.position.y, 2.0),
 		"the HP label floats just above the 1.7 u head, got %f"
 		% (0.0 if hp_label == null else hp_label.position.y),
+	)
+
+	var fallback := avatar.get_node_or_null("MissingBody") as MeshInstance3D
+	_assertions.check(
+		fallback != null and not fallback.visible,
+		"a healthy body keeps the magenta fallback hidden",
+	)
+
+	avatar.queue_free()
+
+
+func _test_a_vanished_body_draws_magenta() -> void:
+	var avatar := PlayerAvatarScene.instantiate() as PlayerAvatar
+	var body := avatar.get_node("Body")
+	avatar.remove_child(body)
+	body.queue_free()
+	avatar.configure(61, TICK_MS)
+	_remote_players.add_child(avatar)
+
+	var fallback := avatar.get_node_or_null("MissingBody") as MeshInstance3D
+	_assertions.check(
+		fallback != null and fallback.visible, "a vanished body shows the magenta fallback"
+	)
+	var material := fallback.get_active_material(0) if fallback != null else null
+	var albedo := Color(0.0, 0.0, 0.0, 0.0)
+	if material != null and "albedo_color" in material:
+		albedo = material.albedo_color
+	_assertions.check(
+		is_equal_approx(albedo.r, 0.95)
+		and is_equal_approx(albedo.g, 0.08)
+		and is_equal_approx(albedo.b, 0.85)
+		and is_equal_approx(albedo.a, 1.0),
+		"the fallback is the palette's magenta, not a default white, got %s" % albedo,
 	)
 
 	avatar.queue_free()

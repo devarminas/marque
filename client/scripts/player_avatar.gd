@@ -25,6 +25,17 @@ var _desired_yaw := 0.0
 @onready var _animation: AnimationPlayer = $AnimationPlayer
 @onready var _hp_label: Label3D = $HpLabel
 @onready var _selection_ring: MeshInstance3D = $SelectionRing
+@onready var _missing_body: MeshInstance3D = $MissingBody
+
+
+func _ready() -> void:
+	if get_node_or_null("Body/Armature/Skeleton3D") != null:
+		return
+	push_error(
+		"PlayerAvatar: the Universal Base body did not instance under"
+		+ " Body/Armature/Skeleton3D; drawing it magenta"
+	)
+	_missing_body.visible = true
 
 
 func configure(id: int, tick_ms: int) -> void:
