@@ -862,7 +862,7 @@ godot --headless --path client --script res://tools/build_world_map.gd
 Two runs produce a byte-identical file, so a regenerated scene with no diff is proof that the
 generator did not change. The scene-authoring rule in `CLAUDE.md` still holds: the committed
 `.tscn` is what the editor opens, what diffs, and what the game loads, and nothing at runtime
-builds it. The generator exists because 3,029 instanced nodes are not hand-placeable, and it
+builds it. The generator exists because 3,011 instanced nodes are not hand-placeable, and it
 stays because a hand edit to the scene is lost on the next run. Move a house by moving its lot
 in `town_table()`, not by dragging it in the editor.
 
@@ -874,8 +874,8 @@ forest regions (a rim band past |x| or |z| > 100, three elliptical woods, five c
 keep chance. `scatter_table()` holds four rules keyed by an `Allow` enum. Forests and scatter
 both come from a jittered grid filtered by pure predicates over `Vector2`: `inside_world`,
 `outside_towns`, `road_clearance`, `inside_region`, `scatter_allows`. The alternative, a loop
-per category with its own exclusion arithmetic, is what the delegate first wrote and then
-collapsed.
+per category with its own exclusion arithmetic, was rejected in the brief before any code was
+written, and the generator was table-driven from its first draft.
 
 **Houses are assembled from the Medieval Village MegaKit's 2 u modules.** `add_house` takes a
 footprint in modules, a storey count, a ground and an upper `Style` (plaster or brick), and a
@@ -897,10 +897,10 @@ is why the plaza and hub bricks are raised over the road rather than the road sh
 
 | What | Value |
 |---|---|
-| instanced nodes (roads, towns, forests, scatter) | 297, 1282, 989, 461; 3,029 of a 4,500 budget |
-| scene tree after load | 6,130 nodes |
-| `world_map.tscn` | 597,559 bytes |
-| probe fps after a 40-frame settle | 56 to 63 across two runs |
+| instanced nodes (roads, towns, forests, scatter) | 280, 1293, 974, 464; 3,011 of a 4,500 budget |
+| scene tree after load | 6,094 nodes |
+| `world_map.tscn` | 593,577 bytes |
+| probe fps after a 40-frame settle | 56 to 64 across three runs |
 | headless suite | `PASS: 1777 assertion(s) held across 34 suite(s)` |
 
 Every forest tree is its own instanced scene rather than a `MultiMeshInstance3D`, which is the

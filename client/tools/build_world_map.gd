@@ -482,8 +482,11 @@ static func walk_line(line: PackedVector2Array, spacing: float, start: float) ->
 			continue
 		var direction := span / length
 		while travelled < consumed + length:
-			stations.append({"at": a + direction * (travelled - consumed), "dir": direction})
+			var at := a + direction * (travelled - consumed)
 			travelled += spacing
+			if at.distance_to(HUB) <= HUB_HALF + 1.0:
+				continue
+			stations.append({"at": at, "dir": direction})
 		consumed += length
 	return stations
 
