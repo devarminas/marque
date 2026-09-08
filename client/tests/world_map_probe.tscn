@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://tests/world_map_probe.gd" id="1_probe"]
+[ext_resource type="PackedScene" path="res://scenes/world_map.tscn" id="2_map"]
+
+[node name="WorldMapProbe" type="Node3D"]
+script = ExtResource("1_probe")
+
+[node name="WorldMap" parent="." instance=ExtResource("2_map")]
+
+[node name="Camera" type="Camera3D" parent="."]
+fov = 60.0

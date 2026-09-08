@@ -15,6 +15,15 @@ Heights are the Y extent of the mesh as the vendor shipped it, in Godot units, b
 | `quaternius/nature/CommonTree_1.gltf` | 7.265 | |
 | `quaternius/nature/CommonTree_3.gltf` | 9.425 | tallest of the five |
 | `quaternius/nature/CommonTree_5.gltf` | 7.006 | |
+| `quaternius/nature/Pine_4.gltf` | 10.238 | tallest pine; `Pine_1` is 7.322 |
+| `quaternius/nature/Rock_Medium_3.gltf` | 2.318 | 3.42 x 3.48 footprint |
+| `quaternius/nature/Bush_Common.gltf` | 1.583 | |
+| `quaternius/village/Wall_Plaster_Straight.gltf` | 3.125 | one wall module: 2.000 wide, z -0.314 to 0.092, trim faces -z |
+| `quaternius/village/Floor_Brick.gltf` | 0.020 | 2.000 x 2.000 tile |
+| `quaternius/village/Roof_RoundTiles_4x6.gltf` | 4.234 | y -0.52 to 3.72 over a 4 x 6 footprint; ridge along z |
+| `quaternius/village/Roof_RoundTiles_8x12.gltf` | 6.780 | the largest roof staged |
+| `quaternius/village/Roof_Tower_RoundTiles.gltf` | 7.360 | 4 x 4 footprint |
+| `quaternius/village/Prop_Chimney.gltf` | 3.180 | |
 | `weapons/Sword_1_A.glb` | 1.388 | |
 | `weapons/Shield_1_A.glb` | 0.708 | |
 | `weapons/Bow_1_1_A_001.glb` | 1.683 | measured along Z, the bow's long axis |
@@ -23,6 +32,8 @@ Heights are the Y extent of the mesh as the vendor shipped it, in Godot units, b
 | `tools/pickaxe.obj` | 14.466 | longest axis, authored; imports at 0.851 |
 
 Every Quaternius pack and the Weapons pack are authored at roughly 1 unit = 1 metre. They import at `nodes/root_scale=1.0` and need no correction. The tool pack OBJ files are the one source authored off contract, 8x to 17x too large, and their sidecars correct that with `scale_mesh`.
+
+The Medieval Village MegaKit is a modular building kit on a 2 u grid: every wall is 2 u wide and 3 u tall, every floor tile is 2 x 2 u, and `Roof_RoundTiles_WxL` covers a W x L footprint with the ridge along the length. The full AABB table for both kits comes from `scripts/measure_gltf_bounds.mjs` run over the source pack's `glTF/` directory; `client/tools/build_world_map.gd` assembles houses from those numbers.
 
 ARM-168 replaced the 2.543 u KayKit Knight, which had made the player render about 2.5 m tall. `client/scenes/player_avatar.tscn` instances `Superhero_Male_FullBody.gltf` at `root_scale` 1.0 and stands 1.733 u in idle, measured by `client/tests/avatar_height_probe.tscn` against a 1.7 u box in the same frame, which that run read back as 1.702 u. The bind pose is 1.820 u and the idle pose stands 8.7 cm shorter, which is why no sidecar correction was needed. `ClickBody/CollisionShape3D` stays a `CapsuleShape3D` with `height = 1.6` and `radius = 0.4` centred at y 0.8. `HpLabel` moved from y 2.4 to y 2.0. ARM-173 deleted `kaykit/` once nothing instanced it; finding 5 records why deletion rather than a tombstone.
 
@@ -42,15 +53,16 @@ ARM-170 picked those two lengths.
 | ARM-169, Peasant and Ranger outfits plus per-class recolours | `quaternius/outfits_fantasy/` |
 | ARM-170, hand tools and weapons attach | `tools/`, `weapons/` |
 | ARM-171, Nature MegaKit trees on gather nodes | `quaternius/nature/` |
+| Open-world map with three towns (`client/scenes/world_map.tscn`) | `quaternius/village/`, `quaternius/nature/` |
 | ARM-172, Imp and Puglin replace dummy NPC visuals | `quaternius/bestiary/`, not in the repository; the unit is blocked on scope |
 
 ## Staging manifest
 
 Source packs live at `C:\Users\armin\Documents\Projects\game\assets\` and are not in git. Every file here is a byte-for-byte copy of what the pack ships; two are copied under a different filename and say so below.
 
-The snippet below measures three directories, and all three are committed. `quaternius/` holds the four CC0 packs, 104,022,006 bytes across 94 files. `tools/` holds two OBJ meshes with their MTL files and sidecars, 6,631,217 bytes across 6 files. `weapons/` holds four GLBs with their sidecars, 2,384,842 bytes across 8 files. `quaternius/bestiary/` is not in the tree and is not counted; see Not staged at all.
+The snippet below measures three directories, and all three are committed. `quaternius/` holds the five CC0 packs, 167,700,770 bytes across 368 files once the village kit and the extra nature pieces for the world map are counted; before them it was 104,022,006 bytes across 94 files. `tools/` holds two OBJ meshes with their MTL files and sidecars, 6,631,217 bytes across 6 files. `weapons/` holds four GLBs with their sidecars, 2,384,842 bytes across 8 files. `quaternius/bestiary/` is not in the tree and is not counted; see Not staged at all.
 
-Every byte figure in this file is a blob size from the git index, and the `.import` sidecars git tracks are included. The whole tree is 113,038,065 bytes, 107.80 MiB, across 108 files.
+Every byte figure in this file is a blob size from the git index, and the `.import` sidecars git tracks are included. The whole tree is 176,716,829 bytes, 168.53 MiB, across 382 files.
 
 Do not measure this on disk. The repo sets `core.autocrlf=true` and ships no `.gitattributes`, so git stores the text files (`.obj`, `.mtl`, `.import`) with LF and checks them out with CRLF. `quaternius/` alone is 19,577 bytes larger on disk than in the index, and that gap widens every time the Godot editor rewrites a sidecar. A disk measurement records one machine at one moment. Measure the index:
 
@@ -97,13 +109,31 @@ The three skin textures are not optional. `Male_Peasant_Arms.gltf` and `Male_Ran
 
 Left in the bundle: the ten female parts (3.11 MB of mesh, but they pull `T_Regular_Female_*`, another 8.54 MB, and are useless without the 16.0 MB female base, so the real female path is about 27.6 MB) and the `Outfits/` folder of combined full-body glTFs. The pack's `Readme.txt` says only the head of the base model is used under clothing and a full body clips. `Modular Parts` is the correct source and `Outfits` is not.
 
-### `quaternius/nature/` (10,239,256 bytes)
+### `quaternius/nature/` (19,223,618 bytes)
 
 From `Stylized Nature MegaKit[Standard]\glTF\`. CC0 1.0.
 
-Taken: `CommonTree_1` through `CommonTree_5` as `.gltf` plus `.bin`, the three textures they reference (`Bark_NormalTree.png`, `Bark_NormalTree_Normal.png`, `Leaves_NormalTree_C.png`), and `License_Standard.txt`.
+Taken by ARM-171: `CommonTree_1` through `CommonTree_5` as `.gltf` plus `.bin`, the three textures they reference (`Bark_NormalTree.png`, `Bark_NormalTree_Normal.png`, `Leaves_NormalTree_C.png`), and `License_Standard.txt`. That was 10,239,256 bytes.
 
-Left in the bundle: `DeadTree_1..5` (about 12.0 MB with its bark pair), `TwistedTree_1..5` (about 14.2 MB), and the rest of the 68-mesh pack. ARM-171 needs one live gather tree. The other two tree families are a cheap copy when a depleted or dead-tree look is wanted.
+Taken by the world map: `Pine_1..5`, `Bush_Common`, `Bush_Common_Flowers`, `Flower_3_Group`, `Flower_3_Single`, `Flower_4_Group`, `Grass_Common_Tall`, `Grass_Wispy_Short`, `Grass_Wispy_Tall`, `Rock_Medium_1..3`, `RockPath_Round_Wide`, `RockPath_Round_Thin`, `RockPath_Square_Wide`, `RockPath_Round_Small_1`, `Pebble_Round_1`, `Pebble_Round_2`, `Pebble_Square_1`, each as `.gltf` plus `.bin`, and the seven textures they reference (`Leaf_Pine_C.png`, `Leaves_TwistedTree_C.png` for the bush, `Flowers.png`, `Leaves.png`, `Grass.png`, `Rocks_Diffuse.png`, `PathRocks_Diffuse.png`). The pines share the common tree's bark pair.
+
+Left in the bundle: `DeadTree_1..5` (about 12.0 MB with its bark pair), `TwistedTree_1..5` (about 14.2 MB, and 16 to 19 u tall, too big for a 1.7 u player to read as a tree), the ferns, clovers, mushrooms, petals, the remaining pebble and path variants, and `Rocks_Desert_Diffuse.png`. The two unstaged tree families are a cheap copy when a depleted or dead-tree look is wanted.
+
+### `quaternius/village/` (54,564,287 bytes)
+
+From `Medieval Village MegaKit[Standard]\glTF\`. CC0 1.0; the pack's `License_Standard.txt` is staged beside the meshes and says so. This is the free Standard cut of the kit, which is why some obvious pieces (a well, a market stall) do not exist to stage.
+
+Taken: 49 pieces as `.gltf` plus `.bin`, every texture they reference (22 PNGs, 2048 x 2048, 52.8 MB of the directory), and the licence. The pieces, by role in `client/tools/build_world_map.gd`:
+
+| Role | Pieces |
+|---|---|
+| walls | `Wall_Plaster_Straight`, `Wall_Plaster_Door_Flat`, `Wall_Plaster_Window_Wide_Flat`, `Wall_Plaster_Window_Thin_Round`, `Wall_Plaster_WoodGrid`, `Wall_UnevenBrick_Straight`, `Wall_UnevenBrick_Door_Flat`, `Wall_UnevenBrick_Window_Wide_Flat`, `Wall_UnevenBrick_Window_Thin_Round`, `Wall_Arch` |
+| corners and floors | `Corner_Exterior_Wood`, `Corner_Exterior_Brick`, `Floor_WoodDark`, `Floor_UnevenBrick`, `Floor_Brick` |
+| roofs | `Roof_RoundTiles_4x4`, `4x6`, `4x8`, `6x6`, `6x8`, `6x10`, `8x8`, `8x10`, `8x12`, `Roof_Front_Brick4`, `Brick6`, `Brick8`, `Roof_Tower_RoundTiles`, `Roof_Dormer_RoundTile` |
+| doors and windows | `DoorFrame_Flat_WoodDark`, `Door_1_Flat`, `Door_2_Flat`, `Window_Wide_Flat1`, `Window_Thin_Round1`, `WindowShutters_Wide_Flat_Open`, `Overhang_Plaster_Long` |
+| props | `Prop_Crate`, `Prop_Wagon`, `Prop_Chimney`, `Prop_WoodenFence_Single`, `Prop_WoodenFence_Extension1`, `Prop_MetalFence_Simple`, `Prop_ExteriorBorder_Straight1`, `Prop_ExteriorBorder_Corner`, `Prop_Brick1`, `Prop_Brick2`, `Prop_Vine1`, `Prop_Vine4`, `Stairs_Exterior_Straight` |
+
+Left in the bundle: the other 133 meshes (balconies, interior stairs, hole covers, the remaining roof sizes and the wooden roof family, plaster overhang corners, the round door and window variants) and the `Textures/` directory at the pack root, which duplicates what `glTF/` carries plus terrain and clothing noise textures nothing here binds.
 
 ### `weapons/` (2,384,842 bytes)
 
@@ -123,7 +153,7 @@ Left in the bundle: the `.fbx` versions of both, and the two shared 4096x4096 al
 
 ### Not staged at all
 
-`Medieval Village MegaKit[Standard]` (169 MB). No M8 unit needs it. `kenney_cursor-pack` is already partly staged at `kenney_cursors/`.
+`Medieval Village MegaKit[Standard]` is 169 MB in the source bundle and 54.6 MB of it is staged at `quaternius/village/` for the world map; see that section. `kenney_cursor-pack` is already partly staged at `kenney_cursors/`.
 
 `quaternius/bestiary/`. No enemies exist in the game yet, so nothing uses `Imp.glb` or `Puglin.glb`, and ARM-172 is blocked on scope. From `Bestiary - Dungeon Monsters Kit[Standard]`, under the Quaternius Asset License v1.0, not CC0; finding 4 records the terms and why they were not what kept it out. The copy would be `Imp.glb`, `Puglin.glb` and `License_Standard.txt`, 17,271,661 bytes. Both GLBs embed their textures, so the 20 MB of loose `T_Imp_*` and `T_Puglin_*` PNGs stayed in the bundle. The Standard pack ships only these two monsters. Authored heights, measured the same way as the table above: `Imp.glb` 1.678 u, `Puglin.glb` 0.931 u. Neither carries animation clips; see finding 8.
 
@@ -158,7 +188,7 @@ Standard texture importer defaults. Every staged sidecar has `compress/mode=0` (
 1. `Superhero_Male_FullBody.gltf` references two texture URIs that do not exist anywhere in the source pack, `T_Hair_1_Normal_png.png` and `T_Eye_Normal_png.png`. The pack ships `T_Hair_1_Normal.png` and `T_Eye_Normal.png`. Vendor typo. The vendor glTF is unmodified. The two textures are staged under the names the glTF asks for, so the glTF binds them as is. Anyone re-copying from the pack must rename them again.
 2. **This repository is public.** `gh api repos/devarminas/marque` returns `"visibility": "public"`. Every licence question below is decided against a public tree, not a private one. `STANDING-ORDERS.md` no longer states a visibility at all. It used to say private, and that stale claim had already propagated into this unit's licensing analysis before the API check caught it. A visibility claim that goes stale is worse than none, so the claim was removed rather than corrected.
 3. Neither the `Weapons` pack nor the `tool pack` ships a licence file at any depth. A recursive search of both source directories for any file matching `licen*`, `readme*`, `*.txt`, `*.pdf` or `*.md` returned nothing. Every other pack staged here ships one. The owner identified the source of both packs as https://pszemoo.itch.io/3d-tools and confirms they are free, so `weapons/` and `tools/` are in the tree on that basis, with the source page as their only provenance. There is no file to copy in beside the meshes. ARM-178 has nothing left to settle for these two packs.
-4. The Bestiary pack is under the Quaternius Asset License v1.0, not CC0. Section 2 grants commercial use with no credit required and explicitly covers contractors and collaborators. Section 3(a) forbids redistributing the assets themselves as an asset pack, in original or modified form, whether alone or bundled, and adds that this applies regardless of how much they were modified. A game's source tree is not an asset pack, and section 2 permits distributing a Product that incorporates the assets, so the reading that allows this is available. That question is not what kept the pack out in the end. `quaternius/bestiary/` is out of the tree because no enemies exist in the game yet and nothing uses these meshes; ARM-172 is blocked on scope. When scope changes, this paragraph is the record to decide the licence against. Section 7 binds whichever licence version was in force when the pack was obtained, and the shipped text is dated 8/28/2026. The other Quaternius packs staged here (Universal Base Characters, UAL2, Modular Fantasy, Stylized Nature) are CC0 1.0 and carry no such clause.
+4. The Bestiary pack is under the Quaternius Asset License v1.0, not CC0. Section 2 grants commercial use with no credit required and explicitly covers contractors and collaborators. Section 3(a) forbids redistributing the assets themselves as an asset pack, in original or modified form, whether alone or bundled, and adds that this applies regardless of how much they were modified. A game's source tree is not an asset pack, and section 2 permits distributing a Product that incorporates the assets, so the reading that allows this is available. That question is not what kept the pack out in the end. `quaternius/bestiary/` is out of the tree because no enemies exist in the game yet and nothing uses these meshes; ARM-172 is blocked on scope. When scope changes, this paragraph is the record to decide the licence against. Section 7 binds whichever licence version was in force when the pack was obtained, and the shipped text is dated 8/28/2026. The other Quaternius packs staged here (Universal Base Characters, UAL2, Modular Fantasy, Stylized Nature, Medieval Village) are CC0 1.0 and carry no such clause.
 5. `client/assets/kaykit/` is gone. ARM-173 deleted the whole directory rather than leaving a tombstone README. The pack was KayKit Adventurers Character Pack 2.0 by Kay Lousberg, recorded as CC0 in the directory's own README on the strength of a `License.txt` that lived in the itch.io bundle and was never copied into the repo; that bundle path no longer exists on this machine, so the licence text could not be backfilled. This repository is public (finding 2), and unlicensed art in a public tree is the exposure the ARM-167 audit was run to find. A tombstone leaves that exposure standing for every file it describes, so the files went. The directory held `Knight.glb` and its texture, `Rig_Medium_General.glb`, `Rig_Medium_MovementBasic.glb`, `movement_library.tres`, and `props/axe_1handed.{gltf,bin}` with `barbarian_texture.png`, 2.3 MB in fourteen files. Their replacements are `quaternius/base_characters/` for the body, `quaternius/animations/` for the clips, and `tools/axe.obj` for the axe, in hand and on the ground. Git history still holds every deleted byte; anyone restoring one must resolve the licence question first.
 6. The repo has no `.gitattributes` and no git LFS. This unit adds 107.80 MiB of binaries and later M8 work adds more. ARM-179 owns the evaluation. Nothing here enables it.
 7. UAL2 Standard ships no neutral idle, walk, or run. All 43 clips are situational (`Idle_FoldArms_Loop`, `Walk_Carry_Loop`, `Zombie_Walk_Fwd_Loop`), and `UAL2_Standard_RM.glb` holds the identical 43, so the root-motion file is no help either. ARM-168's "idle plus locomotion from UAL2" cannot be met from the free pack. It does ship `TreeChopping_Loop`, `Farm_Harvest`, `Farm_PlantSeed` and `Farm_Watering`, which are this game's verbs. Raised on ARM-168 and settled there by substitution, `Idle_FoldArms_Loop` for idle and `Walk_Carry_Loop` for every locomotion speed; the record is in `NOTES.md`, *Player body and UAL2 locomotion*.

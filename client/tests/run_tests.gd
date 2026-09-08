@@ -38,6 +38,7 @@ const SCENE_SUITES: Array = [
 	{"name": "heartbeat edges", "scene": "res://tests/test_heartbeat_edges.tscn"},
 	{"name": "interop", "scene": "res://tests/test_interop.tscn"},
 	{"name": "wiring", "scene": "res://tests/test_wiring.tscn"},
+	{"name": "world map", "scene": "res://tests/test_world_map.tscn"},
 ]
 
 const Assertions := preload("res://tests/assertions.gd")
