@@ -40,9 +40,14 @@ const (
 	MsgUnequip = "unequip"
 	MsgGather  = "gather"
 	MsgUse     = "use"
-	MsgAttack  = "attack"
-	MsgRespawn = "respawn"
-	MsgCast    = "cast"
+	MsgAttack        = "attack"
+	MsgRespawn       = "respawn"
+	MsgCast          = "cast"
+	MsgTalk          = "talk"
+	MsgDialogOption  = "dialog_option"
+
+	OptionAcceptQuest = "accept_quest"
+	OptionStopTalking = "stop_talking"
 )
 
 type PlayerState struct {
@@ -191,6 +196,16 @@ type Mana struct {
 	MaxMana int      `json:"max_mana"`
 }
 
+type DialogOption struct {
+	ID string `json:"id"`
+}
+
+type Dialog struct {
+	NPC     PlayerID       `json:"npc"`
+	Lines   []string       `json:"lines"`
+	Options []DialogOption `json:"options"`
+}
+
 func (Welcome) isServerMessage()     {}
 func (Spawn) isServerMessage()       {}
 func (Despawn) isServerMessage()     {}
@@ -208,6 +223,7 @@ func (Skills) isServerMessage()      {}
 func (Tick) isServerMessage()        {}
 func (HP) isServerMessage()          {}
 func (Mana) isServerMessage()        {}
+func (Dialog) isServerMessage()      {}
 
 type ClientMessage interface {
 	isClientMessage()
@@ -260,29 +276,42 @@ type Cast struct {
 	Player  PlayerID
 }
 
-func (MoveTo) isClientMessage()  {}
-func (Move) isClientMessage()    {}
-func (Pickup) isClientMessage()  {}
-func (Drop) isClientMessage()    {}
-func (Equip) isClientMessage()   {}
-func (Unequip) isClientMessage() {}
-func (Gather) isClientMessage()  {}
-func (Use) isClientMessage()     {}
-func (Attack) isClientMessage()  {}
-func (Respawn) isClientMessage() {}
-func (Cast) isClientMessage()    {}
+type Talk struct {
+	NPC PlayerID `json:"npc"`
+}
 
-func (MoveTo) Name() string  { return MsgMoveTo }
-func (Move) Name() string    { return MsgMove }
-func (Pickup) Name() string  { return MsgPickup }
-func (Drop) Name() string    { return MsgDrop }
-func (Equip) Name() string   { return MsgEquip }
-func (Unequip) Name() string { return MsgUnequip }
-func (Gather) Name() string  { return MsgGather }
-func (Use) Name() string     { return MsgUse }
-func (Attack) Name() string  { return MsgAttack }
-func (Respawn) Name() string { return MsgRespawn }
-func (Cast) Name() string    { return MsgCast }
+type DialogOptionPick struct {
+	NPC    PlayerID `json:"npc"`
+	Option string   `json:"option"`
+}
+
+func (MoveTo) isClientMessage()           {}
+func (Move) isClientMessage()             {}
+func (Pickup) isClientMessage()           {}
+func (Drop) isClientMessage()             {}
+func (Equip) isClientMessage()            {}
+func (Unequip) isClientMessage()          {}
+func (Gather) isClientMessage()           {}
+func (Use) isClientMessage()              {}
+func (Attack) isClientMessage()           {}
+func (Respawn) isClientMessage()          {}
+func (Cast) isClientMessage()             {}
+func (Talk) isClientMessage()             {}
+func (DialogOptionPick) isClientMessage() {}
+
+func (MoveTo) Name() string           { return MsgMoveTo }
+func (Move) Name() string             { return MsgMove }
+func (Pickup) Name() string           { return MsgPickup }
+func (Drop) Name() string             { return MsgDrop }
+func (Equip) Name() string            { return MsgEquip }
+func (Unequip) Name() string          { return MsgUnequip }
+func (Gather) Name() string           { return MsgGather }
+func (Use) Name() string              { return MsgUse }
+func (Attack) Name() string           { return MsgAttack }
+func (Respawn) Name() string          { return MsgRespawn }
+func (Cast) Name() string             { return MsgCast }
+func (Talk) Name() string             { return MsgTalk }
+func (DialogOptionPick) Name() string { return MsgDialogOption }
 
 type serverEnvelope struct {
 	Welcome     *Welcome     `json:"welcome,omitempty"`
@@ -302,6 +331,7 @@ type serverEnvelope struct {
 	Tick        *Tick        `json:"tick,omitempty"`
 	HP          *HP          `json:"hp,omitempty"`
 	Mana        *Mana        `json:"mana,omitempty"`
+	Dialog      *Dialog      `json:"dialog,omitempty"`
 }
 
 func Encode(m ServerMessage) ([]byte, error) {
@@ -341,6 +371,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.HP = &v
 	case Mana:
 		env.Mana = &v
+	case Dialog:
+		env.Dialog = &v
 	default:
 		return nil, fmt.Errorf("net: encode: unhandled server message %T", m)
 	}
@@ -384,6 +416,10 @@ const (
 	ReasonOutOfRange RejectReason = "out_of_range"
 	ReasonUnknownSender RejectReason = "unknown_sender"
 	ReasonBinaryFrame RejectReason = "binary_frame"
+	ReasonNoDialog RejectReason = "no_dialog"
+	ReasonUnknownOption RejectReason = "unknown_option"
+	ReasonQuestActive RejectReason = "quest_active"
+	ReasonQuestComplete RejectReason = "quest_complete"
 )
 
 type Disposition int
@@ -469,6 +505,15 @@ type castWire struct {
 	Player  *PlayerID `json:"player"`
 }
 
+type talkWire struct {
+	NPC *PlayerID `json:"npc"`
+}
+
+type dialogOptionWire struct {
+	NPC    *PlayerID `json:"npc"`
+	Option *string   `json:"option"`
+}
+
 type seqWire struct {
 	Seq *int64 `json:"seq"`
 }
@@ -515,6 +560,10 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 			decodeBody = decodeRespawn
 		case MsgCast:
 			decodeBody = decodeCast
+		case MsgTalk:
+			decodeBody = decodeTalk
+		case MsgDialogOption:
+			decodeBody = decodeDialogOption
 		default:
 			return nil, 0, &RejectError{
 				Reason:      ReasonUnknownMessage,
@@ -679,6 +728,31 @@ func decodeCast(payload []byte) (ClientMessage, error) {
 		msg.Player = *wire.Player
 	}
 	return msg, nil
+}
+
+func decodeTalk(payload []byte) (ClientMessage, error) {
+	var wire talkWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgTalk, "talk: %v", err)
+	}
+	if wire.NPC == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgTalk, "talk needs an npc id")
+	}
+	return Talk{NPC: *wire.NPC}, nil
+}
+
+func decodeDialogOption(payload []byte) (ClientMessage, error) {
+	var wire dialogOptionWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgDialogOption, "dialog_option: %v", err)
+	}
+	if wire.NPC == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgDialogOption, "dialog_option needs an npc id")
+	}
+	if wire.Option == nil || strings.TrimSpace(*wire.Option) == "" {
+		return nil, rejectIntent(ReasonMissingField, MsgDialogOption, "dialog_option needs an option id")
+	}
+	return DialogOptionPick{NPC: *wire.NPC, Option: strings.TrimSpace(*wire.Option)}, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
