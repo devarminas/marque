@@ -642,6 +642,11 @@ func (w *World) handleFrame(ev mnet.Event) {
 			return
 		}
 		w.dialogOption(p, msg, ev.Seq)
+	case mnet.Give:
+		if w.refuseIfDead(p, mnet.MsgGive) {
+			return
+		}
+		w.give(p, msg, ev.Seq)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -697,6 +702,8 @@ func rejectionEvent(re string) string {
 		return EvTalkRejected
 	case mnet.MsgDialogOption:
 		return EvDialogOptionRejected
+	case mnet.MsgGive:
+		return EvGiveRejected
 	default:
 		panic(fmt.Sprintf("game: no rejection event for %q", re))
 	}

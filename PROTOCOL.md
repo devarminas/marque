@@ -66,8 +66,9 @@ server-authoritative WASD `move` intents. **M6h** is the cast-success flash on t
 names a reward set that is absent or incomplete in `shared/sets.json`. **M9b** (ARM-185) is
 the talkable quest NPC and thin dialog wire: `talk`, `dialog_option`, and private `dialog`
 restatement. **M9c** (ARM-187) is the private `quest_log` restatement on accept and on the
-join/reconnect catch-up step. Turn-in remains a later M9 unit; nothing under an **M9a** or
-**M9b** marker describes it. A marker reading plain **M9** is reserved.
+join/reconnect catch-up step. **M9d** (ARM-189) is server turn-in: `give` consumes the
+offered bag slot and grants reward kinds into the bag in one Store transaction. A marker
+reading plain **M9** is reserved.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -450,6 +451,13 @@ in *Quests dialog*.
 
 A request to pick a dialog option. `option` is a server-known id such as `accept_quest` or
 `stop_talking`. Semantics are in *Quests dialog*.
+
+### `give`. **M9d**
+
+    {"give":{"npc":1000003,"slot":3}}
+
+A request to offer the item in bag slot `slot` to an NPC. `npc` is an NPC id in the player-id
+band. `slot` is a bag index, the same space `drop.slot` uses. Semantics are in *Quests turn-in*.
 
 ## Messages, server to client
 
@@ -865,7 +873,7 @@ log is `{"quest_log":{"quests":[]}}`. The list is never `null`.
 
 The first `quest_log` is sent inside the atomic `welcome` step, after `skills`, and is the
 last frame of the join. Thereafter one is sent to a player when that player's quest status
-set changes (accept in **M9c**; turn-in in a later unit), and never otherwise.
+set changes (accept in **M9c**; turn-in in **M9d**), and never otherwise.
 
 ### `error`
 
@@ -2120,7 +2128,7 @@ Death clears a pending talk and closes an open dialog the same way it clears a p
 ### Deliberately absent (dialog). **M9b**
 
 - No quest-log panel chrome (ARM-188). Server `quest_log` restatement is **M9c**.
-- No turn-in, give-item, or reward grant (ARM-189 / ARM-191).
+- No turn-in, give-item, or reward grant under **M9b** markers (ARM-189 / ARM-191).
 - No branching dialog trees beyond accept / stop.
 - No client-authored dialog lines.
 
@@ -2129,14 +2137,51 @@ Death clears a pending talk and closes an open dialog the same way it clears a p
 Private quest status restatement for the journal. The client caches what the server sends;
 it never invents title or objective text. Accept already records `active` under **M9b**;
 **M9c** puts that map on the wire and includes it in the join catch-up step beside
-`inventory`. `complete` is set only by a successful turn-in unit later; **M9c** restates it
+`inventory`. `complete` is set only by a successful turn-in (**M9d**); **M9c** restates it
 when present and refuses double-accept of a complete quest the way **M9b** already does.
 
 ### Deliberately absent (quest log). **M9c**
 
 - No quest log UI or J keybind (ARM-188).
-- No turn-in consume or reward grant (ARM-189).
-- No inventing `complete` outside refuse-path tests and the later turn-in unit.
+- No turn-in consume or reward grant under **M9c** markers (ARM-189).
+- No inventing `complete` outside refuse-path tests and **M9d**.
+
+## Quests turn-in. **M9d**
+
+Offer one bag slot to the quest NPC while the quest is `active`. The server validates the
+NPC, range, quest status, and slot contents, then removes the deliver kind and grants every
+reward kind from the quest's resolved `reward_set` into the bag in one Store transaction.
+Rewards are bag items only: not auto-equipped, and not seeded through `DefaultJoinKit`.
+
+### `give`. **M9d**
+
+    {"give":{"npc":1000003,"slot":3}}
+
+Semantics:
+
+- **Immediate, range-gated.** `GiveRange` equals `TalkRange` / `PickupRange`. Out of range
+  refuses; there is no pending walk for `give` (the client walks first, or talks first).
+- **Only `kind:quest_giver` accepts give.** Other kinds refuse with `wrong_target`.
+- **Quest must be `active`.** Missing / inactive → `quest_inactive`. Already `complete` →
+  `quest_complete`. Status is unchanged on every refuse.
+- **Named slot must hold the quest's `deliver.kind`.** Empty → `empty_slot`. Wrong kind →
+  `wrong_item`. This unit's content delivers qty 1 from one slot.
+- **Bag must fit every reward after the consume frees its slot.** Otherwise `inventory_full`
+  and the stick stays. No partial grant.
+- **On success:** stick removed, reward kinds added to the lowest free bag slots, quest marked
+  `complete`, private `inventory` and `quest_log` restated. Worn slots are untouched.
+
+GAMELOG refuse reasons for give (never on the wire; the player sees `error.msg`) include
+`unknown_player`, `wrong_target`, `out_of_range`, `quest_inactive`, `quest_complete`,
+`no_such_slot`, `empty_slot`, `wrong_item`, and `inventory_full`. Success logs
+`quest_completed`.
+
+### Deliberately absent (turn-in). **M9d**
+
+- No client give UI or NPC give window (ARM-191).
+- No auto-equip of reward kinds.
+- No multi-slot deliver qty greater than one on this intent.
+- No currency, trade window, or bank.
 
 ## Deliberately absent
 

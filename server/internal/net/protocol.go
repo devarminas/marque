@@ -45,6 +45,7 @@ const (
 	MsgCast          = "cast"
 	MsgTalk          = "talk"
 	MsgDialogOption  = "dialog_option"
+	MsgGive          = "give"
 
 	OptionAcceptQuest = "accept_quest"
 	OptionStopTalking = "stop_talking"
@@ -297,6 +298,11 @@ type DialogOptionPick struct {
 	Option string   `json:"option"`
 }
 
+type Give struct {
+	NPC  PlayerID `json:"npc"`
+	Slot int      `json:"slot"`
+}
+
 func (MoveTo) isClientMessage()           {}
 func (Move) isClientMessage()             {}
 func (Pickup) isClientMessage()           {}
@@ -310,6 +316,7 @@ func (Respawn) isClientMessage()          {}
 func (Cast) isClientMessage()             {}
 func (Talk) isClientMessage()             {}
 func (DialogOptionPick) isClientMessage() {}
+func (Give) isClientMessage()             {}
 
 func (MoveTo) Name() string           { return MsgMoveTo }
 func (Move) Name() string             { return MsgMove }
@@ -324,6 +331,7 @@ func (Respawn) Name() string          { return MsgRespawn }
 func (Cast) Name() string             { return MsgCast }
 func (Talk) Name() string             { return MsgTalk }
 func (DialogOptionPick) Name() string { return MsgDialogOption }
+func (Give) Name() string             { return MsgGive }
 
 type serverEnvelope struct {
 	Welcome     *Welcome     `json:"welcome,omitempty"`
@@ -435,6 +443,8 @@ const (
 	ReasonUnknownOption RejectReason = "unknown_option"
 	ReasonQuestActive RejectReason = "quest_active"
 	ReasonQuestComplete RejectReason = "quest_complete"
+	ReasonQuestInactive RejectReason = "quest_inactive"
+	ReasonWrongItem RejectReason = "wrong_item"
 )
 
 type Disposition int
@@ -529,6 +539,11 @@ type dialogOptionWire struct {
 	Option *string   `json:"option"`
 }
 
+type giveWire struct {
+	NPC  *PlayerID `json:"npc"`
+	Slot *int      `json:"slot"`
+}
+
 type seqWire struct {
 	Seq *int64 `json:"seq"`
 }
@@ -579,6 +594,8 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 			decodeBody = decodeTalk
 		case MsgDialogOption:
 			decodeBody = decodeDialogOption
+		case MsgGive:
+			decodeBody = decodeGive
 		default:
 			return nil, 0, &RejectError{
 				Reason:      ReasonUnknownMessage,
@@ -768,6 +785,20 @@ func decodeDialogOption(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonMissingField, MsgDialogOption, "dialog_option needs an option id")
 	}
 	return DialogOptionPick{NPC: *wire.NPC, Option: strings.TrimSpace(*wire.Option)}, nil
+}
+
+func decodeGive(payload []byte) (ClientMessage, error) {
+	var wire giveWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgGive, "give: %v", err)
+	}
+	if wire.NPC == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgGive, "give needs an npc id")
+	}
+	if wire.Slot == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgGive, "give needs a slot index")
+	}
+	return Give{NPC: *wire.NPC, Slot: *wire.Slot}, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
