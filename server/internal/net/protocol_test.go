@@ -283,6 +283,7 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 		{mnet.MsgCast, `{"cast":{"ability":"heal","player":1}}`},
 		{mnet.MsgTalk, `{"talk":{"npc":1000003}}`},
 		{mnet.MsgDialogOption, `{"dialog_option":{"npc":1000003,"option":"accept_quest"}}`},
+		{mnet.MsgGive, `{"give":{"npc":1000003,"slot":3}}`},
 	}
 
 	for _, tc := range cases {
