@@ -770,10 +770,31 @@ fails those.
 #### The two-client demo's sky band is no longer a control
 
 `scripts/two_client_demo.ps1` asserts that the top quarter of a still client's two frames is
-byte-identical, on the premise that the top quarter is sky. A 7 m tree draws there. Measured on
-client a's still pair, **8 pixels out of 230,400 differ, each by one step in one channel, all of
-them canopy green inside x 969..1161, y 97..176**. The same pair on the merge base differs by
-zero. Three idle runs reproduce it, so it is not the intermittent sky-band flake. Geometry is
-unaffected and matches the base exactly, both walks 4.404 u with destinations 8.435 u apart, so
-every behavioural assertion in that demo still passes. The control needs a tolerance or a
-different band. `scripts/` was outside ARM-171's fence, so ARM-183 owns the fix.
+byte-identical, on the premise that the top quarter is sky. A 7 m tree draws there, so
+**`two_client_demo.ps1` exits 1 on this branch**. It is red, not merely noisy, and ARM-183 has to
+land before anything depends on that harness being green.
+
+Measured on client a's still pair, **13 pixels out of 230,400 differ: 12 by one step in one
+channel and one by 46**. All are canopy green, inside x 1006..1161, y 26..176. Client b's still
+pair differs by **0 of 230,400** in the same band, because its camera does not frame the tree up
+there, which is why only one of the two clients fails.
+
+Two details matter for whoever writes the fix. The count is not stable: an earlier run of the
+same build read 8 differing pixels over a smaller box, so a tolerance needs headroom rather than
+a threshold fitted to one run. And the 46-step pixel is not rounding noise, it is a leaf edge
+crossing the material's 0.2 alpha-scissor threshold, so a per-pixel tolerance small enough to
+stay meaningful will not cover it. A band chosen to exclude world geometry is the better fix
+than a tolerance.
+
+None of this is the intermittent sky-band flake, and none of it is a walk regression. The flake
+clusters under GPU load; this reproduces on an idle machine and only with the tree. Geometry is
+identical to the merge base to the digit: both walks 6.204 u, destinations 8.435 u apart, both
+arrivals at (-1.378, 6.049) and (5.928, 1.831) 14 ticks after their paths. Every behavioural
+assertion in the demo still passes; only the control fails.
+
+The cause is not the leaf material, which already imports as alpha-scissor with alpha
+antialiasing off, so its coverage is deterministic. The project sets no MSAA, TAA or
+screen-space AA either. What remains is the shadow pass: the tree is a double-sided
+shadow-casting receiver, and the other client's avatar walks through that pass between the two
+frames. Turning the tree's shadow off would settle the band and is exactly the wrong trade,
+since a cast shadow is this repo's standard anti-false-pass assertion.
