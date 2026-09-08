@@ -60,6 +60,13 @@ server-authoritative WASD `move` intents. **M6h** is the cast-success flash on t
 **M6i** is the milestone demo (`scripts/tab_combat_demo.ps1`); last-line marker
 `TAB COMBAT DEMO OK`. A marker reading plain **M6** is reserved.
 
+**M9 is in progress.** **M9a** (ARM-184) is shared quest content and the singular item kind
+`stick` (distinct from M4c craft product `sticks`). Quest definitions live in
+`shared/quests.json`. The server refuses to start if that file is missing, malformed, or
+names a reward set that is absent or incomplete in `shared/sets.json`. Talk, turn-in, and
+quest-state wire messages are later M9 units; nothing under an **M9a** marker describes them.
+A marker reading plain **M9** is reserved.
+
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
 stale is the only way it can fail.
@@ -1983,6 +1990,26 @@ that actor when the body is living and selectable.
 - No ability JSON for basic attack; damage stays the M5a constant until a later unit.
 - No weapon scaling (ARM-89).
 - No player-faction system beyond PvP (every remote player is a valid attack target).
+
+## Quests. **M9a**
+
+Quest definitions are content, not code. The checked-in file `shared/quests.json` is the only
+source for quest ids, the talk NPC id, the deliver requirement (item kind and quantity), and
+the reward set id. Reward item kinds are resolved from that set in `shared/sets.json` (slots
+and tools); they are not invented in the quest file. The server refuses to start if the quest
+file is missing or malformed, if a quest names an unknown or incomplete set, or if expanded
+reward kinds are empty.
+
+`stick` is a free item kind like other ground seeds: non-empty, seedable via `-item` /
+`SeedGroundItem`, and distinct from the craft product `sticks`.
+
+M9a does not put talk, deliver, or reward on the wire.
+
+### Deliberately absent (quests). **M9a**
+
+- No talk, turn-in, or quest-log wire messages.
+- No dialog UI, quest journal chrome, or NPC talk behavior under **M9a** markers.
+- No second quest table in Go or GDScript.
 
 ## Deliberately absent
 

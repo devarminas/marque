@@ -12,6 +12,7 @@ import (
 	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/questdef"
 )
 
 const TickDuration = 150 * time.Millisecond
@@ -36,13 +37,13 @@ const (
 )
 
 const (
-	EvServerStarted  = "server_started"
-	EvServerStopping = "server_stopping"
-	EvConnected      = "client_connected"
-	EvDisconnected   = "client_disconnected"
-	EvMoveTo         = "move_to"
-	EvMoveToRejected = "move_to_rejected"
-	EvIntentIgnored  = "intent_ignored"
+	EvServerStarted   = "server_started"
+	EvServerStopping  = "server_stopping"
+	EvConnected       = "client_connected"
+	EvDisconnected    = "client_disconnected"
+	EvMoveTo          = "move_to"
+	EvMoveToRejected  = "move_to_rejected"
+	EvIntentIgnored   = "intent_ignored"
 	EvIntentDuplicate = "intent_duplicate"
 	EvPathAssigned    = "path_assigned"
 	EvArrived         = "arrived"
@@ -214,10 +215,12 @@ type World struct {
 
 	classes *classdef.Catalog
 
+	quests *questdef.Catalog
+
 	players map[mnet.PlayerID]*player
 
-	npcs       map[mnet.PlayerID]*npc
-	npcOrder   []mnet.PlayerID
+	npcs      map[mnet.PlayerID]*npc
+	npcOrder  []mnet.PlayerID
 	nextNpcID mnet.PlayerID
 
 	byConn map[*mnet.Conn]*player
@@ -257,6 +260,10 @@ func (w *World) SetAbilities(c *abilitydef.Catalog) {
 
 func (w *World) SetClasses(c *classdef.Catalog) {
 	w.classes = c
+}
+
+func (w *World) SetQuests(c *questdef.Catalog) {
+	w.quests = c
 }
 
 func (w *World) Run(ctx context.Context) {

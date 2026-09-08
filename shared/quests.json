@@ -1,0 +1,14 @@
+{
+  "quests": [
+    {
+      "id": "bring_a_stick",
+      "name": "Bring a Stick",
+      "talk_npc": "quest_giver",
+      "deliver": {
+        "kind": "stick",
+        "qty": 1
+      },
+      "reward_set": "miner"
+    }
+  ]
+}
