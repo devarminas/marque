@@ -120,12 +120,12 @@ transform = Transform3D(1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0)
 visible = false
 
 [node name="pickaxe" type="MeshInstance3D" parent="Grip/left hand"]
-transform = Transform3D(0.0588, 0, 0, 0, 0, 0.0588, 0, -0.0588, 0, 0, 0, 0.5586)
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0.5586)
 visible = false
 mesh = ExtResource("19_pickaxe")
 
 [node name="lumberjack_axe" type="MeshInstance3D" parent="Grip/left hand"]
-transform = Transform3D(0.1357, 0, 0, 0, 0, 0.1357, 0, -0.1357, 0, 0, 0, 0.4071)
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0.4071)
 visible = false
 mesh = ExtResource("20_axe")
 
@@ -152,12 +152,12 @@ transform = Transform3D(1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0)
 visible = false
 
 [node name="pickaxe" type="MeshInstance3D" parent="Grip/right hand"]
-transform = Transform3D(0.0588, 0, 0, 0, 0, 0.0588, 0, -0.0588, 0, 0, 0, 0.5586)
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0.5586)
 visible = false
 mesh = ExtResource("19_pickaxe")
 
 [node name="lumberjack_axe" type="MeshInstance3D" parent="Grip/right hand"]
-transform = Transform3D(0.1357, 0, 0, 0, 0, 0.1357, 0, -0.1357, 0, 0, 0, 0.4071)
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0.4071)
 visible = false
 mesh = ExtResource("20_axe")
 
