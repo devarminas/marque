@@ -9,15 +9,19 @@ import (
 )
 
 const (
-	KindDummy = "dummy"
+	KindDummy      = "dummy"
+	KindQuestGiver = "quest_giver"
 
 	FactionFriendly = "friendly"
 	FactionHostile  = "hostile"
+	FactionNeutral  = "neutral"
 
 	FriendlyDummyX = -3.0
 	FriendlyDummyZ = 0.0
 	EnemyDummyX    = 3.0
 	EnemyDummyZ    = 0.0
+	QuestGiverX    = 0.0
+	QuestGiverZ    = -4.0
 
 	practiceNpcIDBand mnet.PlayerID = 1_000_000
 
@@ -53,11 +57,15 @@ func (w *World) SeedPracticeDummies() error {
 	return w.seedNpc(KindDummy, FactionHostile, EnemyDummyX, EnemyDummyZ)
 }
 
+func (w *World) SeedQuestGiver() error {
+	return w.seedNpc(KindQuestGiver, FactionNeutral, QuestGiverX, QuestGiverZ)
+}
+
 func (w *World) seedNpc(kind, faction string, x, z float64) error {
 	if kind == "" {
 		return errors.New("seed npc: kind must not be empty")
 	}
-	if faction != FactionFriendly && faction != FactionHostile {
+	if faction != FactionFriendly && faction != FactionHostile && faction != FactionNeutral {
 		return fmt.Errorf("seed npc: unknown faction %q", faction)
 	}
 	if reason, detail := checkCoordinates(x, z); reason != "" {
