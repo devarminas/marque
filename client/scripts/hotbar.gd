@@ -3,23 +3,35 @@ extends Control
 const AbilityDefs := preload("res://scripts/ability_defs.gd")
 const HotbarSlotScript := preload("res://scripts/hotbar_slot.gd")
 
-const HOTBAR_1 := "hotbar_1"
-const HOTBAR_2 := "hotbar_2"
+const SLOT_COUNT := 8
 
 signal ability_activated(ability_id: String)
 
 @export var slot_1: HotbarSlotScript
 @export var slot_2: HotbarSlotScript
+@export var slot_3: HotbarSlotScript
+@export var slot_4: HotbarSlotScript
+@export var slot_5: HotbarSlotScript
+@export var slot_6: HotbarSlotScript
+@export var slot_7: HotbarSlotScript
+@export var slot_8: HotbarSlotScript
 
 var _catalog: Dictionary = AbilityDefs._empty_catalog()
 var _slot_ability := {}
 
 
+func _slot_widgets() -> Array:
+	return [slot_1, slot_2, slot_3, slot_4, slot_5, slot_6, slot_7, slot_8]
+
+
 func _ready() -> void:
-	if slot_1 != null:
-		slot_1.pressed.connect(func() -> void: _activate_slot(1))
-	if slot_2 != null:
-		slot_2.pressed.connect(func() -> void: _activate_slot(2))
+	var widgets := _slot_widgets()
+	for i in SLOT_COUNT:
+		var widget: HotbarSlotScript = widgets[i]
+		if widget == null:
+			continue
+		var slot_n := i + 1
+		widget.pressed.connect(_activate_slot.bind(slot_n))
 	reload_from_json()
 
 
@@ -35,10 +47,12 @@ func reload_from_json() -> void:
 		if typeof(ui) != TYPE_DICTIONARY:
 			continue
 		var slot_n := int(ui.get("hotbar_slot", 0))
-		if slot_n == 1 or slot_n == 2:
+		if slot_n >= 1 and slot_n <= SLOT_COUNT:
 			_slot_ability[slot_n] = row
-	_paint_slot(1, slot_1, "1")
-	_paint_slot(2, slot_2, "2")
+	var widgets := _slot_widgets()
+	for i in SLOT_COUNT:
+		var slot_n := i + 1
+		_paint_slot(slot_n, widgets[i], str(slot_n))
 
 
 func ability_id_in_slot(slot_n: int) -> String:
@@ -53,13 +67,11 @@ func catalog() -> Dictionary:
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if event.is_action_pressed(HOTBAR_1):
-		_activate_slot(1)
-		get_viewport().set_input_as_handled()
-		return
-	if event.is_action_pressed(HOTBAR_2):
-		_activate_slot(2)
-		get_viewport().set_input_as_handled()
+	for i in SLOT_COUNT:
+		if event.is_action_pressed("hotbar_%d" % (i + 1)):
+			_activate_slot(i + 1)
+			get_viewport().set_input_as_handled()
+			return
 
 
 func _input(event: InputEvent) -> void:
@@ -71,13 +83,12 @@ func _input(event: InputEvent) -> void:
 	var viewport := get_viewport()
 	if viewport == null or viewport.get_visible_rect().size.x < 200.0:
 		return
-	if _hit_slot(slot_1, button.position):
-		_activate_slot(1)
-		viewport.set_input_as_handled()
-		return
-	if _hit_slot(slot_2, button.position):
-		_activate_slot(2)
-		viewport.set_input_as_handled()
+	var widgets := _slot_widgets()
+	for i in SLOT_COUNT:
+		if _hit_slot(widgets[i], button.position):
+			_activate_slot(i + 1)
+			viewport.set_input_as_handled()
+			return
 
 
 func _hit_slot(widget: HotbarSlotScript, screen_position: Vector2) -> bool:

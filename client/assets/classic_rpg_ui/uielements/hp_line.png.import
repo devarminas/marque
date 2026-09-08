@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bicfs6xc1kncs"
-path="res://.godot/imported/mana_line2.png-715405c05b240d873558e4c0b523019e.ctex"
+uid="uid://cifs3i7arxijp"
+path="res://.godot/imported/hp_line.png-5d6baceb2130dcaecc802abf8994ef17.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/classic_rpg_ui/uielements/mana_line2.png"
-dest_files=["res://.godot/imported/mana_line2.png-715405c05b240d873558e4c0b523019e.ctex"]
+source_file="res://assets/classic_rpg_ui/uielements/hp_line.png"
+dest_files=["res://.godot/imported/hp_line.png-5d6baceb2130dcaecc802abf8994ef17.ctex"]
 
 [params]
 

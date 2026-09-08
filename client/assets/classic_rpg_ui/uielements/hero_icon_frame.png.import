@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c3wmgk85rvirp"
-path="res://.godot/imported/helm_background.png-c942931d93591f882d6dfdb49e15b9cd.ctex"
+uid="uid://dbb0ajp8pu43y"
+path="res://.godot/imported/hero_icon_frame.png-4d6137e7c795158eb56f1c49bee227a0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/classic_rpg_ui/frame_backgrounds/helm_background.png"
-dest_files=["res://.godot/imported/helm_background.png-c942931d93591f882d6dfdb49e15b9cd.ctex"]
+source_file="res://assets/classic_rpg_ui/uielements/hero_icon_frame.png"
+dest_files=["res://.godot/imported/hero_icon_frame.png-4d6137e7c795158eb56f1c49bee227a0.ctex"]
 
 [params]
 

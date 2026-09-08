@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vo6cch56ex0v"
-path="res://.godot/imported/inventory_button.png-a1102d7d363b4fdb1191560547f293eb.ctex"
+uid="uid://b60uphvx4cmli"
+path="res://.godot/imported/mana_line.png-86c48717b19302773b561e1c6ff89ca8.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/classic_rpg_ui/uielements/inventory_button.png"
-dest_files=["res://.godot/imported/inventory_button.png-a1102d7d363b4fdb1191560547f293eb.ctex"]
+source_file="res://assets/classic_rpg_ui/uielements/mana_line.png"
+dest_files=["res://.godot/imported/mana_line.png-86c48717b19302773b561e1c6ff89ca8.ctex"]
 
 [params]
 

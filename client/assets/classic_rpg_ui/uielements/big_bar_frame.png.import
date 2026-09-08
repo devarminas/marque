@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://sdrvou2muedv"
-path="res://.godot/imported/shield_background.png-47b40f290855413583015aab066c73be.ctex"
+uid="uid://dbigbarfrm01"
+path="res://.godot/imported/big_bar_frame.png-2c3382171d8e72d5001545e633db09ca.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/classic_rpg_ui/frame_backgrounds/shield_background.png"
-dest_files=["res://.godot/imported/shield_background.png-47b40f290855413583015aab066c73be.ctex"]
+source_file="res://assets/classic_rpg_ui/uielements/big_bar_frame.png"
+dest_files=["res://.godot/imported/big_bar_frame.png-2c3382171d8e72d5001545e633db09ca.ctex"]
 
 [params]
 

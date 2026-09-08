@@ -1,3 +1,0 @@
-Classic RPG UI
-Source: Classic_RPG_UI pack (UIElements, frame_backgrounds, Icons).
-No license file shipped with the pack. PNGs are used as-is for Marque client HUD chrome.
