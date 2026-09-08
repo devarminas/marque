@@ -1,8 +1,8 @@
 [gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/player_avatar.gd" id="1_avatar"]
-[ext_resource type="PackedScene" path="res://assets/kaykit/Knight.glb" id="2_knight"]
-[ext_resource type="AnimationLibrary" path="res://assets/kaykit/movement_library.tres" id="3_movement"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/base_characters/Superhero_Male_FullBody.gltf" id="2_body"]
+[ext_resource type="AnimationLibrary" path="res://assets/quaternius/animations/locomotion_library.tres" id="3_locomotion"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_click"]
 radius = 0.4
@@ -24,13 +24,13 @@ ground_y = 0.0
 face_travel_direction = true
 turn_degrees_per_second = 540.0
 
-[node name="Knight" parent="." instance=ExtResource("2_knight")]
+[node name="Body" parent="." instance=ExtResource("2_body")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-root_node = NodePath("../Knight")
+root_node = NodePath("../Body")
 libraries = {
-&"kaykit": ExtResource("3_movement")
+&"ual2": ExtResource("3_locomotion")
 }
 
 [node name="ClickBody" type="StaticBody3D" parent="."]
@@ -48,7 +48,7 @@ mesh = SubResource("TorusMesh_select")
 surface_material_override/0 = SubResource("Mat_select")
 
 [node name="HpLabel" type="Label3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
 visible = false
 pixel_size = 0.012
 text = ""

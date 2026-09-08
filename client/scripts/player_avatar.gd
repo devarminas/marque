@@ -4,9 +4,9 @@ extends Node3D
 const PolylineWalker := preload("res://scripts/polyline_walker.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 
-const WALK_ANIM := "kaykit/Running_A"
-const IDLE_ANIM := "kaykit/Idle_A"
-const WALK_SPEED_SCALE := 3.25
+const WALK_ANIM := "ual2/Walk_Carry"
+const IDLE_ANIM := "ual2/Idle_FoldArms"
+const WALK_CLIP_SPEED := 0.65
 
 var player_id := 0
 
@@ -104,7 +104,7 @@ func _set_walking(walking: bool) -> void:
 	if walking:
 		if _animation.current_animation != WALK_ANIM:
 			_animation.play(WALK_ANIM)
-		_animation.speed_scale = WALK_SPEED_SCALE
+		_animation.speed_scale = _walker.speed() / WALK_CLIP_SPEED
 		return
 	if _animation.current_animation != IDLE_ANIM:
 		_animation.play(IDLE_ANIM)

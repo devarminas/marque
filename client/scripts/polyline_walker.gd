@@ -89,6 +89,10 @@ func start_tick() -> int:
 	return _start_tick
 
 
+func speed() -> float:
+	return _speed
+
+
 func _distance_travelled_at_tick(tick: int) -> float:
 	var elapsed_seconds := maxf(0.0, float(tick - _start_tick) * _tick_seconds)
 	return elapsed_seconds * _speed
