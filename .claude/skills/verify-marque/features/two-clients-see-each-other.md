@@ -41,8 +41,9 @@ Preconditions:
 
   Client layer: per-direction displacement over 2.0 units, destinations over 3.0
   units apart, the watcher's frame-pair difference inside [0.2%, 10%], the watcher's
-  top-quarter sky band byte-identical, the walker's not, and the walker's diff at
-  least 8x the watcher's.
+  top quarter quiet (under 0.5% of its pixels differing, none by more than 2 of 255),
+  the walker's top quarter failing that same test, and the walker's diff at least 8x
+  the watcher's.
 
   Server layer, per player id resolved from that client's `DEMO joined` line: a
   `client_connected`; for a client that was given a click, a `move_to`, a
@@ -69,10 +70,10 @@ Preconditions:
 
 ## Gotchas
 
-- **Known flake:** the sky-band still-camera control. Failures cluster under GPU
-  load right after heavy suites. Geometry can match a green merge-base while the
-  sky band flips. Before you call a product regression, follow Known flake in
-  `../SKILL.md`. Two consecutive failures under load are still this flake.
+- **The sky-band flake waiver is retired (ARM-183).** The still-camera control no
+  longer demands byte-exactness, so the GPU noise that used to trip it is inside the
+  tolerance. A top-quarter failure is a finding, not something to rerun away. See
+  *The still-camera control* in `../SKILL.md` for the measured margin.
 - **A starved desktop fails every client-side assertion at once, and the failure
   looks like a frozen server.** Each capture waits 15 rendered frames. Measured on
   this machine under load, one capture took about 4.4 seconds, which is longer than

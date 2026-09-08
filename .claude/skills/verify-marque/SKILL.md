@@ -384,29 +384,41 @@ number and report what you got rather than comparing against a figure written he
   server's clock — the two `move_to` events sit ~23 ticks apart on a healthy run and
   sat 81 apart here — and free the display before believing anything visual.
 
-## Known flake
+## The still-camera control
 
-`two_client_demo.ps1`'s still-camera control is the sky-band check. It asserts
-byte-exactness over the top quarter of a GPU-rendered frame. Failures cluster under
-GPU load right after heavy suites. `DEMO pos` and path geometry can match a green
-merge-base while the sky band still flips. The control fails in the safe direction,
-never a false pass.
+This section replaces the former *Known flake* entry on the sky band, which described a
+control that no longer exists.
 
-If the demo fails on **only** "the background is not a control" with a still
-fraction near zero, use the steps below before you call a product regression.
-`two_client_demo.ps1` prints `SKY-BAND FLAKE CANDIDATE` on that shape and names
-the idle rerun and the geometry comparison.
+`two_client_demo.ps1`'s still-camera control is the top quarter of the frame. Until
+ARM-183 it asserted byte-exactness there, on the premise that the region held only sky.
+ARM-171 put a 7.265 u tree in the world, canopy pixels landed in the band, and lit
+alpha-scissored foliage is not bit-exact across two GPU frames, so the control failed on
+every run at that head.
 
-1. Compare `DEMO pos` and path geometry to a green merge-base or a prior idle pass.
-   Matching geometry is not a walk regression.
-2. Run the next `two_client_demo.ps1` on an idle machine, with no other Godot work
-   in flight.
-3. Two consecutive sky-band failures under load are still this flake. Call a
-   product regression only if the idle control also fails the sky band, or if
-   geometry differs from the green base.
+It now asserts the band is **quiet**, not identical. At most 0.5% of the band's pixels
+may differ, and no channel of any pixel by more than 2 of 255. Both bounds must hold.
+The walking pair is put through the same test and must **fail** it, so every green run
+prints both sides of the boundary and proves the tolerance still discriminates.
 
-Measured shape of the flake: two consecutive sky-band failures immediately after
-heavy suites, merge-base geometry identical, three later idle passes green.
+Measured across five idle runs at `0a19b2d` and two on `main`, 1280x720, band 230,400 px:
+
+| Pair | Differing pixels | Max channel delta |
+|---|---|---|
+| Still camera, canopy in the band | 8, 0.0035%, every run | 1 |
+| Still camera, no canopy in the band | 0 | 0 |
+| Camera that walked | 98,000–151,000, 43%–65% | 155 |
+
+The tolerance sits near the geometric middle of that four-order-of-magnitude gap.
+
+**The sky-band waiver is retired. A band failure is a finding.** The old advice was to
+rerun on an idle machine and treat a lone band failure as noise; that advice now points
+at the only control this demo has for a camera that moved when it should have been
+still. The noise it used to excuse is inside the tolerance. `SKY-BAND FLAKE CANDIDATE`
+is no longer printed by anything.
+
+A band failure names its own numbers. Read them: a handful of pixels off by 1 that
+somehow cleared the bound is a different problem from half the band off by 155, which is
+a camera that moved.
 
 ## Feature map
 
