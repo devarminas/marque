@@ -9,10 +9,11 @@ const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const WornSlotScript := preload("res://scripts/worn_slot.gd")
 const ItemKinds := preload("res://scripts/item_kinds.gd")
+const ClassDefs := preload("res://scripts/class_defs.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
 const WIRE_SIZE := 28
-const AXE_SLOT := WIRE_SIZE - 1
+const SWORD_SLOT := WIRE_SIZE - 1
 const CAMERA_HEIGHT := 20.0
 
 @onready var _world: Node3D = $World
@@ -71,7 +72,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().physics_frame
 
-	_test_axe_is_a_known_kind()
+	_test_every_wearable_kind_is_known()
 	await _test_equipment_restatement_draws_and_clears()
 	await _test_left_click_uses_not_drops()
 	await _test_right_click_equips()
@@ -86,9 +87,25 @@ func _ready() -> void:
 	_finished = true
 
 
-func _test_axe_is_a_known_kind() -> void:
-	_check(ItemKinds.is_known("axe"), 'item_kinds.gd knows "axe"')
-	_check(not ItemKinds.is_known("sword"), "and unknown kinds stay unknown")
+func _test_every_wearable_kind_is_known() -> void:
+	var wearables := ClassDefs.wearable_kinds(ClassDefs.load_sets())
+	_check(
+		wearables.size() > 0,
+		"shared/sets.json resolved %d wearable kind(s), so this cannot pass vacuously"
+		% wearables.size(),
+	)
+	var missing := PackedStringArray()
+	for kind: String in wearables:
+		if not ItemKinds.is_known(kind):
+			missing.append(kind)
+	_check(
+		missing.is_empty(),
+		"item_kinds.gd knows every wearable sets.json ships, missing [%s]" % ", ".join(missing),
+	)
+	_check(
+		not ItemKinds.is_known("bewilderment"),
+		"and a kind no shared table names stays unknown",
+	)
 
 
 func _test_equipment_restatement_draws_and_clears() -> void:
@@ -96,17 +113,17 @@ func _test_equipment_restatement_draws_and_clears() -> void:
 	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}')
 	_check(_equipment.kind_in_slot("right hand") == "", "an empty equipment frame clears the weapon slot")
 
-	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}')
+	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"sword"}]}}')
 	_check(
-		_equipment.kind_in_slot("right hand") == "axe",
-		'an equipment frame with an axe draws it in weapon, got "%s"' % _equipment.kind_in_slot("right hand"),
+		_equipment.kind_in_slot("right hand") == "sword",
+		'an equipment frame with a sword draws it in weapon, got "%s"' % _equipment.kind_in_slot("right hand"),
 	)
 	var slot := _equipment.slot_at("right hand")
 	_check(slot != null, "which is the authored worn slot widget")
 	if slot != null:
 		_check(
 			slot.display_color() == slot.known_color,
-			"and draws axe green like a known inventory kind, got %s" % [slot.display_color()],
+			"and draws sword green like a known inventory kind, got %s" % [slot.display_color()],
 		)
 
 	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}')
@@ -119,20 +136,20 @@ func _test_equipment_restatement_draws_and_clears() -> void:
 func _test_left_click_uses_not_drops() -> void:
 	_equipment.visible = true
 	await _feed(
-		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"axe"}]}}'
-		% [WIRE_SIZE, AXE_SLOT]
+		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"sword"}]}}'
+		% [WIRE_SIZE, SWORD_SLOT]
 	)
 	_watch()
-	await _left_click_slot(AXE_SLOT)
+	await _left_click_slot(SWORD_SLOT)
 	_check(_use_intents.is_empty(), "the first left-click selects and sends no use yet")
 	_check(_drop_intents.is_empty(), "and sends no drop")
 	_check(_equip_intents.is_empty(), "and sends no equip")
 	_check(_session.has_pending_use(), "with a pending use selection")
 
-	await _left_click_slot(AXE_SLOT)
+	await _left_click_slot(SWORD_SLOT)
 	_check(
-		_use_intents.size() == 1 and _use_intents[0] == Vector2i(AXE_SLOT, AXE_SLOT),
-		"the second left-click sends use on slot %d, got %s" % [AXE_SLOT, _use_intents],
+		_use_intents.size() == 1 and _use_intents[0] == Vector2i(SWORD_SLOT, SWORD_SLOT),
+		"the second left-click sends use on slot %d, got %s" % [SWORD_SLOT, _use_intents],
 	)
 	_check(_drop_intents.is_empty(), "and still no drop")
 	_check(_equip_intents.is_empty(), "and still no equip")
@@ -141,20 +158,20 @@ func _test_left_click_uses_not_drops() -> void:
 func _test_right_click_equips() -> void:
 	_equipment.visible = true
 	await _feed(
-		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"axe"}]}}'
-		% [WIRE_SIZE, AXE_SLOT]
+		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"sword"}]}}'
+		% [WIRE_SIZE, SWORD_SLOT]
 	)
 	_watch()
-	await _right_click_slot(AXE_SLOT)
+	await _right_click_slot(SWORD_SLOT)
 	_check(
-		_equip_intents.size() == 1 and _equip_intents[0] == AXE_SLOT,
-		"right-clicking the bag axe sends equip naming slot %d, got %s"
-		% [AXE_SLOT, _equip_intents],
+		_equip_intents.size() == 1 and _equip_intents[0] == SWORD_SLOT,
+		"right-clicking the bag sword sends equip naming slot %d, got %s"
+		% [SWORD_SLOT, _equip_intents],
 	)
 	_check(_drop_intents.is_empty(), "and sends no drop")
 
 	_watch()
-	var stamped := NetClientScript.equip_frame(AXE_SLOT, _net.take_seq())
+	var stamped := NetClientScript.equip_frame(SWORD_SLOT, _net.take_seq())
 	_check(
 		(stamped["equip"] as Dictionary).has("seq"),
 		"equip carries seq when the client stamps it, got %s" % JSON.stringify(stamped),
@@ -163,23 +180,23 @@ func _test_right_click_equips() -> void:
 
 func _test_drag_bag_to_weapon_equips() -> void:
 	await _feed(
-		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"axe"}]}}'
-		% [WIRE_SIZE, AXE_SLOT]
+		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"sword"}]}}'
+		% [WIRE_SIZE, SWORD_SLOT]
 	)
 	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[]}}')
 	_equipment.visible = true
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	var bag := _inventory.slot_at(AXE_SLOT)
+	var bag := _inventory.slot_at(SWORD_SLOT)
 	var worn := _equipment.slot_at("right hand")
 	_check(bag != null and worn != null, "both bag and weapon slots are drawn for drag")
 
 	_watch()
 	var data: Variant = bag._get_drag_data(Vector2.ZERO)
 	_check(
-		data != null and int(data["bag_slot"]) == AXE_SLOT,
-		"an occupied bag slot offers drag data naming slot %d, got %s" % [AXE_SLOT, data],
+		data != null and int(data["bag_slot"]) == SWORD_SLOT,
+		"an occupied bag slot offers drag data naming slot %d, got %s" % [SWORD_SLOT, data],
 	)
 	_check(
 		data != null and worn._can_drop_data(Vector2.ZERO, data),
@@ -188,19 +205,19 @@ func _test_drag_bag_to_weapon_equips() -> void:
 	if data != null:
 		worn._drop_data(Vector2.ZERO, data)
 	_check(
-		_equip_intents.size() == 1 and _equip_intents[0] == AXE_SLOT,
-		"dropping bag slot %d onto weapon sends equip, got %s" % [AXE_SLOT, _equip_intents],
+		_equip_intents.size() == 1 and _equip_intents[0] == SWORD_SLOT,
+		"dropping bag slot %d onto weapon sends equip, got %s" % [SWORD_SLOT, _equip_intents],
 	)
 
 
 func _test_activate_worn_unequips() -> void:
-	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}')
+	await _feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"sword"}]}}')
 	_equipment.visible = true
 	await get_tree().process_frame
 	await get_tree().process_frame
 
 	var worn := _equipment.slot_at("right hand")
-	_check(worn != null and worn.is_occupied(), "the weapon slot holds an axe to unequip")
+	_check(worn != null and worn.is_occupied(), "the weapon slot holds a sword to unequip")
 
 	_watch()
 	worn.activated.emit(worn.worn_name)
@@ -210,8 +227,8 @@ func _test_activate_worn_unequips() -> void:
 		'activating worn right hand sends unequip naming "right hand", got %s' % _unequip_intents,
 	)
 	_check(
-		_equipment.kind_in_slot("right hand") == "axe",
-		"and the panel still shows the axe until the server restates it",
+		_equipment.kind_in_slot("right hand") == "sword",
+		"and the panel still shows the sword until the server restates it",
 	)
 
 

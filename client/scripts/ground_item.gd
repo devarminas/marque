@@ -2,7 +2,7 @@ extends StaticBody3D
 
 
 const KIND_SCENES := {
-	"axe": preload("res://scenes/ground_item_axe.tscn"),
+	"lumberjack_axe": preload("res://scenes/ground_item_lumberjack_axe.tscn"),
 }
 
 const ItemKinds := preload("res://scripts/item_kinds.gd")

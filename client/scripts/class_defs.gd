@@ -121,6 +121,32 @@ static func set_ids(catalog: Dictionary) -> PackedStringArray:
 	return PackedStringArray(by_id.keys())
 
 
+static func tool_kinds(catalog: Dictionary) -> PackedStringArray:
+	var kinds := PackedStringArray()
+	for record: Dictionary in _sets(catalog):
+		var tools: Variant = record.get("tools")
+		if typeof(tools) != TYPE_DICTIONARY:
+			continue
+		for kind: Variant in (tools as Dictionary).keys():
+			if typeof(kind) == TYPE_STRING and not kinds.has(kind):
+				kinds.append(String(kind))
+	kinds.sort()
+	return kinds
+
+
+static func wearable_kinds(catalog: Dictionary) -> PackedStringArray:
+	var kinds := tool_kinds(catalog)
+	for record: Dictionary in _sets(catalog):
+		var slots: Variant = record.get("slots")
+		if typeof(slots) != TYPE_DICTIONARY:
+			continue
+		for kind: Variant in (slots as Dictionary).values():
+			if typeof(kind) == TYPE_STRING and not kinds.has(kind):
+				kinds.append(String(kind))
+	kinds.sort()
+	return kinds
+
+
 static func skill_ids(catalog: Dictionary) -> PackedStringArray:
 	var by_id: Dictionary = catalog.get("by_skill_id", {})
 	return PackedStringArray(by_id.keys())
@@ -146,6 +172,16 @@ static func resolve_path(rel: String, env_name: String) -> String:
 			break
 		dir = parent
 	return ""
+
+
+static func _sets(catalog: Dictionary) -> Array[Dictionary]:
+	var records: Array[Dictionary] = []
+	var by_id: Dictionary = catalog.get("by_set_id", {})
+	for id: Variant in by_id.keys():
+		var entry: Variant = by_id[id]
+		if typeof(entry) == TYPE_DICTIONARY:
+			records.append(entry)
+	return records
 
 
 static func _empty_for(catalog_key: String) -> Dictionary:

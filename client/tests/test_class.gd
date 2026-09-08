@@ -122,7 +122,7 @@ func _test_equipment_without_class_frame_does_not_invent() -> void:
 	_check(_class_hud.text == "Knight", "knight is shown before the equipment-only frame")
 	await _feed(
 		'{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],'
-		+ '"slots":[{"slot":"right hand","kind":"axe"}]}}'
+		+ '"slots":[{"slot":"right hand","kind":"sword"}]}}'
 	)
 	_check(
 		_class_hud.text == "Knight",
