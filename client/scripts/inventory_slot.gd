@@ -5,6 +5,8 @@ const ItemKinds := preload("res://scripts/item_kinds.gd")
 
 signal equip_requested(slot: int)
 
+signal drop_requested(slot: int)
+
 var slot_index := -1
 
 var kind := ""
@@ -58,12 +60,15 @@ func display_color() -> Color:
 func _gui_input(event: InputEvent) -> void:
 	if not is_occupied():
 		return
-	if (
-		event is InputEventMouseButton
-		and event.pressed
-		and event.button_index == MOUSE_BUTTON_RIGHT
-	):
+	var button := event as InputEventMouseButton
+	if button == null or not button.pressed:
+		return
+	if button.button_index == MOUSE_BUTTON_RIGHT:
 		equip_requested.emit(slot_index)
+		accept_event()
+		return
+	if button.button_index == MOUSE_BUTTON_LEFT and button.shift_pressed:
+		drop_requested.emit(slot_index)
 		accept_event()
 
 
