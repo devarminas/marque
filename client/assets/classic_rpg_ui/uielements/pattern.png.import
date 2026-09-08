@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dkeojkcjrth2p"
-path="res://.godot/imported/chest_background.png-add9aca6bc3a50da2236f700175753ed.ctex"
+uid="uid://cpatternorn01"
+path="res://.godot/imported/pattern.png-03c5a7a021ec11f1e87f1c110cda7df4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/classic_rpg_ui/frame_backgrounds/chest_background.png"
-dest_files=["res://.godot/imported/chest_background.png-add9aca6bc3a50da2236f700175753ed.ctex"]
+source_file="res://assets/classic_rpg_ui/uielements/pattern.png"
+dest_files=["res://.godot/imported/pattern.png-03c5a7a021ec11f1e87f1c110cda7df4.ctex"]
 
 [params]
 

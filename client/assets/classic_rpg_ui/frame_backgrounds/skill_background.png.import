@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dns6fmr1nw1uo"
-path="res://.godot/imported/inventory_frame.png-b169d24b4ad1bfd48e182f51b8c65feb.ctex"
+uid="uid://cskillbg01frm"
+path="res://.godot/imported/skill_background.png-146dcf173c090f74a0b074b5353d7810.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/classic_rpg_ui/uielements/inventory_frame.png"
-dest_files=["res://.godot/imported/inventory_frame.png-b169d24b4ad1bfd48e182f51b8c65feb.ctex"]
+source_file="res://assets/classic_rpg_ui/frame_backgrounds/skill_background.png"
+dest_files=["res://.godot/imported/skill_background.png-146dcf173c090f74a0b074b5353d7810.ctex"]
 
 [params]
 

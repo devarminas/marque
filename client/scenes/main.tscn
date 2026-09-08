@@ -1,37 +1,37 @@
-[gd_scene load_steps=47 format=3 uid="uid://bbk0w4hee5gof"]
+[gd_scene format=3 uid="uid://bbk0w4hee5gof"]
 
-[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="2_checker"]
-[ext_resource type="Script" path="res://scripts/camera_rig.gd" id="3_camera_rig"]
-[ext_resource type="Script" path="res://scripts/ground_picker.gd" id="4_ground_picker"]
+[ext_resource type="Script" uid="uid://bujmuw0kvse7u" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Shader" uid="uid://b42cb3f7ccs7f" path="res://materials/ground_checker.gdshader" id="2_checker"]
+[ext_resource type="Script" uid="uid://bctsfdj8kxm0h" path="res://scripts/camera_rig.gd" id="3_camera_rig"]
+[ext_resource type="Script" uid="uid://cnigf73724uvc" path="res://scripts/ground_picker.gd" id="4_ground_picker"]
 [ext_resource type="PackedScene" path="res://scenes/player_avatar.tscn" id="5_avatar"]
-[ext_resource type="Script" path="res://scripts/session.gd" id="6_session"]
-[ext_resource type="Script" path="res://scripts/net_client.gd" id="7_net_client"]
-[ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
-[ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
+[ext_resource type="Script" uid="uid://bdvlomijvk648" path="res://scripts/session.gd" id="6_session"]
+[ext_resource type="Script" uid="uid://b2mi4v2jwa840" path="res://scripts/net_client.gd" id="7_net_client"]
+[ext_resource type="Script" uid="uid://c0t3arwroe80t" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
+[ext_resource type="Script" uid="uid://qd1w0fek3agn" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
 [ext_resource type="PackedScene" path="res://scenes/worn_slot.tscn" id="10_worn_slot"]
-[ext_resource type="Script" path="res://scripts/hp_hud.gd" id="11_hp_hud"]
-[ext_resource type="Script" path="res://scripts/class_hud.gd" id="15_class_hud"]
-[ext_resource type="Script" path="res://scripts/class_debug.gd" id="16_class_debug"]
-[ext_resource type="Script" path="res://scripts/error_hud.gd" id="17_error_hud"]
-[ext_resource type="Script" path="res://scripts/death_overlay.gd" id="12_death_overlay"]
-[ext_resource type="Script" path="res://scripts/hotbar.gd" id="13_hotbar"]
+[ext_resource type="Script" uid="uid://bvm0tvkuu63ld" path="res://scripts/hp_hud.gd" id="11_hp_hud"]
+[ext_resource type="Script" uid="uid://opox48l75jhl" path="res://scripts/death_overlay.gd" id="12_death_overlay"]
+[ext_resource type="Script" uid="uid://b6507fg5vyc32" path="res://scripts/hotbar.gd" id="13_hotbar"]
 [ext_resource type="PackedScene" path="res://scenes/hotbar_slot.tscn" id="14_hotbar_slot"]
-[ext_resource type="Script" path="res://scripts/cursor_hint.gd" id="18_cursor_hint"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/basic_bar.png" id="19_bar_bg"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_line2.png" id="20_hp_line"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/mana_line2.png" id="21_mana_line"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_frame.png" id="22_hp_frame"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/inventory_frame.png" id="23_inv_frame"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/skill_bar.png" id="24_skill_bar"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/inventory_button.png" id="25_inv_btn"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/inventory_button2.png" id="26_inv_btn2"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/icons/inventory.png" id="27_inv_icon"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/frame_backgrounds/helm_background.png" id="28_helm"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/frame_backgrounds/chest_background.png" id="29_chest"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/frame_backgrounds/pants_background.png" id="30_pants"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/frame_backgrounds/shield_background.png" id="31_shield"]
-[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/frame_backgrounds/melee_background.png" id="32_melee"]
+[ext_resource type="Script" uid="uid://bcjrbpj3t0ulx" path="res://scripts/class_hud.gd" id="15_class_hud"]
+[ext_resource type="Script" uid="uid://bx8jwm35lqy45" path="res://scripts/class_debug.gd" id="16_class_debug"]
+[ext_resource type="Script" uid="uid://vc5x0kfnxuk2" path="res://scripts/error_hud.gd" id="17_error_hud"]
+[ext_resource type="Script" uid="uid://bw37kem77qtdf" path="res://scripts/cursor_hint.gd" id="18_cursor_hint"]
+[ext_resource type="Texture2D" uid="uid://biem1kwgp17eg" path="res://assets/classic_rpg_ui/uielements/basic_bar2.png" id="19_tray"]
+[ext_resource type="Texture2D" uid="uid://cifs3i7arxijp" path="res://assets/classic_rpg_ui/uielements/hp_line.png" id="20_hp_line"]
+[ext_resource type="Texture2D" uid="uid://b60uphvx4cmli" path="res://assets/classic_rpg_ui/uielements/mana_line.png" id="21_mana_line"]
+[ext_resource type="Texture2D" uid="uid://cinvryl1eotbn" path="res://assets/classic_rpg_ui/uielements/hp_frame.png" id="22_hp_frame"]
+[ext_resource type="Texture2D" uid="uid://dbigbarbg01ui" path="res://assets/classic_rpg_ui/uielements/big_bar_bg.png" id="23_inv_frame"]
+[ext_resource type="Texture2D" uid="uid://g4x8lmnsfbni" path="res://assets/classic_rpg_ui/uielements/skill_bar.png" id="24_skill_bar"]
+[ext_resource type="Texture2D" uid="uid://b6pu50vveyfre" path="res://assets/classic_rpg_ui/uielements/inventory_frame_little.png" id="25_inv_little"]
+[ext_resource type="Texture2D" uid="uid://bnm5pssleklxs" path="res://assets/classic_rpg_ui/uielements/inventory_frame_little_ready.png" id="26_inv_little_ready"]
+[ext_resource type="Texture2D" uid="uid://bem10yko7k2or" path="res://assets/classic_rpg_ui/icons/inventory.png" id="27_inv_icon"]
+[ext_resource type="Texture2D" uid="uid://bkobrlngix7xt" path="res://assets/classic_rpg_ui/uielements/inventory_frame_little_off.png" id="33_inv_little_off"]
+[ext_resource type="Texture2D" uid="uid://dbb0ajp8pu43y" path="res://assets/classic_rpg_ui/uielements/hero_icon_frame.png" id="34_hero_frame"]
+[ext_resource type="Texture2D" uid="uid://c2sehvwrlgfep" path="res://assets/classic_rpg_ui/uielements/hero_icon_frame_bg.png" id="35_hero_bg"]
+[ext_resource type="Texture2D" uid="uid://dbigbarfrm01" path="res://assets/classic_rpg_ui/uielements/big_bar_frame.png" id="36_dock_frame"]
+[ext_resource type="Texture2D" uid="uid://cpatternorn01" path="res://assets/classic_rpg_ui/uielements/pattern.png" id="37_pattern"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.38, 0.5, 0.68, 1)
@@ -47,6 +47,7 @@ background_mode = 2
 sky = SubResource("Sky_world")
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_ground"]
+render_priority = 0
 shader = ExtResource("2_checker")
 shader_parameter/color_a = Color(0.44, 0.44, 0.45, 1)
 shader_parameter/color_b = Color(0.33, 0.33, 0.34, 1)
@@ -58,54 +59,39 @@ size = Vector2(100, 100)
 [sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
 size = Vector3(100, 1, 100)
 
-[sub_resource type="StyleBoxTexture" id="style_hp_bg"]
+[sub_resource type="StyleBoxTexture" id="style_dock_panel"]
+texture = ExtResource("23_inv_frame")
+
+[sub_resource type="StyleBoxEmpty" id="style_inv_panel_clear"]
+
+[sub_resource type="StyleBoxTexture" id="style_inv_toggle"]
 content_margin_left = 4.0
-content_margin_top = 3.0
+content_margin_top = 4.0
 content_margin_right = 4.0
-content_margin_bottom = 3.0
-texture = ExtResource("19_bar_bg")
-texture_margin_left = 16.0
-texture_margin_top = 12.0
-texture_margin_right = 16.0
-texture_margin_bottom = 12.0
+content_margin_bottom = 4.0
+texture = ExtResource("25_inv_little")
+
+[sub_resource type="StyleBoxTexture" id="style_inv_toggle_off"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+texture = ExtResource("33_inv_little_off")
+
+[sub_resource type="StyleBoxTexture" id="style_inv_toggle_hover"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+texture = ExtResource("26_inv_little_ready")
+
+[sub_resource type="StyleBoxEmpty" id="style_bar_bg"]
 
 [sub_resource type="StyleBoxTexture" id="style_hp_fill"]
 texture = ExtResource("20_hp_line")
-texture_margin_left = 8.0
-texture_margin_top = 6.0
-texture_margin_right = 8.0
-texture_margin_bottom = 6.0
-
-[sub_resource type="StyleBoxTexture" id="style_mana_bg"]
-content_margin_left = 4.0
-content_margin_top = 3.0
-content_margin_right = 4.0
-content_margin_bottom = 3.0
-texture = ExtResource("19_bar_bg")
-texture_margin_left = 16.0
-texture_margin_top = 12.0
-texture_margin_right = 16.0
-texture_margin_bottom = 12.0
 
 [sub_resource type="StyleBoxTexture" id="style_mana_fill"]
 texture = ExtResource("21_mana_line")
-texture_margin_left = 8.0
-texture_margin_top = 6.0
-texture_margin_right = 8.0
-texture_margin_bottom = 6.0
-
-[sub_resource type="StyleBoxTexture" id="style_dock_panel"]
-content_margin_left = 6.0
-content_margin_top = 6.0
-content_margin_right = 6.0
-content_margin_bottom = 6.0
-texture = ExtResource("23_inv_frame")
-texture_margin_left = 28.0
-texture_margin_top = 28.0
-texture_margin_right = 28.0
-texture_margin_bottom = 28.0
-
-[sub_resource type="StyleBoxEmpty" id="style_inv_panel_clear"]
 
 [sub_resource type="StyleBoxTexture" id="style_hotbar_bar"]
 content_margin_left = 8.0
@@ -113,109 +99,68 @@ content_margin_top = 6.0
 content_margin_right = 8.0
 content_margin_bottom = 6.0
 texture = ExtResource("24_skill_bar")
-texture_margin_left = 48.0
-texture_margin_top = 24.0
-texture_margin_right = 48.0
-texture_margin_bottom = 24.0
 
-[sub_resource type="StyleBoxTexture" id="style_inv_toggle"]
-content_margin_left = 2.0
-content_margin_top = 2.0
-content_margin_right = 2.0
-content_margin_bottom = 2.0
-texture = ExtResource("25_inv_btn")
-texture_margin_left = 12.0
-texture_margin_top = 12.0
-texture_margin_right = 12.0
-texture_margin_bottom = 12.0
-
-[sub_resource type="StyleBoxTexture" id="style_inv_toggle_hover"]
-content_margin_left = 2.0
-content_margin_top = 2.0
-content_margin_right = 2.0
-content_margin_bottom = 2.0
-texture = ExtResource("26_inv_btn2")
-texture_margin_left = 12.0
-texture_margin_top = 12.0
-texture_margin_right = 12.0
-texture_margin_bottom = 12.0
-
-[node name="Main" type="Node3D"]
+[node name="Main" type="Node3D" unique_id=2028602151]
 script = ExtResource("1_main")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1758264518]
 environment = SubResource("Environment_world")
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1484285029]
 transform = Transform3D(0.81915206, 0.43938506, -0.36868784, 0, 0.64278764, 0.76604444, 0.57357645, -0.62750685, 0.5265408, 0, 12, 0)
 light_energy = 1.2
 shadow_enabled = true
 
-[node name="Ground" type="StaticBody3D" parent="."]
-collision_layer = 1
+[node name="Ground" type="StaticBody3D" parent="." unique_id=1477568974]
 collision_mask = 0
 
-[node name="Mesh" type="MeshInstance3D" parent="Ground"]
-mesh = SubResource("PlaneMesh_ground")
+[node name="Mesh" type="MeshInstance3D" parent="Ground" unique_id=493739344]
 material_override = SubResource("ShaderMaterial_ground")
+mesh = SubResource("PlaneMesh_ground")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground" unique_id=233083022]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 shape = SubResource("BoxShape3D_ground")
 
-[node name="Player" parent="." instance=ExtResource("5_avatar")]
+[node name="Player" parent="." unique_id=269123760 instance=ExtResource("5_avatar")]
 
-[node name="RemotePlayers" type="Node3D" parent="."]
+[node name="RemotePlayers" type="Node3D" parent="." unique_id=973316163]
 
-[node name="Npcs" type="Node3D" parent="."]
+[node name="Npcs" type="Node3D" parent="." unique_id=1018132021]
 
-[node name="GroundItems" type="Node3D" parent="."]
+[node name="GroundItems" type="Node3D" parent="." unique_id=1026830414]
 
-[node name="ResourceNodes" type="Node3D" parent="."]
+[node name="ResourceNodes" type="Node3D" parent="." unique_id=1065422964]
 
-[node name="CameraRig" type="Node3D" parent="." node_paths=PackedStringArray("target", "camera")]
+[node name="CameraRig" type="Node3D" parent="." unique_id=1366651004 node_paths=PackedStringArray("target", "camera")]
 transform = Transform3D(0.8660254, -0.28678823, 0.40957603, 0, 0.81915206, 0.57357645, -0.5, -0.49673176, 0.7094065, 0, 0, 0)
 script = ExtResource("3_camera_rig")
 target = NodePath("../Player")
 camera = NodePath("Camera3D")
-orbit_degrees_per_pixel = 0.35
-zoom_step = 1.5
-follow_damping = 12.0
-pitch_min_degrees = -80.0
-pitch_max_degrees = -12.0
-distance_min = 4.0
-distance_max = 32.0
-default_yaw_degrees = 30.0
-default_pitch_degrees = -35.0
-default_distance = 14.0
 
-[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+[node name="Camera3D" type="Camera3D" parent="CameraRig" unique_id=1177895069]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 14)
 fov = 60.0
 
-[node name="GroundPicker" type="Node" parent="." node_paths=PackedStringArray("camera")]
+[node name="GroundPicker" type="Node" parent="." unique_id=765795977 node_paths=PackedStringArray("camera")]
 script = ExtResource("4_ground_picker")
 camera = NodePath("../CameraRig/Camera3D")
-ray_length = 4096.0
-ground_collision_mask = 1
-item_collision_mask = 2
-player_collision_mask = 4
-node_collision_mask = 8
 
-[node name="CursorHint" type="Node" parent="." node_paths=PackedStringArray("picker", "camera", "local_player", "chrome_layer")]
+[node name="CursorHint" type="Node" parent="." unique_id=298958687 node_paths=PackedStringArray("picker", "camera", "local_player", "chrome_layer")]
 script = ExtResource("18_cursor_hint")
 picker = NodePath("../GroundPicker")
 camera = NodePath("../CameraRig/Camera3D")
 local_player = NodePath("../Player")
 chrome_layer = NodePath("../UI")
 
-[node name="Recheck" type="Timer" parent="CursorHint"]
+[node name="Recheck" type="Timer" parent="CursorHint" unique_id=805402287]
 wait_time = 0.25
 autostart = true
 
-[node name="UI" type="CanvasLayer" parent="."]
+[node name="UI" type="CanvasLayer" parent="." unique_id=1728807949]
 
-[node name="RightDock" type="PanelContainer" parent="UI" node_paths=PackedStringArray("helmet_slot", "left_hand_slot", "chest_slot", "right_hand_slot", "trousers_slot")]
+[node name="RightDock" type="PanelContainer" parent="UI" unique_id=1705162684 node_paths=PackedStringArray("helmet_slot", "left_hand_slot", "chest_slot", "right_hand_slot", "trousers_slot")]
+visible = false
 anchors_preset = 3
 anchor_left = 1.0
 anchor_top = 1.0
@@ -227,8 +172,6 @@ offset_right = -16.0
 offset_bottom = -16.0
 grow_horizontal = 0
 grow_vertical = 0
-visible = false
-mouse_filter = 0
 theme_override_styles/panel = SubResource("style_dock_panel")
 script = ExtResource("9_equipment_panel")
 helmet_slot = NodePath("Margin/Rows/WornCross/HelmetRow/HelmetSlot")
@@ -237,7 +180,13 @@ chest_slot = NodePath("Margin/Rows/WornCross/HandsRow/ChestSlot")
 right_hand_slot = NodePath("Margin/Rows/WornCross/HandsRow/RightHandSlot")
 trousers_slot = NodePath("Margin/Rows/WornCross/TrousersRow/TrousersSlot")
 
-[node name="Margin" type="MarginContainer" parent="UI/RightDock"]
+[node name="Frame" type="NinePatchRect" parent="UI/RightDock" unique_id=1901801801]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+texture = ExtResource("36_dock_frame")
+
+[node name="Margin" type="MarginContainer" parent="UI/RightDock" unique_id=1615768542]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/margin_left = 10
@@ -245,74 +194,58 @@ theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 10
 
-[node name="Rows" type="VBoxContainer" parent="UI/RightDock/Margin"]
+[node name="Rows" type="VBoxContainer" parent="UI/RightDock/Margin" unique_id=1608344052]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 8
 
-[node name="WornCross" type="VBoxContainer" parent="UI/RightDock/Margin/Rows"]
+[node name="WornCross" type="VBoxContainer" parent="UI/RightDock/Margin/Rows" unique_id=1771539722]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="HelmetRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross"]
+[node name="HelmetRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross" unique_id=1435202488]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 4
 alignment = 1
-theme_override_constants/separation = 4
 
-[node name="HelmetSlot" parent="UI/RightDock/Margin/Rows/WornCross/HelmetRow" instance=ExtResource("10_worn_slot")]
+[node name="HelmetSlot" parent="UI/RightDock/Margin/Rows/WornCross/HelmetRow" unique_id=1549102459 instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
-[node name="EmptyArt" parent="UI/RightDock/Margin/Rows/WornCross/HelmetRow/HelmetSlot" index="0"]
-texture = ExtResource("28_helm")
-
-[node name="HandsRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross"]
+[node name="HandsRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross" unique_id=534671497]
 layout_mode = 2
 mouse_filter = 2
-alignment = 1
 theme_override_constants/separation = 4
+alignment = 1
 
-[node name="LeftHandSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" instance=ExtResource("10_worn_slot")]
+[node name="LeftHandSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" unique_id=1867274162 instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
-[node name="EmptyArt" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow/LeftHandSlot" index="0"]
-texture = ExtResource("31_shield")
-
-[node name="ChestSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" instance=ExtResource("10_worn_slot")]
+[node name="ChestSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" unique_id=590228089 instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
-[node name="EmptyArt" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow/ChestSlot" index="0"]
-texture = ExtResource("29_chest")
-
-[node name="RightHandSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" instance=ExtResource("10_worn_slot")]
+[node name="RightHandSlot" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow" unique_id=1605993163 instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
-[node name="EmptyArt" parent="UI/RightDock/Margin/Rows/WornCross/HandsRow/RightHandSlot" index="0"]
-texture = ExtResource("32_melee")
-
-[node name="TrousersRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross"]
+[node name="TrousersRow" type="HBoxContainer" parent="UI/RightDock/Margin/Rows/WornCross" unique_id=1572959419]
 layout_mode = 2
 mouse_filter = 2
-alignment = 1
 theme_override_constants/separation = 4
+alignment = 1
 
-[node name="TrousersSlot" parent="UI/RightDock/Margin/Rows/WornCross/TrousersRow" instance=ExtResource("10_worn_slot")]
+[node name="TrousersSlot" parent="UI/RightDock/Margin/Rows/WornCross/TrousersRow" unique_id=768099476 instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
-[node name="EmptyArt" parent="UI/RightDock/Margin/Rows/WornCross/TrousersRow/TrousersSlot" index="0"]
-texture = ExtResource("30_pants")
-
-[node name="InventoryPanel" type="PanelContainer" parent="UI/RightDock/Margin/Rows" node_paths=PackedStringArray("slot_grid", "heading")]
+[node name="InventoryPanel" type="PanelContainer" parent="UI/RightDock/Margin/Rows" unique_id=1701428772 node_paths=PackedStringArray("slot_grid", "heading")]
 layout_mode = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("style_inv_panel_clear")
 script = ExtResource("8_inventory_panel")
 slot_grid = NodePath("Margin/Rows/Slots")
 heading = NodePath("Margin/Rows/Heading")
-unknown_heading = "Inventory —"
 
-[node name="Margin" type="MarginContainer" parent="UI/RightDock/Margin/Rows/InventoryPanel"]
+[node name="Margin" type="MarginContainer" parent="UI/RightDock/Margin/Rows/InventoryPanel" unique_id=1813670329]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/margin_left = 0
@@ -320,60 +253,77 @@ theme_override_constants/margin_top = 0
 theme_override_constants/margin_right = 0
 theme_override_constants/margin_bottom = 0
 
-[node name="Rows" type="VBoxContainer" parent="UI/RightDock/Margin/Rows/InventoryPanel/Margin"]
+[node name="Rows" type="VBoxContainer" parent="UI/RightDock/Margin/Rows/InventoryPanel/Margin" unique_id=447094367]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 6
 
-[node name="Heading" type="Label" parent="UI/RightDock/Margin/Rows/InventoryPanel/Margin/Rows"]
+[node name="Heading" type="Label" parent="UI/RightDock/Margin/Rows/InventoryPanel/Margin/Rows" unique_id=679777839]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
 theme_override_font_sizes/font_size = 14
 text = "Inventory —"
 
-[node name="Slots" type="GridContainer" parent="UI/RightDock/Margin/Rows/InventoryPanel/Margin/Rows"]
+[node name="Slots" type="GridContainer" parent="UI/RightDock/Margin/Rows/InventoryPanel/Margin/Rows" unique_id=1565320478]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/h_separation = 4
 theme_override_constants/v_separation = 4
 columns = 4
 
-[node name="InventoryToggle" type="Button" parent="UI"]
+[node name="InventoryToggle" type="Button" parent="UI" unique_id=1910661811]
+custom_minimum_size = Vector2(32, 32)
 anchors_preset = 3
 anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -20.0
-offset_top = -20.0
+offset_left = -36.0
+offset_top = -36.0
 offset_right = -4.0
 offset_bottom = -4.0
 grow_horizontal = 0
 grow_vertical = 0
-custom_minimum_size = Vector2(16, 16)
-mouse_filter = 0
 theme_override_styles/normal = SubResource("style_inv_toggle")
-theme_override_styles/pressed = SubResource("style_inv_toggle_hover")
+theme_override_styles/pressed = SubResource("style_inv_toggle_off")
 theme_override_styles/hover = SubResource("style_inv_toggle_hover")
 theme_override_styles/disabled = SubResource("style_inv_toggle")
 theme_override_styles/focus = SubResource("style_inv_toggle")
-icon = ExtResource("27_inv_icon")
-expand_icon = true
+flat = true
 
-[node name="ClassHud" type="Control" parent="UI" node_paths=PackedStringArray("name_label", "hint_label")]
-layout_mode = 3
-anchors_preset = 0
-offset_left = 16.0
-offset_top = 16.0
-offset_right = 260.0
-offset_bottom = 56.0
+[node name="Icon" type="TextureRect" parent="UI/InventoryToggle" unique_id=2091721293]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
+texture = ExtResource("27_inv_icon")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ClassHud" type="Control" parent="UI" unique_id=1393223960 node_paths=PackedStringArray("name_label", "hint_label")]
 visible = false
+layout_mode = 3
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -74.0
+offset_right = 320.0
+offset_bottom = -34.0
+grow_vertical = 0
+mouse_filter = 2
 script = ExtResource("15_class_hud")
 name_label = NodePath("Stack/NameLabel")
 hint_label = NodePath("Stack/HintLabel")
 
-[node name="Stack" type="VBoxContainer" parent="UI/ClassHud"]
+[node name="Stack" type="VBoxContainer" parent="UI/ClassHud" unique_id=275222444]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -383,9 +333,8 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_constants/separation = 2
 
-[node name="NameLabel" type="Label" parent="UI/ClassHud/Stack"]
+[node name="NameLabel" type="Label" parent="UI/ClassHud/Stack" unique_id=2016758153]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
 theme_override_constants/shadow_offset_x = 1
@@ -393,36 +342,36 @@ theme_override_constants/shadow_offset_y = 1
 theme_override_font_sizes/font_size = 14
 text = "—"
 
-[node name="HintLabel" type="Label" parent="UI/ClassHud/Stack"]
+[node name="HintLabel" type="Label" parent="UI/ClassHud/Stack" unique_id=591335835]
 visible = false
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.72, 0.74, 0.78, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
 theme_override_constants/shadow_offset_x = 1
 theme_override_constants/shadow_offset_y = 1
 theme_override_font_sizes/font_size = 12
-text = ""
 
-[node name="ClassDebug" type="Control" parent="UI" node_paths=PackedStringArray("debug_label")]
+[node name="ClassDebug" type="Control" parent="UI" unique_id=1770071613 node_paths=PackedStringArray("debug_label")]
 layout_mode = 3
-anchors_preset = 0
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
 offset_left = 16.0
-offset_top = 56.0
+offset_top = -28.0
 offset_right = 320.0
-offset_bottom = 76.0
+offset_bottom = -8.0
+grow_vertical = 0
 mouse_filter = 2
 script = ExtResource("16_class_debug")
 debug_label = NodePath("DebugLabel")
 
-[node name="DebugLabel" type="Label" parent="UI/ClassDebug"]
+[node name="DebugLabel" type="Label" parent="UI/ClassDebug" unique_id=1782752424]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.62, 0.64, 0.68, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
 theme_override_constants/shadow_offset_x = 1
@@ -430,25 +379,44 @@ theme_override_constants/shadow_offset_y = 1
 theme_override_font_sizes/font_size = 11
 text = "None"
 
-[node name="HpHud" type="Control" parent="UI" node_paths=PackedStringArray("hp_bar", "hp_label", "mana_bar", "mana_label")]
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 16.0
-offset_top = -68.0
-offset_right = 220.0
-offset_bottom = -16.0
-grow_horizontal = 1
-grow_vertical = 0
+[node name="HpHud" type="Control" parent="UI" unique_id=190769654 node_paths=PackedStringArray("hp_bar", "hp_label", "mana_bar", "mana_label")]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 31.0
+offset_top = 13.0
+offset_right = 335.0
+offset_bottom = 97.0
 mouse_filter = 2
-visible = false
 script = ExtResource("11_hp_hud")
 hp_bar = NodePath("Stack/HpRow/Bar")
 hp_label = NodePath("Stack/HpRow/Label")
 mana_bar = NodePath("Stack/ManaRow/Bar")
 mana_label = NodePath("Stack/ManaRow/Label")
 
-[node name="Frame" type="NinePatchRect" parent="UI/HpHud"]
+[node name="Frame" type="NinePatchRect" parent="UI/HpHud" unique_id=1774159568]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 28.0
+offset_top = 25.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("19_tray")
+
+[node name="Portrait" type="Control" parent="UI/HpHud" unique_id=746141889]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = -26.0
+offset_top = -50.0
+offset_right = 74.0
+offset_bottom = 50.0
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Bg" type="TextureRect" parent="UI/HpHud/Portrait" unique_id=1352942768]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -456,97 +424,134 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+texture = ExtResource("35_hero_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Ring" type="TextureRect" parent="UI/HpHud/Portrait" unique_id=1736151617]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("34_hero_frame")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Stack" type="VBoxContainer" parent="UI/HpHud" unique_id=98382754]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 76.0
+offset_top = 27.0
+offset_right = -18.0
+offset_bottom = -2.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+alignment = 1
+
+[node name="HpRow" type="Control" parent="UI/HpHud/Stack" unique_id=1481529993]
+custom_minimum_size = Vector2(0, 13)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="Border" type="NinePatchRect" parent="UI/HpHud/Stack/HpRow" unique_id=824498208]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 texture = ExtResource("22_hp_frame")
-patch_margin_left = 12
-patch_margin_top = 8
-patch_margin_right = 12
-patch_margin_bottom = 8
 
-[node name="Stack" type="VBoxContainer" parent="UI/HpHud"]
+[node name="Bar" type="ProgressBar" parent="UI/HpHud/Stack/HpRow" unique_id=1403375304]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 3.0
+offset_top = 2.0
+offset_right = -3.0
+offset_bottom = -2.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_constants/separation = 2
-
-[node name="HpRow" type="Control" parent="UI/HpHud/Stack"]
-custom_minimum_size = Vector2(0, 22)
-layout_mode = 2
-size_flags_horizontal = 3
-mouse_filter = 2
-
-[node name="Bar" type="ProgressBar" parent="UI/HpHud/Stack/HpRow"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-theme_override_styles/background = SubResource("style_hp_bg")
+theme_override_styles/background = SubResource("style_bar_bg")
 theme_override_styles/fill = SubResource("style_hp_fill")
-max_value = 100.0
-value = 0.0
 show_percentage = false
 
-[node name="Label" type="Label" parent="UI/HpHud/Stack/HpRow"]
+[node name="Label" type="Label" parent="UI/HpHud/Stack/HpRow" unique_id=905239956]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
 theme_override_constants/shadow_offset_x = 1
 theme_override_constants/shadow_offset_y = 1
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 11
 text = "—"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ManaRow" type="Control" parent="UI/HpHud/Stack"]
-custom_minimum_size = Vector2(0, 22)
+[node name="ManaRow" type="Control" parent="UI/HpHud/Stack" unique_id=1773840513]
+custom_minimum_size = Vector2(0, 13)
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
 
-[node name="Bar" type="ProgressBar" parent="UI/HpHud/Stack/ManaRow"]
+[node name="Border" type="NinePatchRect" parent="UI/HpHud/Stack/ManaRow" unique_id=40959048]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+texture = ExtResource("22_hp_frame")
+
+[node name="Bar" type="ProgressBar" parent="UI/HpHud/Stack/ManaRow" unique_id=1153790503]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 3.0
+offset_top = 2.0
+offset_right = -3.0
+offset_bottom = -2.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
-theme_override_styles/background = SubResource("style_mana_bg")
+theme_override_styles/background = SubResource("style_bar_bg")
 theme_override_styles/fill = SubResource("style_mana_fill")
-max_value = 100.0
-value = 0.0
 show_percentage = false
 
-[node name="Label" type="Label" parent="UI/HpHud/Stack/ManaRow"]
+[node name="Label" type="Label" parent="UI/HpHud/Stack/ManaRow" unique_id=724873161]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
 theme_override_constants/shadow_offset_x = 1
 theme_override_constants/shadow_offset_y = 1
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 11
 text = "—"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ErrorHud" type="Control" parent="UI" node_paths=PackedStringArray("message_label", "linger")]
+[node name="ErrorHud" type="Control" parent="UI" unique_id=632443689 node_paths=PackedStringArray("message_label", "linger")]
+visible = false
+layout_mode = 3
 anchors_preset = 7
 anchor_left = 0.5
 anchor_top = 1.0
@@ -559,33 +564,30 @@ offset_bottom = -76.0
 grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 2
-visible = false
 script = ExtResource("17_error_hud")
 message_label = NodePath("MessageLabel")
 linger = NodePath("Linger")
 
-[node name="MessageLabel" type="Label" parent="UI/ErrorHud"]
+[node name="MessageLabel" type="Label" parent="UI/ErrorHud" unique_id=946272044]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.98, 0.74, 0.36, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
 theme_override_constants/shadow_offset_x = 1
 theme_override_constants/shadow_offset_y = 1
 theme_override_font_sizes/font_size = 16
-text = ""
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Linger" type="Timer" parent="UI/ErrorHud"]
+[node name="Linger" type="Timer" parent="UI/ErrorHud" unique_id=1380560654]
 wait_time = 4.0
 one_shot = true
 
-[node name="DeathOverlay" type="Control" parent="UI" node_paths=PackedStringArray("respawn_button")]
+[node name="DeathOverlay" type="Control" parent="UI" unique_id=1296339493 node_paths=PackedStringArray("respawn_button")]
 visible = false
 layout_mode = 3
 anchors_preset = 15
@@ -593,21 +595,19 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 0
 script = ExtResource("12_death_overlay")
 respawn_button = NodePath("Center/Column/RespawnButton")
 
-[node name="Dim" type="ColorRect" parent="UI/DeathOverlay"]
+[node name="Dim" type="ColorRect" parent="UI/DeathOverlay" unique_id=897205797]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 0
 color = Color(0.02, 0.02, 0.04, 0.72)
 
-[node name="Center" type="CenterContainer" parent="UI/DeathOverlay"]
+[node name="Center" type="CenterContainer" parent="UI/DeathOverlay" unique_id=1630851287]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -616,34 +616,33 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Column" type="VBoxContainer" parent="UI/DeathOverlay/Center"]
+[node name="Column" type="VBoxContainer" parent="UI/DeathOverlay/Center" unique_id=1395377849]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 16
 
-[node name="YouDied" type="Label" parent="UI/DeathOverlay/Center/Column"]
+[node name="YouDied" type="Label" parent="UI/DeathOverlay/Center/Column" unique_id=154603756]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
 theme_override_font_sizes/font_size = 28
 text = "You died"
 horizontal_alignment = 1
 
-[node name="RespawnButton" type="Button" parent="UI/DeathOverlay/Center/Column"]
+[node name="RespawnButton" type="Button" parent="UI/DeathOverlay/Center/Column" unique_id=1460626356]
 custom_minimum_size = Vector2(160, 36)
 layout_mode = 2
-mouse_filter = 0
 text = "Respawn"
 
-[node name="Hotbar" type="Control" parent="UI" node_paths=PackedStringArray("slot_1", "slot_2")]
+[node name="Hotbar" type="Control" parent="UI" unique_id=1904932478 node_paths=PackedStringArray("slot_1", "slot_2", "slot_3", "slot_4", "slot_5", "slot_6", "slot_7", "slot_8")]
+layout_mode = 3
 anchors_preset = 7
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -64.0
-offset_top = -72.0
-offset_right = 64.0
+offset_left = -324.0
+offset_top = -84.0
+offset_right = 324.0
 offset_bottom = -12.0
 grow_horizontal = 2
 grow_vertical = 0
@@ -651,30 +650,90 @@ mouse_filter = 2
 script = ExtResource("13_hotbar")
 slot_1 = NodePath("Bar/Slots/Slot1")
 slot_2 = NodePath("Bar/Slots/Slot2")
+slot_3 = NodePath("Bar/Slots/Slot3")
+slot_4 = NodePath("Bar/Slots/Slot4")
+slot_5 = NodePath("Bar/Slots/Slot5")
+slot_6 = NodePath("Bar/Slots/Slot6")
+slot_7 = NodePath("Bar/Slots/Slot7")
+slot_8 = NodePath("Bar/Slots/Slot8")
 
-[node name="Bar" type="PanelContainer" parent="UI/Hotbar"]
+[node name="Bar" type="PanelContainer" parent="UI/Hotbar" unique_id=8017818]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 64.0
+offset_right = -64.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("style_hotbar_bar")
 
-[node name="Slots" type="HBoxContainer" parent="UI/Hotbar/Bar"]
+[node name="Slots" type="HBoxContainer" parent="UI/Hotbar/Bar" unique_id=2024917725]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 6
 alignment = 1
 
-[node name="Slot1" parent="UI/Hotbar/Bar/Slots" instance=ExtResource("14_hotbar_slot")]
+[node name="Slot1" parent="UI/Hotbar/Bar/Slots" unique_id=176429353 instance=ExtResource("14_hotbar_slot")]
 layout_mode = 2
 
-[node name="Slot2" parent="UI/Hotbar/Bar/Slots" instance=ExtResource("14_hotbar_slot")]
+[node name="Slot2" parent="UI/Hotbar/Bar/Slots" unique_id=541627203 instance=ExtResource("14_hotbar_slot")]
 layout_mode = 2
 
-[node name="Session" type="Node" parent="." node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "class_hud", "class_debug", "error_hud", "death_overlay", "hotbar", "camera_rig")]
+[node name="Slot3" parent="UI/Hotbar/Bar/Slots" unique_id=1801801803 instance=ExtResource("14_hotbar_slot")]
+layout_mode = 2
+
+[node name="Slot4" parent="UI/Hotbar/Bar/Slots" unique_id=1801801804 instance=ExtResource("14_hotbar_slot")]
+layout_mode = 2
+
+[node name="Slot5" parent="UI/Hotbar/Bar/Slots" unique_id=1801801805 instance=ExtResource("14_hotbar_slot")]
+layout_mode = 2
+
+[node name="Slot6" parent="UI/Hotbar/Bar/Slots" unique_id=1801801806 instance=ExtResource("14_hotbar_slot")]
+layout_mode = 2
+
+[node name="Slot7" parent="UI/Hotbar/Bar/Slots" unique_id=1801801807 instance=ExtResource("14_hotbar_slot")]
+layout_mode = 2
+
+[node name="Slot8" parent="UI/Hotbar/Bar/Slots" unique_id=1801801808 instance=ExtResource("14_hotbar_slot")]
+layout_mode = 2
+
+[node name="OrnamentLeft" type="TextureRect" parent="UI/Hotbar" unique_id=1801801901]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = -2.0
+offset_top = -39.0
+offset_right = 67.0
+offset_bottom = 36.0
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("37_pattern")
+expand_mode = 1
+stretch_mode = 6
+flip_h = true
+
+[node name="OrnamentRight" type="TextureRect" parent="UI/Hotbar" unique_id=1801801902]
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -67.0
+offset_top = -38.0
+offset_right = 4.0
+offset_bottom = 36.0
+grow_horizontal = 0
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("37_pattern")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Session" type="Node" parent="." unique_id=1289844251 node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "equipment_panel", "hp_hud", "class_hud", "class_debug", "error_hud", "death_overlay", "hotbar", "camera_rig")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
@@ -693,9 +752,9 @@ death_overlay = NodePath("../UI/DeathOverlay")
 hotbar = NodePath("../UI/Hotbar")
 camera_rig = NodePath("../CameraRig")
 
-[node name="Net" type="Node" parent="Session"]
+[node name="Net" type="Node" parent="Session" unique_id=1040748530]
 script = ExtResource("7_net_client")
 
+[connection signal="timeout" from="CursorHint/Recheck" to="CursorHint" method="refresh"]
 [connection signal="pressed" from="UI/InventoryToggle" to="UI/RightDock" method="toggle"]
 [connection signal="timeout" from="UI/ErrorHud/Linger" to="UI/ErrorHud" method="clear"]
-[connection signal="timeout" from="CursorHint/Recheck" to="CursorHint" method="refresh"]

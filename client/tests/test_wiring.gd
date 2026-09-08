@@ -470,8 +470,21 @@ static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> V
 	if toggle != null and toggle.visible:
 		controls.append(toggle.get_global_rect())
 
-	for inset: Vector2 in [Vector2(4, 4), Vector2(4, 20), Vector2(20, 4), Vector2(20, 20)]:
-		var candidate := panel_rect.end - inset
+	var covered := panel_rect.intersection(screen)
+	if not covered.has_area():
+		return null
+	var fractions: Array[Vector2] = [
+		Vector2(0.08, 0.08),
+		Vector2(0.08, 0.5),
+		Vector2(0.5, 0.08),
+		Vector2(0.92, 0.08),
+		Vector2(0.08, 0.92),
+		Vector2(0.5, 0.5),
+		Vector2(0.92, 0.5),
+		Vector2(0.5, 0.92),
+	]
+	for fraction in fractions:
+		var candidate := covered.position + covered.size * fraction
 		if not screen.has_point(candidate) or not panel_rect.has_point(candidate):
 			continue
 		var on_control := false

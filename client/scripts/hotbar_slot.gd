@@ -22,7 +22,7 @@ func show_empty(key_text: String) -> void:
 	ability_id = ""
 	disabled = true
 	if fill != null:
-		fill.color = Color(0.16, 0.16, 0.18, 1)
+		fill.color = Color(0.16, 0.16, 0.18, 0)
 	if name_label != null:
 		name_label.text = ""
 	if key_label != null:

@@ -251,9 +251,14 @@ func _test_the_headless_rects_say_where_to_aim() -> void:
 		"and the inventory toggle rect %s is authored with an area" % [toggle.get_global_rect()],
 	)
 	_check(
-		not toggle.get_global_rect().has_point(centre),
-		"while staying clear of the viewport centre %s (got %s), so world aims offset around the hotbar instead"
-		% [centre, toggle.get_global_rect()],
+		toggle.get_global_rect().size.x >= 32.0 and toggle.get_global_rect().size.y >= 32.0,
+		"and the formed inventory toggle is at least 32px so the chest icon reads, got %s"
+		% [toggle.get_global_rect().size],
+	)
+	_check(
+		not toggle.get_global_rect().has_point(Vector2(24, 24)),
+		"while staying clear of the equipment pickup probe (24, 24) (got %s)"
+		% [toggle.get_global_rect()],
 	)
 
 	_hide_the_chrome()

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d3vo3g32usor1"
-path="res://.godot/imported/pants_background.png-44c5bd14c370d8525490169007410c04.ctex"
+uid="uid://c2sehvwrlgfep"
+path="res://.godot/imported/hero_icon_frame_bg.png-0fbc53d9c768a83d8881877022f45e35.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/classic_rpg_ui/frame_backgrounds/pants_background.png"
-dest_files=["res://.godot/imported/pants_background.png-44c5bd14c370d8525490169007410c04.ctex"]
+source_file="res://assets/classic_rpg_ui/uielements/hero_icon_frame_bg.png"
+dest_files=["res://.godot/imported/hero_icon_frame_bg.png-0fbc53d9c768a83d8881877022f45e35.ctex"]
 
 [params]
 

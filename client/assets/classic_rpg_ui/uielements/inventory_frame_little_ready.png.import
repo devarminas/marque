@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cue3v84wmaotd"
-path="res://.godot/imported/basic_bar.png-09bd1ed9b71bafa5622e72fc04b3d8f8.ctex"
+uid="uid://bnm5pssleklxs"
+path="res://.godot/imported/inventory_frame_little_ready.png-b5717362759b27f15d594eacd1c7a6aa.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/classic_rpg_ui/uielements/basic_bar.png"
-dest_files=["res://.godot/imported/basic_bar.png-09bd1ed9b71bafa5622e72fc04b3d8f8.ctex"]
+source_file="res://assets/classic_rpg_ui/uielements/inventory_frame_little_ready.png"
+dest_files=["res://.godot/imported/inventory_frame_little_ready.png-b5717362759b27f15d594eacd1c7a6aa.ctex"]
 
 [params]
 

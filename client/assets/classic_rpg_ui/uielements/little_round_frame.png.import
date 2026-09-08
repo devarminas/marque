@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ss6gaxu4mdvq"
-path="res://.godot/imported/hp_line2.png-21d55b09f4eea1677d96b274c4849f0d.ctex"
+uid="uid://cltlrndfrm01"
+path="res://.godot/imported/little_round_frame.png-6ab99eb895f231532738e891e03b6455.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/classic_rpg_ui/uielements/hp_line2.png"
-dest_files=["res://.godot/imported/hp_line2.png-21d55b09f4eea1677d96b274c4849f0d.ctex"]
+source_file="res://assets/classic_rpg_ui/uielements/little_round_frame.png"
+dest_files=["res://.godot/imported/little_round_frame.png-6ab99eb895f231532738e891e03b6455.ctex"]
 
 [params]
 

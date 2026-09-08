@@ -119,10 +119,46 @@ func _test_welcome_draws_self_hp() -> void:
 		hp_fill != null and mana_fill != null and hp_fill.texture != mana_fill.texture,
 		"HP and mana fills use distinct textures",
 	)
-	var frame := _hp_hud.get_node_or_null("Frame") as Control
+	var frame := _hp_hud.get_node_or_null("Frame") as NinePatchRect
 	_check(
 		frame != null and frame.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 		"HpHud Frame is IGNORE so world clicks pass through",
+	)
+	_check(
+		frame != null
+		and frame.texture != null
+		and String(frame.texture.resource_path).contains("basic_bar2"),
+		"HpHud tray Frame uses basic_bar2",
+	)
+	var portrait := _hp_hud.get_node_or_null("Portrait") as Control
+	var portrait_bg := _hp_hud.get_node_or_null("Portrait/Bg") as TextureRect
+	var portrait_ring := _hp_hud.get_node_or_null("Portrait/Ring") as TextureRect
+	_check(portrait != null, "HpHud authors a left Portrait")
+	_check(
+		portrait_bg != null
+		and portrait_bg.texture != null
+		and String(portrait_bg.texture.resource_path).contains("hero_icon_frame_bg"),
+		"Portrait bg uses hero_icon_frame_bg",
+	)
+	_check(
+		portrait_ring != null
+		and portrait_ring.texture != null
+		and String(portrait_ring.texture.resource_path).ends_with("hero_icon_frame.png"),
+		"Portrait ring uses hero_icon_frame",
+	)
+	var hp_border := _hp_hud.get_node_or_null("Stack/HpRow/Border") as NinePatchRect
+	var mana_border := _hp_hud.get_node_or_null("Stack/ManaRow/Border") as NinePatchRect
+	_check(
+		hp_border != null
+		and hp_border.texture != null
+		and String(hp_border.texture.resource_path).contains("hp_frame"),
+		"HP row has Hp_frame border",
+	)
+	_check(
+		mana_border != null
+		and mana_border.texture != null
+		and String(mana_border.texture.resource_path).contains("hp_frame"),
+		"mana row has Hp_frame border",
 	)
 	print("DEMO vitals hud hp=%s mana=%s textured_fills=1" % [_hp_hud.text, _hp_hud.mana_text])
 	_check(

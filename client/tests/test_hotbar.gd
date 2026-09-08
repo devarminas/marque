@@ -65,7 +65,26 @@ func _test_chrome_from_json() -> void:
 	_check(_hotbar.ability_id_in_slot(2) == "fireball", "slot 2 is fireball from JSON")
 	var slot1: HotbarSlotScript = _hotbar.slot_1
 	var slot2: HotbarSlotScript = _hotbar.slot_2
-	_check(slot1 != null and slot2 != null, "both slots are authored")
+	_check(slot1 != null and slot2 != null, "both filled slots are authored")
+	var authored := 0
+	for widget in [
+		_hotbar.slot_1,
+		_hotbar.slot_2,
+		_hotbar.slot_3,
+		_hotbar.slot_4,
+		_hotbar.slot_5,
+		_hotbar.slot_6,
+		_hotbar.slot_7,
+		_hotbar.slot_8,
+	]:
+		if widget != null:
+			authored += 1
+	_check(authored == HotbarScript.SLOT_COUNT, "hotbar authors eight slots")
+	for empty_n in range(3, HotbarScript.SLOT_COUNT + 1):
+		_check(
+			_hotbar.ability_id_in_slot(empty_n) == "",
+			"slot %d stays empty until JSON assigns it" % empty_n,
+		)
 	_check(
 		slot1.fill != null and slot1.fill.color.g > slot1.fill.color.r,
 		"heal slot paint is green-dominant",
