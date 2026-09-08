@@ -247,11 +247,13 @@ func _test_the_headless_rects_say_where_to_aim() -> void:
 		% [hotbar.get_global_rect(), centre],
 	)
 	_check(
-		toggle.is_visible_in_tree()
-		and toggle.get_global_rect().has_point(centre + _beside_offset()),
-		"and the inventory toggle rect %s covers centre plus the offset %s, so the suite"
-		% [toggle.get_global_rect(), centre + _beside_offset()]
-		+ " offsets left instead",
+		toggle.is_visible_in_tree() and toggle.get_global_rect().has_area(),
+		"and the inventory toggle rect %s is authored with an area" % [toggle.get_global_rect()],
+	)
+	_check(
+		not toggle.get_global_rect().has_point(centre),
+		"while staying clear of the viewport centre %s (got %s), so world aims offset around the hotbar instead"
+		% [centre, toggle.get_global_rect()],
 	)
 
 	_hide_the_chrome()
