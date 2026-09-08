@@ -400,13 +400,13 @@ may differ, and no channel of any pixel by more than 2 of 255. Both bounds must 
 The walking pair is put through the same test and must **fail** it, so every green run
 prints both sides of the boundary and proves the tolerance still discriminates.
 
-Measured across five idle runs at `0a19b2d` and two on `main`, 1280x720, band 230,400 px:
+Measured across nine idle runs at `0a19b2d` and four on `main`, 1280x720, band 230,400 px:
 
 | Pair | Differing pixels | Max channel delta |
 |---|---|---|
 | Still camera, canopy in the band | 8, 0.0035%, every run | 1 |
 | Still camera, no canopy in the band | 0 | 0 |
-| Camera that walked | 98,000–151,000, 43%–65% | 155 |
+| Camera that walked | 98,000–153,000, 43%–66% | 155 |
 
 The tolerance sits near the geometric middle of that four-order-of-magnitude gap.
 
