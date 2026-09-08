@@ -95,21 +95,36 @@ func _test_welcome_draws_self_hp() -> void:
 	)
 	var hp_bar: ProgressBar = _hp_hud.get_node_or_null("Stack/HpRow/Bar") as ProgressBar
 	var mana_bar: ProgressBar = _hp_hud.get_node_or_null("Stack/ManaRow/Bar") as ProgressBar
-	_check(hp_bar != null, "authored green HP bar")
-	_check(mana_bar != null, "authored blue mana bar under it")
+	_check(hp_bar != null, "authored HP ProgressBar")
+	_check(mana_bar != null, "authored mana ProgressBar under it")
 	_check(
 		hp_bar != null and mana_bar != null and hp_bar.get_parent().get_index() < mana_bar.get_parent().get_index(),
 		"HP row stacks above mana row",
 	)
+	var hp_fill: StyleBoxTexture = null
+	var mana_fill: StyleBoxTexture = null
+	if hp_bar != null:
+		hp_fill = hp_bar.get_theme_stylebox("fill") as StyleBoxTexture
+	if mana_bar != null:
+		mana_fill = mana_bar.get_theme_stylebox("fill") as StyleBoxTexture
 	_check(
-		hp_bar != null and hp_bar.get_theme_stylebox("fill").bg_color.g > hp_bar.get_theme_stylebox("fill").bg_color.b,
-		"HP fill is green",
+		hp_fill != null and hp_fill.texture != null and String(hp_fill.texture.resource_path).contains("hp_line"),
+		"HP fill StyleBoxTexture uses hp_line art",
 	)
 	_check(
-		mana_bar != null and mana_bar.get_theme_stylebox("fill").bg_color.b > mana_bar.get_theme_stylebox("fill").bg_color.g,
-		"mana fill is blue",
+		mana_fill != null and mana_fill.texture != null and String(mana_fill.texture.resource_path).contains("mana_line"),
+		"mana fill StyleBoxTexture uses mana_line art",
 	)
-	print("DEMO vitals hud hp=%s mana=%s green_over_blue=1" % [_hp_hud.text, _hp_hud.mana_text])
+	_check(
+		hp_fill != null and mana_fill != null and hp_fill.texture != mana_fill.texture,
+		"HP and mana fills use distinct textures",
+	)
+	var frame := _hp_hud.get_node_or_null("Frame") as Control
+	_check(
+		frame != null and frame.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+		"HpHud Frame is IGNORE so world clicks pass through",
+	)
+	print("DEMO vitals hud hp=%s mana=%s textured_fills=1" % [_hp_hud.text, _hp_hud.mana_text])
 	_check(
 		_hp_hud.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 		"and IGNORE so world clicks pass through, got filter %d" % _hp_hud.mouse_filter,
