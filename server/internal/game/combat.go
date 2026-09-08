@@ -99,6 +99,7 @@ func (w *World) attack(p *player, msg mnet.Attack, seq mnet.Seq) {
 func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, seq mnet.Seq) {
 	w.cancelAttack(p, CauseReplaced)
 	p.pending = 0
+	w.clearPendingTalk(p)
 	w.cancelGather(p)
 	p.clearSteer()
 	p.attackTarget = targetID
@@ -228,6 +229,8 @@ func (w *World) kill(victim, killer *player) {
 		"killer": killer.id,
 	})
 	victim.pending = 0
+	w.clearPendingTalk(victim)
+	w.closeDialog(victim)
 	w.cancelGather(victim)
 	w.cancelAttack(victim, CauseAttackerDied)
 	w.clearAttacksOn(victim.id)

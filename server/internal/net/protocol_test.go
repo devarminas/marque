@@ -124,6 +124,23 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			want: `{"error":{"re":"move_to","msg":"out of bounds"}}`,
 		},
 		{
+			name: "dialog",
+			msg: mnet.Dialog{
+				NPC:   1000003,
+				Lines: []string{"Will you accept Bring a Stick?"},
+				Options: []mnet.DialogOption{
+					{ID: mnet.OptionAcceptQuest},
+					{ID: mnet.OptionStopTalking},
+				},
+			},
+			want: `{"dialog":{"npc":1000003,"lines":["Will you accept Bring a Stick?"],"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}`,
+		},
+		{
+			name: "dialog closed",
+			msg:  mnet.Dialog{NPC: 1000003, Lines: []string{}, Options: []mnet.DialogOption{}},
+			want: `{"dialog":{"npc":1000003,"lines":[],"options":[]}}`,
+		},
+		{
 			name: "error with nothing to attribute it to",
 			msg:  mnet.Error{Msg: "text frames only"},
 			want: `{"error":{"msg":"text frames only"}}`,
@@ -247,6 +264,8 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 		{mnet.MsgAttack, `{"attack":{"player":2}}`},
 		{mnet.MsgRespawn, `{"respawn":{}}`},
 		{mnet.MsgCast, `{"cast":{"ability":"heal","player":1}}`},
+		{mnet.MsgTalk, `{"talk":{"npc":1000003}}`},
+		{mnet.MsgDialogOption, `{"dialog_option":{"npc":1000003,"option":"accept_quest"}}`},
 	}
 
 	for _, tc := range cases {

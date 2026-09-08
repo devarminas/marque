@@ -177,6 +177,10 @@ type player struct {
 	gatherNode     mnet.NodeID
 	gatherProgress int
 
+	pendingTalk mnet.PlayerID
+	dialogNPC   mnet.PlayerID
+	quests      map[string]questStatus
+
 	attackTarget   mnet.PlayerID
 	attackProgress int
 
@@ -341,6 +345,9 @@ func (w *World) step() {
 		if p.gatherNode != 0 {
 			w.resolveGather(p)
 		}
+		if p.pendingTalk != 0 {
+			w.resolveTalk(p)
+		}
 		if p.attackTarget != 0 {
 			w.resolveAttack(p)
 		}
@@ -422,6 +429,7 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		pos:     Point{X: spawnX, Z: spawnZ},
 		hp:      MaxHP,
 		mana:    MaxMana,
+		quests:  make(map[string]questStatus),
 	}
 	w.players[p.id] = p
 	w.byConn[conn] = p
@@ -623,6 +631,16 @@ func (w *World) handleFrame(ev mnet.Event) {
 		w.respawnPlayer(p, ev.Seq)
 	case mnet.Cast:
 		w.cast(p, msg, ev.Seq)
+	case mnet.Talk:
+		if w.refuseIfDead(p, mnet.MsgTalk) {
+			return
+		}
+		w.talk(p, msg, ev.Seq)
+	case mnet.DialogOptionPick:
+		if w.refuseIfDead(p, mnet.MsgDialogOption) {
+			return
+		}
+		w.dialogOption(p, msg, ev.Seq)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -674,6 +692,10 @@ func rejectionEvent(re string) string {
 		return EvRespawnRejected
 	case mnet.MsgCast:
 		return EvCastRejected
+	case mnet.MsgTalk:
+		return EvTalkRejected
+	case mnet.MsgDialogOption:
+		return EvDialogOptionRejected
 	default:
 		panic(fmt.Sprintf("game: no rejection event for %q", re))
 	}
@@ -710,6 +732,7 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo, seq mnet.Seq) {
 	}
 
 	p.pending = 0
+	w.clearPendingTalk(p)
 	w.cancelGather(p)
 	w.cancelAttack(p, CauseMoveTo)
 	p.clearSteer()

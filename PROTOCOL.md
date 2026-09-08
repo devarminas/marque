@@ -63,9 +63,10 @@ server-authoritative WASD `move` intents. **M6h** is the cast-success flash on t
 **M9 is in progress.** **M9a** (ARM-184) is shared quest content and the singular item kind
 `stick` (distinct from M4c craft product `sticks`). Quest definitions live in
 `shared/quests.json`. The server refuses to start if that file is missing, malformed, or
-names a reward set that is absent or incomplete in `shared/sets.json`. Talk, turn-in, and
-quest-state wire messages are later M9 units; nothing under an **M9a** marker describes them.
-A marker reading plain **M9** is reserved.
+names a reward set that is absent or incomplete in `shared/sets.json`. **M9b** (ARM-185) is
+the talkable quest NPC and thin dialog wire: `talk`, `dialog_option`, and private `dialog`
+restatement. Turn-in and full quest-log restatement are later M9 units; nothing under an
+**M9a** marker describes them. A marker reading plain **M9** is reserved.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -435,6 +436,20 @@ are ignored under compatibility rule 2 and never applied.
 
 `seq` may ride on the body under *Sequence numbers*, exactly as it does on `attack`.
 
+### `talk`. **M9b**
+
+    {"talk":{"npc":1000003}}
+
+A request to open dialog with an NPC. `npc` is an NPC id in the player-id band. Semantics are
+in *Quests dialog*.
+
+### `dialog_option`. **M9b**
+
+    {"dialog_option":{"npc":1000003,"option":"accept_quest"}}
+
+A request to pick a dialog option. `option` is a server-known id such as `accept_quest` or
+`stop_talking`. Semantics are in *Quests dialog*.
+
 ## Messages, server to client
 
 ### `welcome`
@@ -528,11 +543,13 @@ the new fields under compatibility rule 2 and is exactly as correct as it was be
 rule and integer types as `hp` / `max_hp`. A fresh join seeds mana at `MaxMana`. A pre-M6b client
 ignores the new fields under compatibility rule 2.
 
-**M6e.** `welcome` gains `npcs`, listing every practice dummy as of the same tick:
+**M6e.** `welcome` gains `npcs`, listing every seeded NPC as of the same tick (two practice
+dummies; **M9b** also includes the quest giver):
 
     {"welcome":{...,"npcs":[
       {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100,"max_hp":100},
-      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100}
+      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100},
+      {"id":1000003,"kind":"quest_giver","faction":"neutral","x":0,"z":-4,"hp":100,"max_hp":100}
     ]}}
 
 A pre-M6e client ignores `npcs` under compatibility rule 2. See *Practice dummies*.
@@ -822,6 +839,13 @@ Sent to **one player only**, never broadcast. A full restatement of every skill 
 The first `skills` is sent inside the atomic `welcome` step, after `class`, and is the last
 frame of the join. Thereafter one is sent to a player when that player's XP in any skill
 changes, and never otherwise. **M7c** grants XP only on a completed gather (see *Gathering*).
+
+### `dialog`. **M9b**
+
+    {"dialog":{"npc":1000003,"lines":["Will you accept Bring a Stick?"],"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}
+
+Private restatement of one player's open NPC dialog. Sent only to that player. Empty `lines`
+and empty `options` closes the dialog. Semantics are in *Quests dialog*.
 
 ### `error`
 
@@ -1186,7 +1210,7 @@ Named constants, revisitable:
   first in-range tick when the duration is greater than zero.
 - **Leaving range, losing the active class, or `move_to` cancels** the pending gather (clear
   pending; no yield). A second `gather` replaces the first. A player has at most one pending
-  gather. **A player has at most one pending action among pickup, gather, and attack.** Starting
+  gather. **A player has at most one pending action among pickup, gather, attack, and talk.** Starting
   one clears the others.
 - **A depleted node does not accept new gathers** until respawn. After `NodeRespawnTicks` it
   returns to full: GAMELOG plus `node_state`.
@@ -1920,28 +1944,31 @@ own `mana` restatement, and there is no world-visible cast-impact frame.
 
 ## Practice dummies. **M6e**
 
-The server seeds exactly two stationary NPCs when it starts: one `faction: "friendly"` and one
-`faction: "hostile"`, both `kind: "dummy"`. Their ids sit in a reserved band at and above
-`1000001` so dense player ids stay untouched; `cast.player` and `attack.player` still name them.
-They never path, never attack, and never despawn.
+The server seeds two stationary practice dummies when it starts: one `faction: "friendly"` and
+one `faction: "hostile"`, both `kind: "dummy"`. **M9b** also seeds one `kind: "quest_giver"`
+with `faction: "neutral"` (see *Quests dialog*). Their ids sit in a reserved band at and above
+`1000001` so dense player ids stay untouched; `cast.player`, `attack.player`, and `talk.npc`
+still name them. Dummies never path, never attack, and never despawn.
 
 `welcome` carries them as `npcs`:
 
     {"welcome":{...,"npcs":[
       {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100,"max_hp":100},
-      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100}
+      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100},
+      {"id":1000003,"kind":"quest_giver","faction":"neutral","x":0,"z":-4,"hp":100,"max_hp":100}
     ]}}
 
-HP restatements for dummies reuse the existing `hp` frame with the NPC's id. There is no separate
-`npc_spawn` in M6e: the dummies exist for the life of the process and every joiner learns them
+HP restatements for NPCs reuse the existing `hp` frame with the NPC's id. There is no separate
+`npc_spawn` in M6e: seeded NPCs exist for the life of the process and every joiner learns them
 from `welcome`.
 
 Client left-click selects a living dummy with the same local chrome as a remote player. Faction
-rules for cast are above. Attack may engage a hostile dummy; a friendly dummy is `wrong_target`.
+rules for cast are above. Attack may engage a hostile dummy; a friendly or neutral NPC is
+`wrong_target`.
 
 ### Deliberately absent (dummies). **M6e**
 
-- No AI, loot, respawn camps, or additional kinds.
+- No AI, loot, respawn camps, or additional dummy kinds beyond the two practice dummies.
 - No client-authoritative NPC spawn.
 - No separate NPC message family beyond `welcome.npcs` and reused `hp` frames.
 
@@ -2010,6 +2037,64 @@ M9a does not put talk, deliver, or reward on the wire.
 - No talk, turn-in, or quest-log wire messages.
 - No dialog UI, quest journal chrome, or NPC talk behavior under **M9a** markers.
 - No second quest table in Go or GDScript.
+
+## Quests dialog. **M9b**
+
+Thin talk against a seeded `quest_giver` NPC. The client names the NPC id and option ids;
+the server authors lines and records accept. No quest-log panel restatement here (ARM-187).
+
+### `talk`. **M9b**
+
+    {"talk":{"npc":1000003}}
+
+A request to open dialog with an NPC. `npc` is a player-id-band NPC id (same space as
+`attack.player` / `cast.player`). Semantics:
+
+- **Pending approach like pickup.** `talk` is `move_to` at the NPC's position plus a pending
+  talk. `TalkRange` equals `PickupRange` and gates resolution only.
+- **Only `kind:quest_giver` accepts talk.** Other kinds refuse with `wrong_target`.
+- **On resolve**, the server opens a private dialog session for that player and restates
+  `dialog` with server-authored `lines` and `options` (option `id` strings only).
+- A player has at most one pending talk. A second `talk` replaces the first. Starting talk
+  clears pending pickup, gather, and attack the same way those clear each other.
+- `move_to` / `move` clear a pending talk without opening dialog.
+
+### `dialog_option`. **M9b**
+
+    {"dialog_option":{"npc":1000003,"option":"accept_quest"}}
+
+A request to pick an option in the open dialog. `npc` must match the open session.
+Known option ids:
+
+| id | effect |
+| --- | --- |
+| `accept_quest` | If the NPC's quest is available, record it accepted (`active`) for that player and close the dialog. If already `active` or `complete`, refuse with a clear `error` and leave status unchanged. |
+| `stop_talking` | Close the dialog without accepting. |
+
+Out-of-range options refuse. An option with no open dialog, or for a different NPC, refuses.
+
+### `dialog` (server → client, private). **M9b**
+
+    {"dialog":{"npc":1000003,"lines":["Will you accept Bring a Stick?"],"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}
+
+Private restatement of the open dialog. Empty `lines` and empty `options` means the dialog
+is closed. The client must not invent quest text; it renders what the server sent.
+
+When the quest is already `active` or `complete`, re-talk still opens dialog but omits
+`accept_quest` so accept cannot duplicate.
+
+GAMELOG refuse reasons for dialog (never on the wire; the player sees `error.msg`) include
+`no_dialog`, `unknown_option`, `quest_active`, `quest_complete`, `wrong_target`,
+`unknown_player`, and `out_of_range`.
+
+Death clears a pending talk and closes an open dialog the same way it clears a pending pickup.
+
+### Deliberately absent (dialog). **M9b**
+
+- No quest-log / journal restatement frames (ARM-187).
+- No turn-in, give-item, or reward grant (ARM-189 / ARM-191).
+- No branching dialog trees beyond accept / stop.
+- No client-authored dialog lines.
 
 ## Deliberately absent
 
