@@ -433,14 +433,14 @@ func _test_equipment() -> void:
 		)
 
 	recorder.clear()
-	recorder.feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"axe"}]}}')
+	recorder.feed('{"equipment":{"worn":["helmet","left hand","chest","right hand","trousers"],"slots":[{"slot":"right hand","kind":"sword"}]}}')
 	var one := recorder.of("equipment_changed")
 	if _check(one.size() == 1, "one occupied worn slot decodes"):
 		_check(
 			Array(one[0]["slots"]) == ["right hand"],
 			"as the slot name the server gave it, got %s" % [Array(one[0]["slots"])],
 		)
-		_check(Array(one[0]["kinds"]) == ["axe"], "with its kind, got %s" % [Array(one[0]["kinds"])])
+		_check(Array(one[0]["kinds"]) == ["sword"], "with its kind, got %s" % [Array(one[0]["kinds"])])
 	recorder.release()
 
 

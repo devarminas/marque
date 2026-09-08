@@ -55,7 +55,7 @@ func _ready() -> void:
 	_test_item_spawn_is_idempotent()
 	_test_item_despawn()
 	await _test_an_unknown_kind_is_magenta()
-	_test_an_axe_draws_its_model()
+	_test_a_lumberjack_axe_draws_its_model()
 	_test_a_malformed_item_frame_changes_nothing()
 	_test_a_second_welcome_frees_items_as_well_as_players()
 	_test_welcome_without_items()
@@ -240,10 +240,10 @@ func _test_an_unknown_kind_is_magenta() -> void:
 	_feed('{"item_despawn":{"id":21}}')
 
 
-func _test_an_axe_draws_its_model() -> void:
-	_feed('{"item_spawn":{"id":61,"kind":"axe","x":-3.0,"z":1.0}}')
+func _test_a_lumberjack_axe_draws_its_model() -> void:
+	_feed('{"item_spawn":{"id":61,"kind":"lumberjack_axe","x":-3.0,"z":1.0}}')
 	var axe: GroundItemScript = _session.item_for(61)
-	if not _check(axe != null, "an axe kind gets a body"):
+	if not _check(axe != null, "a lumberjack_axe kind gets a body"):
 		return
 	_check(axe.has_model(), "which draws the axe model, not the box")
 	_check(
