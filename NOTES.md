@@ -505,3 +505,39 @@ the widget sat while hidden. Measured at 1280x720: bag slot 0 read `(1050, 126)`
 the bag opened and `(1050, 332)` once it settled. **Both are inside the viewport**, so a bounds
 check passes on the stale one and the click lands on empty chrome, silently. Wait for the rect
 to stop changing between frames before reading a centre to click.
+
+### Player body and UAL2 locomotion (ARM-168)
+
+The player avatar is the Quaternius Universal Base, `Superhero_Male_FullBody.gltf`, driven by
+two UAL2 clips out of `client/assets/quaternius/animations/locomotion_library.tres`. Standing
+height in idle, measured by `client/tests/avatar_height_probe.tscn`, is **1.733 u** at
+`root_scale` 1.0, inside the 1.6 to 1.8 band. The probe reads that off the rendered silhouette,
+so it also measures a 1.7 u box standing in the same frame as its own control; that box read
+1.702 u, which bounds the method's error at a few millimetres. The bind pose is 1.820 u, the
+figure `test_avatar.gd` asserts to catch a stray `root_scale`, and the idle pose stands 8.7 cm
+shorter than it. The animated body therefore lands on contract with no sidecar correction, and
+the outfit parts ARM-169 layers on the same skeleton need none either.
+
+**The two clips are substitutes, chosen knowingly.** UAL2 Standard ships no neutral idle, no
+neutral walk, and no run. Every idle is situational and the only walks are `Walk_Carry_Loop`
+and `Zombie_Walk_Fwd_Loop` (`client/assets/README.md`, finding 7). Keeping the KayKit clips was
+not available, because the Knight and the Universal Base are different skeletons. So idle is
+`Idle_FoldArms_Loop` and locomotion is `Walk_Carry_Loop` at every speed. The player stands with
+folded arms and walks as though carrying something. That is accepted and reversible, and the
+decision is recorded on ARM-168 in the owner's comment of 2026-09-08. A purchased neutral set,
+or the fuller paid Universal Animation Library, retires it by changing two constants in
+`player_avatar.gd` and rerunning the bake.
+
+`Walk_Carry` covers 0.6527 u/s of ground at `speed_scale` 1.0, measured by
+`client/tests/bake_ual2_library.gd` from the planted toe and carried in `player_avatar.gd` as
+0.65. The avatar plays it at path speed
+divided by that, 4.62x for the server's 3.0 u/s, so the feet match the stride instead of
+sliding. It reads hurried. A real walk or run clip fixes that through the same constant.
+
+Godot's scene importer strips the vendor `_Loop` suffix into `loop_mode`, so the library keys
+and the script constants are `ual2/Idle_FoldArms` and `ual2/Walk_Carry` while the GLB and the
+Linear thread say `Idle_FoldArms_Loop` and `Walk_Carry_Loop`. Same clips.
+
+A broken body path does not fail the scene load. Godot logs a parse error, drops the node, and
+instantiates an avatar with no `Body`. `player_avatar.gd` catches that in `_ready` and shows the
+authored `MissingBody` magenta capsule, per the palette above.

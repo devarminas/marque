@@ -4,9 +4,9 @@ extends Node3D
 const PolylineWalker := preload("res://scripts/polyline_walker.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 
-const WALK_ANIM := "kaykit/Running_A"
-const IDLE_ANIM := "kaykit/Idle_A"
-const WALK_SPEED_SCALE := 3.25
+const WALK_ANIM := "ual2/Walk_Carry"
+const IDLE_ANIM := "ual2/Idle_FoldArms"
+const WALK_CLIP_SPEED := 0.65
 
 var player_id := 0
 
@@ -25,6 +25,17 @@ var _desired_yaw := 0.0
 @onready var _animation: AnimationPlayer = $AnimationPlayer
 @onready var _hp_label: Label3D = $HpLabel
 @onready var _selection_ring: MeshInstance3D = $SelectionRing
+@onready var _missing_body: MeshInstance3D = $MissingBody
+
+
+func _ready() -> void:
+	if get_node_or_null("Body/Armature/Skeleton3D") != null:
+		return
+	push_error(
+		"PlayerAvatar: the Universal Base body did not instance under"
+		+ " Body/Armature/Skeleton3D; drawing it magenta"
+	)
+	_missing_body.visible = true
 
 
 func configure(id: int, tick_ms: int) -> void:
@@ -104,7 +115,7 @@ func _set_walking(walking: bool) -> void:
 	if walking:
 		if _animation.current_animation != WALK_ANIM:
 			_animation.play(WALK_ANIM)
-		_animation.speed_scale = WALK_SPEED_SCALE
+		_animation.speed_scale = _walker.speed() / WALK_CLIP_SPEED
 		return
 	if _animation.current_animation != IDLE_ANIM:
 		_animation.play(IDLE_ANIM)

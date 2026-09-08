@@ -10,6 +10,12 @@ const TICK_MS := 100
 const POSITION_EPSILON := 1.0e-5
 const YAW_EPSILON := 0.0175
 const TURN_FRAMES := 40
+const BODY_SCENE_PATH := "res://assets/quaternius/base_characters/Superhero_Male_FullBody.gltf"
+const BODY_SKIN := "SuperHero_Male"
+const BASE_RIG_BONES := 65
+const BIND_HEIGHT := 1.8196
+const BIND_HEIGHT_EPSILON := 0.02
+const SERVER_WALK_SPEED := 3.0
 
 @onready var _remote_players: Node3D = $RemotePlayers
 
@@ -33,6 +39,7 @@ func _ready() -> void:
 	_assertions = Assertions.new()
 
 	_test_scene_instantiates_and_configures()
+	_test_a_vanished_body_draws_magenta()
 	_test_position_tracks_the_walker_over_simulated_time()
 	_test_two_avatars_do_not_share_state()
 	_test_a_pathless_avatar_idles()
@@ -79,18 +86,32 @@ func _test_scene_instantiates_and_configures() -> void:
 		avatar.position.y, avatar.ground_y, POSITION_EPSILON, "its feet sit at ground_y"
 	)
 
-	var skeleton := avatar.get_node_or_null("Knight/Rig_Medium/Skeleton3D") as Skeleton3D
-	_assertions.check(skeleton != null, "the rig's Skeleton3D exists under Knight/Rig_Medium")
+	var skeleton := avatar.get_node_or_null("Body/Armature/Skeleton3D") as Skeleton3D
+	_assertions.check(skeleton != null, "the rig's Skeleton3D exists under Body/Armature")
+	_assertions.check(
+		skeleton != null and skeleton.get_bone_count() == BASE_RIG_BONES,
+		"the Universal Base rig has the %d bones every Quaternius part shares, got %d"
+		% [BASE_RIG_BONES, 0 if skeleton == null else skeleton.get_bone_count()],
+	)
 	var skinned := 0
+	var skin_names := PackedStringArray()
+	var body_height := 0.0
 	if skeleton != null:
 		for node in skeleton.get_children():
 			var mesh := node as MeshInstance3D
 			if mesh == null:
 				continue
 			skinned += 1
+			skin_names.append(String(mesh.name))
+			if mesh.name == BODY_SKIN and mesh.mesh != null:
+				body_height = mesh.mesh.get_aabb().size.y
 			_assertions.check(
 				mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON,
 				"%s casts a shadow" % mesh.name,
+			)
+			_assertions.check(
+				mesh.skin != null and mesh.get_node_or_null(mesh.skeleton) == skeleton,
+				"%s is skinned to the shared rig, not merely parented under it" % mesh.name,
 			)
 			var surface_material := mesh.get_active_material(0) if mesh.mesh != null and mesh.mesh.get_surface_count() > 0 else null
 			_assertions.check(
@@ -102,8 +123,27 @@ func _test_scene_instantiates_and_configures() -> void:
 					"%s is lit, not unlit" % mesh.name,
 				)
 	_assertions.check(skinned > 0, "the skeleton carries skinned meshes (%d)" % skinned)
+	_assertions.check(
+		skin_names.has(BODY_SKIN),
+		"the %s skin is among the skinned meshes, got [%s]" % [BODY_SKIN, ", ".join(skin_names)],
+	)
+	_assertions.check(
+		absf(body_height - BIND_HEIGHT) <= BIND_HEIGHT_EPSILON,
+		"the body keeps its authored %.3f u bind height, so the import root_scale is 1.0, got %f"
+		% [BIND_HEIGHT, body_height],
+	)
 
-	_assertions.check(avatar.get_node_or_null("Knight") is Node3D, "the Knight rig is instanced")
+	var body := avatar.get_node_or_null("Body") as Node3D
+	_assertions.check(
+		body != null and body.scene_file_path == BODY_SCENE_PATH,
+		"Body is the Universal Base glTF instance, got \"%s\""
+		% ("" if body == null else body.scene_file_path),
+	)
+	_assertions.check(
+		body != null and body.transform.basis.z.z < 0.0,
+		"the +Z-authored body is turned to face the avatar's -Z forward",
+	)
+
 	var animation := avatar.get_node_or_null("AnimationPlayer") as AnimationPlayer
 	_assertions.check(animation != null, "an AnimationPlayer is authored on the avatar")
 	_assertions.check(
@@ -115,8 +155,81 @@ func _test_scene_instantiates_and_configures() -> void:
 		"the idle animation %s is in the library" % PlayerAvatar.IDLE_ANIM,
 	)
 	_assertions.check(
-		animation != null and animation.root_node == NodePath("../Knight"),
-		"the AnimationPlayer drives the Knight rig",
+		PlayerAvatar.IDLE_ANIM == "ual2/Idle_FoldArms",
+		"idle is UAL2 Idle_FoldArms_Loop; Godot strips the _Loop suffix on import, got \"%s\""
+		% PlayerAvatar.IDLE_ANIM,
+	)
+	_assertions.check(
+		PlayerAvatar.WALK_ANIM == "ual2/Walk_Carry",
+		"walk is UAL2 Walk_Carry_Loop; Godot strips the _Loop suffix on import, got \"%s\""
+		% PlayerAvatar.WALK_ANIM,
+	)
+
+	var clip_lengths := {PlayerAvatar.IDLE_ANIM: 2.5, PlayerAvatar.WALK_ANIM: 2.0}
+	for clip_name in clip_lengths:
+		var clip: Animation = animation.get_animation(clip_name) if animation != null else null
+		_assertions.check(clip != null, "%s resolves to an Animation" % clip_name)
+		if clip == null:
+			continue
+		_assertions.check(
+			clip.loop_mode == Animation.LOOP_LINEAR,
+			"the %s clip loops linearly, so a held walk never plays once and freezes" % clip_name,
+		)
+		_assertions.check(
+			is_equal_approx(clip.length, clip_lengths[clip_name]),
+			"the %s clip is %.1f s of the vendor's motion, got %f"
+			% [clip_name, clip_lengths[clip_name], clip.length],
+		)
+		_assertions.check(
+			body != null
+			and clip.get_track_count() > 0
+			and body.has_node(NodePath(String(clip.track_get_path(0)).get_slice(":", 0))),
+			"the %s clip's tracks resolve on the Body skeleton" % clip_name,
+		)
+
+	_assertions.check(
+		animation != null and animation.root_node == NodePath("../Body"),
+		"the AnimationPlayer drives the Body rig",
+	)
+
+	var hp_label := avatar.get_node_or_null("HpLabel") as Label3D
+	_assertions.check(
+		hp_label != null and is_equal_approx(hp_label.position.y, 2.0),
+		"the HP label floats just above the 1.7 u head, got %f"
+		% (0.0 if hp_label == null else hp_label.position.y),
+	)
+
+	var fallback := avatar.get_node_or_null("MissingBody") as MeshInstance3D
+	_assertions.check(
+		fallback != null and not fallback.visible,
+		"a healthy body keeps the magenta fallback hidden",
+	)
+
+	avatar.queue_free()
+
+
+func _test_a_vanished_body_draws_magenta() -> void:
+	var avatar := PlayerAvatarScene.instantiate() as PlayerAvatar
+	var body := avatar.get_node("Body")
+	avatar.remove_child(body)
+	body.queue_free()
+	avatar.configure(61, TICK_MS)
+	_remote_players.add_child(avatar)
+
+	var fallback := avatar.get_node_or_null("MissingBody") as MeshInstance3D
+	_assertions.check(
+		fallback != null and fallback.visible, "a vanished body shows the magenta fallback"
+	)
+	var material := fallback.get_active_material(0) if fallback != null else null
+	var albedo := Color(0.0, 0.0, 0.0, 0.0)
+	if material != null and "albedo_color" in material:
+		albedo = material.albedo_color
+	_assertions.check(
+		is_equal_approx(albedo.r, 0.95)
+		and is_equal_approx(albedo.g, 0.08)
+		and is_equal_approx(albedo.b, 0.85)
+		and is_equal_approx(albedo.a, 1.0),
+		"the fallback is the palette's magenta, not a default white, got %s" % albedo,
 	)
 
 	avatar.queue_free()
@@ -222,7 +335,9 @@ func _test_walk_animation_follows_the_walker() -> void:
 		"an avatar with no path plays nothing",
 	)
 
-	avatar.follow_path(PackedVector2Array([Vector2(0.0, 0.0), Vector2(6.0, 0.0)]), 0, 3.0)
+	avatar.follow_path(
+		PackedVector2Array([Vector2(0.0, 0.0), Vector2(6.0, 0.0)]), 0, SERVER_WALK_SPEED
+	)
 	avatar.update_to_tick(5)
 	_assertions.check(
 		animation != null and animation.current_animation == PlayerAvatar.WALK_ANIM,
@@ -230,7 +345,15 @@ func _test_walk_animation_follows_the_walker() -> void:
 		% [PlayerAvatar.WALK_ANIM, "" if animation == null else animation.current_animation],
 	)
 	_assertions.check(
-		animation != null and is_equal_approx(animation.speed_scale, PlayerAvatar.WALK_SPEED_SCALE),
+		is_equal_approx(PlayerAvatar.WALK_CLIP_SPEED, 0.65),
+		"Walk_Carry covers 0.65 u/s, measured by bake_ual2_library.gd, so a 3.0 u/s path plays it"
+		+ " at 4.62x, got %f" % PlayerAvatar.WALK_CLIP_SPEED,
+	)
+	_assertions.check(
+		animation != null
+		and is_equal_approx(
+			animation.speed_scale, SERVER_WALK_SPEED / PlayerAvatar.WALK_CLIP_SPEED
+		),
 		"the walk is scaled to match the server's stride, got %f"
 		% (0.0 if animation == null else animation.speed_scale),
 	)

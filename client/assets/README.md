@@ -23,13 +23,13 @@ Heights are the Y extent of the mesh as the vendor shipped it, in Godot units, b
 | `tools/pickaxe.obj` | 14.466 | longest axis, off contract |
 | `kaykit/Knight.glb` | 2.543 | off contract |
 
-Every Quaternius pack and the Weapons pack are authored at roughly 1 unit = 1 metre. They import at `nodes/root_scale=1.0` and need no correction. Two sources are off contract. The tool pack OBJ files are 8x to 17x too large. The KayKit Knight is 2.543 u, so the player renders about 2.5 m tall today.
+Every Quaternius pack and the Weapons pack are authored at roughly 1 unit = 1 metre. They import at `nodes/root_scale=1.0` and need no correction. Two sources are off contract. The tool pack OBJ files are 8x to 17x too large. The KayKit Knight is 2.543 u, so the player rendered about 2.5 m tall until ARM-168.
 
-The Knight gap is live. `client/scenes/player_avatar.tscn` instances `Knight.glb` with no scale override, while the same scene's `ClickBody/CollisionShape3D` is a `CapsuleShape3D` with `height = 1.6` and `radius = 0.4` centred at y 0.8, and `HpLabel` sits at y 2.4. The collision already encodes the 1.6 to 1.8 band. The visual does not. ARM-168 closes the gap when it swaps the avatar.
+ARM-168 closed the Knight gap. `client/scenes/player_avatar.tscn` instances `Superhero_Male_FullBody.gltf` at `root_scale` 1.0 and stands 1.733 u in idle, measured by `client/tests/avatar_height_probe.tscn` against a 1.7 u box in the same frame, which that run read back as 1.702 u. The bind pose is 1.820 u and the idle pose stands 8.7 cm shorter, which is why no sidecar correction was needed. `ClickBody/CollisionShape3D` stays a `CapsuleShape3D` with `height = 1.6` and `radius = 0.4` centred at y 0.8. `HpLabel` moved from y 2.4 to y 2.0. `Knight.glb` stays in the tree until ARM-173 and nothing instances it.
 
 Root scale is target height divided by authored height. Worked examples:
 
-- Player base at 1.7 u from `Superhero_Male_FullBody.gltf`. 1.7 / 1.820 = 0.934.
+- Player base at 1.7 u from `Superhero_Male_FullBody.gltf`. 1.7 / 1.820 = 0.934. ARM-168 measured the animated idle before applying it and left the scale at 1.0; see the paragraph above.
 - A 0.75 m axe from `tools/axe.obj`. 0.75 / 6.631 = 0.113.
 - A 0.85 m pickaxe from `tools/pickaxe.obj`. 0.85 / 14.466 = 0.059.
 
@@ -75,6 +75,14 @@ Left in the bundle: the female base (`Superhero_Female_FullBody` with its `T_Hai
 From `Universal Animation Library 2[Standard]\...\Unreal-Godot\`. CC0 1.0.
 
 Taken: `UAL2_Standard.glb`, plus the pack's `README.txt` and `License.txt`. The GLB holds 43 clips.
+
+`locomotion_library.tres` is the one file under `quaternius/` that is not a pack copy. The byte figures in this section were measured before it existed and do not count it. `client/tests/bake_ual2_library.gd` copies `Idle_FoldArms` and `Walk_Carry` out of the imported GLB into that `AnimationLibrary`, the same shape as `kaykit/movement_library.tres`, and `player_avatar.tscn` loads it as `ual2`. Rerun the bake to add a clip:
+
+```powershell
+godot --headless --path client --script res://tests/bake_ual2_library.gd
+```
+
+It also prints the walk clip's ground speed, 0.6527 u/s, measured from the planted toe; `player_avatar.gd` carries it rounded to 0.65. Godot's scene importer strips the vendor `_Loop` suffix into `loop_mode`, so the GLB's `Idle_FoldArms_Loop` and `Walk_Carry_Loop` are `Idle_FoldArms` and `Walk_Carry` inside Godot and in the library.
 
 Left out on purpose: the pack's `Godot_Setup.png`. Anything under `client/` is imported as a game resource and shipped in the export, and a setup screenshot is not a game resource. Read it in the source pack.
 
@@ -154,6 +162,6 @@ Standard texture importer defaults. Every staged sidecar has `compress/mode=0` (
 4. The Bestiary pack is under the Quaternius Asset License v1.0, not CC0. Section 2 grants commercial use with no credit required and explicitly covers contractors and collaborators. Section 3(a) forbids redistributing the assets themselves as an asset pack, in original or modified form, whether alone or bundled, and adds that this applies regardless of how much they were modified. A game's source tree is not an asset pack, and section 2 permits distributing a Product that incorporates the assets, so the reading that allows this is available. That question is not what kept the pack out in the end. `quaternius/bestiary/` is out of the tree because no enemies exist in the game yet and nothing uses these meshes; ARM-172 is blocked on scope. When scope changes, this paragraph is the record to decide the licence against. Section 7 binds whichever licence version was in force when the pack was obtained, and the shipped text is dated 8/28/2026. The other Quaternius packs staged here (Universal Base Characters, UAL2, Modular Fantasy, Stylized Nature) are CC0 1.0 and carry no such clause.
 5. `kaykit/README.md` cites a source bundle path that no longer exists on this machine, and KayKit's own license file was never copied into the repo. The README records the pack as CC0 by Kay Lousberg. The license file cannot be backfilled from local disk.
 6. The repo has no `.gitattributes` and no git LFS. This unit adds 107.80 MiB of binaries and later M8 work adds more. ARM-179 owns the evaluation. Nothing here enables it.
-7. UAL2 Standard ships no neutral idle, walk, or run. All 43 clips are situational (`Idle_FoldArms_Loop`, `Walk_Carry_Loop`, `Zombie_Walk_Fwd_Loop`), and `UAL2_Standard_RM.glb` holds the identical 43, so the root-motion file is no help either. ARM-168's "idle plus locomotion from UAL2" cannot be met from the free pack. It does ship `TreeChopping_Loop`, `Farm_Harvest`, `Farm_PlantSeed` and `Farm_Watering`, which are this game's verbs. Raised on ARM-168.
+7. UAL2 Standard ships no neutral idle, walk, or run. All 43 clips are situational (`Idle_FoldArms_Loop`, `Walk_Carry_Loop`, `Zombie_Walk_Fwd_Loop`), and `UAL2_Standard_RM.glb` holds the identical 43, so the root-motion file is no help either. ARM-168's "idle plus locomotion from UAL2" cannot be met from the free pack. It does ship `TreeChopping_Loop`, `Farm_Harvest`, `Farm_PlantSeed` and `Farm_Watering`, which are this game's verbs. Raised on ARM-168 and settled there by substitution, `Idle_FoldArms_Loop` for idle and `Walk_Carry_Loop` for every locomotion speed; the record is in `NOTES.md`, *Player body and UAL2 locomotion*.
 8. `Imp.glb` and `Puglin.glb` carry no animation clips. Both are rigged but neither has an `animations` array, so ARM-172 gets static posed meshes. Raised on ARM-172.
 9. `Superhero_Male_FullBody.gltf`, `UAL2_Standard.glb` and every staged outfit part share an identical 65-bone skeleton with zero name differences. Godot's name-based retarget works across all three with no bone map.
