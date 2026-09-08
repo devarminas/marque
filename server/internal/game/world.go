@@ -10,6 +10,7 @@ import (
 
 	"github.com/devarminas/marque/server/internal/abilitydef"
 	"github.com/devarminas/marque/server/internal/classdef"
+	"github.com/devarminas/marque/server/internal/questdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
@@ -214,6 +215,8 @@ type World struct {
 
 	classes *classdef.Catalog
 
+	quests *questdef.Catalog
+
 	players map[mnet.PlayerID]*player
 
 	npcs       map[mnet.PlayerID]*npc
@@ -257,6 +260,10 @@ func (w *World) SetAbilities(c *abilitydef.Catalog) {
 
 func (w *World) SetClasses(c *classdef.Catalog) {
 	w.classes = c
+}
+
+func (w *World) SetQuests(c *questdef.Catalog) {
+	w.quests = c
 }
 
 func (w *World) Run(ctx context.Context) {

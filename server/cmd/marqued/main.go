@@ -20,6 +20,7 @@ import (
 	"github.com/devarminas/marque/server/internal/game"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/questdef"
 )
 
 type itemSeed struct {
@@ -76,6 +77,7 @@ func run() error {
 	addr := flag.String("addr", "127.0.0.1:8080", "host:port to listen on")
 	enableLog := flag.Bool("gamelog", true, "write the NDJSON event log to stdout")
 	abilitiesPath := flag.String("abilities", "", "path to shared/abilities.json (default: search from cwd, or MARQUE_ABILITIES)")
+	questsPath := flag.String("quests", "", "path to shared/quests.json (default: search from cwd, or MARQUE_QUESTS)")
 	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
 	seedClassKits := flag.Bool("seed-class-kits", false, "place one ground item per unique kind from shared/sets.json (armor + tools) on a grid near spawn for class demo/test; does not change DefaultJoinKit")
 	var seeds itemSeeds
@@ -104,11 +106,25 @@ func run() error {
 		return err
 	}
 
+	qpath := strings.TrimSpace(*questsPath)
+	if qpath == "" {
+		resolved, err := questdef.ResolvePath()
+		if err != nil {
+			return err
+		}
+		qpath = resolved
+	}
+	quests, err := questdef.Load(qpath, classes)
+	if err != nil {
+		return err
+	}
+
 	log := gamelog.New(os.Stdout, *enableLog)
 	hub := mnet.NewHub()
 	world := game.NewWorld(hub, log, game.NewMemoryStore(wearables), game.ResumeGraceTicks, game.DefaultJoinKit)
 	world.SetAbilities(abilities)
 	world.SetClasses(classes)
+	world.SetQuests(quests)
 
 	var groundSeeds itemSeeds
 	var classKitFields []gamelog.Fields
@@ -145,6 +161,8 @@ func run() error {
 		"worn_slots":        game.WornSlots,
 		"abilities":         abilities.Len(),
 		"abilities_path":    path,
+		"quests":            quests.Len(),
+		"quests_path":       qpath,
 		"classes":           classes.ClassLen(),
 		"skills":            classes.SkillLen(),
 	}

@@ -11,6 +11,7 @@ const InventorySize = 28
 
 const (
 	KindAcorn           = "acorn"
+	KindStick           = "stick"
 	KindSword           = "sword"
 	KindStaff           = "staff"
 	KindBow             = "bow"

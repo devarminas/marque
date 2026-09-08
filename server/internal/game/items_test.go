@@ -94,6 +94,21 @@ func TestSeedingRefusesAnItemWithNoKind(t *testing.T) {
 	}
 }
 
+func TestSeedingAdmitsStickKind(t *testing.T) {
+	w, _ := newStepWorld(t)
+
+	if err := w.SeedGroundItem(KindStick, 1, 1); err != nil {
+		t.Fatalf("seeding stick: %v", err)
+	}
+	items := w.items.GroundItems()
+	if len(items) != 1 || items[0].Kind != KindStick {
+		t.Fatalf("seeded %+v, want one %q", items, KindStick)
+	}
+	if KindStick == KindSticks {
+		t.Fatal("stick must stay distinct from sticks")
+	}
+}
+
 func TestPickupRangeCoversTheSpotUnderfoot(t *testing.T) {
 	if PickupRange < MinPathLength {
 		t.Fatalf("PickupRange %v is below MinPathLength %v: a pickup underfoot assigns no path and never closes the gap", PickupRange, MinPathLength)
