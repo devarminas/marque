@@ -154,6 +154,7 @@ func _ready() -> void:
 	await _test_clicking_an_occupied_slot_uses_it()
 	await _test_cancel_clears_use_selection()
 	await _test_clicking_an_empty_slot_uses_nothing()
+	await _test_shift_clicking_an_occupied_slot_drops_it()
 	await _test_clicking_the_panel_chrome_reaches_nothing()
 
 	await _test_the_scripted_feed_still_builds_a_world()
@@ -926,6 +927,60 @@ func _test_clicking_an_empty_slot_uses_nothing() -> void:
 	_check(_use_intents.is_empty(), "as is a negative use slot")
 
 
+func _test_shift_clicking_an_occupied_slot_drops_it() -> void:
+	var last := WIRE_SIZE - 1
+	_dock.visible = false
+	await _feed(
+		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"acorn"}]}}' % [WIRE_SIZE, last]
+	)
+	var closed := _panel.slot_at(last)
+	_check(closed != null, "the panel draws slot %d while the bag is still closed" % last)
+	if closed != null:
+		_check(
+			closed.get_global_rect().has_area() and not closed.is_visible_in_tree(),
+			"with a laid-out rect %s but no visibility in the tree, so the viewport skips it "
+			% closed.get_global_rect()
+			+ "for input and a click at that centre reaches nothing at all",
+		)
+
+	_press_toggle_inventory()
+	_check(_dock.visible, "the toggle_inventory action opens the bag on the frame it is pressed")
+
+	_watch()
+	await _click_slot(last, true)
+	_check(
+		_drop_intents.size() == 1 and _drop_intents[0] == last,
+		"shift-clicking occupied slot %d sends exactly one drop naming it, got %s"
+		% [last, _drop_intents],
+	)
+	_check(_use_intents.is_empty(), "and no use, got %s" % [_use_intents])
+	_check(
+		not _session.has_pending_use(),
+		"and leaves no pending use selection, so the next plain click starts a fresh one",
+	)
+	_check(
+		_panel.kind_in_slot(last) == "acorn",
+		"and the panel still shows the item, because a drop is not predicted",
+	)
+
+	_watch()
+	await _click_slot(last)
+	_check(
+		_session.has_pending_use() and _drop_intents.is_empty(),
+		"while a plain click on that same slot still starts a use, got drop %s" % [_drop_intents],
+	)
+	_check(_session.clear_use_selection(), "which clears again")
+
+	await _feed('{"inventory":{"size":%d,"slots":[]}}' % WIRE_SIZE)
+	_watch()
+	await _click_slot(last, true)
+	_check(
+		_drop_intents.is_empty(),
+		"shift-clicking that slot once it is empty drops nothing, got %s" % [_drop_intents],
+	)
+	_dock.visible = false
+
+
 func _test_clicking_the_panel_chrome_reaches_nothing() -> void:
 	await _feed(_inventory_frame(WIRE_SIZE, 1))
 	await _check_the_chrome_is_a_wall("carrying one item")
@@ -1097,7 +1152,7 @@ func _right_click(screen_position: Vector2) -> void:
 	await get_tree().process_frame
 
 
-func _click_slot(index: int) -> void:
+func _click_slot(index: int, shift := false) -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var slot := _panel.slot_at(index)
@@ -1113,18 +1168,21 @@ func _click_slot(index: int) -> void:
 		% [index, rect, viewport.get_visible_rect()],
 	)
 
-	var press := InputEventMouseButton.new()
-	press.button_index = MOUSE_BUTTON_LEFT
-	press.pressed = true
-	press.position = centre
-	viewport.push_input(press)
-
-	var release := InputEventMouseButton.new()
-	release.button_index = MOUSE_BUTTON_LEFT
-	release.pressed = false
-	release.position = centre
-	viewport.push_input(release)
+	for pressed: bool in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = pressed
+		event.shift_pressed = shift
+		event.position = centre
+		viewport.push_input(event)
 	await get_tree().process_frame
+
+
+func _press_toggle_inventory() -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = KEY_I
+	event.pressed = true
+	_camera.get_viewport().push_input(event)
 
 
 func _look_straight_down_at(ground: Vector2) -> void:
