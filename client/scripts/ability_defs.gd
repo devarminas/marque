@@ -115,6 +115,8 @@ static func _validate(ability: Dictionary) -> String:
 		return "%s: mana_cost required" % id
 	if float(ability["mana_cost"]) < 0.0:
 		return "%s: mana_cost must be >= 0" % id
+	if int(round(float(ability["mana_cost"]))) < 1:
+		return "%s: mana_cost must round to at least 1" % id
 	if not _is_number(ability.get("range", null)):
 		return "%s: range required" % id
 	if float(ability["range"]) < 0.0:

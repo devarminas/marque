@@ -1,0 +1,18 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/cast_hit_fx.gd" id="1_cast_hit"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_flash"]
+radius = 0.55
+height = 1.1
+
+[sub_resource type="StandardMaterial3D" id="Mat_flash"]
+shading_mode = 0
+transparency = 1
+albedo_color = Color(1, 1, 0.65, 0.9)
+
+[node name="CastHitFx" type="MeshInstance3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+mesh = SubResource("SphereMesh_flash")
+material_override = SubResource("Mat_flash")
+script = ExtResource("1_cast_hit")

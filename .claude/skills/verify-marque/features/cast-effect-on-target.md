@@ -37,3 +37,6 @@ stdout/stderr and `server.stdout.ndjson`.
   binding only to `hp` would miss that case and would also flash on melee hits.
 - **Flash is short-lived.** Assert `CastHitFx` as soon as `cast_effect_played`
   fires; waiting on later HP restatements can outlive the tween.
+- **Scene-authored flash.** `cast_hit_fx.tscn` holds the sphere; scripts only
+  instance and tint it.
+- **Casters only.** Other clients do not see the flash (no world wire cue).
