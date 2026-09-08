@@ -83,8 +83,8 @@ func _drawn(subject: String, height: float) -> bool:
 	if height >= MINIMUM_SILHOUETTE:
 		return true
 	_fail(
-		"the %s covered no pixels in its band, so %.3f u is a measurement over nothing"
-		% [subject, height]
+		"the %s read %.3f u, under the %.3f u floor, so its band drew nothing to measure"
+		% [subject, height, MINIMUM_SILHOUETTE]
 	)
 	return false
 
