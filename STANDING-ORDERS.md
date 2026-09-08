@@ -12,7 +12,7 @@ not need and which is never pasted into a brief.
 RuneScape-like point-and-click farming/crafting MMO. Multiplayer, persistent inventory,
 single authoritative server. Codename: Project Marque.
 
-Code and PRs: `github.com/devarminas/marque` (private). Clone or open the worktree the brief
+Code and PRs: `github.com/devarminas/marque`. Clone or open the worktree the brief
 names; do not invent a local path from this file.
 
 ## Sources of truth
