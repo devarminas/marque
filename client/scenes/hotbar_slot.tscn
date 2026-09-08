@@ -1,11 +1,28 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/hotbar_slot.gd" id="1_hotbar_slot"]
+[ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/skill_frame.png" id="2_skill_frame"]
+
+[sub_resource type="StyleBoxTexture" id="style_slot_frame"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+texture = ExtResource("2_skill_frame")
+texture_margin_left = 24.0
+texture_margin_top = 24.0
+texture_margin_right = 24.0
+texture_margin_bottom = 24.0
 
 [node name="HotbarSlot" type="Button" node_paths=PackedStringArray("fill", "name_label", "key_label")]
 custom_minimum_size = Vector2(52, 52)
 focus_mode = 0
 mouse_filter = 2
+theme_override_styles/normal = SubResource("style_slot_frame")
+theme_override_styles/pressed = SubResource("style_slot_frame")
+theme_override_styles/hover = SubResource("style_slot_frame")
+theme_override_styles/disabled = SubResource("style_slot_frame")
+theme_override_styles/focus = SubResource("style_slot_frame")
 script = ExtResource("1_hotbar_slot")
 fill = NodePath("Fill")
 name_label = NodePath("Name")
@@ -16,10 +33,10 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 3.0
-offset_top = 3.0
-offset_right = -3.0
-offset_bottom = -3.0
+offset_left = 6.0
+offset_top = 6.0
+offset_right = -6.0
+offset_bottom = -6.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
