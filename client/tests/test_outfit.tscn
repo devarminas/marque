@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/test_outfit.gd" id="1_outfit"]
+
+[node name="TestOutfit" type="Node3D"]
+script = ExtResource("1_outfit")
+
+[node name="Avatars" type="Node3D" parent="."]
+
+[node name="World" type="Node3D" parent="."]

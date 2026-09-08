@@ -18,6 +18,7 @@ const SCENE_SUITES: Array = [
 	{"name": "world and camera", "scene": "res://tests/test_world.tscn"},
 	{"name": "move chord", "scene": "res://tests/test_move_chord.tscn"},
 	{"name": "player avatar", "scene": "res://tests/test_avatar.tscn"},
+	{"name": "outfit", "scene": "res://tests/test_outfit.tscn"},
 	{"name": "ground items", "scene": "res://tests/test_items.tscn"},
 	{"name": "resource nodes", "scene": "res://tests/test_nodes.tscn"},
 	{"name": "interaction", "scene": "res://tests/test_interaction.tscn"},

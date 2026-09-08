@@ -541,3 +541,114 @@ Linear thread say `Idle_FoldArms_Loop` and `Walk_Carry_Loop`. Same clips.
 A broken body path does not fail the scene load. Godot logs a parse error, drops the node, and
 instantiates an avatar with no `Body`. `player_avatar.gd` catches that in `_ready` and shows the
 authored `MissingBody` magenta capsule, per the palette above.
+
+### Class outfits and recolors (ARM-169)
+
+The worn set implies a class, the client dresses the avatar. Five classes, two Quaternius
+Modular Fantasy outfits, one tint each. `client/scripts/outfit_defs.gd` is the whole mapping:
+a table keyed by class id, no branching, and the only file to touch when a class is added.
+
+| Class | Outfit | Tint |
+| -- | -- | -- |
+| Archer | Ranger | leaf green |
+| Knight | Ranger | cool steel blue |
+| Mage | Peasant | violet cloth |
+| Miner | Peasant | dusty ochre |
+| Lumberjack | Peasant | deep work green |
+
+No class, or an incomplete set, wears nothing: the bare Universal Base at full girth. That is a
+different silhouette from all five kits, not a muted version of one.
+
+**The parts are authored in `player_avatar.tscn`, all ten of them, all hidden.** Which parts are
+*shown* is runtime behaviour and lives in `apply_class`; which parts *exist* is fixed, so they
+are scene content. The parts sit under an `Outfit` node beside `Body`, never under the base
+`Skeleton3D` — `test_avatar.gd` iterates that skeleton's mesh children and asserts things about
+each one, and parking clothes there would silently change what that loop covers.
+
+**A part follows the animation because its `skeleton` NodePath points at the base rig,** not
+because anything reparents it. Every Quaternius part ships the same 65-bone armature with the
+same rest pose, so pointing the part's `MeshInstance3D.skeleton` at `Body/Armature/Skeleton3D`
+binds it to the pose the `AnimationPlayer` is already driving. The part instance carries the
+same 180-degree transform as `Body` so its global transform matches the skeleton's; without
+that the skinning is computed in the wrong space. A part that rides the root transform without
+deforming is the failure this arrangement avoids, and `test_outfit.gd` asserts the shared
+`Skeleton3D` object identity rather than the mere presence of a path.
+
+#### The pack's head-only rule, and why the obvious reading of it is unbuildable
+
+`client/assets/quaternius/outfits_fantasy/Readme.txt` says only the head of the base model is
+required and that using the full body will clip. **The pack ships no head-only mesh.** The base
+glTF has three mesh nodes — `Eyebrows`, `Eyes` and `SuperHero_Male` — and `SuperHero_Male` is a
+single primitive on a single material covering the body and the head together. There is no
+surface to keep and no surface to drop. `Head` in that file is a bone. Splitting it needs a DCC
+tool, and none is installed here.
+
+So the rule was satisfied by measurement instead. The clipping is real and visible at this
+game's camera distance (14 u, -35 degrees, roughly a hundred pixels of character): the bare
+back, shoulders and shins punch through the tunic and trousers on both outfits, in idle and
+mid-stride, from in front and behind.
+
+Two obvious fixes were tried and rejected on the evidence:
+
+- **Uniform shrink of `Body`.** Scaling to 0.86 does clear the cloth, because the whole figure
+  sinks. That sinking is also what kills it: the head drops into the collar and, from the front,
+  disappears entirely. Pivoting the scale at the neck keeps the head but leaves the shoulders
+  exactly where they were, so the clipping comes straight back. Uniform scale cannot shrink the
+  torso and hold the head, because the drop is the mechanism.
+- **Hiding `SuperHero_Male`.** Zero clipping, and the silhouette is clean. It also leaves the
+  Peasant with no head at all and the Ranger with a hollow inside the hood, because the hood has
+  a face opening and nothing behind it.
+
+**What works is shrinking girth alone: `Body.scale = Vector3(0.78, 1.0, 0.78)` whenever an
+outfit is worn.** The torso, hips and legs pull inside the cloth; the head keeps its exact
+height, position and vertical size. It is one number and it is reversible. The bare avatar stays
+at `Vector3.ONE`, so nothing changes for a player with no class.
+
+The visible skin that remains is the arms and hands, and that is the outfits' own geometry, not
+a leak: `Male_Peasant_Arms` and `Male_Ranger_Arms` each carry an `MI_Regular_Male` surface for
+the bare forearms and hands. Hiding the base body entirely still leaves a full bare arm, which
+is how that was established.
+
+#### Tinting
+
+A tint is `albedo_color` on a duplicate of the part's own material, which multiplies the vendor
+albedo texture, so the fabric detail survives the recolor. Only surfaces whose material name
+starts with `MI_Peasant` or `MI_Ranger` are tinted. `MI_Regular_Male` is left alone, so the
+hands never take the class colour. The check is written to fail closed: an unnamed material is
+not tinted rather than tinted by accident.
+
+#### Remote players stay bare, and that is the protocol
+
+`PROTOCOL.md` sends `class` to one player only and never broadcasts it. The client therefore
+knows its own class and nobody else's, so remote avatars wear the bare base body. Dressing them
+needs a server-side broadcast, which is out of scope for an art-only remap; ARM-169 explicitly
+required no new `shared/` rows and no server change.
+
+#### A multiply tint cannot add a colour the texture does not have
+
+The Knight was specified as "Ranger, cooler/metal-leaning tint". A blue `albedo_color` over
+`T_Ranger_BaseColor` does not produce a blue Ranger, because `albedo_color` multiplies: the
+texture's blue channel is near zero on the green cloth, so the blue tint has nothing to scale up.
+The first palette put Archer and Knight 0.034 apart on a 0.10 floor, two dark green hooded figures
+that a player could not tell apart.
+
+**They separate on value, not hue.** Archer is brightened (`albedo_color` above 1.0 is legal and
+does scale up, which is the only way to make the vendor green read bright) and Knight is pushed
+dark and cool until it reads as near-black steel. The five tints are the ones the probe passes
+with margin, not the ones that looked reasonable in a table.
+
+#### The probe measures the whole avatar, not one patch
+
+`client/tests/class_outfit_probe.tscn` stands all five classes plus a bare avatar in one frame at
+the real game camera, then compares each pair.
+
+The first version averaged a torso patch per avatar and compared mean colours. That metric is
+wrong twice over: on the Ranger it sampled the brown belt rather than the tunic, and mean colour
+throws away silhouette, which is half of what separates a hooded Ranger from a bare-headed
+Peasant. Tuning the palette to satisfy it made the palette worse, not better, and drove Archer
+into Lumberjack's green.
+
+The probe now crops each avatar and compares the crops **pixel for pixel**, so a tint difference
+and a silhouette difference both register. Every pair lands between 0.203 and 0.281 against a
+0.12 floor. It prints the crop size and refuses a zero-pixel crop, because a comparison over no
+input passes vacuously.

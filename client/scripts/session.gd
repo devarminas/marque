@@ -1348,6 +1348,8 @@ func _clear_hit_points() -> void:
 func _clear_class_state() -> void:
 	_active_class_id = ""
 	_skill_levels.clear()
+	if _local != null:
+		_local.apply_class("")
 	if _class_hud != null:
 		_class_hud.clear()
 	_refresh_class_debug()
@@ -1360,6 +1362,8 @@ func _apply_class(
 	missing_tools: PackedStringArray,
 ) -> void:
 	_active_class_id = class_id
+	if _local != null:
+		_local.apply_class(class_id)
 	if _class_hud == null:
 		push_error("session: class arrived with no hud to draw it")
 		return
