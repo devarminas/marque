@@ -10,6 +10,8 @@ const TREE_HALF_WIDTH := 2.4
 const STUMP_HALF_WIDTH := 0.7
 const AVATAR_HALF_WIDTH := 0.6
 const REFERENCE_HALF_WIDTH := 0.3
+const REFERENCE_TOLERANCE := 0.05
+const MINIMUM_SILHOUETTE := 0.2
 const DEFAULT_PREFIX := "user://gather_tree"
 
 @onready var _camera: Camera3D = $Camera
@@ -47,6 +49,12 @@ func _ready() -> void:
 			ProjectSettings.globalize_path(full_path),
 		]
 	)
+	if not _drawn("tree", tree_height) or not _drawn("player", player_height):
+		return
+	if not _control_holds(reference_height):
+		return
+	if not _taller(tree_height, player_height):
+		return
 
 	_node.apply_state("depleted")
 	for _frame in RESTATE_FRAMES:
@@ -63,15 +71,51 @@ func _ready() -> void:
 		"TREE PROBE depleted %.3f u, shot %s"
 		% [stump_height, ProjectSettings.globalize_path(depleted_path)]
 	)
+	if not _drawn("stump", stump_height):
+		return
+	if not _taller(tree_height, stump_height):
+		return
+	print("TREE PROBE OK")
 	get_tree().quit(0)
+
+
+func _drawn(subject: String, height: float) -> bool:
+	if height >= MINIMUM_SILHOUETTE:
+		return true
+	_fail(
+		"the %s covered no pixels in its band, so %.3f u is a measurement over nothing"
+		% [subject, height]
+	)
+	return false
+
+
+func _control_holds(reference_height: float) -> bool:
+	if absf(reference_height - REFERENCE_HEIGHT) <= REFERENCE_TOLERANCE:
+		return true
+	_fail(
+		"the %.3f u control box read back as %.3f u, so the method is wrong, not the art"
+		% [REFERENCE_HEIGHT, reference_height]
+	)
+	return false
+
+
+func _taller(tall: float, short: float) -> bool:
+	if tall > short:
+		return true
+	_fail("%.3f u does not stand over %.3f u" % [tall, short])
+	return false
+
+
+func _fail(reason: String) -> void:
+	push_error("TREE PROBE FAILED: %s" % reason)
+	get_tree().quit(1)
 
 
 func _save(image: Image, path: String) -> bool:
 	var error := image.save_png(path)
 	if error == OK:
 		return true
-	push_error("TREE PROBE could not save %s: %s" % [path, error_string(error)])
-	get_tree().quit(1)
+	_fail("could not save %s: %s" % [path, error_string(error)])
 	return false
 
 
