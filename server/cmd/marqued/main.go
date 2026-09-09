@@ -204,6 +204,9 @@ func run() error {
 	if err := world.SeedQuestGiver(); err != nil {
 		return err
 	}
+	if err := world.SeedImpCamp(); err != nil {
+		return err
+	}
 	if *friendlyHP > 0 {
 		if err := world.SetNPCHitPointsByFaction(game.FactionFriendly, *friendlyHP); err != nil {
 			return err

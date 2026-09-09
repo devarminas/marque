@@ -554,6 +554,13 @@ load. `attack` needs Combat; `cast` of heal/fireball needs mage. Player-vs-playe
 always refused. Gathering and no-class players still take damage and can die/respawn. The old
 two-client PvP `combat_demo` harness is retired in favor of dummy / tab combat demos.
 
+### Imp NPC (ARM-206)
+
+One hostile `imp` seeds at camp home `(12, 8)` with HP 50 and melee damage 5. It patrols a short
+radius, aggros the first living player inside 8u (join order, no threat table), chases until it
+is more than 16u from home, then leashes home and clears combat. Paths and death despawn use the
+existing `path` / `despawn` frames. Pool respawn is ARM-207; mesh is ARM-208.
+
 ### Bag slot gestures (ARM-151)
 
 A bag slot carries three gestures, and every one of them needs the bag open. Left-click is the

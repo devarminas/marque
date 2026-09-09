@@ -193,7 +193,7 @@ func (w *World) resolveAttack(p *player) {
 	w.log.Event(w.tick, EvAttackHit, fields)
 	w.broadcastHP(target)
 	if target.hp == 0 {
-		w.kill(target, p)
+		w.kill(target, p.id)
 	}
 }
 
@@ -232,13 +232,16 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 	w.broadcastNPCHP(target)
 	if target.dead() {
 		w.clearAttacksOn(target.id)
+		if target.kind == KindImp {
+			w.killImp(target, p.id)
+		}
 	}
 }
 
-func (w *World) kill(victim, killer *player) {
+func (w *World) kill(victim *player, killer mnet.PlayerID) {
 	w.log.Event(w.tick, EvDeath, gamelog.Fields{
 		"player": victim.id,
-		"killer": killer.id,
+		"killer": killer,
 	})
 	victim.pending = 0
 	w.clearPendingTalk(victim)

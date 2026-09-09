@@ -11,6 +11,7 @@ import (
 const (
 	KindDummy      = "dummy"
 	KindQuestGiver = "quest_giver"
+	KindImp        = "imp"
 
 	FactionFriendly = "friendly"
 	FactionHostile  = "hostile"
@@ -23,9 +24,29 @@ const (
 	QuestGiverX    = 0.0
 	QuestGiverZ    = -4.0
 
+	// Hardcoded camp home until ARM-207 owns pool spawn.
+	ImpCampX = 12.0
+	ImpCampZ = 8.0
+
+	ImpMaxHP        = 50
+	ImpDamage       = 5
+	ImpThreatRange  = 8.0
+	ImpLeashRange   = 16.0
+	ImpPatrolRadius = 3.0
+
 	practiceNpcIDBand mnet.PlayerID = 1_000_000
 
 	EvNpcSpawned = "npc_spawned"
+	EvNpcAggro   = "npc_aggro"
+	EvNpcLeash   = "npc_leash"
+)
+
+type npcPhase uint8
+
+const (
+	phaseIdle npcPhase = iota
+	phaseCombat
+	phaseReturn
 )
 
 type npc struct {
@@ -34,9 +55,19 @@ type npc struct {
 	faction string
 	pos     Point
 	hp      int
+	maxHP   int
+
+	home           Point
+	remaining      []Point
+	phase          npcPhase
+	target         mnet.PlayerID
+	attackProgress int
+	patrolOut      bool
 }
 
 func (n *npc) dead() bool { return n.hp == 0 }
+
+func (n *npc) mobile() bool { return n.kind == KindImp }
 
 func (n *npc) wire() mnet.NpcState {
 	return mnet.NpcState{
@@ -46,27 +77,39 @@ func (n *npc) wire() mnet.NpcState {
 		X:       n.pos.X,
 		Z:       n.pos.Z,
 		HP:      n.hp,
-		MaxHP:   MaxHP,
+		MaxHP:   n.maxHP,
 	}
 }
 
 func (w *World) SeedPracticeDummies() error {
-	if err := w.seedNpc(KindDummy, FactionFriendly, FriendlyDummyX, FriendlyDummyZ); err != nil {
+	if err := w.seedNPC(KindDummy, FactionFriendly, FriendlyDummyX, FriendlyDummyZ, MaxHP); err != nil {
 		return err
 	}
-	return w.seedNpc(KindDummy, FactionHostile, EnemyDummyX, EnemyDummyZ)
+	return w.seedNPC(KindDummy, FactionHostile, EnemyDummyX, EnemyDummyZ, MaxHP)
 }
 
 func (w *World) SeedQuestGiver() error {
-	return w.seedNpc(KindQuestGiver, FactionNeutral, QuestGiverX, QuestGiverZ)
+	return w.seedNPC(KindQuestGiver, FactionNeutral, QuestGiverX, QuestGiverZ, MaxHP)
 }
 
-func (w *World) seedNpc(kind, faction string, x, z float64) error {
+func (w *World) SeedImpCamp() error {
+	if err := w.seedNPC(KindImp, FactionHostile, ImpCampX, ImpCampZ, ImpMaxHP); err != nil {
+		return err
+	}
+	n := w.npcs[w.npcOrder[len(w.npcOrder)-1]]
+	n.home = Point{X: ImpCampX, Z: ImpCampZ}
+	return nil
+}
+
+func (w *World) seedNPC(kind, faction string, x, z float64, maxHP int) error {
 	if kind == "" {
 		return errors.New("seed npc: kind must not be empty")
 	}
 	if faction != FactionFriendly && faction != FactionHostile && faction != FactionNeutral {
 		return fmt.Errorf("seed npc: unknown faction %q", faction)
+	}
+	if maxHP < 1 {
+		return fmt.Errorf("seed npc: maxHP %d must be >= 1", maxHP)
 	}
 	if reason, detail := checkCoordinates(x, z); reason != "" {
 		return fmt.Errorf("seed npc %q at (%v, %v): %s", kind, x, z, detail)
@@ -77,7 +120,8 @@ func (w *World) seedNpc(kind, faction string, x, z float64) error {
 		kind:    kind,
 		faction: faction,
 		pos:     Point{X: x, Z: z},
-		hp:      MaxHP,
+		hp:      maxHP,
+		maxHP:   maxHP,
 	}
 	w.npcs[n.id] = n
 	w.npcOrder = append(w.npcOrder, n.id)
@@ -87,6 +131,7 @@ func (w *World) seedNpc(kind, faction string, x, z float64) error {
 		"faction": n.faction,
 		"x":       n.pos.X,
 		"z":       n.pos.Z,
+		"max_hp":  n.maxHP,
 	})
 	return nil
 }
@@ -104,7 +149,7 @@ func (w *World) npcStates() []mnet.NpcState {
 }
 
 func (w *World) broadcastNPCHP(n *npc) {
-	w.broadcast(mnet.HP{ID: n.id, HP: n.hp, MaxHP: MaxHP}, nil)
+	w.broadcast(mnet.HP{ID: n.id, HP: n.hp, MaxHP: n.maxHP}, nil)
 }
 
 func (w *World) SetNPCHitPointsByFaction(faction string, hp int) error {
@@ -116,7 +161,7 @@ func (w *World) SetNPCHitPointsByFaction(faction string, hp int) error {
 	}
 	for _, id := range w.npcOrder {
 		n, ok := w.npcs[id]
-		if !ok || n.faction != faction {
+		if !ok || n.faction != faction || n.kind != KindDummy {
 			continue
 		}
 		n.hp = hp
@@ -128,4 +173,27 @@ func (w *World) SetNPCHitPointsByFaction(faction string, hp int) error {
 		return nil
 	}
 	return fmt.Errorf("set npc hp: no %s dummy seeded", faction)
+}
+
+func (w *World) despawnNPC(n *npc) {
+	delete(w.npcs, n.id)
+	order := w.npcOrder[:0]
+	for _, id := range w.npcOrder {
+		if id == n.id {
+			continue
+		}
+		order = append(order, id)
+	}
+	w.npcOrder = order
+	w.broadcast(mnet.Despawn{ID: n.id}, nil)
+}
+
+func (w *World) npcByKind(kind string) *npc {
+	for _, id := range w.npcOrder {
+		n := w.npcs[id]
+		if n != nil && n.kind == kind {
+			return n
+		}
+	}
+	return nil
 }
