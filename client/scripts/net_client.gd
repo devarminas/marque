@@ -54,6 +54,15 @@ signal node_despawned(id: int)
 
 signal node_state_changed(id: int, kind: String, position: Vector2, state: String)
 
+signal npc_spawned(
+	id: int,
+	kind: String,
+	faction: String,
+	position: Vector2,
+	hp: int,
+	max_hp: int,
+)
+
 signal inventory_changed(
 	size: int, slot_indices: PackedInt32Array, slot_kinds: PackedStringArray
 )
@@ -432,6 +441,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_node_despawn(body, text)
 		"node_state":
 			_on_node_state(body, text)
+		"npc_spawn":
+			_on_npc_spawn(body, text)
 		"inventory":
 			_on_inventory(body, text)
 		"equipment":
@@ -717,6 +728,20 @@ func _on_node_state(body: Dictionary, text: String) -> void:
 	if node.is_empty():
 		return
 	node_state_changed.emit(node["id"], node["kind"], node["position"], node["state"])
+
+
+func _on_npc_spawn(body: Dictionary, text: String) -> void:
+	var npc := _npc_state(body, "npc_spawn", text)
+	if npc.is_empty():
+		return
+	npc_spawned.emit(
+		npc["id"],
+		npc["kind"],
+		npc["faction"],
+		npc["position"],
+		npc["hp"],
+		npc["max_hp"],
+	)
 
 
 func _on_inventory(body: Dictionary, text: String) -> void:

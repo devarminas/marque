@@ -74,6 +74,8 @@ func _ready() -> void:
 	_test_imp_spawns_from_welcome()
 	_test_cast_targets()
 	_test_attack_targets()
+	_test_despawn_forgets_npc()
+	_test_npc_spawn_after_despawn()
 
 	_finished = true
 
@@ -288,6 +290,43 @@ func _test_attack_targets() -> void:
 		"hostile imp becomes one attack naming 1000004, got %s" % [_attacks],
 	)
 	_check(_attack_refuses.is_empty(), "hostile imp does not refuse")
+
+
+func _test_despawn_forgets_npc() -> void:
+	var npcs: Dictionary = _session.get("_npcs")
+	_check(npcs.has(1000004), "imp is registered before despawn")
+	_session.select_player(1000004)
+	_check(_session.selected_player_id() == 1000004, "imp selected before despawn")
+	_net.ingest_text_frame('{"despawn":{"id":1000004}}')
+	npcs = _session.get("_npcs")
+	_check(not npcs.has(1000004), "despawn forgets the npc registry entry")
+	_check(_session.selected_player_id() == 0, "despawn clears selection of that npc")
+
+
+func _test_npc_spawn_after_despawn() -> void:
+	var npcs: Dictionary = _session.get("_npcs")
+	_check(not npcs.has(1000006), "respawn id is absent before npc_spawn")
+	_net.ingest_text_frame(
+		'{"npc_spawn":{"id":1000006,"kind":"imp","faction":"hostile","x":13.0,"z":7.5,"hp":50,"max_hp":50}}'
+	)
+	npcs = _session.get("_npcs")
+	var imp: NpcDummyScript = npcs.get(1000006)
+	_check(imp != null, "npc_spawn builds an imp body")
+	if imp == null:
+		return
+	_check(imp.kind == NpcDummyScript.KindImp, "npc_spawn kind is imp")
+	_check(imp.faction == NpcDummyScript.FactionHostile, "npc_spawn faction is hostile")
+	_check(
+		imp.get_node_or_null("Body/Armature/Skeleton3D") != null,
+		"npc_spawn imp uses the bestiary Imp scene",
+	)
+	_check(is_equal_approx(imp.global_position.x, 13.0), "npc_spawn places x")
+	_check(is_equal_approx(imp.global_position.z, 7.5), "npc_spawn places z")
+	var hp_map: Dictionary = _session.get("_hp")
+	var hit: Variant = hp_map.get(1000006)
+	_check(hit is Vector2i and hit == Vector2i(50, 50), "npc_spawn applies hit points")
+	var label := imp.get_node_or_null("HpLabel") as Label3D
+	_check(label != null and label.visible and label.text == "50/50", "npc_spawn shows hp label")
 
 
 func _check(cond: bool, msg: String) -> void:

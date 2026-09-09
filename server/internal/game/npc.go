@@ -154,6 +154,7 @@ func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp st
 		fields["camp"] = camp
 	}
 	w.log.Event(w.tick, EvNpcSpawned, fields)
+	w.broadcast(mnet.NpcSpawn(n.wire()), nil)
 	return nil
 }
 

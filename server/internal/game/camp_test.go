@@ -1,10 +1,13 @@
 package game
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
 	mrand "math/rand/v2"
 
+	"github.com/coder/websocket"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
@@ -131,6 +134,76 @@ func TestCampRespawnAfterDeathTimer(t *testing.T) {
 	if distanceBetween(pos, c.content.Center) > c.content.Radius+1e-9 {
 		t.Fatalf("respawn outside radius: %v", pos)
 	}
+}
+
+func TestCampRespawnBroadcastsNpcSpawn(t *testing.T) {
+	pw := newClassProbe(t)
+	c := seedDeterministicCamp(t, pw.w)
+	c.content.JitterTicks = 0
+	c.content.DeathTimerTicks = 5
+
+	peer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)
+	_ = drainJoin(t, peer.ws)
+	alice := pw.equipClass(pw.w.order[len(pw.w.order)-1], "knight")
+
+	imp := pw.w.npcByKind(KindImp)
+	deadID := imp.id
+	alice.pos = imp.pos
+	imp.hp = AttackDamage
+
+	pw.w.attack(alice, mnet.Attack{Player: imp.id}, 1)
+	for range AttackPeriodTicks {
+		pw.w.step()
+	}
+	if _, ok := pw.w.npcs[deadID]; ok {
+		t.Fatal("dead imp still in world")
+	}
+
+	for range 4 {
+		pw.w.step()
+	}
+	pw.w.step()
+	if pw.w.campLiveCount(c) != ImpCampPoolMax {
+		t.Fatalf("after timer live=%d, want %d", pw.w.campLiveCount(c), ImpCampPoolMax)
+	}
+
+	frame := awaitWireKind(t, peer.ws, "npc_spawn", 2*time.Second)
+	var spawn mnet.NpcSpawn
+	if err := json.Unmarshal(frame, &spawn); err != nil {
+		t.Fatalf("npc_spawn: %v: %s", err, frame)
+	}
+	if spawn.ID == deadID {
+		t.Fatalf("npc_spawn reused dead id %d", deadID)
+	}
+	if spawn.Kind != KindImp || spawn.Faction != FactionHostile {
+		t.Fatalf("npc_spawn=%+v", spawn)
+	}
+	if spawn.HP != ImpMaxHP || spawn.MaxHP != ImpMaxHP {
+		t.Fatalf("npc_spawn hp=%d/%d", spawn.HP, spawn.MaxHP)
+	}
+	pos := Point{X: spawn.X, Z: spawn.Z}
+	if distanceBetween(pos, c.content.Center) > c.content.Radius+1e-9 {
+		t.Fatalf("npc_spawn outside radius: %v", pos)
+	}
+	if _, ok := pw.w.npcs[spawn.ID]; !ok {
+		t.Fatalf("npc_spawn id %d missing from world", spawn.ID)
+	}
+}
+
+func awaitWireKind(t *testing.T, ws *websocket.Conn, want string, within time.Duration) json.RawMessage {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		kind, body, ok := readHeartbeatFrame(t, ws, time.Until(deadline))
+		if !ok {
+			break
+		}
+		if kind == want {
+			return body
+		}
+	}
+	t.Fatalf("no %q frame within %v", want, within)
+	return nil
 }
 
 func TestCampNeverExceedsPoolMax(t *testing.T) {

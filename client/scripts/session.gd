@@ -207,6 +207,7 @@ func _ready() -> void:
 	_net.node_spawned.connect(_on_node_spawned)
 	_net.node_despawned.connect(_on_node_despawned)
 	_net.node_state_changed.connect(_on_node_state_changed)
+	_net.npc_spawned.connect(_on_npc_spawned)
 	_net.inventory_changed.connect(_on_inventory_changed)
 	_net.dialog_changed.connect(_on_dialog_changed)
 	_net.quest_log_changed.connect(_on_quest_log_changed)
@@ -1009,6 +1010,27 @@ func _on_node_state_changed(
 	body.place_at(spawn_position.x, spawn_position.y)
 
 
+func _on_npc_spawned(
+	id: int,
+	kind: String,
+	faction: String,
+	spawn_position: Vector2,
+	hp: int,
+	max_hp: int,
+) -> void:
+	if not _clock.is_anchored():
+		push_error("session: npc_spawn for %d before welcome; ignoring" % id)
+		return
+	if _npcs.has(id):
+		push_warning("session: npc_spawn for known npc %d replaces the existing body" % id)
+		_forget_npc(id)
+	var body := _ensure_npc(id, kind, faction)
+	if body == null:
+		return
+	body.place_at(spawn_position.x, spawn_position.y)
+	_apply_hit_points(id, hp, max_hp)
+
+
 func _on_spawned(id: int, spawn_position: Vector2) -> void:
 	if not _clock.is_anchored():
 		push_error("session: spawn for %d before welcome; ignoring" % id)
@@ -1030,10 +1052,13 @@ func _on_despawned(id: int) -> void:
 	if id == _you:
 		push_error("session: despawn carried our own id %d; ignoring" % id)
 		return
-	if not _avatars.has(id):
-		push_warning("session: despawn for unknown player %d; ignoring" % id)
+	if _avatars.has(id):
+		_forget(id)
 		return
-	_forget(id)
+	if _npcs.has(id):
+		_forget_npc(id)
+		return
+	push_warning("session: despawn for unknown actor %d; ignoring" % id)
 
 
 func _on_path_assigned(
