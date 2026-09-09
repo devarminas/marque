@@ -228,11 +228,22 @@ func _hud_text() -> String:
 
 
 func _tree_node_id() -> int:
+	const PRIMARY_X := 5.0
+	const PRIMARY_Z := 0.0
+	const COORD_EPS := 0.01
+	var fallback := 0
 	for id: int in _session.known_node_ids():
 		var body := _session.node_for(id)
-		if body != null and body.kind == TREE_KIND:
+		if body == null or body.kind != TREE_KIND:
+			continue
+		if fallback == 0:
+			fallback = id
+		if (
+			absf(body.position.x - PRIMARY_X) <= COORD_EPS
+			and absf(body.position.z - PRIMARY_Z) <= COORD_EPS
+		):
 			return id
-	return 0
+	return fallback
 
 
 func _ground_item_id(kind: String) -> int:
