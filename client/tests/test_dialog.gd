@@ -134,7 +134,7 @@ func _test_no_client_script_assigns_a_mouse_filter() -> void:
 func _test_restatement_opens_and_clears() -> void:
 	_check(not _panel.visible, "the dialog starts closed")
 	_net.ingest_text_frame(
-		'{"dialog":{"npc":%d,"lines":["Will you accept Bring a Stick?"],'
+		'{"dialog":{"npc":%d,"lines":["Will you accept Bring Sticks?"],'
 		% QUEST_NPC
 		+ '"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}'
 	)
@@ -143,7 +143,7 @@ func _test_restatement_opens_and_clears() -> void:
 	_check(_panel.npc_id() == QUEST_NPC, "and caches the npc id")
 	var lines := _panel.get_node("Margin/Rows/Lines") as Label
 	_check(
-		lines != null and lines.text == "Will you accept Bring a Stick?",
+		lines != null and lines.text == "Will you accept Bring Sticks?",
 		"and draws the server lines",
 	)
 	var accept := _panel.get_node("Margin/Rows/Buttons/AcceptQuest") as Button
@@ -218,7 +218,7 @@ func _test_talk_intent_for_quest_giver() -> void:
 func _test_an_open_panel_swallows_a_click() -> void:
 	_look_straight_down()
 	_net.ingest_text_frame(
-		'{"dialog":{"npc":%d,"lines":["Will you accept Bring a Stick?"],'
+		'{"dialog":{"npc":%d,"lines":["Will you accept Bring Sticks?"],'
 		% QUEST_NPC
 		+ '"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}'
 	)
@@ -291,7 +291,7 @@ func _stand_an_item_at(ground: Vector2) -> void:
 		+ '"players":[{"id":1,"x":0.0,"z":0.0}],"items":[]}}'
 	)
 	_net.ingest_text_frame(
-		'{"item_spawn":{"id":%d,"kind":"stick","x":%f,"z":%f}}'
+		'{"item_spawn":{"id":%d,"kind":"sticks","x":%f,"z":%f}}'
 		% [CLICK_ITEM_ID, ground.x, ground.y]
 	)
 	await get_tree().process_frame

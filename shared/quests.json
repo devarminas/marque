@@ -2,10 +2,10 @@
   "quests": [
     {
       "id": "bring_a_stick",
-      "name": "Bring a Stick",
+      "name": "Bring Sticks",
       "talk_npc": "quest_giver",
       "deliver": {
-        "kind": "stick",
+        "kind": "sticks",
         "qty": 1
       },
       "reward_set": "miner"

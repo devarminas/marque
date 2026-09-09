@@ -75,7 +75,7 @@ func _check(condition: bool, message: String) -> bool:
 func _test_open_dialog_frame() -> void:
 	var rec := Recorder.new()
 	rec.feed(
-		'{"dialog":{"npc":1000003,"lines":["Will you accept Bring a Stick?"],'
+		'{"dialog":{"npc":1000003,"lines":["Will you accept Bring Sticks?"],'
 		+ '"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}'
 	)
 	_check(rec.names() == ["dialog_changed"], "open dialog emits dialog_changed, got %s" % [rec.names()])
@@ -86,7 +86,7 @@ func _test_open_dialog_frame() -> void:
 	var event: Dictionary = events[0]
 	_check(event["npc"] == 1000003, "dialog.npc is 1000003, got %s" % event["npc"])
 	_check(
-		event["lines"] == PackedStringArray(["Will you accept Bring a Stick?"]),
+		event["lines"] == PackedStringArray(["Will you accept Bring Sticks?"]),
 		"dialog.lines are server text, got %s" % [event["lines"]],
 	)
 	_check(

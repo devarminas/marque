@@ -59,7 +59,7 @@ func TestAcceptRestatesQuestLog(t *testing.T) {
 		t.Fatalf("quest_log=%+v", log)
 	}
 	e := log.Quests[0]
-	if e.ID != "bring_a_stick" || e.Title != "Bring a Stick" || e.Objective != "Deliver 1 stick" || e.Status != "active" {
+	if e.ID != "bring_a_stick" || e.Title != "Bring Sticks" || e.Objective != "Deliver 1 sticks" || e.Status != "active" {
 		t.Fatalf("entry=%+v", e)
 	}
 }
@@ -87,7 +87,7 @@ func TestReconnectRestatesQuestLog(t *testing.T) {
 		t.Fatalf("resumed quest_log=%+v", step.questLog)
 	}
 	e := step.questLog.Quests[0]
-	if e.ID != "bring_a_stick" || e.Status != "active" || e.Title != "Bring a Stick" {
+	if e.ID != "bring_a_stick" || e.Status != "active" || e.Title != "Bring Sticks" {
 		t.Fatalf("entry=%+v", e)
 	}
 }

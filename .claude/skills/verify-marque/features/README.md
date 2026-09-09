@@ -88,8 +88,8 @@ behaviour, then exactly four H2 sections in order: `Sub-features`,
   the three-interval liveness window, and the loud abandon of a silent server.
 - [Seed class kits on the ground](./seed-class-kits.md) — M7g: `-seed-class-kits`
   places sets-derived wearable kinds on a grid near spawn; join kit stays empty.
-- [Quest demo: stick for miner kit](./quest-demo.md) — M9: talk, accept, give
-  `stick`, miner bag rewards, quest log complete (`QUEST DEMO OK`).
+- [Quest demo: sticks for miner kit](./quest-demo.md) — M9: talk, accept, give
+  `sticks`, miner bag rewards, quest log complete (`QUEST DEMO OK`).
 - [Right-click a tree, chop it or be told why not](./gather-refusal.md) — ARM-147:
   right-click gathers, left-click on a node is inert, and the class gate's refusal
   reads `usable tool not equipped` on screen for four seconds.

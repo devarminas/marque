@@ -27,7 +27,7 @@ func TestQuestLogMessageActiveFromContent(t *testing.T) {
 		t.Fatalf("quests=%+v", got.Quests)
 	}
 	e := got.Quests[0]
-	if e.ID != "bring_a_stick" || e.Title != "Bring a Stick" || e.Objective != "Deliver 1 stick" || e.Status != string(questStatusActive) {
+	if e.ID != "bring_a_stick" || e.Title != "Bring Sticks" || e.Objective != "Deliver 1 sticks" || e.Status != string(questStatusActive) {
 		t.Fatalf("entry=%+v", e)
 	}
 }

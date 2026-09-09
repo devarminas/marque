@@ -91,8 +91,8 @@ func _test_empty_quest_log() -> void:
 func _test_active_quest_frame() -> void:
 	var rec := Recorder.new()
 	rec.feed(
-		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick",'
-		+ '"objective":"Deliver 1 stick","status":"active"}]}}'
+		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks",'
+		+ '"objective":"Deliver 1 sticks","status":"active"}]}}'
 	)
 	_check(rec.names() == ["quest_log_changed"], "quest_log emits quest_log_changed, got %s" % [rec.names()])
 	var events := rec.of("quest_log_changed")
@@ -105,11 +105,11 @@ func _test_active_quest_frame() -> void:
 		"quest id is server id, got %s" % [event["ids"]],
 	)
 	_check(
-		event["titles"] == PackedStringArray(["Bring a Stick"]),
+		event["titles"] == PackedStringArray(["Bring Sticks"]),
 		"title is server text, got %s" % [event["titles"]],
 	)
 	_check(
-		event["objectives"] == PackedStringArray(["Deliver 1 stick"]),
+		event["objectives"] == PackedStringArray(["Deliver 1 sticks"]),
 		"objective is server text, got %s" % [event["objectives"]],
 	)
 	_check(
@@ -122,8 +122,8 @@ func _test_active_quest_frame() -> void:
 func _test_rejects_bad_status() -> void:
 	var rec := Recorder.new()
 	rec.feed(
-		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick",'
-		+ '"objective":"Deliver 1 stick","status":"pending"}]}}'
+		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks",'
+		+ '"objective":"Deliver 1 sticks","status":"pending"}]}}'
 	)
 	_check(rec.names().is_empty(), "a non-wire status emits nothing, got %s" % [rec.names()])
 	rec.release()
