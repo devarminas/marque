@@ -741,6 +741,7 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo, seq mnet.Seq) {
 
 	p.pending = 0
 	w.clearPendingTalk(p)
+	w.closeDialog(p)
 	w.cancelGather(p)
 	w.cancelAttack(p, CauseMoveTo)
 	p.clearSteer()
