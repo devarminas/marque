@@ -80,7 +80,12 @@ func TestSeedQuestGiverDistinctFromDummies(t *testing.T) {
 
 func TestQuestGiverNotAttackableAsHostile(t *testing.T) {
 	pw, giver := newDialogProbe(t)
-	alice := pw.join()
+	classes, err := classdef.LoadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pw.w.SetClasses(classes)
+	alice := (&classProbe{probeWorld: pw}).joinWithClass("knight")
 	alice.pos = giver.pos
 	pw.w.attack(alice, mnet.Attack{Player: giver.id}, 1)
 	if alice.attackTarget != 0 {

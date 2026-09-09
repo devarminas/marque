@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/devarminas/marque/server/internal/abilitydef"
+	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
@@ -48,6 +49,15 @@ func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonUnknownAbility,
 			Detail:      "unknown ability",
+			Re:          mnet.MsgCast,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	}
+	if isMageAbility(ability.ID) && !w.classMageGate(p) {
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonNeedsClass,
+			Detail:      "cast requires an active mage class",
 			Re:          mnet.MsgCast,
 			Disposition: mnet.ReplyError,
 		})
@@ -242,6 +252,18 @@ func (w *World) resolveCastTarget(caster *player, ability abilitydef.Ability, na
 			Disposition: mnet.ReplyError,
 		}
 	}
+}
+
+func isMageAbility(id string) bool {
+	return id == "heal" || id == "fireball"
+}
+
+func (w *World) classMageGate(p *player) bool {
+	if w.classes == nil {
+		return false
+	}
+	res := classdef.ClassOf(w.wornKinds(p), w.classes)
+	return res.Class != nil && res.Class.ID == "mage"
 }
 
 func playerCastTarget(p *player) *castTarget {
