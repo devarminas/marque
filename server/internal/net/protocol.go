@@ -32,20 +32,25 @@ type Seq int64
 type EquipSlot string
 
 const (
-	MsgMoveTo  = "move_to"
-	MsgMove    = "move"
-	MsgPickup  = "pickup"
-	MsgDrop    = "drop"
-	MsgEquip   = "equip"
-	MsgUnequip = "unequip"
-	MsgGather  = "gather"
-	MsgUse     = "use"
-	MsgAttack        = "attack"
-	MsgRespawn       = "respawn"
-	MsgCast          = "cast"
-	MsgTalk          = "talk"
-	MsgDialogOption  = "dialog_option"
-	MsgGive          = "give"
+	MsgMoveTo       = "move_to"
+	MsgMove         = "move"
+	MsgPickup       = "pickup"
+	MsgDrop         = "drop"
+	MsgEquip        = "equip"
+	MsgUnequip      = "unequip"
+	MsgGather       = "gather"
+	MsgUse          = "use"
+	MsgAttack       = "attack"
+	MsgRespawn      = "respawn"
+	MsgCast         = "cast"
+	MsgTalk         = "talk"
+	MsgDialogOption = "dialog_option"
+	MsgGive         = "give"
+	MsgPartyInvite  = "party_invite"
+	MsgPartyAccept  = "party_accept"
+	MsgPartyDecline = "party_decline"
+	MsgPartyLeave   = "party_leave"
+	MsgPartyKick    = "party_kick"
 
 	OptionAcceptQuest = "accept_quest"
 	OptionStopTalking = "stop_talking"
@@ -109,7 +114,7 @@ type Welcome struct {
 	Players        []PlayerState `json:"players"`
 	Items          []ItemState   `json:"items"`
 	Nodes          []NodeState   `json:"nodes"`
-	Npcs           []NpcState   `json:"npcs"`
+	Npcs           []NpcState    `json:"npcs"`
 }
 
 type Spawn PlayerState
@@ -218,25 +223,39 @@ type QuestLog struct {
 	Quests []QuestLogEntry `json:"quests"`
 }
 
-func (Welcome) isServerMessage()     {}
-func (Spawn) isServerMessage()       {}
-func (Despawn) isServerMessage()     {}
-func (Path) isServerMessage()        {}
-func (Error) isServerMessage()       {}
-func (ItemSpawn) isServerMessage()   {}
-func (ItemDespawn) isServerMessage() {}
-func (NodeSpawn) isServerMessage()   {}
-func (NodeDespawn) isServerMessage() {}
-func (NodeUpdate) isServerMessage()  {}
-func (Inventory) isServerMessage()   {}
-func (Equipment) isServerMessage()   {}
-func (Class) isServerMessage()       {}
-func (Skills) isServerMessage()      {}
-func (Tick) isServerMessage()        {}
-func (HP) isServerMessage()          {}
-func (Mana) isServerMessage()        {}
-func (Dialog) isServerMessage()      {}
-func (QuestLog) isServerMessage()    {}
+type PartyID int64
+
+type Party struct {
+	ID      PartyID    `json:"id"`
+	Leader  PlayerID   `json:"leader"`
+	Members []PlayerID `json:"members"`
+}
+
+type PartyInviteNotice struct {
+	From PlayerID `json:"from"`
+}
+
+func (Welcome) isServerMessage()           {}
+func (Spawn) isServerMessage()             {}
+func (Despawn) isServerMessage()           {}
+func (Path) isServerMessage()              {}
+func (Error) isServerMessage()             {}
+func (ItemSpawn) isServerMessage()         {}
+func (ItemDespawn) isServerMessage()       {}
+func (NodeSpawn) isServerMessage()         {}
+func (NodeDespawn) isServerMessage()       {}
+func (NodeUpdate) isServerMessage()        {}
+func (Inventory) isServerMessage()         {}
+func (Equipment) isServerMessage()         {}
+func (Class) isServerMessage()             {}
+func (Skills) isServerMessage()            {}
+func (Tick) isServerMessage()              {}
+func (HP) isServerMessage()                {}
+func (Mana) isServerMessage()              {}
+func (Dialog) isServerMessage()            {}
+func (QuestLog) isServerMessage()          {}
+func (Party) isServerMessage()             {}
+func (PartyInviteNotice) isServerMessage() {}
 
 type ClientMessage interface {
 	isClientMessage()
@@ -303,6 +322,20 @@ type Give struct {
 	Slot int      `json:"slot"`
 }
 
+type PartyInvite struct {
+	Player PlayerID `json:"player"`
+}
+
+type PartyAccept struct{}
+
+type PartyDecline struct{}
+
+type PartyLeave struct{}
+
+type PartyKick struct {
+	Player PlayerID `json:"player"`
+}
+
 func (MoveTo) isClientMessage()           {}
 func (Move) isClientMessage()             {}
 func (Pickup) isClientMessage()           {}
@@ -317,6 +350,11 @@ func (Cast) isClientMessage()             {}
 func (Talk) isClientMessage()             {}
 func (DialogOptionPick) isClientMessage() {}
 func (Give) isClientMessage()             {}
+func (PartyInvite) isClientMessage()      {}
+func (PartyAccept) isClientMessage()      {}
+func (PartyDecline) isClientMessage()     {}
+func (PartyLeave) isClientMessage()       {}
+func (PartyKick) isClientMessage()        {}
 
 func (MoveTo) Name() string           { return MsgMoveTo }
 func (Move) Name() string             { return MsgMove }
@@ -332,27 +370,34 @@ func (Cast) Name() string             { return MsgCast }
 func (Talk) Name() string             { return MsgTalk }
 func (DialogOptionPick) Name() string { return MsgDialogOption }
 func (Give) Name() string             { return MsgGive }
+func (PartyInvite) Name() string      { return MsgPartyInvite }
+func (PartyAccept) Name() string      { return MsgPartyAccept }
+func (PartyDecline) Name() string     { return MsgPartyDecline }
+func (PartyLeave) Name() string       { return MsgPartyLeave }
+func (PartyKick) Name() string        { return MsgPartyKick }
 
 type serverEnvelope struct {
-	Welcome     *Welcome     `json:"welcome,omitempty"`
-	Spawn       *Spawn       `json:"spawn,omitempty"`
-	Despawn     *Despawn     `json:"despawn,omitempty"`
-	Path        *Path        `json:"path,omitempty"`
-	Error       *Error       `json:"error,omitempty"`
-	ItemSpawn   *ItemSpawn   `json:"item_spawn,omitempty"`
-	ItemDespawn *ItemDespawn `json:"item_despawn,omitempty"`
-	NodeSpawn   *NodeSpawn   `json:"node_spawn,omitempty"`
-	NodeDespawn *NodeDespawn `json:"node_despawn,omitempty"`
-	NodeState   *NodeUpdate  `json:"node_state,omitempty"`
-	Inventory   *Inventory   `json:"inventory,omitempty"`
-	Equipment   *Equipment   `json:"equipment,omitempty"`
-	Class       *Class       `json:"class,omitempty"`
-	Skills      *Skills      `json:"skills,omitempty"`
-	Tick        *Tick        `json:"tick,omitempty"`
-	HP          *HP          `json:"hp,omitempty"`
-	Mana        *Mana        `json:"mana,omitempty"`
-	Dialog      *Dialog      `json:"dialog,omitempty"`
-	QuestLog    *QuestLog    `json:"quest_log,omitempty"`
+	Welcome           *Welcome           `json:"welcome,omitempty"`
+	Spawn             *Spawn             `json:"spawn,omitempty"`
+	Despawn           *Despawn           `json:"despawn,omitempty"`
+	Path              *Path              `json:"path,omitempty"`
+	Error             *Error             `json:"error,omitempty"`
+	ItemSpawn         *ItemSpawn         `json:"item_spawn,omitempty"`
+	ItemDespawn       *ItemDespawn       `json:"item_despawn,omitempty"`
+	NodeSpawn         *NodeSpawn         `json:"node_spawn,omitempty"`
+	NodeDespawn       *NodeDespawn       `json:"node_despawn,omitempty"`
+	NodeState         *NodeUpdate        `json:"node_state,omitempty"`
+	Inventory         *Inventory         `json:"inventory,omitempty"`
+	Equipment         *Equipment         `json:"equipment,omitempty"`
+	Class             *Class             `json:"class,omitempty"`
+	Skills            *Skills            `json:"skills,omitempty"`
+	Tick              *Tick              `json:"tick,omitempty"`
+	HP                *HP                `json:"hp,omitempty"`
+	Mana              *Mana              `json:"mana,omitempty"`
+	Dialog            *Dialog            `json:"dialog,omitempty"`
+	QuestLog          *QuestLog          `json:"quest_log,omitempty"`
+	Party             *Party             `json:"party,omitempty"`
+	PartyInviteNotice *PartyInviteNotice `json:"party_invite_notice,omitempty"`
 }
 
 func Encode(m ServerMessage) ([]byte, error) {
@@ -396,6 +441,10 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.Dialog = &v
 	case QuestLog:
 		env.QuestLog = &v
+	case Party:
+		env.Party = &v
+	case PartyInviteNotice:
+		env.PartyInviteNotice = &v
 	default:
 		return nil, fmt.Errorf("net: encode: unhandled server message %T", m)
 	}
@@ -409,42 +458,49 @@ func Encode(m ServerMessage) ([]byte, error) {
 type RejectReason string
 
 const (
-	ReasonMalformedJSON RejectReason = "malformed_json"
-	ReasonProtocolError RejectReason = "protocol_error"
-	ReasonUnknownMessage RejectReason = "unknown_message"
-	ReasonMissingField RejectReason = "missing_field"
-	ReasonNonFinite RejectReason = "non_finite"
-	ReasonOutOfBounds RejectReason = "out_of_bounds"
-	ReasonDegenerate RejectReason = "degenerate"
-	ReasonUnknownItem RejectReason = "unknown_item"
-	ReasonNoSuchSlot RejectReason = "no_such_slot"
-	ReasonEmptySlot RejectReason = "empty_slot"
-	ReasonNotEquippable RejectReason = "not_equippable"
-	ReasonNoSuchWornSlot RejectReason = "no_such_worn_slot"
-	ReasonEmptyWornSlot RejectReason = "empty_worn_slot"
-	ReasonInventoryFull RejectReason = "inventory_full"
-	ReasonUnknownNode RejectReason = "unknown_node"
-	ReasonNodeDepleted RejectReason = "node_depleted"
-	ReasonNeedsClass RejectReason = "needs_class"
-	ReasonNoRecipe RejectReason = "no_recipe"
-	ReasonUnknownPlayer RejectReason = "unknown_player"
-	ReasonSelf RejectReason = "self"
-	ReasonTargetDead RejectReason = "target_dead"
-	ReasonDead RejectReason = "dead"
-	ReasonNotDead RejectReason = "not_dead"
-	ReasonUnknownAbility RejectReason = "unknown_ability"
-	ReasonNoTarget RejectReason = "no_target"
-	ReasonWrongTarget RejectReason = "wrong_target"
+	ReasonMalformedJSON    RejectReason = "malformed_json"
+	ReasonProtocolError    RejectReason = "protocol_error"
+	ReasonUnknownMessage   RejectReason = "unknown_message"
+	ReasonMissingField     RejectReason = "missing_field"
+	ReasonNonFinite        RejectReason = "non_finite"
+	ReasonOutOfBounds      RejectReason = "out_of_bounds"
+	ReasonDegenerate       RejectReason = "degenerate"
+	ReasonUnknownItem      RejectReason = "unknown_item"
+	ReasonNoSuchSlot       RejectReason = "no_such_slot"
+	ReasonEmptySlot        RejectReason = "empty_slot"
+	ReasonNotEquippable    RejectReason = "not_equippable"
+	ReasonNoSuchWornSlot   RejectReason = "no_such_worn_slot"
+	ReasonEmptyWornSlot    RejectReason = "empty_worn_slot"
+	ReasonInventoryFull    RejectReason = "inventory_full"
+	ReasonUnknownNode      RejectReason = "unknown_node"
+	ReasonNodeDepleted     RejectReason = "node_depleted"
+	ReasonNeedsClass       RejectReason = "needs_class"
+	ReasonNoRecipe         RejectReason = "no_recipe"
+	ReasonUnknownPlayer    RejectReason = "unknown_player"
+	ReasonSelf             RejectReason = "self"
+	ReasonTargetDead       RejectReason = "target_dead"
+	ReasonDead             RejectReason = "dead"
+	ReasonNotDead          RejectReason = "not_dead"
+	ReasonUnknownAbility   RejectReason = "unknown_ability"
+	ReasonNoTarget         RejectReason = "no_target"
+	ReasonWrongTarget      RejectReason = "wrong_target"
 	ReasonInsufficientMana RejectReason = "insufficient_mana"
-	ReasonOutOfRange RejectReason = "out_of_range"
-	ReasonUnknownSender RejectReason = "unknown_sender"
-	ReasonBinaryFrame RejectReason = "binary_frame"
-	ReasonNoDialog RejectReason = "no_dialog"
-	ReasonUnknownOption RejectReason = "unknown_option"
-	ReasonQuestActive RejectReason = "quest_active"
-	ReasonQuestComplete RejectReason = "quest_complete"
-	ReasonQuestInactive RejectReason = "quest_inactive"
-	ReasonWrongItem RejectReason = "wrong_item"
+	ReasonOutOfRange       RejectReason = "out_of_range"
+	ReasonUnknownSender    RejectReason = "unknown_sender"
+	ReasonBinaryFrame      RejectReason = "binary_frame"
+	ReasonNoDialog         RejectReason = "no_dialog"
+	ReasonUnknownOption    RejectReason = "unknown_option"
+	ReasonQuestActive      RejectReason = "quest_active"
+	ReasonQuestComplete    RejectReason = "quest_complete"
+	ReasonQuestInactive    RejectReason = "quest_inactive"
+	ReasonWrongItem        RejectReason = "wrong_item"
+	ReasonNotLeader        RejectReason = "not_leader"
+	ReasonPartyFull        RejectReason = "party_full"
+	ReasonAlreadyInParty   RejectReason = "already_in_party"
+	ReasonDuplicateInvite  RejectReason = "duplicate_invite"
+	ReasonNoInvite         RejectReason = "no_invite"
+	ReasonNotInParty       RejectReason = "not_in_party"
+	ReasonNotSameParty     RejectReason = "not_same_party"
 )
 
 type Disposition int
@@ -544,6 +600,14 @@ type giveWire struct {
 	Slot *int      `json:"slot"`
 }
 
+type partyInviteWire struct {
+	Player *PlayerID `json:"player"`
+}
+
+type partyKickWire struct {
+	Player *PlayerID `json:"player"`
+}
+
 type seqWire struct {
 	Seq *int64 `json:"seq"`
 }
@@ -596,6 +660,16 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 			decodeBody = decodeDialogOption
 		case MsgGive:
 			decodeBody = decodeGive
+		case MsgPartyInvite:
+			decodeBody = decodePartyInvite
+		case MsgPartyAccept:
+			decodeBody = decodePartyAccept
+		case MsgPartyDecline:
+			decodeBody = decodePartyDecline
+		case MsgPartyLeave:
+			decodeBody = decodePartyLeave
+		case MsgPartyKick:
+			decodeBody = decodePartyKick
 		default:
 			return nil, 0, &RejectError{
 				Reason:      ReasonUnknownMessage,
@@ -799,6 +873,52 @@ func decodeGive(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonMissingField, MsgGive, "give needs a slot index")
 	}
 	return Give{NPC: *wire.NPC, Slot: *wire.Slot}, nil
+}
+
+func decodePartyInvite(payload []byte) (ClientMessage, error) {
+	var wire partyInviteWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgPartyInvite, "party_invite: %v", err)
+	}
+	if wire.Player == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgPartyInvite, "party_invite needs a player id")
+	}
+	return PartyInvite{Player: *wire.Player}, nil
+}
+
+func decodePartyAccept(payload []byte) (ClientMessage, error) {
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgPartyAccept, "party_accept: %v", err)
+	}
+	return PartyAccept{}, nil
+}
+
+func decodePartyDecline(payload []byte) (ClientMessage, error) {
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgPartyDecline, "party_decline: %v", err)
+	}
+	return PartyDecline{}, nil
+}
+
+func decodePartyLeave(payload []byte) (ClientMessage, error) {
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgPartyLeave, "party_leave: %v", err)
+	}
+	return PartyLeave{}, nil
+}
+
+func decodePartyKick(payload []byte) (ClientMessage, error) {
+	var wire partyKickWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgPartyKick, "party_kick: %v", err)
+	}
+	if wire.Player == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgPartyKick, "party_kick needs a player id")
+	}
+	return PartyKick{Player: *wire.Player}, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
