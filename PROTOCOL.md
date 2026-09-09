@@ -458,6 +458,36 @@ A request to pick a dialog option. `option` is a server-known id such as `accept
 A request to offer the item in bag slot `slot` to an NPC. `npc` is an NPC id in the player-id
 band. `slot` is a bag index, the same space `drop.slot` uses. Semantics are in *Quests turn-in*.
 
+### `party_invite`. **M11 party**
+
+    {"party_invite":{"player":2}}
+
+A request to invite player `player` into the sender's party. Semantics are in *Party*.
+
+### `party_accept`. **M11 party**
+
+    {"party_accept":{}}
+
+Accept the sender's pending party invite. Semantics are in *Party*.
+
+### `party_decline`. **M11 party**
+
+    {"party_decline":{}}
+
+Decline the sender's pending party invite. Semantics are in *Party*.
+
+### `party_leave`. **M11 party**
+
+    {"party_leave":{}}
+
+Leave the sender's current party. Semantics are in *Party*.
+
+### `party_kick`. **M11 party**
+
+    {"party_kick":{"player":3}}
+
+Leader-only request to remove `player` from the sender's party. Semantics are in *Party*.
+
 ## Messages, server to client
 
 ### `welcome`
@@ -873,6 +903,22 @@ log is `{"quest_log":{"quests":[]}}`. The list is never `null`.
 The first `quest_log` is sent inside the atomic `welcome` step, after `skills`, and is the
 last frame of the join. Thereafter one is sent to a player when that player's quest status
 set changes (accept in **M9c**; turn-in in **M9d**), and never otherwise.
+
+### `party`. **M11 party**
+
+    {"party":{"id":1,"leader":2,"members":[2,3,4]}}
+
+Private membership restatement. Sent **only to current members** of that party (and to a
+player who just left or was kicked, as an empty clear). Non-members never receive it.
+Semantics are in *Party*.
+
+### `party_invite_notice`. **M11 party**
+
+    {"party_invite_notice":{"from":2}}
+
+Private notice that player `from` has invited this player. Sent only to the invitee.
+`from` of `0` clears a pending invite (decline, accept, inviter cancel, or inviter gone).
+Semantics are in *Party*.
 
 ### `error`
 
@@ -2188,6 +2234,96 @@ GAMELOG refuse reasons for give (never on the wire; the player sees `error.msg`)
 - No auto-equip of reward kinds.
 - No multi-slot deliver qty greater than one on this intent.
 - No currency, trade window, or bank.
+
+## Party. **M11 party**
+
+Thin cooperative grouping. The server owns membership. Clients send intents; members receive
+private restatements. Party size cap is **4** (`PartySize`).
+
+Only a solo player or a party **leader** may invite. A solo invite creates no party until the
+target accepts; accept then creates a party of two with the inviter as leader. Further invites
+from that leader add members until the cap.
+
+### Intents
+
+| Intent | Body | Who |
+| --- | --- | --- |
+| `party_invite` | `{"player":2}` | Solo player or leader |
+| `party_accept` | `{}` | Invitee with a pending invite |
+| `party_decline` | `{}` | Invitee with a pending invite |
+| `party_leave` | `{}` | Any member |
+| `party_kick` | `{"player":3}` | Leader only |
+
+### Pending invites
+
+At most one pending invite per invitee (`from` the inviter). A successful `party_invite`
+stores that pending and sends the invitee a private `party_invite_notice`. Accept joins;
+decline clears. A new invite to an invitee who already has a pending invite from the same
+inviter is `duplicate_invite`. An invite while the invitee already has a pending invite from
+someone else is also `duplicate_invite` (one pending slot).
+
+### Membership restatement `party`
+
+    {"party":{"id":1,"leader":2,"members":[2,3,4]}}
+
+`id` is the server party id. `leader` is the current leader's player id. `members` is join
+order (stable): the leader is always present in the list, not necessarily first. Empty clear
+for a player who left or was kicked:
+
+    {"party":{"id":0,"leader":0,"members":[]}}
+
+Restated to every **current** member whenever membership or leadership changes, and once to
+the removed player as the empty clear. Never broadcast. On join/resume catch-up, a member
+receives `party` after `quest_log`; an invitee with a pending invite receives
+`party_invite_notice` after that.
+
+### Leadership when the leader leaves
+
+**Transfer**, not disband. When the leader leaves (or is retired from the world) and at least
+one other member remains, leadership passes to the earliest remaining member in join order.
+When the last member leaves, the party is deleted. Kick never transfers leadership: only the
+leader may kick, and kicking the leader is refused (`self`; use `party_leave`).
+
+### Refusals
+
+Refuse reasons (GAMELOG `reason`; player sees `error` with `re` naming the intent):
+
+| reason | typical case |
+| --- | --- |
+| `self` | invite self; kick self |
+| `unknown_player` | target id is not a connected/suspended player |
+| `wrong_target` | invite or kick names an NPC id |
+| `not_leader` | non-leader invite or kick |
+| `party_full` | invite when the party already has `PartySize` members |
+| `already_in_party` | invitee already in a party; invitee accept while already in a party |
+| `duplicate_invite` | pending invite already held by that invitee |
+| `no_invite` | accept/decline with no pending invite |
+| `not_in_party` | leave/kick when actor or target is not in the party |
+| `not_same_party` | kick names a player in a different party |
+
+Death does not leave a party. Suspension keeps membership. Retirement (final leave of the
+world) removes the player from their party with the same leadership rules as `party_leave`.
+
+### Log vocabulary. **M11 party**
+
+| ev | when |
+| --- | --- |
+| `party_invite` | invite intent received (before refuse/success) |
+| `party_invited` | pending invite stored |
+| `party_accept` / `party_decline` / `party_leave` / `party_kick` | intent received |
+| `party_joined` | member added (fields: `party`, `player`, `leader`, `members`) |
+| `party_left` | member removed by leave or retire |
+| `party_kicked` | member removed by kick |
+| `party_leader` | leadership transferred (`party`, `leader`, `from`) |
+| `party_disbanded` | last member gone |
+| `party_invite_rejected` / `party_accept_rejected` / … | refuse path via `rejectionEvent` |
+
+### Deliberately absent (party). **M11 party**
+
+- No client party roster UI (ARM-205).
+- No shared loot, party chat, or shared XP outside later kill-quest credit (ARM-210).
+- No raid size, alliances, or cross-party invites.
+- No promoting a non-leader without the leader leaving.
 
 ## Deliberately absent
 

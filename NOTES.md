@@ -13,6 +13,16 @@ Settled decisions that are closed to re-litigation live in
 
 Installed and verified: Godot 4.7.2, Go 1.27.0, git 2.55, gh 2.97.0.
 
+## Party leadership on leader leave. **M11 party** / ARM-204
+
+**Transfer to the earliest remaining member in join order; delete the party only when empty.**
+
+Disband-on-leader-leave would punish the remaining group for one disconnect and force a
+re-invite loop before camps and kill-quest credit matter. Transfer keeps the cooperative
+primitive intact with one rule and no promote intent. Join order is already the membership
+list on the wire, so the successor is deterministic and visible in the `party` restatement.
+Cap stays at 4 so a transferred lead cannot accidentally grow a raid.
+
 Headless client tests and race recipes live in [AGENTS.md](AGENTS.md).
 
 ## Godot authoring traps
