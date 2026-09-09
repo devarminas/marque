@@ -469,6 +469,9 @@ static func _chrome_point(client: Client, panel_rect: Rect2, screen: Rect2) -> V
 	var toggle := client.root.get_node_or_null("UI/InventoryToggle") as Control
 	if toggle != null and toggle.visible:
 		controls.append(toggle.get_global_rect())
+	var quest_toggle := client.root.get_node_or_null("UI/QuestLogToggle") as Control
+	if quest_toggle != null and quest_toggle.visible:
+		controls.append(quest_toggle.get_global_rect())
 
 	var covered := panel_rect.intersection(screen)
 	if not covered.has_area():

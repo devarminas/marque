@@ -1,4 +1,4 @@
-[gd_scene load_steps=35 format=3]
+[gd_scene load_steps=36 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://scripts/class_debug.gd" id="16_class_debug"]
 [ext_resource type="Script" path="res://scripts/error_hud.gd" id="17_error_hud"]
 [ext_resource type="Script" path="res://scripts/dialog_panel.gd" id="18_dialog_panel"]
+[ext_resource type="Script" path="res://scripts/quest_log_panel.gd" id="38_quest_log_panel"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/basic_bar2.png" id="19_tray"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_line.png" id="20_hp_line"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/mana_line.png" id="21_mana_line"]
@@ -226,6 +227,80 @@ mouse_filter = 2
 texture = ExtResource("27_inv_icon")
 expand_mode = 1
 stretch_mode = 5
+
+[node name="QuestLogToggle" type="Button" parent="." unique_id=1881881881]
+custom_minimum_size = Vector2(32, 32)
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -36.0
+offset_top = -72.0
+offset_right = -4.0
+offset_bottom = -40.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/normal = SubResource("style_inv_toggle")
+theme_override_styles/pressed = SubResource("style_inv_toggle_off")
+theme_override_styles/hover = SubResource("style_inv_toggle_hover")
+theme_override_styles/disabled = SubResource("style_inv_toggle")
+theme_override_styles/focus = SubResource("style_inv_toggle")
+theme_override_font_sizes/font_size = 14
+text = "J"
+flat = true
+
+[node name="QuestLogPanel" type="PanelContainer" parent="." unique_id=1881881882 node_paths=PackedStringArray("empty_label", "entries_label")]
+visible = false
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -300.0
+offset_top = 48.0
+offset_right = -16.0
+offset_bottom = 248.0
+grow_horizontal = 0
+custom_minimum_size = Vector2(200, 120)
+theme_override_styles/panel = SubResource("style_dock_panel")
+script = ExtResource("38_quest_log_panel")
+empty_label = NodePath("Margin/Rows/Empty")
+entries_label = NodePath("Margin/Rows/Entries")
+
+[node name="Margin" type="MarginContainer" parent="QuestLogPanel" unique_id=1881881883]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="Rows" type="VBoxContainer" parent="QuestLogPanel/Margin" unique_id=1881881884]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Heading" type="Label" parent="QuestLogPanel/Margin/Rows" unique_id=1881881885]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 14
+text = "Quest Log"
+
+[node name="Empty" type="Label" parent="QuestLogPanel/Margin/Rows" unique_id=1881881886]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.78, 0.8, 0.82, 1)
+theme_override_font_sizes/font_size = 14
+text = "No quests."
+
+[node name="Entries" type="Label" parent="QuestLogPanel/Margin/Rows" unique_id=1881881887]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 14
+autowrap_mode = 3
 
 [node name="ClassHud" type="Control" parent="." unique_id=1393223960 node_paths=PackedStringArray("name_label", "hint_label")]
 visible = false
@@ -713,4 +788,5 @@ expand_mode = 1
 stretch_mode = 6
 
 [connection signal="pressed" from="InventoryToggle" to="RightDock" method="toggle"]
+[connection signal="pressed" from="QuestLogToggle" to="QuestLogPanel" method="toggle"]
 [connection signal="timeout" from="ErrorHud/Linger" to="ErrorHud" method="clear"]
