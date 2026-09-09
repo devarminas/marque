@@ -364,6 +364,9 @@ func _build_the_click_world() -> void:
 	var quest_toggle := _root.get_node_or_null("UI/QuestLogToggle") as CanvasItem
 	if quest_toggle != null:
 		quest_toggle.visible = false
+	var party_toggle := _root.get_node_or_null("UI/PartyToggle") as CanvasItem
+	if party_toggle != null:
+		party_toggle.visible = false
 	await _feed(_welcome_frame())
 	await _feed(
 		'{"item_spawn":{"id":%d,"kind":"acorn","x":%f,"z":%f}}'
@@ -561,6 +564,9 @@ func _build_the_node_click_world() -> void:
 	var quest_toggle := _root.get_node_or_null("UI/QuestLogToggle") as CanvasItem
 	if quest_toggle != null:
 		quest_toggle.visible = false
+	var party_toggle := _root.get_node_or_null("UI/PartyToggle") as CanvasItem
+	if party_toggle != null:
+		party_toggle.visible = false
 	await _feed(_welcome_frame())
 	await _feed(
 		'{"node_spawn":{"id":%d,"kind":"tree","x":%f,"z":%f,"state":"full"}}'
@@ -670,6 +676,9 @@ func _build_the_player_click_world() -> void:
 	var quest_toggle := _root.get_node_or_null("UI/QuestLogToggle") as CanvasItem
 	if quest_toggle != null:
 		quest_toggle.visible = false
+	var party_toggle := _root.get_node_or_null("UI/PartyToggle") as CanvasItem
+	if party_toggle != null:
+		party_toggle.visible = false
 	await _feed(
 		(
 			'{"welcome":{"you":%d,"tick_ms":150,"tick":900,"players":['

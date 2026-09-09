@@ -16,6 +16,7 @@ const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const DialogPanelScript := preload("res://scripts/dialog_panel.gd")
 const GivePanelScript := preload("res://scripts/give_panel.gd")
 const QuestLogPanelScript := preload("res://scripts/quest_log_panel.gd")
+const PartyPanelScript := preload("res://scripts/party_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
 const ClassHudScript := preload("res://scripts/class_hud.gd")
@@ -87,6 +88,14 @@ signal dialog_option_requested(npc_id: int, option_id: String)
 
 signal give_requested(npc_id: int, slot: int)
 
+signal party_invite_requested(player_id: int)
+
+signal party_accept_requested()
+
+signal party_decline_requested()
+
+signal party_leave_requested()
+
 signal respawn_requested()
 
 @export var net: Node
@@ -100,6 +109,7 @@ signal respawn_requested()
 @export var dialog_panel: Node
 @export var give_panel: Node
 @export var quest_log_panel: Node
+@export var party_panel: Node
 @export var equipment_panel: Node
 @export var hp_hud: Node
 @export var class_hud: Node
@@ -115,6 +125,7 @@ var _panel: InventoryPanelScript = null
 var _dialog: DialogPanelScript = null
 var _give: GivePanelScript = null
 var _quest_log: QuestLogPanelScript = null
+var _party: PartyPanelScript = null
 var _equipment: EquipmentPanelScript = null
 var _hp_hud: HpHudScript = null
 var _class_hud: ClassHudScript = null
@@ -195,6 +206,8 @@ func _ready() -> void:
 	_net.inventory_changed.connect(_on_inventory_changed)
 	_net.dialog_changed.connect(_on_dialog_changed)
 	_net.quest_log_changed.connect(_on_quest_log_changed)
+	_net.party_changed.connect(_on_party_changed)
+	_net.party_invite_notice_changed.connect(_on_party_invite_notice_changed)
 	_net.equipment_changed.connect(_on_equipment_changed)
 	_net.class_changed.connect(_on_class_changed)
 	_net.skills_changed.connect(_on_skills_changed)
@@ -236,6 +249,15 @@ func _ready() -> void:
 	_quest_log = quest_log_panel as QuestLogPanelScript
 	if _quest_log == null:
 		push_error("Session.quest_log_panel must point at a node running quest_log_panel.gd")
+
+	_party = party_panel as PartyPanelScript
+	if _party == null:
+		push_error("Session.party_panel must point at a node running party_panel.gd")
+	else:
+		_party.invite_pressed.connect(_on_party_invite_pressed)
+		_party.accept_pressed.connect(_on_party_accept_pressed)
+		_party.decline_pressed.connect(_on_party_decline_pressed)
+		_party.leave_pressed.connect(_on_party_leave_pressed)
 
 	_equipment = equipment_panel as EquipmentPanelScript
 	if _equipment == null:
@@ -475,6 +497,44 @@ func request_give(npc_id: int, slot: int) -> void:
 		)
 		return
 	_net.send_give(npc_id, slot)
+
+
+func request_party_invite(player_id: int) -> void:
+	if player_id < 1:
+		push_warning("session: party_invite needs a selected player id")
+		return
+	if player_id == _you:
+		push_warning("session: party_invite of self ignored")
+		return
+	party_invite_requested.emit(player_id)
+	if _net == null or not _net.is_open():
+		push_warning("session: party_invite of player %d dropped, the socket is not open" % player_id)
+		return
+	_net.send_party_invite(player_id)
+
+
+func request_party_accept() -> void:
+	party_accept_requested.emit()
+	if _net == null or not _net.is_open():
+		push_warning("session: party_accept dropped, the socket is not open")
+		return
+	_net.send_party_accept()
+
+
+func request_party_decline() -> void:
+	party_decline_requested.emit()
+	if _net == null or not _net.is_open():
+		push_warning("session: party_decline dropped, the socket is not open")
+		return
+	_net.send_party_decline()
+
+
+func request_party_leave() -> void:
+	party_leave_requested.emit()
+	if _net == null or not _net.is_open():
+		push_warning("session: party_leave dropped, the socket is not open")
+		return
+	_net.send_party_leave()
 
 
 func request_cast(ability_id: String) -> void:
@@ -1178,6 +1238,36 @@ func _on_quest_log_changed(
 		return
 	_quest_log.apply(ids, titles, objectives, statuses)
 	_reconcile_give_panel()
+
+
+func _on_party_changed(party_id: int, leader_id: int, members: PackedInt32Array) -> void:
+	if _party == null:
+		push_error("session: party arrived with no panel to draw it")
+		return
+	_party.apply_party(party_id, leader_id, members)
+
+
+func _on_party_invite_notice_changed(from_player: int) -> void:
+	if _party == null:
+		push_error("session: party_invite_notice arrived with no panel to draw it")
+		return
+	_party.apply_invite(from_player)
+
+
+func _on_party_invite_pressed() -> void:
+	request_party_invite(_selected_player_id)
+
+
+func _on_party_accept_pressed() -> void:
+	request_party_accept()
+
+
+func _on_party_decline_pressed() -> void:
+	request_party_decline()
+
+
+func _on_party_leave_pressed() -> void:
+	request_party_leave()
 
 
 func _on_dialog_option_chosen(npc_id: int, option_id: String) -> void:
