@@ -13,8 +13,9 @@ attacker click-engages the victim, walks in, lands period hits of 10 until HP
   descending `target_hp` to 0, plus one `death`.
 - `death-overlay-then-respawn` — victim shot 2 reports overlay visible and HP 0;
   shot 3 reports overlay hidden and HP 100; GAMELOG has one `respawn`.
-- `act-after-respawn` — victim issues a post-respawn ground click; GAMELOG has a
-  `move_to` at or after that `respawn`.
+- `act-after-respawn` — victim issues a post-respawn `move_to` via the demo API
+  (`request_move_to`); GAMELOG has a `move_to` at or after that `respawn`. UI
+  players would use WASD instead (ARM-145).
 - `demo-pass` — harness exits 0 with `COMBAT DEMO OK` as its last line, and both
   clients print `DEMO done`.
 

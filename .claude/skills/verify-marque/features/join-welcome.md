@@ -10,9 +10,10 @@ the client draws one Quaternius-base avatar per player — its own included — 
 - `join-connect` — a client connects and learns its own id from `welcome`.
 - `join-see-world` — every listed player is drawn as a body, self included.
 - `join-broadcast` — players already present see the newcomer appear (`spawn`).
-- `join-join-kit` — the join kit is seeded and restated: the GAMELOG gains
-  `join_seeded`, and the newcomer receives `inventory` and `equipment` frames as
-  part of the join step, before it sends any intent.
+- `join-join-kit` — the join step always restates `inventory` and `equipment`
+  before any intent. `join_seeded` appears only when a non-empty join kit is
+  passed (`-join-kit`); stock `DefaultJoinKit` is empty, so a default `run.ps1`
+  shows no `join_seeded`.
 - `join-late-paths` — a late joiner sees mid-walk players moving, via re-anchored
   path replays, not frozen at a stale position.
 
@@ -37,9 +38,9 @@ Preconditions:
 - **Own id learned.** Each client log has one `DEMO joined <id>` line; the two ids
   are 1 and 2 in some order.
 - **Server agrees.** `server.stdout.ndjson` has one `client_connected` event per id,
-  before any other event naming that player. Right after each one sit that player's
-  `join_seeded` and the `inventory`/`equipment` join step — expected lines, not
-  anomalies.
+  before any other event naming that player. The join step still restates
+  `inventory` / `equipment` (and class / skills / quest log). Do not require
+  `join_seeded` on a stock server with an empty kit.
 - **Both drawn, both screens.** Every `DEMO pos <shot>` group in both client logs
   lists exactly two player ids — each client draws itself and the other, in all four
   shots.
