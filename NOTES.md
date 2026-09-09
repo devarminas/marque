@@ -840,8 +840,8 @@ owns yet.
 
 `client/scenes/world_map.tscn` is a 256 x 256 u world, the same square the server already
 clamps movement to (`WorldHalfExtent` 128), with three towns on a triangle and a Y of dirt roads
-meeting at a hub. It is a separate scene on purpose. `main.tscn` still draws its 100 x 100 u
-checker plane, and wiring the map in is its own unit; see the follow-ups below.
+meeting at a hub. ARM-199 instances it from `main.tscn` as `WorldMap` and drops the old 100 x 100
+checker, sun, and environment so the map owns lighting and the walkable ground.
 
 **The scene is generated, then committed, and the generator is the thing to edit.**
 `client/tools/build_world_map.gd` writes the `.tscn` text from a fixed seed:
@@ -908,12 +908,15 @@ the real scene windowed, saves an aerial and four ground-level shots, and assert
 shows roof-red over each town centre and dirt-brown on the Northmere road 9 u out of the hub,
 against a sky-box control that must read zero of both.
 
-**Follow-ups, none owned yet.** Instance the map into `main.tscn` in place of the checker plane
-and remove the duplicate sun and environment from whichever scene loses. The server spawn at
-(0, 0) already lands on the Northmere road just south of the hub, and the seeded tree at (5, 0)
-stands beside it; the plaza centres are the natural respawn points once towns mean something.
-The server paths in a straight line and knows nothing of houses, so a player walks through
-walls until the navmesh unit lands; the house footprints the test reads are the obstacle list
-that unit needs, and the generator is where to emit them. The nature kit ships no water and the
-village kit's free cut ships no well or stall, so the plazas are bare brick; `Wall_Arch` and
+**Walk-through buildings are accepted until a navmesh unit.** The server paths in a straight
+line and knows nothing of houses, so a player walks through walls. The house footprints the
+world-map test reads are the obstacle list that unit needs, and the generator is where to emit
+them.
+
+**Seeds stay on the Northmere road near the hub.** Join spawn is (0, 0). The seeded tree is at
+(5, 0). Practice dummies and the quest giver sit within a few units of origin. Class-kit ground
+seeds start at (1, 2). Plaza centres are the natural respawn points once towns mean something.
+
+**Follow-ups, none owned yet.** The nature kit ships no water and the village kit's free cut
+ships no well or stall, so the plazas are bare brick; `Wall_Arch` and
 `Stairs_Exterior_Straight` are staged and unused for whoever dresses them.

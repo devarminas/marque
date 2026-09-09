@@ -885,7 +885,10 @@ and not for branching on.
 Without this, a rejected intent is indistinguishable from packet loss or a stalled server, and
 the client debugging that has to read server logs across a language boundary. It also matters
 later: `NOTES.md` decides that unreachable clicks are rejected rather than snapped, so once a
-real navmesh lands, rejection becomes routine rather than exceptional.
+real navmesh lands, rejection becomes routine rather than exceptional. Until then, buildings on
+`world_map` have no collision for pathing: the server walks a straight line and players pass
+through walls. That is accepted for M10; house footprints stay client-side metadata for the
+navmesh unit.
 
 ## Validation
 

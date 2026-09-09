@@ -60,6 +60,19 @@ func _test_scene_contract() -> void:
 	)
 	_check(_rig != null and _rig.camera == _camera, "CameraRig owns the Camera3D")
 	_check(_picker != null and _picker.camera == _camera, "GroundPicker uses the same camera")
+	var world_map := _player.get_parent().get_node_or_null("WorldMap") as Node3D
+	_check(world_map != null, "main instances WorldMap as the play ground")
+	var ground_mesh := null if world_map == null else world_map.get_node_or_null("Ground/Mesh") as MeshInstance3D
+	_check(
+		ground_mesh != null and ground_mesh.mesh is PlaneMesh,
+		"WorldMap authors a Ground/Mesh PlaneMesh",
+	)
+	if ground_mesh != null and ground_mesh.mesh is PlaneMesh:
+		var plane := ground_mesh.mesh as PlaneMesh
+		_check(
+			plane.size.is_equal_approx(Vector2(256.0, 256.0)),
+			"WorldMap ground is 256 x 256, got %v" % plane.size,
+		)
 
 
 func _test_follow_reads_target_without_writing() -> void:
