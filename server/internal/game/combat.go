@@ -222,7 +222,9 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 
 	p.attackProgress = 0
 	target.hp -= AttackDamage
-	if target.hp < 0 {
+	if target.kind == KindDummy {
+		target.floorPracticeHP()
+	} else if target.hp < 0 {
 		target.hp = 0
 	}
 	fields := playerTargetFields(p.id, target.id)

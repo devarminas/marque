@@ -588,8 +588,8 @@ ignores the new fields under compatibility rule 2.
 dummies; **M9b** also includes the quest giver; **ARM-207** fills one Imp camp pool of five):
 
     {"welcome":{...,"npcs":[
-      {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100,"max_hp":100},
-      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100},
+      {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100000,"max_hp":100000},
+      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100000,"max_hp":100000},
       {"id":1000003,"kind":"quest_giver","faction":"neutral","x":0,"z":-4,"hp":100,"max_hp":100},
       {"id":1000004,"kind":"imp","faction":"hostile","x":...,"z":...,"hp":50,"max_hp":50},
       ...
@@ -2056,8 +2056,8 @@ still name them. Dummies never path, never attack, and never despawn.
 `imp` entries inside the starter-town camp radius):
 
     {"welcome":{...,"npcs":[
-      {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100,"max_hp":100},
-      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100},
+      {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100000,"max_hp":100000},
+      {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100000,"max_hp":100000},
       {"id":1000003,"kind":"quest_giver","faction":"neutral","x":0,"z":-4,"hp":100,"max_hp":100},
       {"id":1000004,"kind":"imp","faction":"hostile","x":...,"z":...,"hp":50,"max_hp":50},
       ...
@@ -2076,6 +2076,9 @@ rules for cast are above. Attack may engage a hostile dummy or Imp; a friendly o
 ### Deliberately absent (dummies). **M6e**
 
 - No loot on practice dummies.
+Practice dummies are immortal for class testing (**ARM-209**): player damage and heals
+never reduce dummy hp below 1. Dummies seed at max_hp: 100000; the client may show
+rolling ~5s DPS/HPS meters from observed hp restatements (and cast effects as fallback).
 - No client-authoritative NPC spawn.
 - No separate NPC message family beyond `welcome.npcs`, reused `hp` / `path` / `despawn` frames.
 

@@ -28,6 +28,9 @@ const (
 	ImpCampX = 12.0
 	ImpCampZ = 8.0
 
+	DummyMaxHP      = 100000
+	DummyMinHP      = 1
+
 	ImpMaxHP        = 50
 	ImpDamage       = 5
 	ImpThreatRange  = 8.0
@@ -68,6 +71,15 @@ type npc struct {
 
 func (n *npc) dead() bool { return n.hp == 0 }
 
+func (n *npc) floorPracticeHP() {
+	if n.kind != KindDummy {
+		return
+	}
+	if n.hp < DummyMinHP {
+		n.hp = DummyMinHP
+	}
+}
+
 func (n *npc) mobile() bool { return n.kind == KindImp }
 
 func (n *npc) wire() mnet.NpcState {
@@ -83,10 +95,10 @@ func (n *npc) wire() mnet.NpcState {
 }
 
 func (w *World) SeedPracticeDummies() error {
-	if err := w.seedNPC(KindDummy, FactionFriendly, FriendlyDummyX, FriendlyDummyZ, MaxHP); err != nil {
+	if err := w.seedNPC(KindDummy, FactionFriendly, FriendlyDummyX, FriendlyDummyZ, DummyMaxHP); err != nil {
 		return err
 	}
-	return w.seedNPC(KindDummy, FactionHostile, EnemyDummyX, EnemyDummyZ, MaxHP)
+	return w.seedNPC(KindDummy, FactionHostile, EnemyDummyX, EnemyDummyZ, DummyMaxHP)
 }
 
 func (w *World) SeedQuestGiver() error {
@@ -157,8 +169,8 @@ func (w *World) SetNPCHitPointsByFaction(faction string, hp int) error {
 	if faction != FactionFriendly && faction != FactionHostile {
 		return fmt.Errorf("set npc hp: unknown faction %q", faction)
 	}
-	if hp < 0 || hp > MaxHP {
-		return fmt.Errorf("set npc hp: hp %d out of range [0,%d]", hp, MaxHP)
+	if hp < 0 || hp > DummyMaxHP {
+		return fmt.Errorf("set npc hp: hp %d out of range [0,%d]", hp, DummyMaxHP)
 	}
 	for _, id := range w.npcOrder {
 		n, ok := w.npcs[id]

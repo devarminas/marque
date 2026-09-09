@@ -32,7 +32,7 @@ func TestAttackOutOfRangePathsInThenHitsOnPeriod(t *testing.T) {
 	if !alice.walking() {
 		t.Fatal("out-of-range attack assigned no path")
 	}
-	if hostile.hp != MaxHP {
+	if hostile.hp != DummyMaxHP {
 		t.Fatal("hit landed before arrival")
 	}
 
@@ -42,18 +42,18 @@ func TestAttackOutOfRangePathsInThenHitsOnPeriod(t *testing.T) {
 	if distanceBetween(alice.pos, hostile.pos) > AttackRange {
 		t.Fatal("never entered AttackRange")
 	}
-	if hostile.hp != MaxHP {
+	if hostile.hp != DummyMaxHP {
 		t.Fatalf("hit on first in-range contact: hp=%d", hostile.hp)
 	}
 	if alice.attackProgress < 1 {
 		t.Fatalf("in-range arrival did not start the period: progress=%d", alice.attackProgress)
 	}
 
-	for alice.attackProgress > 0 && hostile.hp == MaxHP {
+	for alice.attackProgress > 0 && hostile.hp == DummyMaxHP {
 		pw.w.step()
 	}
-	if hostile.hp != MaxHP-AttackDamage {
-		t.Fatalf("hp=%d after first period, want %d", hostile.hp, MaxHP-AttackDamage)
+	if hostile.hp != DummyMaxHP-AttackDamage {
+		t.Fatalf("hp=%d after first period, want %d", hostile.hp, DummyMaxHP-AttackDamage)
 	}
 	if got := pw.events(EvAttackHit); len(got) != 1 {
 		t.Fatalf("logged %d attack_hit, want 1", len(got))
@@ -75,7 +75,7 @@ func TestNoHitOnFirstInRangeTickWhenPeriodPositive(t *testing.T) {
 	if alice.attackProgress != 1 {
 		t.Fatalf("progress=%d after first in-range tick, want 1", alice.attackProgress)
 	}
-	if hostile.hp != MaxHP {
+	if hostile.hp != DummyMaxHP {
 		t.Fatalf("hit on first in-range tick: hp=%d", hostile.hp)
 	}
 }
@@ -99,7 +99,7 @@ func TestAttackPeriodPausesOffRange(t *testing.T) {
 	if alice.attackProgress != 2 {
 		t.Fatalf("progress reset off-range: got %d, want paused 2", alice.attackProgress)
 	}
-	if hostile.hp != MaxHP {
+	if hostile.hp != DummyMaxHP {
 		t.Fatalf("out-of-range hit: hp=%d", hostile.hp)
 	}
 
@@ -108,8 +108,8 @@ func TestAttackPeriodPausesOffRange(t *testing.T) {
 	alice.pos = Point{X: 0, Z: 0}
 	pw.w.step()
 	pw.w.step()
-	if hostile.hp != MaxHP-AttackDamage {
-		t.Fatalf("hp=%d after resume to period, want %d", hostile.hp, MaxHP-AttackDamage)
+	if hostile.hp != DummyMaxHP-AttackDamage {
+		t.Fatalf("hp=%d after resume to period, want %d", hostile.hp, DummyMaxHP-AttackDamage)
 	}
 }
 
@@ -140,10 +140,13 @@ func TestMoveToCancelsPendingAttack(t *testing.T) {
 	}
 }
 
-func TestTenHitsKillFromFull(t *testing.T) {
+func TestTenHitsKillImpFromFull(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
-	hostile := pw.seedHostile()
+	seedDeterministicCamp(t, pw.w)
+	hostile := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, hostile)
+	hostile.hp = ImpMaxHP
 	hostile.pos = Point{X: 1, Z: 0}
 	alice.pos = Point{X: 0, Z: 0}
 	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
@@ -157,16 +160,33 @@ func TestTenHitsKillFromFull(t *testing.T) {
 		}
 	}
 	if !hostile.dead() {
-		t.Fatalf("hostile survived with hp=%d after %d hits", hostile.hp, hits)
+		t.Fatalf("imp survived with hp=%d after %d hits", hostile.hp, hits)
 	}
-	if hits != MaxHP/AttackDamage {
-		t.Fatalf("hits=%d, want %d", hits, MaxHP/AttackDamage)
-	}
-	if hostile.hp < 0 {
-		t.Fatalf("hp went negative: %d", hostile.hp)
+	if hits != ImpMaxHP/AttackDamage {
+		t.Fatalf("hits=%d, want %d", hits, ImpMaxHP/AttackDamage)
 	}
 	if alice.attackTarget != 0 {
 		t.Fatalf("attacker still pending on corpse: %d", alice.attackTarget)
+	}
+}
+
+func TestPracticeDummySurvivesLethalVolley(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	hostile := pw.seedHostile()
+	hostile.hp = AttackDamage
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+
+	for range AttackPeriodTicks * 20 {
+		pw.w.step()
+	}
+	if hostile.dead() || hostile.hp < DummyMinHP {
+		t.Fatalf("dummy died or floored below min: hp=%d", hostile.hp)
+	}
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("attacker lost immortal target: %d", alice.attackTarget)
 	}
 }
 
@@ -241,7 +261,9 @@ func TestSameTickMultiAttackerJoinOrder(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	bob := pw.joinWithClass("knight")
-	hostile := pw.seedHostile()
+	seedDeterministicCamp(t, pw.w)
+	hostile := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, hostile)
 	hostile.hp = AttackDamage
 	hostile.pos = Point{X: 1, Z: 0}
 	alice.pos = Point{X: 0, Z: 0}
@@ -254,7 +276,7 @@ func TestSameTickMultiAttackerJoinOrder(t *testing.T) {
 
 	pw.w.step()
 	if !hostile.dead() {
-		t.Fatalf("hostile hp=%d, want 0", hostile.hp)
+		t.Fatalf("imp hp=%d, want 0", hostile.hp)
 	}
 	hits := pw.events(EvAttackHit)
 	if len(hits) != 1 {
@@ -342,7 +364,7 @@ func TestAttackIgnoresWeapon(t *testing.T) {
 	for range AttackPeriodTicks {
 		pw.w.step()
 	}
-	if hostile.hp != MaxHP-AttackDamage {
+	if hostile.hp != DummyMaxHP-AttackDamage {
 		t.Fatalf("knight hit failed: hp=%d", hostile.hp)
 	}
 }
