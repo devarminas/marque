@@ -2,20 +2,23 @@
 
 The local player holds a direction chord; the client sends `move` intents with
 world-space `dx`/`dz`; the server steers at `WalkSpeed` and broadcasts short
-`path` segments. Click-to-move remains. Last intent wins.
+`path` segments. WASD is the only player movement gesture (ARM-145 removed
+ground-click `move_to` from the UI). `move_to` remains on the wire for demos
+and probes; last intent wins when both hit the same tick.
 
 ## Sub-features
 
 - Direction steer via `move` (sticky until zero or superseded)
 - Camera-relative WASD → world axes on the client
 - Attack cancel with `attack_cancelled.cause` = `move`
-- Click `move_to` still works; last intent wins
+- Wire `move_to` still exists for scripted demos; UI left-click on bare ground
+  sends nothing
 
 ## How to get to it (user POV)
 
 1. Connect a windowed client to a live marqued.
 2. Hold W/A/S/D. The avatar walks under server paths.
-3. Click the ground. Click-path replaces steer (and the reverse).
+3. Left-click bare ground. Nothing walks; steer stays as it was.
 
 ## Driving it with verify-marque / scripts
 

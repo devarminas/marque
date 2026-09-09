@@ -116,10 +116,10 @@ Preconditions:
   1280x720.
 - **The dropped item lands under the dropper's feet**, because that is what a drop
   does (`PROTOCOL.md`, *Drop*). In the third capture it sits at the base of the
-  winner's avatar — the axe is drawn with its own model now rather than a
-  placeholder, so look for the axe, not a coloured sliver, and expect overlap, not
-  a clear silhouette. Assert it from the `DEMO item` lines and
-  the GAMELOG, not from the pixels.
+  winner's avatar — this demo seeds an **acorn**, drawn as the default green
+  box in `ground_item.tscn` (only `lumberjack_axe` has its own model scene). Expect
+  overlap with the avatar, not a clear silhouette. Assert it from the `DEMO item`
+  lines and the GAMELOG, not from the pixels.
 - **Arriving and dropping on the same tick is correct.** The tick loop steps movement
   and then drains intents, so a drop handled in the arrival tick uses the arrival
   position; measured at ticks 79 and 80 on one run and 83 and 83 on another, with the

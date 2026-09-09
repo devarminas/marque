@@ -21,8 +21,8 @@ screen, which clears itself after four seconds. Left-click on a node now sends n
 
 ## How to get to it (user POV)
 
-- Join with an empty bag. Right-click the seeded tree at (5, 0). Nothing is gathered
-  and the refusal text appears above the hotbar.
+- Join with an empty bag. Right-click the primary seeded tree at (5, 0). Nothing is
+  gathered and the refusal text appears above the hotbar.
 - Pick up a lumberjack set from the ground (`forester_cap`, `forester_shirt`,
   `forester_trousers`, `lumberjack_axe`), open the bag with `I`, right-click each
   piece to wear it. The class restatement turns the player into a Lumberjack.

@@ -41,10 +41,11 @@ Preconditions:
   end.
 
 - **Run the headless pass.** `powershell -ExecutionPolicy Bypass -File
-  scripts/interop_test.ps1`. Marker: `INTEROP OK`, and the suite-count line in the
-  tail must name the current suite count (15 as of this revision). Its heartbeat
-  suites feed scripted frames at an instanced `main.tscn`, so they need no server;
-  the interop and wiring suites need `MARQUE_WS_URL`, which the script provides.
+  scripts/interop_test.ps1`. Marker: `INTEROP OK` on the last line (exit 0). The
+  headless `PASS:` line names the current suite total (tree-free plus scene
+  suites in `run_tests.gd`; do not pin an old count). Heartbeat suites feed
+  scripted frames at an instanced `main.tscn`, so they need no server; the
+  interop and wiring suites need `MARQUE_WS_URL`, which the script provides.
 - **Wire layer.** The tick-protocol suite asserts `welcome` carries `heartbeat_ticks`
   as an int, that an absent or non-integer one reads as 0 without costing the
   welcome, and that `abandon()` emits `disconnected` immediately and stays silent on

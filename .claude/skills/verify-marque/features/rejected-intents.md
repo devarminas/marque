@@ -12,8 +12,8 @@ distinguishable from packet loss.
 
 - `reject-oob` — a `move_to` outside `[-128, 128]²` is rejected, not clamped:
   `error` with `"re":"move_to"`, GAMELOG `move_to_rejected`, no broadcast.
-- `reject-degenerate` — clicking where you already stand (stationary) yields
-  `"already there"` and no path.
+- `reject-degenerate` — a stationary `move_to` to the player's current point yields
+  `"already there"` and no path (wire / probe only after ARM-145).
 - `reject-malformed` — a frame with zero or several top-level keys, or a binary
   frame, is a protocol error: `error` then close.
 - `reject-nonjson` — a text frame that is not JSON, or JSON that is not an object
@@ -26,7 +26,8 @@ distinguishable from packet loss.
 
 - An ordinary player cannot reach most of these: the visible ground lies inside the
   bounds, so they arrive only from a broken or malicious client. `reject-degenerate`
-  is the one a player can trigger, by clicking their own feet while standing still.
+  is no longer a UI click (ARM-145 removed ground-click `move_to`); trigger it with a
+  raw `move_to` probe to the player's current coordinates after an `arrived`.
 
 ## Driving it with a raw protocol probe
 

@@ -1,14 +1,14 @@
 # Tab targeting (select, no auto-attack)
 
 M6c: left-click another living player selects them with a yellow ring. Selection
-does not send `attack`. Escape clears. Ground click moves and keeps the
-selection.
+does not send `attack`. Escape clears. Ground click keeps the selection and
+sends no `move_to` (ARM-145).
 
 ## Sub-features
 
 - `select-on-left-click` — left-click remote living player sets selection chrome;
   no GAMELOG `attack` from that click alone.
-- `ground-keeps-selection` — ground click issues `move_to`; selection persists.
+- `ground-keeps-selection` — ground click sends no `move_to`; selection persists.
 - `escape-clears` — Escape (`ui_cancel`) clears selection after use-on cancel.
 - `no-self-select` — left-click self does not select and does not attack.
 - `right-click-attack` — right-click remote engages `attack` and selects (M6f).
@@ -16,7 +16,7 @@ selection.
 ## How to get to it (user POV)
 
 - Left-click another player: yellow ring under their feet, no auto-attack.
-- Click the ground: you walk; the ring stays.
+- Click the ground: you stay put; the ring stays.
 - Press Escape: the ring goes away.
 - Right-click them to engage basic attack (M6f).
 
