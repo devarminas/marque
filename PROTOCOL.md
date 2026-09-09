@@ -900,9 +900,10 @@ each carrying its content `id`, `title` (`name` from `shared/quests.json`), `obj
 Unknown content still restates `id` and `status` with empty `title` and `objective`. An empty
 log is `{"quest_log":{"quests":[]}}`. The list is never `null`.
 
-The first `quest_log` is sent inside the atomic `welcome` step, after `skills`, and is the
-last frame of the join. Thereafter one is sent to a player when that player's quest status
-set changes (accept in **M9c**; turn-in in **M9d**), and never otherwise.
+The first `quest_log` is sent inside the atomic `welcome` step, after `skills`.
+Thereafter one is sent to a player when that player's quest status set changes
+(accept in **M9c**; turn-in in **M9d**), and never otherwise. **M11 party** may
+append `party` / `party_invite_notice` after `quest_log` on join/resume.
 
 ### `party`. **M11 party**
 
