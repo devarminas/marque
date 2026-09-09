@@ -72,6 +72,7 @@ func _ready() -> void:
 	_test_bodies_and_select()
 	_test_quest_giver_spawns_from_welcome()
 	_test_imp_spawns_from_welcome()
+	_test_imp_follows_path_frames()
 	_test_cast_targets()
 	_test_attack_targets()
 	_test_despawn_forgets_npc()
@@ -235,6 +236,35 @@ func _test_imp_spawns_from_welcome() -> void:
 	_check(
 		imp.get_node_or_null("MissingBody") != null and not imp.get_node("MissingBody").visible,
 		"welcome imp hides magenta",
+	)
+
+
+func _test_imp_follows_path_frames() -> void:
+	var npcs: Dictionary = _session.get("_npcs")
+	var imp: NpcDummyScript = npcs.get(1000004)
+	_check(imp != null, "imp exists before path frame")
+	if imp == null:
+		return
+	_check(
+		is_equal_approx(imp.position.x, 12.0) and is_equal_approx(imp.position.z, 8.0),
+		"imp still at welcome camp before path, got %s" % imp.position,
+	)
+	_net.ingest_text_frame(
+		'{"path":{"id":1000004,"start_tick":1,"speed":3.0,"points":[[12.0,8.0],[0.0,0.0]]}}'
+	)
+	imp.update_to_tick(1)
+	_check(
+		is_equal_approx(imp.position.x, 12.0) and is_equal_approx(imp.position.z, 8.0),
+		"imp at path start on start_tick, got %s" % imp.position,
+	)
+	# 3 u/s * 150ms = 0.45u per tick; 10 ticks ≈ 4.5u toward origin from (12,8).
+	imp.update_to_tick(11)
+	var moved := Vector2(imp.position.x, imp.position.z).distance_to(Vector2(12.0, 8.0))
+	_check(moved >= 3.0, "imp mesh advanced ≥3u along path by tick 11, moved=%.3f at %s" % [moved, imp.position])
+	_check(
+		Vector2(imp.position.x, imp.position.z).distance_to(Vector2.ZERO)
+		< Vector2(12.0, 8.0).distance_to(Vector2.ZERO),
+		"imp closer to player origin than camp after chase path",
 	)
 
 

@@ -1065,10 +1065,14 @@ func _on_path_assigned(
 	id: int, start_tick: int, points: PackedVector2Array, speed: float
 ) -> void:
 	var avatar: PlayerAvatarScript = _avatars.get(id)
-	if avatar == null:
-		push_warning("session: path for unknown player %d; ignoring" % id)
+	if avatar != null:
+		avatar.follow_path(points, start_tick, speed)
 		return
-	avatar.follow_path(points, start_tick, speed)
+	var dummy: NpcDummyScript = _npcs.get(id)
+	if dummy != null:
+		dummy.follow_path(points, start_tick, speed)
+		return
+	push_warning("session: path for unknown id %d; ignoring" % id)
 
 
 func _on_server_error(re: String, message: String) -> void:
@@ -1533,6 +1537,9 @@ func _ensure_npc(id: int, kind: String, faction: String) -> NpcDummyScript:
 		push_error("session: npc scene did not instantiate as an NpcDummy")
 		return null
 	body.configure(id, kind, faction)
+	if _tick_ms > 0:
+		body.configure_motion(_tick_ms)
+		body.clock = _clock
 	npcs.add_child(body)
 	_npcs[id] = body
 	return body
