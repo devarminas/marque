@@ -91,8 +91,10 @@ Preconditions:
   and rerun. The occlusion story is untested; the frame rate is what was measured.
 - The phases exist so exactly one player moves per capture window; simultaneous
   walks have no still-camera control and prove much less.
-- The moving-camera diff fraction is checker-phase dependent (measured 24%–52% for
-  near-identical walks); assert the ratio against the still figure, not an absolute.
+- The moving-camera diff fraction is ground-texture dependent (measured 24%–52% for
+  near-identical walks on the old checker; re-check the ratio on `world_map` grass if
+  the still/moving control fails); assert the ratio against the still figure, not an
+  absolute.
 - Each client holds its connection ~2s after its last capture so the other's final
   frame still contains two bodies; a variant that quits early despawns a body out of
   the other's proof.

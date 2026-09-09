@@ -1,8 +1,9 @@
 # Gather then craft (contested tree)
 
-The M4 milestone: two clients equip the join-kit axe, race the seeded tree for
-one `logs` yield, and the winner crafts `logs`→`sticks` via two-click use-on.
-The second gatherer on that depletion does not double the resource.
+The M4 milestone: two clients equip the join-kit axe, race the primary seeded tree
+at (5, 0) for one `logs` yield, and the winner crafts `logs`→`sticks` via two-click
+use-on. The second gatherer on that depletion does not double the resource. A second
+starter tree at (-5, 2) is also live; demos still target (5, 0).
 
 ## Sub-features
 
@@ -18,7 +19,7 @@ The second gatherer on that depletion does not double the resource.
 
 ## How to get to it (user POV)
 
-- Press **E**, right-click the axe to wear it. Left-click the tree; after the
+- Press **E**, right-click the axe to wear it. Right-click the tree; after the
   walk and chop duration, `logs` land in the bag and the tree depletes. Left-
   click the `logs` slot twice (use-on self) to craft `sticks`.
 
@@ -50,11 +51,16 @@ both client stdout/stderr logs, and `server.stdout.ndjson`.
 
 - **Two clients, identical flags.** Like contested pickup: nothing distinguishes
   the clients except window position and shot prefix. The claim is server-side.
-- **Tree at (5, 0).** Inventory is bottom-right; the demo unprojects the trunk
-  above ground so the gather click clears the opaque panel.
+- **Primary tree at (5, 0).** A second starter tree lives at (-5, 2); both reuse
+  `resource_node.tscn` over server positions. Inventory is bottom-right; the demo
+  unprojects the trunk above ground so the gather click clears the opaque panel.
+  Decorative trees in `world_map` are not gather nodes.
 - **Wait for restatement.** Shot 2 waits for `logs` or a depleted node, not
   merely for the click tick offset. Shot 3 waits for `sticks` on the winner.
 - **Self-use only.** Craft is two left-clicks on the same `logs` slot
   (`on` equals `slot`). Do not invent a second recipe.
-- **Join order picks the winner.** Assert exactly one win, never which client
-  label won.
+- **Empty join kit.** `DefaultJoinKit` is empty since M7. `scripts/gather_craft_demo.ps1`
+  still expects a bag `axe` at join and does not pass `-join-kit`, so the windowed
+  contested-gather recipe is currently unreachable until that harness seeds a kit
+  (product/script fix outside this skill directory). Use
+  `scripts/gather_error_demo.ps1` for a live gather proof that seeds ground gear.

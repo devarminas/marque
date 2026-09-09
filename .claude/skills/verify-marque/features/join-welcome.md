@@ -2,8 +2,8 @@
 
 Starting the client with a server URL is the whole login: the connection is accepted,
 the server sends `welcome` with this player's id and every player in the world, and
-the client draws one Knight avatar per player — its own included — on the checkered
-ground.
+the client draws one Quaternius-base avatar per player — its own included — on the
+`world_map` grass ground (Northmere road near the hub).
 
 ## Sub-features
 
@@ -43,9 +43,8 @@ Preconditions:
 - **Both drawn, both screens.** Every `DEMO pos <shot>` group in both client logs
   lists exactly two player ids — each client draws itself and the other, in all four
   shots.
-- **Pixels.** In `a_1.png`, name what must be there: two Knight avatars on the
-  checkered ground, each with a cast shadow. (The avatars were blue capsules once;
-  they are the kaykit Knight mesh now.) Two bodies at the origin overlap at
+- **Pixels.** In `a_1.png`, name what must be there: two player avatars on the
+  world-map ground, each with a cast shadow. Two bodies at the origin overlap at
   spawn; the demo path delays its first capture until after the first click, so the
   frame shows two separated bodies.
 - **Late-join half.** `join-late-paths` needs a player mid-walk when another
