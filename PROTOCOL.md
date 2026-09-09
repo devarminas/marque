@@ -2169,7 +2169,8 @@ Semantics:
 - **Bag must fit every reward after the consume frees its slot.** Otherwise `inventory_full`
   and the stick stays. No partial grant.
 - **On success:** stick removed, reward kinds added to the lowest free bag slots, quest marked
-  `complete`, private `inventory` and `quest_log` restated. Worn slots are untouched.
+  `complete`, open dialog closed (empty `dialog` restatement), private `inventory` and
+  `quest_log` restated. Worn slots are untouched.
 
 GAMELOG refuse reasons for give (never on the wire; the player sees `error.msg`) include
 `unknown_player`, `wrong_target`, `out_of_range`, `quest_inactive`, `quest_complete`,

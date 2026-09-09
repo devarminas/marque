@@ -46,6 +46,31 @@ func TestGiveStickCompletesQuestAndGrantsMinerBag(t *testing.T) {
 	}
 }
 
+func TestGiveStickClosesOpenDialog(t *testing.T) {
+	pw, giver := newDialogProbe(t)
+	alice := pw.join()
+	alice.pos = giver.pos
+	alice.quests["bring_a_stick"] = questStatusActive
+	stick, err := pw.w.items.SpawnInventoryItem(alice.id, KindStick)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pw.w.talk(alice, mnet.Talk{NPC: giver.id}, 1)
+	pw.w.step()
+	if alice.dialogNPC != giver.id {
+		t.Fatalf("dialogNPC=%d before give", alice.dialogNPC)
+	}
+
+	pw.w.give(alice, mnet.Give{NPC: giver.id, Slot: stick.Index}, 2)
+
+	if alice.dialogNPC != 0 {
+		t.Fatalf("dialogNPC=%d after successful give", alice.dialogNPC)
+	}
+	if alice.quests["bring_a_stick"] != questStatusComplete {
+		t.Fatalf("status=%q", alice.quests["bring_a_stick"])
+	}
+}
+
 func TestGiveRefusesWrongItem(t *testing.T) {
 	pw, giver := newDialogProbe(t)
 	alice := pw.join()
