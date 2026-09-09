@@ -158,6 +158,25 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			want: `{"quest_log":{"quests":[]}}`,
 		},
 		{
+			name: "party",
+			msg: mnet.Party{
+				ID:      1,
+				Leader:  2,
+				Members: []mnet.PlayerID{2, 3, 4},
+			},
+			want: `{"party":{"id":1,"leader":2,"members":[2,3,4]}}`,
+		},
+		{
+			name: "empty party",
+			msg:  mnet.Party{ID: 0, Leader: 0, Members: []mnet.PlayerID{}},
+			want: `{"party":{"id":0,"leader":0,"members":[]}}`,
+		},
+		{
+			name: "party_invite_notice",
+			msg:  mnet.PartyInviteNotice{From: 2},
+			want: `{"party_invite_notice":{"from":2}}`,
+		},
+		{
 			name: "error with nothing to attribute it to",
 			msg:  mnet.Error{Msg: "text frames only"},
 			want: `{"error":{"msg":"text frames only"}}`,
@@ -284,6 +303,11 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 		{mnet.MsgTalk, `{"talk":{"npc":1000003}}`},
 		{mnet.MsgDialogOption, `{"dialog_option":{"npc":1000003,"option":"accept_quest"}}`},
 		{mnet.MsgGive, `{"give":{"npc":1000003,"slot":3}}`},
+		{mnet.MsgPartyInvite, `{"party_invite":{"player":2}}`},
+		{mnet.MsgPartyAccept, `{"party_accept":{}}`},
+		{mnet.MsgPartyDecline, `{"party_decline":{}}`},
+		{mnet.MsgPartyLeave, `{"party_leave":{}}`},
+		{mnet.MsgPartyKick, `{"party_kick":{"player":3}}`},
 	}
 
 	for _, tc := range cases {
