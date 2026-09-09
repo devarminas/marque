@@ -17,6 +17,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "class defs", "script": preload("res://tests/test_class_defs.gd")},
 	{"name": "grip defs", "script": preload("res://tests/test_grip_defs.gd")},
 	{"name": "scene files", "script": preload("res://tests/test_scene_files.gd")},
+	{"name": "dummy meter", "script": preload("res://tests/test_dummy_meter.gd")},
 ]
 
 const SCENE_SUITES: Array = [

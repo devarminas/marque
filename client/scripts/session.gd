@@ -1284,6 +1284,9 @@ func _play_cast_effect_on_target(target_id: int, ability_id: String) -> void:
 		return
 	if CastHitFx.play(host, color) == null:
 		return
+	var dummy := host as NpcDummyScript
+	if dummy != null and dummy.kind == NpcDummyScript.KindDummy:
+		dummy.observe_cast(ability_id)
 	cast_effect_played.emit(target_id, ability_id)
 
 

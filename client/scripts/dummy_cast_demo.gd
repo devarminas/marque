@@ -74,6 +74,15 @@ func run(root: Node, session: SessionScript) -> int:
 		return _fail("fireball did not lower hostile dummy hp")
 	print("DEMO fireballok %d %d" % [hostile_id, _session.hit_points_for(hostile_id).x])
 
+	_effects.clear()
+	_session.request_cast("fireball")
+	if not await _wait_cast_fx(hostile_id, "fireball"):
+		return _fail("second fireball did not play on immortal hostile")
+	var hp_after_volley := _session.hit_points_for(hostile_id).x
+	if hp_after_volley <= 0:
+		return _fail("hostile dummy died from repeated fireballs: hp=%d" % hp_after_volley)
+	print("DEMO immortal %d hp=%d" % [hostile_id, hp_after_volley])
+
 	await _wait_msec(HOLD_MSEC)
 	print("DEMO done")
 	return 0
