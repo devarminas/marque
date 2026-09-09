@@ -210,30 +210,9 @@ func (w *World) resolveGather(p *player) {
 	fields["slot"] = slot.Index
 	w.log.Event(w.tick, EvGatherResolved, fields)
 
-	w.grantSkillXP(p, n.skill)
+	w.grantSkillXP(p, n.skill, SkillXPGather)
 	w.depleteNode(n, p)
 	w.sendInventory(p)
-}
-
-func (w *World) grantSkillXP(p *player, skill string) {
-	if skill == "" || w.classes == nil {
-		return
-	}
-	if _, ok := w.classes.GetSkill(skill); !ok {
-		return
-	}
-	if p.skillXP == nil {
-		p.skillXP = make(map[string]int64)
-	}
-	xp := p.skillXP[skill] + SkillXPGather
-	p.skillXP[skill] = xp
-	w.log.Event(w.tick, EvSkillXP, gamelog.Fields{
-		"player": p.id,
-		"skill":  skill,
-		"xp":     xp,
-		"level":  w.classes.LevelFor(skill, xp),
-	})
-	w.sendSkills(p)
 }
 
 func (w *World) depleteNode(n *resourceNode, winner *player) {

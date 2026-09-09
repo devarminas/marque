@@ -960,5 +960,5 @@ ships no well or stall, so the plazas are bare brick; `Wall_Arch` and
 - Content: `shared/quests.json` quest `slay_imps`, NPC kind `imp_quest_giver` seeded at (4, -4).
 - Party credit: anywhere-in-party, quest must be active, one credit per Imp death per member.
 - Turn-in: talk `turn_in_quest` when progress is 5/5; knight reward set grants to bag.
-- XP grant hooks deferred to ARM-211.
+- XP (ARM-211): Imp kill grants 20 into killer `ClassOf` skill; quest complete (stick + slay_imps) grants 50 into turn-in `ClassOf` skill; gather stays 10 into the node's skill. No class means no kill/quest XP.
 

@@ -258,6 +258,7 @@ func (w *World) turnInQuest(p *player, n *npc) {
 		"npc":     n.id,
 		"rewards": len(q.RewardKinds),
 	})
+	w.grantClassSkillXP(p, SkillXPQuest)
 	w.closeDialog(p)
 	w.sendInventory(p)
 	w.sendQuestLog(p)

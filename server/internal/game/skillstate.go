@@ -8,6 +8,44 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
+// Tuning: ARM-211 (kill/quest). Gather amount stays in nodes.go as SkillXPGather.
+const (
+	SkillXPKill  = 20
+	SkillXPQuest = 50
+)
+
+func (w *World) grantClassSkillXP(p *player, amount int64) {
+	if amount <= 0 || w.classes == nil {
+		return
+	}
+	res := classdef.ClassOf(w.wornKinds(p), w.classes)
+	if res.Class == nil {
+		return
+	}
+	w.grantSkillXP(p, res.Class.Skill, amount)
+}
+
+func (w *World) grantSkillXP(p *player, skill string, amount int64) {
+	if skill == "" || amount <= 0 || w.classes == nil {
+		return
+	}
+	if _, ok := w.classes.GetSkill(skill); !ok {
+		return
+	}
+	if p.skillXP == nil {
+		p.skillXP = make(map[string]int64)
+	}
+	xp := p.skillXP[skill] + amount
+	p.skillXP[skill] = xp
+	w.log.Event(w.tick, EvSkillXP, gamelog.Fields{
+		"player": p.id,
+		"skill":  skill,
+		"xp":     xp,
+		"level":  w.classes.LevelFor(skill, xp),
+	})
+	w.sendSkills(p)
+}
+
 func (w *World) classMessage(p *player) mnet.Class {
 	out := mnet.Class{Player: p.id}
 	if w.classes == nil {

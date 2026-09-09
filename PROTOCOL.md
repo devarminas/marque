@@ -1349,11 +1349,12 @@ any other pending gather for that node then refuses/empties with no second `logs
 | Event | Fields | When |
 |---|---|---|
 | `class` | `player`, `class` | a `class` restatement was sent (equip or unequip) |
-| `skill_xp` | `player`, `skill`, `xp`, `level` | a completed gather granted XP |
+| `skill_xp` | `player`, `skill`, `xp`, `level` | skill XP granted (gather, Imp kill, or quest complete) |
 
-**M7c tunables:** `SkillXPGather = 10` (XP per completed gather), `XPPerLevel = 100` (XP per
-level step in the level function). Combat, magic, and ranged XP accrual are not wired in this
-cut; only gather grants XP.
+**M7c / ARM-211 tunables:** `SkillXPGather = 10` (XP per completed gather into the node's skill),
+`SkillXPKill = 20` (Imp kill into the killer's `ClassOf` skill), `SkillXPQuest = 50` (quest
+completion into the turn-in player's `ClassOf` skill), `XPPerLevel = 100`. No active class means
+no kill/quest XP. Levels still unlock nothing.
 
 ## Crafting. **M4c**
 
@@ -2314,7 +2315,7 @@ Kill quests complete via `dialog_option` `turn_in_quest` at the quest NPC (prefe
 
 ### Deliberately absent (kill quests). **ARM-210**
 
-- No quest XP amounts (**ARM-211** owns XP tables).
+- Quest and kill XP amounts are live (**ARM-211**): Imp kill 20, quest complete 50, into `ClassOf` skill.
 - No DPS meters (**ARM-209**).
 - No client scene art for the second giver beyond seeded NPC kind (visual contract unchanged).
 ## Party. **M11 party**
