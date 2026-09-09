@@ -39,8 +39,8 @@ func TestSeedPracticeDummiesWelcome(t *testing.T) {
 	if friendly.ID == alice.id || hostile.ID == alice.id {
 		t.Fatal("dummy id collided with player")
 	}
-	if friendly.HP != MaxHP || hostile.HP != MaxHP {
-		t.Fatalf("hp friendly=%d hostile=%d", friendly.HP, hostile.HP)
+	if friendly.HP != DummyMaxHP || hostile.HP != DummyMaxHP || friendly.MaxHP != DummyMaxHP || hostile.MaxHP != DummyMaxHP {
+		t.Fatalf("hp friendly=%d/%d hostile=%d/%d", friendly.HP, friendly.MaxHP, hostile.HP, hostile.MaxHP)
 	}
 	spawned := pw.events(EvNpcSpawned)
 	if len(spawned) != 2 {
@@ -92,11 +92,11 @@ func TestCastFireballDamagesEnemyDummyOnly(t *testing.T) {
 	friendly := pw.w.npcByFaction(FactionFriendly)
 	hostile := pw.w.npcByFaction(FactionHostile)
 	friendlyHP := friendly.hp
-	hostile.hp = MaxHP
+	hostile.hp = DummyMaxHP
 
 	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: hostile.id}, 1)
-	if hostile.hp != MaxHP-40 {
-		t.Fatalf("hostile hp=%d, want %d", hostile.hp, MaxHP-40)
+	if hostile.hp != DummyMaxHP-40 {
+		t.Fatalf("hostile hp=%d, want %d", hostile.hp, DummyMaxHP-40)
 	}
 	if friendly.hp != friendlyHP {
 		t.Fatalf("friendly hp changed to %d", friendly.hp)
@@ -191,8 +191,8 @@ func TestAttackHostileDummyEngagesAndHits(t *testing.T) {
 	for range AttackPeriodTicks {
 		pw.w.step()
 	}
-	if hostile.hp != MaxHP-AttackDamage {
-		t.Fatalf("hostile hp=%d, want %d", hostile.hp, MaxHP-AttackDamage)
+	if hostile.hp != DummyMaxHP-AttackDamage {
+		t.Fatalf("hostile hp=%d, want %d", hostile.hp, DummyMaxHP-AttackDamage)
 	}
 	if got := pw.events(EvAttackHit); len(got) != 1 {
 		t.Fatalf("attack_hit=%v, want one", got)
@@ -233,3 +233,42 @@ const sharedAbilitiesJSONWithHealRange = `{
     }
   ]
 }`
+
+func TestDummyFireballNeverKills(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSONWithHealRange))
+	if err := pw.w.SeedPracticeDummies(); err != nil {
+		t.Fatal(err)
+	}
+	alice := pw.joinWithClass("mage")
+	hostile := pw.w.npcByFaction(FactionHostile)
+	hostile.hp = 30
+	alice.pos = hostile.pos
+
+	for range 5 {
+		alice.mana = MaxMana
+		pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: hostile.id}, 1)
+	}
+	if hostile.dead() || hostile.hp < DummyMinHP {
+		t.Fatalf("dummy died from fireballs: hp=%d", hostile.hp)
+	}
+}
+
+func TestDummyHealNeverZeroes(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSONWithHealRange))
+	if err := pw.w.SeedPracticeDummies(); err != nil {
+		t.Fatal(err)
+	}
+	alice := pw.joinWithClass("mage")
+	friendly := pw.w.npcByFaction(FactionFriendly)
+	friendly.hp = DummyMinHP
+	alice.pos = friendly.pos
+	pw.w.cast(alice, mnet.Cast{Ability: "heal", Player: friendly.id}, 1)
+	if friendly.hp <= DummyMinHP {
+		t.Fatalf("heal did not raise friendly: hp=%d", friendly.hp)
+	}
+	if friendly.dead() {
+		t.Fatal("friendly dummy dead after heal")
+	}
+}

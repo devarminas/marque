@@ -19,13 +19,21 @@ type castTarget struct {
 
 func (t *castTarget) applyHeal(amount int) {
 	*t.hp += amount
-	if *t.hp > MaxHP {
-		*t.hp = MaxHP
+	maxHP := MaxHP
+	if t.npc != nil {
+		maxHP = t.npc.maxHP
+	}
+	if *t.hp > maxHP {
+		*t.hp = maxHP
 	}
 }
 
 func (t *castTarget) applyDamage(amount int) {
 	*t.hp -= amount
+	if t.npc != nil && t.npc.kind == KindDummy {
+		t.npc.floorPracticeHP()
+		return
+	}
 	if *t.hp < 0 {
 		*t.hp = 0
 	}
