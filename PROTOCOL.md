@@ -2093,7 +2093,8 @@ A request to open dialog with an NPC. `npc` is a player-id-band NPC id (same spa
   `dialog` with server-authored `lines` and `options` (option `id` strings only).
 - A player has at most one pending talk. A second `talk` replaces the first. Starting talk
   clears pending pickup, gather, and attack the same way those clear each other.
-- `move_to` / `move` clear a pending talk without opening dialog.
+- `move_to` / `move` clear a pending talk without opening dialog. They also close an open
+  dialog with an empty `dialog` restatement (same shape death uses).
 
 ### `dialog_option`. **M9b**
 

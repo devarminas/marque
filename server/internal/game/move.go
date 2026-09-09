@@ -40,6 +40,7 @@ func (w *World) move(p *player, msg mnet.Move, seq mnet.Seq) {
 
 	p.pending = 0
 	w.clearPendingTalk(p)
+	w.closeDialog(p)
 	w.cancelGather(p)
 	w.cancelAttack(p, CauseMove)
 	p.remaining = nil
