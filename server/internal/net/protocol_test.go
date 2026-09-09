@@ -127,13 +127,13 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			name: "dialog",
 			msg: mnet.Dialog{
 				NPC:   1000003,
-				Lines: []string{"Will you accept Bring a Stick?"},
+				Lines: []string{"Will you accept Bring Sticks?"},
 				Options: []mnet.DialogOption{
 					{ID: mnet.OptionAcceptQuest},
 					{ID: mnet.OptionStopTalking},
 				},
 			},
-			want: `{"dialog":{"npc":1000003,"lines":["Will you accept Bring a Stick?"],"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}`,
+			want: `{"dialog":{"npc":1000003,"lines":["Will you accept Bring Sticks?"],"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}`,
 		},
 		{
 			name: "dialog closed",
@@ -145,12 +145,12 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			msg: mnet.QuestLog{
 				Quests: []mnet.QuestLogEntry{{
 					ID:        "bring_a_stick",
-					Title:     "Bring a Stick",
-					Objective: "Deliver 1 stick",
+					Title:     "Bring Sticks",
+					Objective: "Deliver 1 sticks",
 					Status:    "active",
 				}},
 			},
-			want: `{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick","objective":"Deliver 1 stick","status":"active"}]}}`,
+			want: `{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks","objective":"Deliver 1 sticks","status":"active"}]}}`,
 		},
 		{
 			name: "empty quest_log",

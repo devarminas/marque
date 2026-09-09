@@ -60,15 +60,14 @@ server-authoritative WASD `move` intents. **M6h** is the cast-success flash on t
 **M6i** is the milestone demo (`scripts/tab_combat_demo.ps1`); last-line marker
 `TAB COMBAT DEMO OK`. A marker reading plain **M6** is reserved.
 
-**M9 is in progress.** **M9a** (ARM-184) is shared quest content and the singular item kind
-`stick` (distinct from M4c craft product `sticks`). Quest definitions live in
-`shared/quests.json`. The server refuses to start if that file is missing, malformed, or
-names a reward set that is absent or incomplete in `shared/sets.json`. **M9b** (ARM-185) is
-the talkable quest NPC and thin dialog wire: `talk`, `dialog_option`, and private `dialog`
-restatement. **M9c** (ARM-187) is the private `quest_log` restatement on accept and on the
-join/reconnect catch-up step. **M9d** (ARM-189) is server turn-in: `give` consumes the
-offered bag slot and grants reward kinds into the bag in one Store transaction. A marker
-reading plain **M9** is reserved.
+**M9 is in progress.** **M9a** (ARM-184 / ARM-196) is shared quest content whose deliverable
+is the M4c craft product `sticks`. Quest definitions live in `shared/quests.json`. The server
+refuses to start if that file is missing, malformed, or names a reward set that is absent or
+incomplete in `shared/sets.json`. **M9b** (ARM-185) is the talkable quest NPC and thin dialog
+wire: `talk`, `dialog_option`, and private `dialog` restatement. **M9c** (ARM-187) is the
+private `quest_log` restatement on accept and on the join/reconnect catch-up step. **M9d**
+(ARM-189) is server turn-in: `give` consumes the offered bag slot and grants reward kinds into
+the bag in one Store transaction. A marker reading plain **M9** is reserved.
 
 This line used to say M1's messages were specified and not yet implemented, and it stayed wrong
 for the whole of M1 because correcting it was never any unit's job. It is a status line; being
@@ -852,14 +851,14 @@ grants XP only on a completed gather (see *Gathering*). **M9c** appends `quest_l
 
 ### `dialog`. **M9b**
 
-    {"dialog":{"npc":1000003,"lines":["Will you accept Bring a Stick?"],"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}
+    {"dialog":{"npc":1000003,"lines":["Will you accept Bring Sticks?"],"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}
 
 Private restatement of one player's open NPC dialog. Sent only to that player. Empty `lines`
 and empty `options` closes the dialog. Semantics are in *Quests dialog*.
 
 ### `quest_log`. **M9c**
 
-    {"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick","objective":"Deliver 1 stick","status":"active"}]}}
+    {"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks","objective":"Deliver 1 sticks","status":"active"}]}}
 
 Sent to **one player only**, never broadcast. A full restatement of that player's quest
 statuses, on `inventory`'s doctrine and for its reason: a restatement cannot drift, and a
@@ -2063,8 +2062,8 @@ and tools); they are not invented in the quest file. The server refuses to start
 file is missing or malformed, if a quest names an unknown or incomplete set, or if expanded
 reward kinds are empty.
 
-`stick` is a free item kind like other ground seeds: non-empty, seedable via `-item` /
-`SeedGroundItem`, and distinct from the craft product `sticks`.
+The shipped quest delivers the craft product `sticks` (same kind as **M4c**). No separate
+singular `stick` kind exists.
 
 M9a does not put talk, deliver, or reward on the wire.
 
@@ -2112,7 +2111,7 @@ Out-of-range options refuse. An option with no open dialog, or for a different N
 
 ### `dialog` (server → client, private). **M9b**
 
-    {"dialog":{"npc":1000003,"lines":["Will you accept Bring a Stick?"],"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}
+    {"dialog":{"npc":1000003,"lines":["Will you accept Bring Sticks?"],"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}
 
 Private restatement of the open dialog. Empty `lines` and empty `options` means the dialog
 is closed. The client must not invent quest text; it renders what the server sent.
@@ -2168,8 +2167,8 @@ Semantics:
 - **Named slot must hold the quest's `deliver.kind`.** Empty → `empty_slot`. Wrong kind →
   `wrong_item`. This unit's content delivers qty 1 from one slot.
 - **Bag must fit every reward after the consume frees its slot.** Otherwise `inventory_full`
-  and the stick stays. No partial grant.
-- **On success:** stick removed, reward kinds added to the lowest free bag slots, quest marked
+  and the sticks stay. No partial grant.
+- **On success:** sticks removed, reward kinds added to the lowest free bag slots, quest marked
   `complete`, open dialog closed (empty `dialog` restatement), private `inventory` and
   `quest_log` restated. Worn slots are untouched.
 

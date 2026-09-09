@@ -157,20 +157,20 @@ func _test_open_and_close_rules() -> void:
 	_check(not _give.visible, "the give panel starts closed")
 	await _seed_quest_giver()
 	_net.ingest_text_frame(
-		'{"inventory":{"size":28,"slots":[{"slot":%d,"kind":"stick"}]}}' % OFFER_SLOT
+		'{"inventory":{"size":28,"slots":[{"slot":%d,"kind":"sticks"}]}}' % OFFER_SLOT
 	)
 	await get_tree().process_frame
 	_check(not _give.visible, "inventory alone does not open give")
 
 	_net.ingest_text_frame(
-		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick",'
-		+ '"objective":"Deliver 1 stick","status":"active"}]}}'
+		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks",'
+		+ '"objective":"Deliver 1 sticks","status":"active"}]}}'
 	)
 	await get_tree().process_frame
 	_check(not _give.visible, "an active quest alone does not open give")
 
 	_net.ingest_text_frame(
-		'{"dialog":{"npc":%d,"lines":["Have you a stick?"],'
+		'{"dialog":{"npc":%d,"lines":["Have you sticks?"],'
 		% QUEST_NPC
 		+ '"options":[{"id":"stop_talking"}]}}'
 	)
@@ -179,21 +179,21 @@ func _test_open_and_close_rules() -> void:
 	_check(_give.visible, "dialog + quest_giver + active quest opens give")
 	_check(_give.npc_id() == QUEST_NPC, "and caches the dialog npc")
 	_check(
-		_give.kind_in_slot(OFFER_SLOT) == "stick",
+		_give.kind_in_slot(OFFER_SLOT) == "sticks",
 		"and draws the bag cache as offer slots, got %s" % _give.kind_in_slot(OFFER_SLOT),
 	)
 
 	_net.ingest_text_frame(
-		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick",'
-		+ '"objective":"Deliver 1 stick","status":"complete"}]}}'
+		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks",'
+		+ '"objective":"Deliver 1 sticks","status":"complete"}]}}'
 	)
 	await get_tree().process_frame
 	_check(not _give.visible, "completing the quest closes give while dialog stays")
 	_check(_dialog.visible, "dialog remains open after quest complete")
 
 	_net.ingest_text_frame(
-		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick",'
-		+ '"objective":"Deliver 1 stick","status":"active"}]}}'
+		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks",'
+		+ '"objective":"Deliver 1 sticks","status":"active"}]}}'
 	)
 	await get_tree().process_frame
 	_check(_give.visible, "reactivating the quest reopens give")
@@ -209,14 +209,14 @@ func _test_offer_sends_give_intent_without_local_delete() -> void:
 	_give_intents.clear()
 	await _seed_quest_giver()
 	_net.ingest_text_frame(
-		'{"inventory":{"size":28,"slots":[{"slot":%d,"kind":"stick"}]}}' % OFFER_SLOT
+		'{"inventory":{"size":28,"slots":[{"slot":%d,"kind":"sticks"}]}}' % OFFER_SLOT
 	)
 	_net.ingest_text_frame(
-		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick",'
-		+ '"objective":"Deliver 1 stick","status":"active"}]}}'
+		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks",'
+		+ '"objective":"Deliver 1 sticks","status":"active"}]}}'
 	)
 	_net.ingest_text_frame(
-		'{"dialog":{"npc":%d,"lines":["Have you a stick?"],'
+		'{"dialog":{"npc":%d,"lines":["Have you sticks?"],'
 		% QUEST_NPC
 		+ '"options":[{"id":"stop_talking"}]}}'
 	)
@@ -235,11 +235,11 @@ func _test_offer_sends_give_intent_without_local_delete() -> void:
 		"activating an offer slot emits give_requested, got %s" % [_give_intents],
 	)
 	_check(
-		_give.kind_in_slot(OFFER_SLOT) == "stick",
+		_give.kind_in_slot(OFFER_SLOT) == "sticks",
 		"and leave the offer slot alone until inventory restates",
 	)
 	_check(
-		_inventory != null and _inventory.kind_in_slot(OFFER_SLOT) == "stick",
+		_inventory != null and _inventory.kind_in_slot(OFFER_SLOT) == "sticks",
 		"and leave the bag panel alone until inventory restates",
 	)
 
@@ -250,14 +250,14 @@ func _test_offer_sends_give_intent_without_local_delete() -> void:
 func _test_cancel_clears_without_closing_dialog() -> void:
 	await _seed_quest_giver()
 	_net.ingest_text_frame(
-		'{"inventory":{"size":28,"slots":[{"slot":%d,"kind":"stick"}]}}' % OFFER_SLOT
+		'{"inventory":{"size":28,"slots":[{"slot":%d,"kind":"sticks"}]}}' % OFFER_SLOT
 	)
 	_net.ingest_text_frame(
-		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick",'
-		+ '"objective":"Deliver 1 stick","status":"active"}]}}'
+		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks",'
+		+ '"objective":"Deliver 1 sticks","status":"active"}]}}'
 	)
 	_net.ingest_text_frame(
-		'{"dialog":{"npc":%d,"lines":["Have you a stick?"],'
+		'{"dialog":{"npc":%d,"lines":["Have you sticks?"],'
 		% QUEST_NPC
 		+ '"options":[{"id":"stop_talking"}]}}'
 	)
@@ -271,7 +271,7 @@ func _test_cancel_clears_without_closing_dialog() -> void:
 	_check(_dialog.visible, "without closing dialog")
 
 	_net.ingest_text_frame(
-		'{"inventory":{"size":28,"slots":[{"slot":%d,"kind":"stick"}]}}' % OFFER_SLOT
+		'{"inventory":{"size":28,"slots":[{"slot":%d,"kind":"sticks"}]}}' % OFFER_SLOT
 	)
 	await get_tree().process_frame
 	_check(not _give.visible, "and stays closed across inventory restatement while dismissed")
@@ -279,7 +279,7 @@ func _test_cancel_clears_without_closing_dialog() -> void:
 	_net.ingest_text_frame('{"dialog":{"npc":%d,"lines":[],"options":[]}}' % QUEST_NPC)
 	await get_tree().process_frame
 	_net.ingest_text_frame(
-		'{"dialog":{"npc":%d,"lines":["Have you a stick?"],'
+		'{"dialog":{"npc":%d,"lines":["Have you sticks?"],'
 		% QUEST_NPC
 		+ '"options":[{"id":"stop_talking"}]}}'
 	)
@@ -294,14 +294,14 @@ func _test_an_open_panel_swallows_a_click() -> void:
 	_look_straight_down()
 	await _seed_quest_giver()
 	_net.ingest_text_frame(
-		'{"inventory":{"size":28,"slots":[{"slot":%d,"kind":"stick"}]}}' % OFFER_SLOT
+		'{"inventory":{"size":28,"slots":[{"slot":%d,"kind":"sticks"}]}}' % OFFER_SLOT
 	)
 	_net.ingest_text_frame(
-		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick",'
-		+ '"objective":"Deliver 1 stick","status":"active"}]}}'
+		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks",'
+		+ '"objective":"Deliver 1 sticks","status":"active"}]}}'
 	)
 	_net.ingest_text_frame(
-		'{"dialog":{"npc":%d,"lines":["Have you a stick?"],'
+		'{"dialog":{"npc":%d,"lines":["Have you sticks?"],'
 		% QUEST_NPC
 		+ '"options":[{"id":"stop_talking"}]}}'
 	)
@@ -387,7 +387,7 @@ func _stand_an_item_at(ground: Vector2) -> void:
 		+ '"players":[{"id":1,"x":0.0,"z":0.0}],"items":[]}}'
 	)
 	_net.ingest_text_frame(
-		'{"item_spawn":{"id":%d,"kind":"stick","x":%f,"z":%f}}'
+		'{"item_spawn":{"id":%d,"kind":"sticks","x":%f,"z":%f}}'
 		% [CLICK_ITEM_ID, ground.x, ground.y]
 	)
 	await get_tree().process_frame

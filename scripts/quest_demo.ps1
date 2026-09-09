@@ -9,7 +9,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$StickKind = "stick"
+$SticksKind = "sticks"
 $QuestId = "bring_a_stick"
 $KitBagSlot = 0
 $RewardKinds = @(
@@ -182,7 +182,7 @@ try {
 
     Write-Host "==> starting marqued on a free port"
     $server = Start-Process -FilePath $binary `
-        -ArgumentList "-addr", "127.0.0.1:0", "-join-kit", $StickKind `
+        -ArgumentList "-addr", "127.0.0.1:0", "-join-kit", $SticksKind `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
     $null = $server.Handle
@@ -209,10 +209,10 @@ try {
     Write-Host "==> marqued listening at $url (pid $($server.Id))"
 
     $joinKit = @($started.join_kit)
-    if ($joinKit.Count -ne 1 -or $joinKit[0] -ne $StickKind) {
-        Add-Failure "server_started.join_kit is [$($joinKit -join ',')], want [$StickKind]"
+    if ($joinKit.Count -ne 1 -or $joinKit[0] -ne $SticksKind) {
+        Add-Failure "server_started.join_kit is [$($joinKit -join ',')], want [$SticksKind]"
     } else {
-        Write-Host "==> server: -join-kit put $StickKind in every joining player's bag"
+        Write-Host "==> server: -join-kit put $SticksKind in every joining player's bag"
     }
 
     $prefix = Join-Path $OutDir "client"
@@ -280,8 +280,8 @@ try {
         if ($size -lt 4096) { Add-Failure "$shot is only $size bytes; that is not a frame" }
     }
 
-    if (-not $report.Slots.ContainsKey(1) -or -not (Test-HasKind $report.Slots[1] $StickKind)) {
-        Add-Failure "shot 1 bag does not show the seeded $StickKind"
+    if (-not $report.Slots.ContainsKey(1) -or -not (Test-HasKind $report.Slots[1] $SticksKind)) {
+        Add-Failure "shot 1 bag does not show the seeded $SticksKind"
     }
     if (-not $report.QuestLogs.ContainsKey(2)) {
         Add-Failure "client never reported questlog for shot 2"
@@ -293,15 +293,15 @@ try {
         Add-Failure "client reported no inventory slots for shot 3"
     } else {
         $after = $report.Slots[3]
-        if (Test-HasKind $after $StickKind) {
-            Add-Failure "shot 3 bag still holds $StickKind after give"
+        if (Test-HasKind $after $SticksKind) {
+            Add-Failure "shot 3 bag still holds $SticksKind after give"
         }
         foreach ($kind in $RewardKinds) {
             if (-not (Test-HasKind $after $kind)) {
                 Add-Failure "shot 3 bag missing reward kind $kind"
             }
         }
-        Write-Host "==> client: miner reward kinds present after give; stick gone"
+        Write-Host "==> client: miner reward kinds present after give; sticks gone"
     }
 
     if (-not $report.QuestLogs.ContainsKey(3)) {
@@ -325,13 +325,13 @@ try {
             Add-Failure "the server logged $($seeded.Count) join_seeded event(s) for player $player, want 1"
         } else {
             $ev = $seeded[0]
-            if ([string]$ev.kind -ne $StickKind) {
-                Add-Failure "join_seeded named kind '$($ev.kind)', want '$StickKind'"
+            if ([string]$ev.kind -ne $SticksKind) {
+                Add-Failure "join_seeded named kind '$($ev.kind)', want '$SticksKind'"
             }
             if ([int]$ev.slot -ne $KitBagSlot) {
                 Add-Failure "join_seeded filled bag slot $($ev.slot), want slot $KitBagSlot"
             }
-            Write-Host "==> server: the join kit gave player $player $StickKind in slot $KitBagSlot"
+            Write-Host "==> server: the join kit gave player $player $SticksKind in slot $KitBagSlot"
         }
 
         $accepted = Select-PlayerEvents $events "quest_accepted" $player
@@ -353,13 +353,13 @@ try {
             if ([string]$ev.quest -ne $QuestId) {
                 Add-Failure "quest_completed named quest '$($ev.quest)', want '$QuestId'"
             }
-            if ([string]$ev.consume -ne $StickKind) {
-                Add-Failure "quest_completed consume '$($ev.consume)', want '$StickKind'"
+            if ([string]$ev.consume -ne $SticksKind) {
+                Add-Failure "quest_completed consume '$($ev.consume)', want '$SticksKind'"
             }
             if ([int]$ev.rewards -ne $RewardKinds.Count) {
                 Add-Failure "quest_completed rewards $($ev.rewards), want $($RewardKinds.Count)"
             }
-            Write-Host "==> server: player $player completed $QuestId and consumed $StickKind"
+            Write-Host "==> server: player $player completed $QuestId and consumed $SticksKind"
         }
 
         foreach ($kind in @("talk_rejected", "dialog_option_rejected", "give_rejected")) {

@@ -7,9 +7,9 @@ const DialogPanelScript := preload("res://scripts/dialog_panel.gd")
 const GivePanelScript := preload("res://scripts/give_panel.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 
-const STICK_KIND := "stick"
+const STICKS_KIND := "sticks"
 const QUEST_ID := "bring_a_stick"
-const QUEST_TITLE := "Bring a Stick"
+const QUEST_TITLE := "Bring Sticks"
 const REWARD_KINDS := [
 	"prospector_jacket",
 	"prospector_boots",
@@ -50,12 +50,12 @@ func run(
 	_prefix = prefix
 
 	if not await _wait_for_join():
-		return _fail("no join-kit %s in inventory after %dms" % [STICK_KIND, JOIN_TIMEOUT_MSEC])
+		return _fail("no join-kit %s in inventory after %dms" % [STICKS_KIND, JOIN_TIMEOUT_MSEC])
 	print("DEMO joined %d" % _session.own_id())
 
-	var stick_slot := _find_bag_kind(STICK_KIND)
+	var stick_slot := _find_bag_kind(STICKS_KIND)
 	if stick_slot < 0:
-		return _fail("the join kit never placed a %s in the bag" % STICK_KIND)
+		return _fail("the join kit never placed a %s in the bag" % STICKS_KIND)
 	print("DEMO stickslot %d" % stick_slot)
 
 	var npc_id := _find_quest_giver()
@@ -94,11 +94,11 @@ func run(
 		return _fail("give panel never opened for active quest on npc %d" % npc_id)
 	print("DEMO giveopen %d" % npc_id)
 
-	stick_slot = _find_bag_kind(STICK_KIND)
+	stick_slot = _find_bag_kind(STICKS_KIND)
 	if stick_slot < 0:
-		return _fail("bag lost the %s before give" % STICK_KIND)
-	if _give.kind_in_slot(stick_slot) != STICK_KIND:
-		return _fail("give panel slot %d is not the %s" % [stick_slot, STICK_KIND])
+		return _fail("bag lost the %s before give" % STICKS_KIND)
+	if _give.kind_in_slot(stick_slot) != STICKS_KIND:
+		return _fail("give panel slot %d is not the %s" % [stick_slot, STICKS_KIND])
 	_session.request_give(npc_id, stick_slot)
 	print("DEMO give %d %d" % [npc_id, stick_slot])
 
@@ -106,8 +106,8 @@ func run(
 		return _fail("quest_log never showed %s as complete" % QUEST_ID)
 	if not await _wait_rewards():
 		return _fail("bag never held the miner reward kinds after give")
-	if _find_bag_kind(STICK_KIND) >= 0:
-		return _fail("%s remained in the bag after give" % STICK_KIND)
+	if _find_bag_kind(STICKS_KIND) >= 0:
+		return _fail("%s remained in the bag after give" % STICKS_KIND)
 	print("DEMO complete %s" % QUEST_ID)
 
 	if not await _capture(3):
@@ -123,7 +123,7 @@ func run(
 func _wait_for_join() -> bool:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		if _session.own_id() > 0 and _find_bag_kind(STICK_KIND) >= 0 and _find_quest_giver() > 0:
+		if _session.own_id() > 0 and _find_bag_kind(STICKS_KIND) >= 0 and _find_quest_giver() > 0:
 			return true
 		await _tree.process_frame
 	return false

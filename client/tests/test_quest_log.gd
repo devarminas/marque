@@ -188,18 +188,18 @@ func _test_empty_and_active_restatement() -> void:
 	_check(entries != null and not entries.visible, "and hides the entries label")
 
 	_net.ingest_text_frame(
-		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring a Stick",'
-		+ '"objective":"Deliver 1 stick","status":"active"}]}}'
+		'{"quest_log":{"quests":[{"id":"bring_a_stick","title":"Bring Sticks",'
+		+ '"objective":"Deliver 1 sticks","status":"active"}]}}'
 	)
 	await get_tree().process_frame
 	_check(empty != null and not empty.visible, "an active quest hides the empty state")
 	_check(entries != null and entries.visible, "and shows the entries label")
 	_check(
-		entries != null and entries.text.contains("Bring a Stick"),
+		entries != null and entries.text.contains("Bring Sticks"),
 		"and draws the server title, got %s" % (entries.text if entries else ""),
 	)
 	_check(
-		entries != null and entries.text.contains("Deliver 1 stick"),
+		entries != null and entries.text.contains("Deliver 1 sticks"),
 		"and draws the server objective",
 	)
 	_check(

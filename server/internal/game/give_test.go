@@ -7,24 +7,24 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-func TestGiveStickCompletesQuestAndGrantsMinerBag(t *testing.T) {
+func TestGiveSticksCompletesQuestAndGrantsMinerBag(t *testing.T) {
 	pw, giver := newDialogProbe(t)
 	alice := pw.join()
 	alice.pos = giver.pos
 	alice.quests["bring_a_stick"] = questStatusActive
-	stick, err := pw.w.items.SpawnInventoryItem(alice.id, KindStick)
+	sticks, err := pw.w.items.SpawnInventoryItem(alice.id, KindSticks)
 	if err != nil {
 		t.Fatal(err)
 	}
 	q := mustQuest(t, pw.w)
 
-	pw.w.give(alice, mnet.Give{NPC: giver.id, Slot: stick.Index}, 1)
+	pw.w.give(alice, mnet.Give{NPC: giver.id, Slot: sticks.Index}, 1)
 
 	if alice.quests["bring_a_stick"] != questStatusComplete {
 		t.Fatalf("status=%q", alice.quests["bring_a_stick"])
 	}
-	if countKind(pw.w.items.Inventory(alice.id), KindStick) != 0 {
-		t.Fatal("stick still in bag")
+	if countKind(pw.w.items.Inventory(alice.id), KindSticks) != 0 {
+		t.Fatal("sticks still in bag")
 	}
 	bag := pw.w.items.Inventory(alice.id)
 	kinds := make([]string, len(bag))
@@ -46,12 +46,12 @@ func TestGiveStickCompletesQuestAndGrantsMinerBag(t *testing.T) {
 	}
 }
 
-func TestGiveStickClosesOpenDialog(t *testing.T) {
+func TestGiveSticksClosesOpenDialog(t *testing.T) {
 	pw, giver := newDialogProbe(t)
 	alice := pw.join()
 	alice.pos = giver.pos
 	alice.quests["bring_a_stick"] = questStatusActive
-	stick, err := pw.w.items.SpawnInventoryItem(alice.id, KindStick)
+	sticks, err := pw.w.items.SpawnInventoryItem(alice.id, KindSticks)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestGiveStickClosesOpenDialog(t *testing.T) {
 		t.Fatalf("dialogNPC=%d before give", alice.dialogNPC)
 	}
 
-	pw.w.give(alice, mnet.Give{NPC: giver.id, Slot: stick.Index}, 2)
+	pw.w.give(alice, mnet.Give{NPC: giver.id, Slot: sticks.Index}, 2)
 
 	if alice.dialogNPC != 0 {
 		t.Fatalf("dialogNPC=%d after successful give", alice.dialogNPC)
@@ -114,15 +114,15 @@ func TestGiveRefusesInactiveQuest(t *testing.T) {
 	pw, giver := newDialogProbe(t)
 	alice := pw.join()
 	alice.pos = giver.pos
-	slot, err := pw.w.items.SpawnInventoryItem(alice.id, KindStick)
+	slot, err := pw.w.items.SpawnInventoryItem(alice.id, KindSticks)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	pw.w.give(alice, mnet.Give{NPC: giver.id, Slot: slot.Index}, 1)
 
-	if countKind(pw.w.items.Inventory(alice.id), KindStick) != 1 {
-		t.Fatal("stick consumed without active quest")
+	if countKind(pw.w.items.Inventory(alice.id), KindSticks) != 1 {
+		t.Fatal("sticks consumed without active quest")
 	}
 	if got := pw.events(EvGiveRejected)[0]["reason"]; got != string(mnet.ReasonQuestInactive) {
 		t.Fatalf("reason=%v", got)
@@ -134,15 +134,15 @@ func TestGiveRefusesCompleteQuest(t *testing.T) {
 	alice := pw.join()
 	alice.pos = giver.pos
 	alice.quests["bring_a_stick"] = questStatusComplete
-	slot, err := pw.w.items.SpawnInventoryItem(alice.id, KindStick)
+	slot, err := pw.w.items.SpawnInventoryItem(alice.id, KindSticks)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	pw.w.give(alice, mnet.Give{NPC: giver.id, Slot: slot.Index}, 1)
 
-	if countKind(pw.w.items.Inventory(alice.id), KindStick) != 1 {
-		t.Fatal("stick consumed on complete quest")
+	if countKind(pw.w.items.Inventory(alice.id), KindSticks) != 1 {
+		t.Fatal("sticks consumed on complete quest")
 	}
 	if got := pw.events(EvGiveRejected)[0]["reason"]; got != string(mnet.ReasonQuestComplete) {
 		t.Fatalf("reason=%v", got)
@@ -154,7 +154,7 @@ func TestGiveRefusesFullBag(t *testing.T) {
 	alice := pw.join()
 	alice.pos = giver.pos
 	alice.quests["bring_a_stick"] = questStatusActive
-	if _, err := pw.w.items.SpawnInventoryItem(alice.id, KindStick); err != nil {
+	if _, err := pw.w.items.SpawnInventoryItem(alice.id, KindSticks); err != nil {
 		t.Fatal(err)
 	}
 	for i := 1; i < InventorySize; i++ {
@@ -168,8 +168,8 @@ func TestGiveRefusesFullBag(t *testing.T) {
 	if alice.quests["bring_a_stick"] != questStatusActive {
 		t.Fatalf("status=%q", alice.quests["bring_a_stick"])
 	}
-	if countKind(pw.w.items.Inventory(alice.id), KindStick) != 1 {
-		t.Fatal("stick lost on full bag")
+	if countKind(pw.w.items.Inventory(alice.id), KindSticks) != 1 {
+		t.Fatal("sticks lost on full bag")
 	}
 	if got := pw.events(EvGiveRejected)[0]["reason"]; got != string(mnet.ReasonInventoryFull) {
 		t.Fatalf("reason=%v", got)
@@ -180,15 +180,15 @@ func TestGiveRefusesOutOfRange(t *testing.T) {
 	pw, giver := newDialogProbe(t)
 	alice := pw.join()
 	alice.quests["bring_a_stick"] = questStatusActive
-	slot, err := pw.w.items.SpawnInventoryItem(alice.id, KindStick)
+	slot, err := pw.w.items.SpawnInventoryItem(alice.id, KindSticks)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	pw.w.give(alice, mnet.Give{NPC: giver.id, Slot: slot.Index}, 1)
 
-	if countKind(pw.w.items.Inventory(alice.id), KindStick) != 1 {
-		t.Fatal("stick consumed out of range")
+	if countKind(pw.w.items.Inventory(alice.id), KindSticks) != 1 {
+		t.Fatal("sticks consumed out of range")
 	}
 	if got := pw.events(EvGiveRejected)[0]["reason"]; got != string(mnet.ReasonOutOfRange) {
 		t.Fatalf("reason=%v", got)
@@ -208,7 +208,7 @@ func TestGiveRefusesNonQuestNPC(t *testing.T) {
 	alice := pw.join()
 	alice.pos = dummy.pos
 	alice.quests["bring_a_stick"] = questStatusActive
-	slot, err := pw.w.items.SpawnInventoryItem(alice.id, KindStick)
+	slot, err := pw.w.items.SpawnInventoryItem(alice.id, KindSticks)
 	if err != nil {
 		t.Fatal(err)
 	}

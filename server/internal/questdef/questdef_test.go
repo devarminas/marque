@@ -55,7 +55,7 @@ func TestLoadSharedBringAStick(t *testing.T) {
 	if q.TalkNPC != "quest_giver" {
 		t.Fatalf("talk_npc=%q", q.TalkNPC)
 	}
-	if q.Deliver.Kind != "stick" || q.Deliver.Qty != 1 {
+	if q.Deliver.Kind != "sticks" || q.Deliver.Qty != 1 {
 		t.Fatalf("deliver=%+v", q.Deliver)
 	}
 	if q.RewardSet != "miner" {
@@ -102,7 +102,7 @@ func TestNilSetsFailsClosed(t *testing.T) {
 	_, err := Parse([]byte(`{
 		"quests":[{
 			"id":"x","name":"X","talk_npc":"n",
-			"deliver":{"kind":"stick","qty":1},"reward_set":"miner"
+			"deliver":{"kind":"sticks","qty":1},"reward_set":"miner"
 		}]
 	}`), nil)
 	if err == nil {
@@ -114,7 +114,7 @@ func TestUnknownRewardSetFailsClosed(t *testing.T) {
 	_, err := Parse([]byte(`{
 		"quests":[{
 			"id":"x","name":"X","talk_npc":"n",
-			"deliver":{"kind":"stick","qty":1},"reward_set":"no_such_set"
+			"deliver":{"kind":"sticks","qty":1},"reward_set":"no_such_set"
 		}]
 	}`), mustLoadSets(t))
 	if err == nil {
@@ -138,7 +138,7 @@ func TestDeliverQtyZeroFailsClosed(t *testing.T) {
 	_, err := Parse([]byte(`{
 		"quests":[{
 			"id":"x","name":"X","talk_npc":"n",
-			"deliver":{"kind":"stick","qty":0},"reward_set":"miner"
+			"deliver":{"kind":"sticks","qty":0},"reward_set":"miner"
 		}]
 	}`), mustLoadSets(t))
 	if err == nil {
@@ -149,8 +149,8 @@ func TestDeliverQtyZeroFailsClosed(t *testing.T) {
 func TestDuplicateIDFailsClosed(t *testing.T) {
 	_, err := Parse([]byte(`{
 		"quests":[
-			{"id":"x","name":"X","talk_npc":"n","deliver":{"kind":"stick","qty":1},"reward_set":"miner"},
-			{"id":"x","name":"Y","talk_npc":"n","deliver":{"kind":"stick","qty":1},"reward_set":"miner"}
+			{"id":"x","name":"X","talk_npc":"n","deliver":{"kind":"sticks","qty":1},"reward_set":"miner"},
+			{"id":"x","name":"Y","talk_npc":"n","deliver":{"kind":"sticks","qty":1},"reward_set":"miner"}
 		]
 	}`), mustLoadSets(t))
 	if err == nil {
@@ -170,7 +170,7 @@ func TestEmptyRewardSetFailsClosed(t *testing.T) {
 	_, err = Parse([]byte(`{
 		"quests":[{
 			"id":"x","name":"X","talk_npc":"n",
-			"deliver":{"kind":"stick","qty":1},"reward_set":"hollow"
+			"deliver":{"kind":"sticks","qty":1},"reward_set":"hollow"
 		}]
 	}`), emptySets)
 	if err == nil {
