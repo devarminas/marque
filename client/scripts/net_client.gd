@@ -214,6 +214,10 @@ func send_dialog_option(npc_id: int, option: String, seq: int = 0) -> Error:
 	return _send(dialog_option_frame(npc_id, option, _intent_seq(seq)))
 
 
+func send_give(npc_id: int, slot: int, seq: int = 0) -> Error:
+	return _send(give_frame(npc_id, slot, _intent_seq(seq)))
+
+
 func next_seq() -> int:
 	return _next_seq
 
@@ -277,6 +281,10 @@ static func talk_frame(npc_id: int, seq: int = 0) -> Dictionary:
 
 static func dialog_option_frame(npc_id: int, option: String, seq: int = 0) -> Dictionary:
 	return {"dialog_option": _intent_body({"npc": npc_id, "option": option}, seq)}
+
+
+static func give_frame(npc_id: int, slot: int, seq: int = 0) -> Dictionary:
+	return {"give": _intent_body({"npc": npc_id, "slot": slot}, seq)}
 
 
 static func _intent_body(body: Dictionary, seq: int) -> Dictionary:
