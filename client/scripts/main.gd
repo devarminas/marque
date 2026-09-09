@@ -17,6 +17,7 @@ const DummyAttackDemoScript := preload("res://scripts/dummy_attack_demo.gd")
 const WasdDemoScript := preload("res://scripts/wasd_demo.gd")
 const TabCombatDemoScript := preload("res://scripts/tab_combat_demo.gd")
 const QuestDemoScript := preload("res://scripts/quest_demo.gd")
+const EnemyQuestDemoScript := preload("res://scripts/enemy_quest_demo.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
 const DialogPanelScript := preload("res://scripts/dialog_panel.gd")
@@ -51,6 +52,8 @@ const COMBAT_ROLE_FLAG := "--combat-role"
 const WASD_SHOTS_FLAG := "--wasd-shots"
 const TAB_COMBAT_SHOTS_FLAG := "--tab-combat-shots"
 const QUEST_SHOTS_FLAG := "--quest-shots"
+const ENEMY_QUEST_SHOTS_FLAG := "--enemy-quest-shots"
+const ENEMY_QUEST_ROLE_FLAG := "--enemy-quest-role"
 
 const DEMO_PHASES := 2
 
@@ -105,6 +108,9 @@ func _ready() -> void:
 		return
 	if QUEST_SHOTS_FLAG in args:
 		await _run_quest_demo(args)
+		return
+	if ENEMY_QUEST_SHOTS_FLAG in args:
+		await _run_enemy_quest_demo(args)
 		return
 	if SHOTS_FLAG in args:
 		await _run_demo(args)
@@ -324,6 +330,31 @@ func _run_tab_combat_demo(args: Array) -> void:
 	var code: int = await demo.run(self, session, prefix)
 	get_tree().quit(code)
 
+
+func _run_enemy_quest_demo(args: Array) -> void:
+	var prefix := _argument_after(args, ENEMY_QUEST_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % ENEMY_QUEST_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+	var role := _argument_after(args, ENEMY_QUEST_ROLE_FLAG)
+	if role.is_empty():
+		push_error("%s needs leader or member after it" % ENEMY_QUEST_ROLE_FLAG)
+		get_tree().quit(1)
+		return
+
+	var session := get_node_or_null("Session") as SessionScript
+	var inventory := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
+	var dialog := get_node_or_null("UI/DialogPanel") as DialogPanelScript
+	var party := get_node_or_null("UI/PartyPanel")
+	if session == null or inventory == null or dialog == null or party == null:
+		push_error("main.tscn is missing Session, inventory, DialogPanel, or PartyPanel")
+		get_tree().quit(1)
+		return
+
+	var demo := EnemyQuestDemoScript.new()
+	var code: int = await demo.run(self, session, inventory, dialog, party, prefix, role)
+	get_tree().quit(code)
 
 func _run_quest_demo(args: Array) -> void:
 	var prefix := _argument_after(args, QUEST_SHOTS_FLAG)

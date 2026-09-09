@@ -36,6 +36,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/wasd_demo.ps1` | `WASD DEMO OK` |
 | `scripts/tab_combat_demo.ps1` | `TAB COMBAT DEMO OK` |
 | `scripts/quest_demo.ps1` | `QUEST DEMO OK` |
+| `scripts/enemy_quest_demo.ps1` | `ENEMY QUEST DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
 | each scripted client | `DEMO done` on its stdout |
@@ -146,6 +147,8 @@ anything looks off.
 | `--gather-error-shots <abs-prefix>` | Enter the refused-gather demo mode (`gather_error_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **ARM-147.** One client; right-clicks the tree unarmed, reads the refusal, wears a ground-seeded lumberjack set, chops. Absolute host path required. |
 | `--combat-shots <abs-prefix>` | Enter the combat milestone demo mode (`combat_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M5d.** Requires `--combat-role attacker\|victim`. Absolute host path required. |
 | `--combat-role attacker\|victim` | Which side of the combat demo this client plays. Required alongside `--combat-shots`. |
+| `--enemy-quest-shots <abs-prefix>` | Enter the M11 enemy/party/kill-quest demo (`enemy_quest_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. Requires `--enemy-quest-role leader\|member`. Absolute host path required. |
+| `--enemy-quest-role leader\|member` | Which side of the enemy quest demo this client plays. Required alongside `--enemy-quest-shots`. |
 | `--screenshot` | No server needed: render `main.tscn`, save one frame to `user://shot.png`, print its absolute path, quit. The single-client visual baseline. |
 
 Scripted demo mode waits for **two** players (`DEMO_MIN_PLAYERS` in `main.gd`), so a
