@@ -190,10 +190,15 @@ func (w *World) killImp(n *npc, killer mnet.PlayerID) {
 	n.target = 0
 	n.attackProgress = 0
 	n.remaining = nil
-	w.log.Event(w.tick, EvDeath, gamelog.Fields{
+	fields := gamelog.Fields{
 		"npc":    n.id,
 		"kind":   n.kind,
 		"killer": killer,
-	})
+	}
+	if n.camp != "" {
+		fields["camp"] = n.camp
+	}
+	w.log.Event(w.tick, EvDeath, fields)
+	w.noteCampDespawn(n)
 	w.despawnNPC(n)
 }

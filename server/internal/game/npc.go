@@ -24,7 +24,7 @@ const (
 	QuestGiverX    = 0.0
 	QuestGiverZ    = -4.0
 
-	// Hardcoded camp home until ARM-207 owns pool spawn.
+	// Starter-town Imp camp center (ARM-207 pool).
 	ImpCampX = 12.0
 	ImpCampZ = 8.0
 
@@ -57,6 +57,7 @@ type npc struct {
 	hp      int
 	maxHP   int
 
+	camp           string
 	home           Point
 	remaining      []Point
 	phase          npcPhase
@@ -92,16 +93,11 @@ func (w *World) SeedQuestGiver() error {
 	return w.seedNPC(KindQuestGiver, FactionNeutral, QuestGiverX, QuestGiverZ, MaxHP)
 }
 
-func (w *World) SeedImpCamp() error {
-	if err := w.seedNPC(KindImp, FactionHostile, ImpCampX, ImpCampZ, ImpMaxHP); err != nil {
-		return err
-	}
-	n := w.npcs[w.npcOrder[len(w.npcOrder)-1]]
-	n.home = Point{X: ImpCampX, Z: ImpCampZ}
-	return nil
+func (w *World) seedNPC(kind, faction string, x, z float64, maxHP int) error {
+	return w.seedNPCAt(kind, faction, x, z, maxHP, "")
 }
 
-func (w *World) seedNPC(kind, faction string, x, z float64, maxHP int) error {
+func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp string) error {
 	if kind == "" {
 		return errors.New("seed npc: kind must not be empty")
 	}
@@ -122,17 +118,22 @@ func (w *World) seedNPC(kind, faction string, x, z float64, maxHP int) error {
 		pos:     Point{X: x, Z: z},
 		hp:      maxHP,
 		maxHP:   maxHP,
+		camp:    camp,
 	}
 	w.npcs[n.id] = n
 	w.npcOrder = append(w.npcOrder, n.id)
-	w.log.Event(w.tick, EvNpcSpawned, gamelog.Fields{
+	fields := gamelog.Fields{
 		"npc":     n.id,
 		"kind":    n.kind,
 		"faction": n.faction,
 		"x":       n.pos.X,
 		"z":       n.pos.Z,
 		"max_hp":  n.maxHP,
-	})
+	}
+	if camp != "" {
+		fields["camp"] = camp
+	}
+	w.log.Event(w.tick, EvNpcSpawned, fields)
 	return nil
 }
 

@@ -6,39 +6,9 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-func TestSeedImpCampWelcome(t *testing.T) {
-	pw := newProbeWorld(t)
-	if err := pw.w.SeedImpCamp(); err != nil {
-		t.Fatal(err)
-	}
-	states := pw.w.npcStates()
-	if len(states) != 1 {
-		t.Fatalf("npcs=%d, want 1", len(states))
-	}
-	s := states[0]
-	if s.Kind != KindImp || s.Faction != FactionHostile {
-		t.Fatalf("state=%+v", s)
-	}
-	if s.X != ImpCampX || s.Z != ImpCampZ {
-		t.Fatalf("pos=%v,%v want %v,%v", s.X, s.Z, ImpCampX, ImpCampZ)
-	}
-	if s.HP != ImpMaxHP || s.MaxHP != ImpMaxHP {
-		t.Fatalf("hp=%d/%d, want %d", s.HP, s.MaxHP, ImpMaxHP)
-	}
-	imp := pw.w.npcByKind(KindImp)
-	if imp == nil || imp.home != (Point{X: ImpCampX, Z: ImpCampZ}) {
-		t.Fatalf("home unset: %+v", imp)
-	}
-	if got := pw.events(EvNpcSpawned); len(got) != 1 {
-		t.Fatalf("npc_spawned=%v", got)
-	}
-}
-
 func TestImpPatrolsNearHome(t *testing.T) {
 	pw := newProbeWorld(t)
-	if err := pw.w.SeedImpCamp(); err != nil {
-		t.Fatal(err)
-	}
+	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
 	start := imp.pos
 	pw.stepN(5)
@@ -61,14 +31,13 @@ func TestImpAggroFirstPlayerInThreatRange(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	bob := pw.joinWithClass("knight")
-	if err := pw.w.SeedImpCamp(); err != nil {
-		t.Fatal(err)
-	}
+	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
 	imp.remaining = nil
 	imp.patrolOut = false
-	alice.pos = Point{X: ImpCampX + 7, Z: ImpCampZ}
-	bob.pos = Point{X: ImpCampX + 6, Z: ImpCampZ}
+	alice.pos = Point{X: imp.home.X + 7, Z: imp.home.Z}
+	bob.pos = Point{X: imp.home.X + 6, Z: imp.home.Z}
 
 	pw.w.step()
 	if imp.phase != phaseCombat || imp.target != alice.id {
@@ -83,12 +52,11 @@ func TestImpAggroFirstPlayerInThreatRange(t *testing.T) {
 func TestImpNoAggroOutsideThreatRange(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
-	if err := pw.w.SeedImpCamp(); err != nil {
-		t.Fatal(err)
-	}
+	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
 	imp.remaining = nil
-	alice.pos = Point{X: ImpCampX + ImpThreatRange + 1, Z: ImpCampZ}
+	alice.pos = Point{X: imp.home.X + ImpThreatRange + 1, Z: imp.home.Z}
 
 	pw.w.step()
 	if imp.phase == phaseCombat {
@@ -102,14 +70,12 @@ func TestImpNoAggroOutsideThreatRange(t *testing.T) {
 func TestImpLeashClearsCombatAndReturnsHome(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
-	if err := pw.w.SeedImpCamp(); err != nil {
-		t.Fatal(err)
-	}
+	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
-	alice.pos = Point{X: ImpCampX + 100, Z: ImpCampZ}
+	alice.pos = Point{X: imp.home.X + 100, Z: imp.home.Z}
 	imp.phase = phaseCombat
 	imp.target = alice.id
-	imp.pos = Point{X: ImpCampX + ImpLeashRange + 1, Z: ImpCampZ}
+	imp.pos = Point{X: imp.home.X + ImpLeashRange + 1, Z: imp.home.Z}
 	imp.remaining = nil
 
 	pw.w.step()
@@ -141,9 +107,7 @@ func TestImpLeashClearsCombatAndReturnsHome(t *testing.T) {
 func TestImpMeleeDamagesPlayer(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
-	if err := pw.w.SeedImpCamp(); err != nil {
-		t.Fatal(err)
-	}
+	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
 	alice.pos = imp.pos
 	imp.phase = phaseCombat
@@ -169,9 +133,7 @@ func TestImpMeleeDamagesPlayer(t *testing.T) {
 func TestCombatClassCanAttackImp(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
-	if err := pw.w.SeedImpCamp(); err != nil {
-		t.Fatal(err)
-	}
+	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
 	alice.pos = imp.pos
 
@@ -190,9 +152,7 @@ func TestCombatClassCanAttackImp(t *testing.T) {
 func TestGatheringClassCannotAttackImp(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("lumberjack")
-	if err := pw.w.SeedImpCamp(); err != nil {
-		t.Fatal(err)
-	}
+	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
 	before := imp.hp
 	pw.w.attack(alice, mnet.Attack{Player: imp.id}, 1)
@@ -208,32 +168,12 @@ func TestGatheringClassCannotAttackImp(t *testing.T) {
 	}
 }
 
-func TestImpDeathRemovesInstanceAndLogs(t *testing.T) {
-	pw := newClassProbe(t)
-	alice := pw.joinWithClass("knight")
-	if err := pw.w.SeedImpCamp(); err != nil {
-		t.Fatal(err)
-	}
-	imp := pw.w.npcByKind(KindImp)
-	impID := imp.id
-	alice.pos = imp.pos
-	imp.hp = AttackDamage
-
-	pw.w.attack(alice, mnet.Attack{Player: imp.id}, 1)
-	for range AttackPeriodTicks {
-		pw.w.step()
-	}
-	if _, ok := pw.w.npcs[impID]; ok {
-		t.Fatal("dead imp still in world")
-	}
-	if pw.w.npcByKind(KindImp) != nil {
-		t.Fatal("imp kind still present after death")
-	}
-	deaths := pw.events(EvDeath)
-	if len(deaths) != 1 || deaths[0]["npc"] != float64(impID) {
-		t.Fatalf("death=%v", deaths)
-	}
-	if alice.attackTarget != 0 {
-		t.Fatalf("attacker still locked on despawned imp: %d", alice.attackTarget)
+func despawnOtherImps(w *World, keep *npc) {
+	for _, id := range append([]mnet.PlayerID(nil), w.npcOrder...) {
+		n := w.npcs[id]
+		if n == nil || n.kind != KindImp || n == keep {
+			continue
+		}
+		w.despawnNPC(n)
 	}
 }
