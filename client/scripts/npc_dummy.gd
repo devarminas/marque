@@ -1,6 +1,10 @@
 class_name NpcDummy
 extends Node3D
 
+const PolylineWalker := preload("res://scripts/polyline_walker.gd")
+const TickClock := preload("res://scripts/tick_clock.gd")
+const DummyMeterScript := preload("res://scripts/dummy_meter.gd")
+
 const FactionFriendly := "friendly"
 const FactionHostile := "hostile"
 const FactionNeutral := "neutral"
@@ -11,16 +15,27 @@ const KindImpQuestGiver := "imp_quest_giver"
 const KindImp := "imp"
 
 const IDLE_ANIM := "ual2/Idle_FoldArms"
-const DummyMeterScript := preload("res://scripts/dummy_meter.gd")
+const WALK_ANIM := "ual2/Walk_Carry"
+const WALK_CLIP_SPEED := 0.65
 
 var npc_id := 0
 var kind := KindDummy
 var faction := FactionHostile
 
+var clock: TickClock = null
+
+@export var ground_y := 0.0
+@export var face_travel_direction := true
+@export var turn_degrees_per_second := 540.0
+
 var _body_mesh: MeshInstance3D = null
 var _meter: DummyMeterScript = null
 var _last_hp := -1
 var _last_max_hp := -1
+var _walker: PolylineWalker = null
+var _tick_ms := 0
+var _desired_yaw := 0.0
+var _animation: AnimationPlayer = null
 
 @onready var _selection_ring: MeshInstance3D = $SelectionRing
 @onready var _hp_label: Label3D = $HpLabel
@@ -35,9 +50,9 @@ func _ready() -> void:
 	var missing := get_node_or_null("MissingBody") as MeshInstance3D
 	if missing != null and get_node_or_null("Body/Armature/Skeleton3D") == null:
 		missing.visible = true
-	var anim := get_node_or_null("AnimationPlayer") as AnimationPlayer
-	if anim != null and anim.has_animation(IDLE_ANIM):
-		anim.play(IDLE_ANIM)
+	_animation = get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if _animation != null and _animation.has_animation(IDLE_ANIM):
+		_animation.play(IDLE_ANIM)
 	_apply_faction_color()
 	if kind == KindDummy:
 		_meter = DummyMeterScript.new()
@@ -72,8 +87,49 @@ func configure(id: int, npc_kind: String, npc_faction: String) -> void:
 		_configure_meter_label()
 
 
+func configure_motion(tick_ms: int) -> void:
+	if tick_ms <= 0:
+		push_error("NpcDummy.configure_motion: tick_ms must be > 0, got %d" % tick_ms)
+		return
+	_tick_ms = tick_ms
+	_walker = PolylineWalker.new(tick_ms)
+
+
 func place_at(x: float, z: float) -> void:
-	position = Vector3(x, 0.0, z)
+	position = Vector3(x, ground_y, z)
+	if _tick_ms > 0:
+		_walker = PolylineWalker.new(_tick_ms)
+
+
+func follow_path(points: PackedVector2Array, start_tick: int, speed: float) -> void:
+	if _walker == null:
+		push_error("NpcDummy.follow_path: configure_motion() was never called")
+		return
+	_walker.set_path(points, start_tick, speed)
+
+
+func update_to_tick(tick: int) -> void:
+	if _walker == null or not _walker.has_path():
+		_set_walking(false)
+		return
+
+	var ground := _walker.position_at_tick(tick)
+	position = Vector3(ground.x, ground_y, ground.y)
+	_set_walking(not _walker.is_finished_at_tick(tick))
+
+	if not face_travel_direction:
+		return
+	var heading := _walker.direction_at_tick(tick)
+	if heading == Vector2.ZERO:
+		return
+	_desired_yaw = _yaw_facing(heading)
+
+
+func _process(delta: float) -> void:
+	if clock != null and clock.is_anchored():
+		update_to_tick(clock.estimated_tick())
+	if face_travel_direction:
+		_turn_toward_desired_yaw(delta)
 
 
 func set_selected(on: bool) -> void:
@@ -138,3 +194,27 @@ func _apply_faction_color() -> void:
 	else:
 		mat.albedo_color = Color(0.85, 0.25, 0.2, 1)
 	_body_mesh.material_override = mat
+
+
+func _set_walking(walking: bool) -> void:
+	if _animation == null:
+		return
+	if walking:
+		if _animation.has_animation(WALK_ANIM) and _animation.current_animation != WALK_ANIM:
+			_animation.play(WALK_ANIM)
+		if _animation.has_animation(WALK_ANIM) and _walker != null:
+			_animation.speed_scale = _walker.speed() / WALK_CLIP_SPEED
+		return
+	if _animation.has_animation(IDLE_ANIM) and _animation.current_animation != IDLE_ANIM:
+		_animation.play(IDLE_ANIM)
+	_animation.speed_scale = 1.0
+
+
+func _turn_toward_desired_yaw(delta: float) -> void:
+	rotation.y = rotate_toward(
+		rotation.y, _desired_yaw, deg_to_rad(turn_degrees_per_second) * delta
+	)
+
+
+static func _yaw_facing(heading: Vector2) -> float:
+	return atan2(-heading.x, -heading.y)
