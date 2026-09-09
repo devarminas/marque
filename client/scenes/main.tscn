@@ -1,7 +1,6 @@
 [gd_scene format=3 uid="uid://bbk0w4hee5gof"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="Shader" path="res://materials/ground_checker.gdshader" id="2_checker"]
 [ext_resource type="Script" path="res://scripts/camera_rig.gd" id="3_camera_rig"]
 [ext_resource type="Script" path="res://scripts/ground_picker.gd" id="4_ground_picker"]
 [ext_resource type="PackedScene" path="res://scenes/player_avatar.tscn" id="5_avatar"]
@@ -9,54 +8,12 @@
 [ext_resource type="Script" path="res://scripts/net_client.gd" id="7_net_client"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="8_hud"]
 [ext_resource type="Script" path="res://scripts/cursor_hint.gd" id="9_cursor_hint"]
-
-[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
-sky_top_color = Color(0.38, 0.5, 0.68, 1)
-sky_horizon_color = Color(0.68, 0.72, 0.76, 1)
-ground_bottom_color = Color(0.24, 0.24, 0.26, 1)
-ground_horizon_color = Color(0.68, 0.72, 0.76, 1)
-
-[sub_resource type="Sky" id="Sky_world"]
-sky_material = SubResource("ProceduralSkyMaterial_sky")
-
-[sub_resource type="Environment" id="Environment_world"]
-background_mode = 2
-sky = SubResource("Sky_world")
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_ground"]
-render_priority = 0
-shader = ExtResource("2_checker")
-shader_parameter/color_a = Color(0.44, 0.44, 0.45, 1)
-shader_parameter/color_b = Color(0.33, 0.33, 0.34, 1)
-shader_parameter/square_size = 1.0
-
-[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
-size = Vector2(100, 100)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
-size = Vector3(100, 1, 100)
+[ext_resource type="PackedScene" path="res://scenes/world_map.tscn" id="10_world_map"]
 
 [node name="Main" type="Node3D" unique_id=2028602151]
 script = ExtResource("1_main")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1758264518]
-environment = SubResource("Environment_world")
-
-[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1484285029]
-transform = Transform3D(0.81915206, 0.43938506, -0.36868784, 0, 0.64278764, 0.76604444, 0.57357645, -0.62750685, 0.5265408, 0, 12, 0)
-light_energy = 1.2
-shadow_enabled = true
-
-[node name="Ground" type="StaticBody3D" parent="." unique_id=1477568974]
-collision_mask = 0
-
-[node name="Mesh" type="MeshInstance3D" parent="Ground" unique_id=493739344]
-material_override = SubResource("ShaderMaterial_ground")
-mesh = SubResource("PlaneMesh_ground")
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground" unique_id=233083022]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
-shape = SubResource("BoxShape3D_ground")
+[node name="WorldMap" parent="." unique_id=1477568974 instance=ExtResource("10_world_map")]
 
 [node name="Player" parent="." unique_id=269123760 instance=ExtResource("5_avatar")]
 
