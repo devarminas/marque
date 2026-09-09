@@ -1,4 +1,4 @@
-package questdef
+﻿package questdef
 
 import (
 	"os"
@@ -45,8 +45,8 @@ func TestLoadSharedBringAStick(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cat.Len() != 1 {
-		t.Fatalf("want 1 quest, got %d (%v)", cat.Len(), cat.IDs())
+	if cat.Len() != 2 {
+		t.Fatalf("want 2 quests, got %d (%v)", cat.Len(), cat.IDs())
 	}
 	q, ok := cat.Get("bring_a_stick")
 	if !ok {
@@ -196,5 +196,53 @@ func TestResolvePathFindsShared(t *testing.T) {
 	}
 	if gotAbs != want {
 		t.Fatalf("ResolvePath=%q want %q", gotAbs, want)
+	}
+}
+
+
+func TestLoadSharedSlayImps(t *testing.T) {
+	sets := mustLoadSets(t)
+	cat, err := Load(sharedQuestsPath(t), sets)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	q, ok := cat.Get("slay_imps")
+	if !ok {
+		t.Fatal("missing slay_imps")
+	}
+	if q.TalkNPC != "imp_quest_giver" {
+		t.Fatalf("talk_npc=%q", q.TalkNPC)
+	}
+	if q.Kill.Kind != "imp" || q.Kill.Qty != 5 {
+		t.Fatalf("kill=%+v", q.Kill)
+	}
+	if q.RewardSet != "knight" {
+		t.Fatalf("reward_set=%q", q.RewardSet)
+	}
+}
+
+func TestBothObjectivesFailsClosed(t *testing.T) {
+	_, err := Parse([]byte(`{
+		"quests":[{
+			"id":"x","name":"X","talk_npc":"n",
+			"deliver":{"kind":"sticks","qty":1},
+			"kill":{"kind":"imp","qty":1},
+			"reward_set":"miner"
+		}]
+	}`), mustLoadSets(t))
+	if err == nil {
+		t.Fatal("expected both-objectives error")
+	}
+}
+
+func TestMissingObjectiveFailsClosed(t *testing.T) {
+	_, err := Parse([]byte(`{
+		"quests":[{
+			"id":"x","name":"X","talk_npc":"n",
+			"reward_set":"miner"
+		}]
+	}`), mustLoadSets(t))
+	if err == nil {
+		t.Fatal("expected missing objective error")
 	}
 }

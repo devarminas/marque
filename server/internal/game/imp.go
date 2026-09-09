@@ -1,4 +1,4 @@
-package game
+﻿package game
 
 import (
 	"github.com/devarminas/marque/server/internal/gamelog"
@@ -200,5 +200,6 @@ func (w *World) killImp(n *npc, killer mnet.PlayerID) {
 	}
 	w.log.Event(w.tick, EvDeath, fields)
 	w.noteCampDespawn(n)
+	w.creditImpKill(killer)
 	w.despawnNPC(n)
 }

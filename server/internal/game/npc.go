@@ -1,4 +1,4 @@
-package game
+﻿package game
 
 import (
 	"errors"
@@ -11,6 +11,7 @@ import (
 const (
 	KindDummy      = "dummy"
 	KindQuestGiver = "quest_giver"
+	KindImpQuestGiver = "imp_quest_giver"
 	KindImp        = "imp"
 
 	FactionFriendly = "friendly"
@@ -23,6 +24,9 @@ const (
 	EnemyDummyZ    = 0.0
 	QuestGiverX    = 0.0
 	QuestGiverZ    = -4.0
+
+	ImpQuestGiverX = 4.0
+	ImpQuestGiverZ = -4.0
 
 	// Starter-town Imp camp center (ARM-207 pool).
 	ImpCampX = 12.0
@@ -91,6 +95,10 @@ func (w *World) SeedPracticeDummies() error {
 
 func (w *World) SeedQuestGiver() error {
 	return w.seedNPC(KindQuestGiver, FactionNeutral, QuestGiverX, QuestGiverZ, MaxHP)
+}
+
+func (w *World) SeedImpQuestGiver() error {
+	return w.seedNPC(KindImpQuestGiver, FactionNeutral, ImpQuestGiverX, ImpQuestGiverZ, MaxHP)
 }
 
 func (w *World) seedNPC(kind, faction string, x, z float64, maxHP int) error {

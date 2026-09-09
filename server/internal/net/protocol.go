@@ -1,4 +1,4 @@
-package net
+﻿package net
 
 import (
 	"encoding/json"
@@ -53,6 +53,7 @@ const (
 	MsgPartyKick    = "party_kick"
 
 	OptionAcceptQuest = "accept_quest"
+	OptionTurnInQuest  = "turn_in_quest"
 	OptionStopTalking = "stop_talking"
 )
 
@@ -493,6 +494,7 @@ const (
 	ReasonQuestActive      RejectReason = "quest_active"
 	ReasonQuestComplete    RejectReason = "quest_complete"
 	ReasonQuestInactive    RejectReason = "quest_inactive"
+	ReasonQuestIncomplete RejectReason = "quest_incomplete"
 	ReasonWrongItem        RejectReason = "wrong_item"
 	ReasonNotLeader        RejectReason = "not_leader"
 	ReasonPartyFull        RejectReason = "party_full"
