@@ -9,7 +9,6 @@ signal offer_chosen(npc_id: int, slot: int)
 signal cancelled()
 
 @export var slot_grid: GridContainer
-@export var heading: Label
 @export var cancel_button: Button
 
 var _npc_id := 0
@@ -17,8 +16,8 @@ var _slots := {}
 
 
 func _ready() -> void:
-	if slot_grid == null or heading == null or cancel_button == null:
-		push_error("GivePanel: the scene did not assign slot_grid, heading, and cancel_button")
+	if slot_grid == null or cancel_button == null:
+		push_error("GivePanel: the scene did not assign slot_grid and cancel_button")
 		return
 	cancel_button.pressed.connect(_on_cancel_pressed)
 
@@ -45,16 +44,12 @@ func apply(
 	_npc_id = npc_id
 	visible = true
 	_rebuild_offers(bag_size, slot_indices, slot_kinds)
-	if heading != null:
-		heading.text = "Offer"
 
 
 func clear() -> void:
 	_npc_id = 0
 	visible = false
 	_clear_slots()
-	if heading != null:
-		heading.text = "Offer"
 
 
 func npc_id() -> int:

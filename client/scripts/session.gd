@@ -1160,9 +1160,7 @@ func _on_dialog_changed(npc_id: int, lines: PackedStringArray, option_ids: Packe
 		return
 	var had_dialog := _dialog.visible
 	_dialog.apply(npc_id, lines, option_ids)
-	if _dialog.visible and not had_dialog:
-		_give_dismissed = false
-	elif not _dialog.visible:
+	if not had_dialog or not _dialog.visible:
 		_give_dismissed = false
 	_reconcile_give_panel()
 
@@ -1217,7 +1215,6 @@ func _give_should_open() -> bool:
 		if status == "active":
 			return true
 	return false
-
 
 
 func _on_equipment_changed(

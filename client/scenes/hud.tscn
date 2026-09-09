@@ -642,7 +642,7 @@ custom_minimum_size = Vector2(140, 32)
 layout_mode = 2
 text = "Stop talking"
 
-[node name="GivePanel" type="PanelContainer" parent="." unique_id=1911911911 node_paths=PackedStringArray("slot_grid", "heading", "cancel_button")]
+[node name="GivePanel" type="PanelContainer" parent="." unique_id=1911911911 node_paths=PackedStringArray("slot_grid", "cancel_button")]
 visible = false
 anchors_preset = 7
 anchor_left = 0.5
@@ -659,7 +659,6 @@ custom_minimum_size = Vector2(160, 96)
 theme_override_styles/panel = SubResource("style_dock_panel")
 script = ExtResource("39_give_panel")
 slot_grid = NodePath("Margin/Rows/Slots")
-heading = NodePath("Margin/Rows/Heading")
 cancel_button = NodePath("Margin/Rows/Cancel")
 
 [node name="Margin" type="MarginContainer" parent="GivePanel" unique_id=1911911912]
