@@ -1,4 +1,4 @@
-[gd_scene load_steps=34 format=3]
+[gd_scene load_steps=35 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/class_hud.gd" id="15_class_hud"]
 [ext_resource type="Script" path="res://scripts/class_debug.gd" id="16_class_debug"]
 [ext_resource type="Script" path="res://scripts/error_hud.gd" id="17_error_hud"]
+[ext_resource type="Script" path="res://scripts/dialog_panel.gd" id="18_dialog_panel"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/basic_bar2.png" id="19_tray"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_line.png" id="20_hp_line"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/mana_line.png" id="21_mana_line"]
@@ -505,6 +506,65 @@ vertical_alignment = 1
 [node name="Linger" type="Timer" parent="ErrorHud" unique_id=1380560654]
 wait_time = 4.0
 one_shot = true
+
+[node name="DialogPanel" type="PanelContainer" parent="." unique_id=1861861861 node_paths=PackedStringArray("lines_label", "accept_button", "stop_button")]
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -280.0
+offset_top = -140.0
+offset_right = 280.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 0
+custom_minimum_size = Vector2(200, 72)
+theme_override_styles/panel = SubResource("style_dock_panel")
+script = ExtResource("18_dialog_panel")
+lines_label = NodePath("Margin/Rows/Lines")
+accept_button = NodePath("Margin/Rows/Buttons/AcceptQuest")
+stop_button = NodePath("Margin/Rows/Buttons/StopTalking")
+
+[node name="Margin" type="MarginContainer" parent="DialogPanel" unique_id=1861861862]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="Rows" type="VBoxContainer" parent="DialogPanel/Margin" unique_id=1861861863]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="Lines" type="Label" parent="DialogPanel/Margin/Rows" unique_id=1861861864]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 3
+
+[node name="Buttons" type="HBoxContainer" parent="DialogPanel/Margin/Rows" unique_id=1861861865]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="AcceptQuest" type="Button" parent="DialogPanel/Margin/Rows/Buttons" unique_id=1861861866]
+visible = false
+custom_minimum_size = Vector2(140, 32)
+layout_mode = 2
+text = "Accept quest"
+
+[node name="StopTalking" type="Button" parent="DialogPanel/Margin/Rows/Buttons" unique_id=1861861867]
+visible = false
+custom_minimum_size = Vector2(140, 32)
+layout_mode = 2
+text = "Stop talking"
 
 [node name="DeathOverlay" type="Control" parent="." unique_id=1296339493 node_paths=PackedStringArray("respawn_button")]
 visible = false

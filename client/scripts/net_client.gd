@@ -76,6 +76,8 @@ signal hp_changed(id: int, hp: int, max_hp: int)
 
 signal mana_changed(id: int, mana: int, max_mana: int)
 
+signal dialog_changed(npc_id: int, lines: PackedStringArray, option_ids: PackedStringArray)
+
 signal server_error(re: String, message: String)
 
 signal unknown_message(key: String)
@@ -197,6 +199,14 @@ func send_respawn(seq: int = 0) -> Error:
 	return _send(respawn_frame(_intent_seq(seq)))
 
 
+func send_talk(npc_id: int, seq: int = 0) -> Error:
+	return _send(talk_frame(npc_id, _intent_seq(seq)))
+
+
+func send_dialog_option(npc_id: int, option: String, seq: int = 0) -> Error:
+	return _send(dialog_option_frame(npc_id, option, _intent_seq(seq)))
+
+
 func next_seq() -> int:
 	return _next_seq
 
@@ -252,6 +262,14 @@ static func cast_frame(ability_id: String, target_id: int = 0, seq: int = 0) -> 
 
 static func respawn_frame(seq: int = 0) -> Dictionary:
 	return {"respawn": _intent_body({}, seq)}
+
+
+static func talk_frame(npc_id: int, seq: int = 0) -> Dictionary:
+	return {"talk": _intent_body({"npc": npc_id}, seq)}
+
+
+static func dialog_option_frame(npc_id: int, option: String, seq: int = 0) -> Dictionary:
+	return {"dialog_option": _intent_body({"npc": npc_id, "option": option}, seq)}
 
 
 static func _intent_body(body: Dictionary, seq: int) -> Dictionary:
@@ -375,6 +393,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_hp(body, text)
 		"mana":
 			_on_mana(body, text)
+		"dialog":
+			_on_dialog(body, text)
 		"tick":
 			_on_tick(body, text)
 		"error":
@@ -914,9 +934,9 @@ func _npc_state(entry: Variant, where: String, text: String) -> Dictionary:
 		push_error("net_client: %s has no faction string: %s" % [where, text])
 		return {}
 	var faction: String = state["faction"]
-	if faction != "friendly" and faction != "hostile":
+	if faction != "friendly" and faction != "hostile" and faction != "neutral":
 		push_error(
-			'net_client: %s faction must be "friendly" or "hostile", got "%s": %s'
+			'net_client: %s faction must be "friendly", "hostile", or "neutral", got "%s": %s'
 			% [where, faction, text]
 		)
 		return {}
@@ -928,6 +948,54 @@ func _npc_state(entry: Variant, where: String, text: String) -> Dictionary:
 		"hp": int(state["hp"]),
 		"max_hp": int(state["max_hp"]),
 	}
+
+
+func _on_dialog(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["npc"], text):
+		return
+	var npc_id := int(body["npc"])
+	if npc_id <= 0:
+		push_error("net_client: dialog.npc must be >= 1, got %d: %s" % [npc_id, text])
+		return
+
+	var raw_lines: Variant = body.get("lines")
+	if body.has("lines") and _is_null_list(raw_lines, "dialog.lines", text):
+		raw_lines = []
+	if typeof(raw_lines) != TYPE_ARRAY:
+		push_error("net_client: dialog.lines is missing or not an array: %s" % text)
+		return
+	var lines := PackedStringArray()
+	for entry: Variant in raw_lines as Array:
+		if typeof(entry) != TYPE_STRING:
+			push_error("net_client: dialog.lines entry is not a string: %s" % text)
+			return
+		lines.append(String(entry))
+
+	var raw_options: Variant = body.get("options")
+	if body.has("options") and _is_null_list(raw_options, "dialog.options", text):
+		raw_options = []
+	if typeof(raw_options) != TYPE_ARRAY:
+		push_error("net_client: dialog.options is missing or not an array: %s" % text)
+		return
+	var option_ids := PackedStringArray()
+	for entry: Variant in raw_options as Array:
+		if typeof(entry) != TYPE_DICTIONARY:
+			push_error("net_client: dialog.options entry is not an object: %s" % text)
+			return
+		var option: Dictionary = entry
+		if typeof(option.get("id")) != TYPE_STRING:
+			push_error("net_client: dialog.options entry has no id string: %s" % text)
+			return
+		var option_id: String = option["id"]
+		if option_id.is_empty():
+			push_error("net_client: dialog.options entry has an empty id: %s" % text)
+			return
+		if option_ids.has(option_id):
+			push_error('net_client: dialog.options names id "%s" twice: %s' % [option_id, text])
+			return
+		option_ids.append(option_id)
+
+	dialog_changed.emit(npc_id, lines, option_ids)
 
 
 func _on_tick(body: Dictionary, text: String) -> void:
