@@ -13,6 +13,7 @@ const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const NpcDummyScene := preload("res://scenes/npc_dummy.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const DialogPanelScript := preload("res://scripts/dialog_panel.gd")
+const GivePanelScript := preload("res://scripts/give_panel.gd")
 const QuestLogPanelScript := preload("res://scripts/quest_log_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
@@ -83,6 +84,8 @@ signal talk_requested(npc_id: int)
 
 signal dialog_option_requested(npc_id: int, option_id: String)
 
+signal give_requested(npc_id: int, slot: int)
+
 signal respawn_requested()
 
 @export var net: Node
@@ -94,6 +97,7 @@ signal respawn_requested()
 @export var ground_picker: Node
 @export var inventory_panel: Node
 @export var dialog_panel: Node
+@export var give_panel: Node
 @export var quest_log_panel: Node
 @export var equipment_panel: Node
 @export var hp_hud: Node
@@ -108,6 +112,7 @@ var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
 var _panel: InventoryPanelScript = null
 var _dialog: DialogPanelScript = null
+var _give: GivePanelScript = null
 var _quest_log: QuestLogPanelScript = null
 var _equipment: EquipmentPanelScript = null
 var _hp_hud: HpHudScript = null
@@ -138,6 +143,11 @@ var _items := {}
 var _nodes := {}
 var _npcs := {}
 var _use_from := -1
+var _bag_size := 0
+var _bag_indices := PackedInt32Array()
+var _bag_kinds := PackedStringArray()
+var _quest_statuses := PackedStringArray()
+var _give_dismissed := false
 var _selected_player_id := 0
 var _casts_awaiting_mana: Array = []
 var _last_move_dx := 0.0
@@ -214,6 +224,13 @@ func _ready() -> void:
 		push_error("Session.dialog_panel must point at a node running dialog_panel.gd")
 	else:
 		_dialog.option_chosen.connect(_on_dialog_option_chosen)
+
+	_give = give_panel as GivePanelScript
+	if _give == null:
+		push_error("Session.give_panel must point at a node running give_panel.gd")
+	else:
+		_give.offer_chosen.connect(_on_offer_chosen)
+		_give.cancelled.connect(_on_give_cancelled)
 
 	_quest_log = quest_log_panel as QuestLogPanelScript
 	if _quest_log == null:
@@ -433,6 +450,30 @@ func request_dialog_option(npc_id: int, option_id: String) -> void:
 		)
 		return
 	_net.send_dialog_option(npc_id, option_id)
+
+
+func request_give(npc_id: int, slot: int) -> void:
+	if slot < 0:
+		push_error("session: give for slot %d; slot indices start at 0" % slot)
+		return
+	if _dialog == null or _dialog.npc_id() != npc_id:
+		push_warning(
+			"session: give for npc %d with no matching open dialog; ignoring" % npc_id
+		)
+		return
+	if _give == null or _give.npc_id() != npc_id:
+		push_warning(
+			"session: give for npc %d with no matching open give panel; ignoring" % npc_id
+		)
+		return
+	give_requested.emit(npc_id, slot)
+	if _net == null or not _net.is_open():
+		push_warning(
+			"session: give of slot %d for npc %d dropped, the socket is not open"
+			% [slot, npc_id]
+		)
+		return
+	_net.send_give(npc_id, slot)
 
 
 func request_cast(ability_id: String) -> void:
@@ -955,6 +996,10 @@ func _on_disconnected(code: int, reason: String) -> void:
 	_casts_awaiting_mana.clear()
 	if _dialog != null:
 		_dialog.clear()
+	if _give != null:
+		_give.clear()
+	_quest_statuses = PackedStringArray()
+	_give_dismissed = false
 	var resume := not _logout_requested and not _base_url.is_empty()
 	if resume:
 		push_warning(
@@ -1098,18 +1143,26 @@ func _on_worn_activated(worn: String) -> void:
 func _on_inventory_changed(
 	size: int, slot_indices: PackedInt32Array, slot_kinds: PackedStringArray
 ) -> void:
+	_bag_size = size
+	_bag_indices = slot_indices
+	_bag_kinds = slot_kinds
 	if _panel == null:
 		push_error("session: inventory arrived with no panel to draw it")
 		return
 	clear_use_selection()
 	_panel.apply(size, slot_indices, slot_kinds)
+	_reconcile_give_panel()
 
 
 func _on_dialog_changed(npc_id: int, lines: PackedStringArray, option_ids: PackedStringArray) -> void:
 	if _dialog == null:
 		push_error("session: dialog arrived with no panel to draw it")
 		return
+	var had_dialog := _dialog.visible
 	_dialog.apply(npc_id, lines, option_ids)
+	if not had_dialog or not _dialog.visible:
+		_give_dismissed = false
+	_reconcile_give_panel()
 
 
 func _on_quest_log_changed(
@@ -1118,14 +1171,50 @@ func _on_quest_log_changed(
 	objectives: PackedStringArray,
 	statuses: PackedStringArray,
 ) -> void:
+	_quest_statuses = statuses
 	if _quest_log == null:
 		push_error("session: quest_log arrived with no panel to draw it")
 		return
 	_quest_log.apply(ids, titles, objectives, statuses)
+	_reconcile_give_panel()
 
 
 func _on_dialog_option_chosen(npc_id: int, option_id: String) -> void:
 	request_dialog_option(npc_id, option_id)
+
+
+func _on_offer_chosen(npc_id: int, slot: int) -> void:
+	request_give(npc_id, slot)
+
+
+func _on_give_cancelled() -> void:
+	_give_dismissed = true
+	if _give != null:
+		_give.clear()
+
+
+func _reconcile_give_panel() -> void:
+	if _give == null:
+		return
+	if not _give_should_open():
+		_give.clear()
+		return
+	clear_use_selection()
+	_give.apply(_dialog.npc_id(), _bag_size, _bag_indices, _bag_kinds)
+
+
+func _give_should_open() -> bool:
+	if _give_dismissed:
+		return false
+	if _dialog == null or not _dialog.visible or _dialog.npc_id() <= 0:
+		return false
+	var dummy: NpcDummyScript = _npcs.get(_dialog.npc_id())
+	if dummy == null or dummy.kind != NpcDummyScript.KindQuestGiver:
+		return false
+	for status: String in _quest_statuses:
+		if status == "active":
+			return true
+	return false
 
 
 func _on_equipment_changed(

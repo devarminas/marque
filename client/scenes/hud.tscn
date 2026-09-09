@@ -1,4 +1,4 @@
-[gd_scene load_steps=36 format=3]
+[gd_scene load_steps=37 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://scripts/class_debug.gd" id="16_class_debug"]
 [ext_resource type="Script" path="res://scripts/error_hud.gd" id="17_error_hud"]
 [ext_resource type="Script" path="res://scripts/dialog_panel.gd" id="18_dialog_panel"]
+[ext_resource type="Script" path="res://scripts/give_panel.gd" id="39_give_panel"]
 [ext_resource type="Script" path="res://scripts/quest_log_panel.gd" id="38_quest_log_panel"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/basic_bar2.png" id="19_tray"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_line.png" id="20_hp_line"]
@@ -640,6 +641,58 @@ visible = false
 custom_minimum_size = Vector2(140, 32)
 layout_mode = 2
 text = "Stop talking"
+
+[node name="GivePanel" type="PanelContainer" parent="." unique_id=1911911911 node_paths=PackedStringArray("slot_grid", "cancel_button")]
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -200.0
+offset_top = -140.0
+offset_right = 200.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 0
+custom_minimum_size = Vector2(160, 96)
+theme_override_styles/panel = SubResource("style_dock_panel")
+script = ExtResource("39_give_panel")
+slot_grid = NodePath("Margin/Rows/Slots")
+cancel_button = NodePath("Margin/Rows/Cancel")
+
+[node name="Margin" type="MarginContainer" parent="GivePanel" unique_id=1911911912]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="Rows" type="VBoxContainer" parent="GivePanel/Margin" unique_id=1911911913]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="Heading" type="Label" parent="GivePanel/Margin/Rows" unique_id=1911911914]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 14
+text = "Offer"
+
+[node name="Slots" type="GridContainer" parent="GivePanel/Margin/Rows" unique_id=1911911915]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+columns = 4
+
+[node name="Cancel" type="Button" parent="GivePanel/Margin/Rows" unique_id=1911911916]
+custom_minimum_size = Vector2(140, 32)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Cancel"
 
 [node name="DeathOverlay" type="Control" parent="." unique_id=1296339493 node_paths=PackedStringArray("respawn_button")]
 visible = false
