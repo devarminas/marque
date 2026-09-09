@@ -3,6 +3,7 @@
     {
       "id": "knight",
       "name": "Knight",
+      "family": "Combat",
       "skill": "combat",
       "requires": {
         "helmet": "plate_helm",
@@ -15,6 +16,7 @@
     {
       "id": "mage",
       "name": "Mage",
+      "family": "Combat",
       "skill": "magic",
       "requires": {
         "helmet": "cloth_hood",
@@ -27,6 +29,7 @@
     {
       "id": "archer",
       "name": "Archer",
+      "family": "Combat",
       "skill": "ranged",
       "requires": {
         "helmet": "leather_helm",
@@ -39,6 +42,7 @@
     {
       "id": "miner",
       "name": "Miner",
+      "family": "Gathering",
       "skill": "mining",
       "requires": {
         "helmet": "prospector_helm",
@@ -51,6 +55,7 @@
     {
       "id": "lumberjack",
       "name": "Lumberjack",
+      "family": "Gathering",
       "skill": "woodcutting",
       "requires": {
         "helmet": "forester_cap",

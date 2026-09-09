@@ -83,12 +83,12 @@ func TestPlayerJoinNeverEntersNpcIDBand(t *testing.T) {
 }
 
 func TestCastFireballDamagesEnemyDummyOnly(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSONWithHealRange))
 	if err := pw.w.SeedPracticeDummies(); err != nil {
 		t.Fatal(err)
 	}
-	alice := pw.join()
+	alice := pw.joinWithClass("mage")
 	friendly := pw.w.npcByFaction(FactionFriendly)
 	hostile := pw.w.npcByFaction(FactionHostile)
 	friendlyHP := friendly.hp
@@ -117,12 +117,12 @@ func TestCastFireballDamagesEnemyDummyOnly(t *testing.T) {
 }
 
 func TestCastHealHelpsFriendlyDummyOnly(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSONWithHealRange))
 	if err := pw.w.SeedPracticeDummies(); err != nil {
 		t.Fatal(err)
 	}
-	alice := pw.join()
+	alice := pw.joinWithClass("mage")
 	friendly := pw.w.npcByFaction(FactionFriendly)
 	hostile := pw.w.npcByFaction(FactionHostile)
 	friendly.hp = 40
@@ -148,11 +148,11 @@ func TestCastHealHelpsFriendlyDummyOnly(t *testing.T) {
 }
 
 func TestAttackFriendlyDummyRefused(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	if err := pw.w.SeedPracticeDummies(); err != nil {
 		t.Fatal(err)
 	}
-	alice := pw.join()
+	alice := pw.joinWithClass("knight")
 	friendly := pw.w.npcByFaction(FactionFriendly)
 	beforeHP := friendly.hp
 
@@ -173,11 +173,11 @@ func TestAttackFriendlyDummyRefused(t *testing.T) {
 }
 
 func TestAttackHostileDummyEngagesAndHits(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	if err := pw.w.SeedPracticeDummies(); err != nil {
 		t.Fatal(err)
 	}
-	alice := pw.join()
+	alice := pw.joinWithClass("knight")
 	hostile := pw.w.npcByFaction(FactionHostile)
 	alice.pos = hostile.pos
 

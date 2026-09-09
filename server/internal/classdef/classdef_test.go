@@ -202,8 +202,45 @@ func TestLoadSharedClasses(t *testing.T) {
 	if knight.Skill != "combat" {
 		t.Fatalf("knight skill %q, want combat", knight.Skill)
 	}
+	if knight.Family != FamilyCombat {
+		t.Fatalf("knight family %q, want %s", knight.Family, FamilyCombat)
+	}
 	if knight.Requires["right hand"] != "sword" || knight.Requires["left hand"] != "shield" {
 		t.Fatalf("knight requires %v, want sword+shield in the hands", knight.Requires)
+	}
+	wantFamily := map[string]string{
+		"knight": FamilyCombat, "mage": FamilyCombat, "archer": FamilyCombat,
+		"miner": FamilyGathering, "lumberjack": FamilyGathering,
+	}
+	for id, family := range wantFamily {
+		cl, _ := cat.GetClass(id)
+		if cl.Family != family {
+			t.Fatalf("%s family %q, want %s", id, cl.Family, family)
+		}
+	}
+}
+
+func TestMissingFamilyFailsClosed(t *testing.T) {
+	_, err := ParseClasses([]byte(`{
+		"classes":[{
+			"id":"knight","name":"Knight","skill":"combat",
+			"requires":{"helmet":"plate_helm"}
+		}]
+	}`))
+	if err == nil {
+		t.Fatal("expected missing family error")
+	}
+}
+
+func TestUnknownFamilyFailsClosed(t *testing.T) {
+	_, err := ParseClasses([]byte(`{
+		"classes":[{
+			"id":"knight","name":"Knight","family":"Support","skill":"combat",
+			"requires":{"helmet":"plate_helm"}
+		}]
+	}`))
+	if err == nil {
+		t.Fatal("expected unknown family error")
 	}
 }
 
@@ -391,7 +428,7 @@ func TestWearablesRejectsMissingClassRequire(t *testing.T) {
 	}
 	classes, err := ParseClasses([]byte(`{
 		"classes":[{
-			"id":"miner","name":"Miner","skill":"mining",
+			"id":"miner","name":"Miner","family":"Gathering","skill":"mining",
 			"requires":{"helmet":"prospector_helm","right hand":"pickaxe","feet":"prospector_boots"}
 		}]
 	}`))

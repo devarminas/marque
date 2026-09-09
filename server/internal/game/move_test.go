@@ -41,11 +41,12 @@ func TestMoveZeroClearsSteer(t *testing.T) {
 }
 
 func TestMoveCancelsPendingAttack(t *testing.T) {
-	pw := newProbeWorld(t)
-	alice := pw.join()
-	bob := pw.join()
-	bob.pos = Point{X: 1, Z: 0}
-	pw.w.attack(alice, mnet.Attack{Player: bob.id}, 0)
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
 	pw.w.step()
 
 	pw.w.move(alice, mnet.Move{DX: -1, DZ: 0}, 0)
@@ -56,12 +57,12 @@ func TestMoveCancelsPendingAttack(t *testing.T) {
 	if len(cancelled) != 1 || cancelled[0]["cause"] != CauseMove {
 		t.Fatalf("cancel events=%v, want one cause=%s", cancelled, CauseMove)
 	}
-	before := bob.hp
+	before := hostile.hp
 	for range AttackPeriodTicks + 2 {
 		pw.w.step()
 	}
-	if bob.hp != before {
-		t.Fatalf("hits continued after cancel: hp %d→%d", before, bob.hp)
+	if hostile.hp != before {
+		t.Fatalf("hits continued after cancel: hp %d→%d", before, hostile.hp)
 	}
 }
 

@@ -40,9 +40,15 @@ type Skill struct {
 	MaxLevel int    `json:"max_level"`
 }
 
+const (
+	FamilyCombat    = "Combat"
+	FamilyGathering = "Gathering"
+)
+
 type Class struct {
 	ID       string            `json:"id"`
 	Name     string            `json:"name"`
+	Family   string            `json:"family"`
 	Skill    string            `json:"skill"`
 	Requires map[string]string `json:"requires"`
 }
@@ -237,6 +243,13 @@ func validateClass(c Class) error {
 	}
 	if c.Name == "" {
 		return fmt.Errorf("%q: missing name", c.ID)
+	}
+	switch c.Family {
+	case FamilyCombat, FamilyGathering:
+	case "":
+		return fmt.Errorf("%q: missing family", c.ID)
+	default:
+		return fmt.Errorf("%q: unknown family %q", c.ID, c.Family)
 	}
 	if c.Skill == "" {
 		return fmt.Errorf("%q: missing skill", c.ID)

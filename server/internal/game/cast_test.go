@@ -8,10 +8,10 @@ import (
 )
 
 func TestCastFireballDamagesHostileInRange(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
-	alice := pw.join()
-	bob := pw.join()
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
 	bob.pos = Point{X: 3, Z: 0}
 	bob.hp = MaxHP
 
@@ -35,9 +35,9 @@ func TestCastFireballDamagesHostileInRange(t *testing.T) {
 }
 
 func TestCastFireballRefusesFriendlySelf(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
-	alice := pw.join()
+	alice := pw.joinWithClass("mage")
 	before := alice.mana
 
 	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: alice.id}, 1)
@@ -55,9 +55,9 @@ func TestCastFireballRefusesFriendlySelf(t *testing.T) {
 }
 
 func TestCastHealRestoresSelf(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
-	alice := pw.join()
+	alice := pw.joinWithClass("mage")
 	alice.hp = 40
 
 	pw.w.cast(alice, mnet.Cast{Ability: "heal", Player: alice.id}, 1)
@@ -71,9 +71,9 @@ func TestCastHealRestoresSelf(t *testing.T) {
 }
 
 func TestCastHealCapsAtMaxHP(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
-	alice := pw.join()
+	alice := pw.joinWithClass("mage")
 	alice.hp = MaxHP - 5
 
 	pw.w.cast(alice, mnet.Cast{Ability: "heal", Player: alice.id}, 1)
@@ -84,10 +84,10 @@ func TestCastHealCapsAtMaxHP(t *testing.T) {
 }
 
 func TestCastHealRefusesHostileOther(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
-	alice := pw.join()
-	bob := pw.join()
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
 	bob.hp = 50
 	beforeMana := alice.mana
 	beforeHP := bob.hp
@@ -107,9 +107,9 @@ func TestCastHealRefusesHostileOther(t *testing.T) {
 }
 
 func TestCastRefusesNoTarget(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
-	alice := pw.join()
+	alice := pw.joinWithClass("mage")
 	before := alice.mana
 
 	pw.w.cast(alice, mnet.Cast{Ability: "fireball"}, 1)
@@ -124,10 +124,10 @@ func TestCastRefusesNoTarget(t *testing.T) {
 }
 
 func TestCastRefusesInsufficientMana(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
-	alice := pw.join()
-	bob := pw.join()
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
 	bob.pos = Point{X: 2, Z: 0}
 	alice.mana = 10
 	beforeHP := bob.hp
@@ -147,10 +147,10 @@ func TestCastRefusesInsufficientMana(t *testing.T) {
 }
 
 func TestCastRefusesOutOfRange(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
-	alice := pw.join()
-	bob := pw.join()
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
 	bob.pos = Point{X: 20, Z: 0}
 	beforeMana := alice.mana
 	beforeHP := bob.hp
@@ -167,7 +167,7 @@ func TestCastRefusesOutOfRange(t *testing.T) {
 }
 
 func TestCastJSONOnlyDamageAndMana(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	custom := `{
   "abilities":[{
     "id":"fireball","name":"Fireball","mana_cost":10,"cooldown_ticks":1,"range":8,
@@ -180,8 +180,8 @@ func TestCastJSONOnlyDamageAndMana(t *testing.T) {
   }]
 }`
 	pw.w.SetAbilities(mustParseAbilities(t, custom))
-	alice := pw.join()
-	bob := pw.join()
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
 	bob.pos = Point{X: 1, Z: 0}
 
 	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
@@ -195,10 +195,10 @@ func TestCastJSONOnlyDamageAndMana(t *testing.T) {
 }
 
 func TestCastIgnoresClientAuthoredDamage(t *testing.T) {
-	pw := newProbeWorld(t)
+	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
-	alice := pw.join()
-	bob := pw.join()
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
 	bob.pos = Point{X: 1, Z: 0}
 
 	msg, _, err := mnet.Decode([]byte(`{"cast":{"ability":"fireball","player":2,"damage":999}}`))
@@ -215,6 +215,39 @@ func TestCastIgnoresClientAuthoredDamage(t *testing.T) {
 	pw.w.cast(alice, cast, 1)
 	if bob.hp != MaxHP-40 {
 		t.Fatalf("client damage leaked: hp=%d", bob.hp)
+	}
+}
+
+func TestCastNonMageRefused(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	alice := pw.joinWithClass("knight")
+	alice.hp = 40
+	beforeMana := alice.mana
+
+	pw.w.cast(alice, mnet.Cast{Ability: "heal", Player: alice.id}, 1)
+	if alice.hp != 40 || alice.mana != beforeMana {
+		t.Fatalf("knight heal mutated hp=%d mana=%d", alice.hp, alice.mana)
+	}
+	got := pw.events(EvCastRejected)
+	if len(got) != 1 || got[0]["reason"] != string(mnet.ReasonNeedsClass) {
+		t.Fatalf("cast_rejected=%v, want needs_class", got)
+	}
+}
+
+func TestCastWithoutClassRefused(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	alice := pw.joinBare()
+	before := alice.mana
+
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: alice.id}, 1)
+	if alice.mana != before {
+		t.Fatalf("mana changed: %d", alice.mana)
+	}
+	got := pw.events(EvCastRejected)
+	if len(got) != 1 || got[0]["reason"] != string(mnet.ReasonNeedsClass) {
+		t.Fatalf("cast_rejected=%v, want needs_class", got)
 	}
 }
 
@@ -328,7 +361,7 @@ func TestFriendlyCastKillsSelfTarget(t *testing.T) {
 	bob.pos = Point{X: 1, Z: 0}
 	bob.hp = MaxHP
 
-	pw.w.attack(bob, mnet.Attack{Player: alice.id}, 1)
+	pw.w.beginAttack(bob, alice.id, alice.pos, 1)
 	if bob.attackTarget == 0 {
 		t.Fatal("bob never started attacking alice")
 	}

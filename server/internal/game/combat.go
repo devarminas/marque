@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
@@ -51,6 +52,15 @@ func (w *World) attack(p *player, msg mnet.Attack, seq mnet.Seq) {
 		})
 		return
 	}
+	if !w.classCombatGate(p) {
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonNeedsClass,
+			Detail:      "attack requires an active Combat-family class",
+			Re:          mnet.MsgAttack,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	}
 	if n, ok := w.npcs[msg.Player]; ok {
 		if n.faction != FactionHostile {
 			w.refuse(p, &mnet.RejectError{
@@ -73,27 +83,29 @@ func (w *World) attack(p *player, msg mnet.Attack, seq mnet.Seq) {
 		w.beginAttack(p, n.id, n.pos, seq)
 		return
 	}
-	target, live := w.players[msg.Player]
-	if !live {
+	if _, live := w.players[msg.Player]; live {
 		w.refuse(p, &mnet.RejectError{
-			Reason:      mnet.ReasonUnknownPlayer,
-			Detail:      "no such player",
+			Reason:      mnet.ReasonWrongTarget,
+			Detail:      "player vs player is disabled",
 			Re:          mnet.MsgAttack,
 			Disposition: mnet.ReplyError,
 		})
 		return
 	}
-	if target.dead() {
-		w.refuse(p, &mnet.RejectError{
-			Reason:      mnet.ReasonTargetDead,
-			Detail:      "that player is dead",
-			Re:          mnet.MsgAttack,
-			Disposition: mnet.ReplyError,
-		})
-		return
-	}
+	w.refuse(p, &mnet.RejectError{
+		Reason:      mnet.ReasonUnknownPlayer,
+		Detail:      "no such player",
+		Re:          mnet.MsgAttack,
+		Disposition: mnet.ReplyError,
+	})
+}
 
-	w.beginAttack(p, target.id, target.pos, seq)
+func (w *World) classCombatGate(p *player) bool {
+	if w.classes == nil {
+		return false
+	}
+	res := classdef.ClassOf(w.wornKinds(p), w.classes)
+	return res.Class != nil && res.Class.Family == classdef.FamilyCombat
 }
 
 func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, seq mnet.Seq) {
