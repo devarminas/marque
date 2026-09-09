@@ -181,6 +181,9 @@ type player struct {
 	dialogNPC   mnet.PlayerID
 	quests      map[string]questStatus
 
+	partyID           mnet.PartyID
+	pendingInviteFrom mnet.PlayerID
+
 	attackTarget   mnet.PlayerID
 	attackProgress int
 
@@ -223,6 +226,9 @@ type World struct {
 
 	players map[mnet.PlayerID]*player
 
+	parties     map[mnet.PartyID]*party
+	nextPartyID mnet.PartyID
+
 	npcs      map[mnet.PlayerID]*npc
 	npcOrder  []mnet.PlayerID
 	nextNpcID mnet.PlayerID
@@ -253,6 +259,7 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		resumeGrace: resumeGrace,
 		joinKit:     joinKit,
 		players:     make(map[mnet.PlayerID]*player),
+		parties:     make(map[mnet.PartyID]*party),
 		byConn:      make(map[*mnet.Conn]*player),
 		bySession:   make(map[string]*player),
 	}
@@ -481,6 +488,7 @@ func (w *World) sendJoinStep(p *player) {
 	w.sendClass(p)
 	w.sendSkills(p)
 	w.sendQuestLog(p)
+	w.sendPartyCatchUp(p)
 }
 
 func suspends(reason string) bool {
@@ -534,6 +542,14 @@ func (w *World) expireSuspended() {
 }
 
 func (w *World) retire(p *player) {
+	if p.partyID != 0 {
+		w.removeFromParty(p, EvPartyLeft)
+	}
+	w.clearInvitesFrom(p.id)
+	if p.pendingInviteFrom != 0 {
+		w.clearPendingInvite(p)
+	}
+
 	delete(w.players, p.id)
 	delete(w.bySession, p.session)
 	if p.conn != nil {
@@ -647,6 +663,16 @@ func (w *World) handleFrame(ev mnet.Event) {
 			return
 		}
 		w.give(p, msg, ev.Seq)
+	case mnet.PartyInvite:
+		w.partyInvite(p, msg, ev.Seq)
+	case mnet.PartyAccept:
+		w.partyAccept(p, msg, ev.Seq)
+	case mnet.PartyDecline:
+		w.partyDecline(p, msg, ev.Seq)
+	case mnet.PartyLeave:
+		w.partyLeave(p, msg, ev.Seq)
+	case mnet.PartyKick:
+		w.partyKick(p, msg, ev.Seq)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -704,6 +730,16 @@ func rejectionEvent(re string) string {
 		return EvDialogOptionRejected
 	case mnet.MsgGive:
 		return EvGiveRejected
+	case mnet.MsgPartyInvite:
+		return EvPartyInviteRejected
+	case mnet.MsgPartyAccept:
+		return EvPartyAcceptRejected
+	case mnet.MsgPartyDecline:
+		return EvPartyDeclineRejected
+	case mnet.MsgPartyLeave:
+		return EvPartyLeaveRejected
+	case mnet.MsgPartyKick:
+		return EvPartyKickRejected
 	default:
 		panic(fmt.Sprintf("game: no rejection event for %q", re))
 	}
