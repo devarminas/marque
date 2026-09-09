@@ -193,8 +193,10 @@ func run() error {
 			return err
 		}
 	}
-	if err := world.SeedResourceNode(game.KindTree, game.SeedTreeX, game.SeedTreeZ); err != nil {
-		return err
+	for _, tree := range game.StarterTownTrees {
+		if err := world.SeedResourceNode(game.KindTree, tree.X, tree.Z); err != nil {
+			return err
+		}
 	}
 	if err := world.SeedPracticeDummies(); err != nil {
 		return err

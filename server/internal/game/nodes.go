@@ -16,10 +16,19 @@ const (
 
 	SeedTreeX = 5.0
 	SeedTreeZ = 0.0
+	SeedTree2X = -5.0
+	SeedTree2Z = 2.0
 
 	KindTree = "tree"
 	KindLogs = "logs"
 )
+
+// StarterTownTrees are the choppable trees near the hub on the Northmere road.
+// Decorative trees in world_map.tscn are not resource nodes.
+var StarterTownTrees = []Point{
+	{X: SeedTreeX, Z: SeedTreeZ},
+	{X: SeedTree2X, Z: SeedTree2Z},
+}
 
 // Tuning: ARM-122.
 const SkillXPGather = 10

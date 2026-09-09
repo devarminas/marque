@@ -18,7 +18,7 @@ const TOGGLE_KEY := KEY_I
 
 const SCREENSHOT_WARMUP_FRAMES := 15
 const REQUIRED_PLAYERS := 2
-const REQUIRED_NODES := 1
+const REQUIRED_NODES := 2
 const JOIN_TIMEOUT_MSEC := 20000
 const RESTATE_TIMEOUT_MSEC := 15000
 const USEC_PER_MSEC := 1000
@@ -161,12 +161,21 @@ func _wait_for_scenario() -> int:
 	while Time.get_ticks_msec() < deadline:
 		if (
 			_session.known_ids().size() >= REQUIRED_PLAYERS
-			and _tree_node_id() > 0
+			and _tree_count() >= REQUIRED_NODES
 			and _find_bag_kind(AXE_KIND) >= 0
 		):
 			return Time.get_ticks_usec()
 		await _tree.process_frame
 	return -1
+
+
+func _tree_count() -> int:
+	var count := 0
+	for id: int in _session.known_node_ids():
+		var body := _session.node_for(id)
+		if body != null and body.kind == TREE_KIND:
+			count += 1
+	return count
 
 
 func _equip_axe() -> bool:
@@ -206,11 +215,22 @@ func _craft_logs(slot: int) -> bool:
 
 
 func _tree_node_id() -> int:
+	const PRIMARY_X := 5.0
+	const PRIMARY_Z := 0.0
+	const COORD_EPS := 0.01
+	var fallback := 0
 	for id: int in _session.known_node_ids():
 		var body := _session.node_for(id)
-		if body != null and body.kind == TREE_KIND:
+		if body == null or body.kind != TREE_KIND:
+			continue
+		if fallback == 0:
+			fallback = id
+		if (
+			absf(body.position.x - PRIMARY_X) <= COORD_EPS
+			and absf(body.position.z - PRIMARY_Z) <= COORD_EPS
+		):
 			return id
-	return 0
+	return fallback
 
 
 func _node_is_depleted(node_id: int) -> bool:

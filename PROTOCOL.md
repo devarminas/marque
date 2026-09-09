@@ -1219,9 +1219,11 @@ takes the ordinary path and gets a reason rather than an event of its own.
 
 ## Gathering. **M4a**
 
-Resource nodes are the third entity family. M4a ships one kind, `tree`, seeded at a fixed
-position (`SeedTreeX`, `SeedTreeZ` = 5, 0). A live full tree yields one `logs` into the lowest
-free bag slot when a gather resolves.
+Resource nodes are the third entity family. M4a ships one kind, `tree`. M10 seeds two starter
+trees on the Northmere road (`SeedTreeX/Z` = 5, 0 and `SeedTree2X/Z` = -5, 2) via
+`StarterTownTrees`. The client draws each with the same `resource_node.tscn` prop from server
+positions. Decorative trees in `world_map.tscn` are not nodes. A live full tree yields one
+`logs` into the lowest free bag slot when a gather resolves.
 
 ### Tunables
 

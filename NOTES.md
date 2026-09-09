@@ -913,9 +913,11 @@ line and knows nothing of houses, so a player walks through walls. The house foo
 world-map test reads are the obstacle list that unit needs, and the generator is where to emit
 them.
 
-**Seeds stay on the Northmere road near the hub.** Join spawn is (0, 0). The seeded tree is at
-(5, 0). Practice dummies and the quest giver sit within a few units of origin. Class-kit ground
-seeds start at (1, 2). Plaza centres are the natural respawn points once towns mean something.
+**Seeds stay on the Northmere road near the hub.** Join spawn is (0, 0). Choppable trees are
+server-seeded at (5, 0) and (-5, 2); the client instances `resource_node.tscn` once per node
+and never mirrors the map's decorative trees. Practice dummies and the quest giver sit within a
+few units of origin. Class-kit ground seeds start at (1, 2). Plaza centres are the natural
+respawn points once towns mean something.
 
 **Follow-ups, none owned yet.** The nature kit ships no water and the village kit's free cut
 ships no well or stall, so the plazas are bare brick; `Wall_Arch` and
