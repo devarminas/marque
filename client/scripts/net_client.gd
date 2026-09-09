@@ -85,6 +85,10 @@ signal quest_log_changed(
 	statuses: PackedStringArray,
 )
 
+signal party_changed(party_id: int, leader_id: int, members: PackedInt32Array)
+
+signal party_invite_notice_changed(from_player: int)
+
 signal server_error(re: String, message: String)
 
 signal unknown_message(key: String)
@@ -218,6 +222,22 @@ func send_give(npc_id: int, slot: int, seq: int = 0) -> Error:
 	return _send(give_frame(npc_id, slot, _intent_seq(seq)))
 
 
+func send_party_invite(player_id: int, seq: int = 0) -> Error:
+	return _send(party_invite_frame(player_id, _intent_seq(seq)))
+
+
+func send_party_accept(seq: int = 0) -> Error:
+	return _send(party_accept_frame(_intent_seq(seq)))
+
+
+func send_party_decline(seq: int = 0) -> Error:
+	return _send(party_decline_frame(_intent_seq(seq)))
+
+
+func send_party_leave(seq: int = 0) -> Error:
+	return _send(party_leave_frame(_intent_seq(seq)))
+
+
 func next_seq() -> int:
 	return _next_seq
 
@@ -285,6 +305,22 @@ static func dialog_option_frame(npc_id: int, option: String, seq: int = 0) -> Di
 
 static func give_frame(npc_id: int, slot: int, seq: int = 0) -> Dictionary:
 	return {"give": _intent_body({"npc": npc_id, "slot": slot}, seq)}
+
+
+static func party_invite_frame(player_id: int, seq: int = 0) -> Dictionary:
+	return {"party_invite": _intent_body({"player": player_id}, seq)}
+
+
+static func party_accept_frame(seq: int = 0) -> Dictionary:
+	return {"party_accept": _intent_body({}, seq)}
+
+
+static func party_decline_frame(seq: int = 0) -> Dictionary:
+	return {"party_decline": _intent_body({}, seq)}
+
+
+static func party_leave_frame(seq: int = 0) -> Dictionary:
+	return {"party_leave": _intent_body({}, seq)}
 
 
 static func _intent_body(body: Dictionary, seq: int) -> Dictionary:
@@ -412,6 +448,10 @@ func ingest_text_frame(text: String) -> void:
 			_on_dialog(body, text)
 		"quest_log":
 			_on_quest_log(body, text)
+		"party":
+			_on_party(body, text)
+		"party_invite_notice":
+			_on_party_invite_notice(body, text)
 		"tick":
 			_on_tick(body, text)
 		"error":
@@ -1064,6 +1104,63 @@ func _on_quest_log(body: Dictionary, text: String) -> void:
 		statuses.append(status)
 
 	quest_log_changed.emit(ids, titles, objectives, statuses)
+
+
+func _on_party(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["id", "leader"], text):
+		return
+	var raw_members: Variant = body.get("members")
+	if body.has("members") and _is_null_list(raw_members, "party.members", text):
+		raw_members = []
+	if typeof(raw_members) != TYPE_ARRAY:
+		push_error("net_client: party.members is missing or not an array: %s" % text)
+		return
+
+	var party_id := int(body["id"])
+	var leader_id := int(body["leader"])
+	var members := PackedInt32Array()
+	var seen := {}
+	for entry: Variant in raw_members as Array:
+		if not _is_number(entry):
+			push_error("net_client: party.members entry is not a number: %s" % text)
+			return
+		var member_id := int(entry)
+		if member_id < 1:
+			push_error("net_client: party.members entry must be >= 1, got %d: %s" % [member_id, text])
+			return
+		if seen.has(member_id):
+			push_error("net_client: party.members names id %d twice: %s" % [member_id, text])
+			return
+		seen[member_id] = true
+		members.append(member_id)
+
+	if party_id == 0 and leader_id == 0 and members.is_empty():
+		party_changed.emit(0, 0, members)
+		return
+	if party_id < 1:
+		push_error("net_client: party.id must be >= 1 when membership is set: %s" % text)
+		return
+	if leader_id < 1:
+		push_error("net_client: party.leader must be >= 1 when membership is set: %s" % text)
+		return
+	if members.is_empty():
+		push_error("net_client: party.members is empty while id/leader are set: %s" % text)
+		return
+	if not seen.has(leader_id):
+		push_error("net_client: party.leader %d is not in members: %s" % [leader_id, text])
+		return
+
+	party_changed.emit(party_id, leader_id, members)
+
+
+func _on_party_invite_notice(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["from"], text):
+		return
+	var from_player := int(body["from"])
+	if from_player < 0:
+		push_error("net_client: party_invite_notice.from must be >= 0: %s" % text)
+		return
+	party_invite_notice_changed.emit(from_player)
 
 
 func _on_tick(body: Dictionary, text: String) -> void:
