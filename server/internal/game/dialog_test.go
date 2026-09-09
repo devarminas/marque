@@ -42,16 +42,6 @@ func newDialogProbe(t *testing.T) (*probeWorld, *npc) {
 	return pw, giver
 }
 
-func (w *World) npcByKind(kind string) *npc {
-	for _, id := range w.npcOrder {
-		n := w.npcs[id]
-		if n != nil && n.kind == kind {
-			return n
-		}
-	}
-	return nil
-}
-
 func TestSeedQuestGiverDistinctFromDummies(t *testing.T) {
 	pw := newProbeWorld(t)
 	if err := pw.w.SeedPracticeDummies(); err != nil {

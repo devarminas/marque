@@ -338,6 +338,8 @@ func (w *World) step() {
 		}
 	}
 
+	w.stepNPCs(distance)
+
 	for _, p := range w.order {
 		if p.pending != 0 {
 			w.resolvePickup(p)

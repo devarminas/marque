@@ -131,12 +131,15 @@ func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
 		w.broadcastNPCHP(target.npc)
 		if ability.Effect.Kind == abilitydef.EffectDamage && target.npc.dead() {
 			w.clearAttacksOn(target.npc.id)
+			if target.npc.kind == KindImp {
+				w.killImp(target.npc, p.id)
+			}
 		}
 		return
 	}
 	w.broadcastHP(target.plyr)
 	if ability.Effect.Kind == abilitydef.EffectDamage && target.plyr.dead() {
-		w.kill(target.plyr, p)
+		w.kill(target.plyr, p.id)
 	}
 }
 
