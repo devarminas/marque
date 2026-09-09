@@ -41,7 +41,9 @@ DefaultJoinKit), launches one windowed client with `--quest-shots`, and asserts:
   `quest_completed` with `consume=stick` and five rewards; no talk/dialog/give
   rejects.
 - Client layer: `DEMO accepted` / `DEMO complete`, shot 1 bag holds `stick`,
-  shot 3 bag holds miner kinds only, shot 3 questlog is complete.
+  shot 3 bag holds miner kinds only, shot 3 questlog is complete. The client
+  waits for dialog / give panels, then sends `dialog_option` / `give` through
+  Session (same gates as the UI).
 - Three PNGs over 4KB each and `DEMO done` on the client.
 
 Evidence lands in `-OutDir`, default `$env:TEMP\marque-quest`: three PNGs,
