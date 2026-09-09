@@ -7,6 +7,7 @@ const FactionNeutral := "neutral"
 
 const KindDummy := "dummy"
 const KindQuestGiver := "quest_giver"
+const KindImpQuestGiver := "imp_quest_giver"
 const KindImp := "imp"
 
 const IDLE_ANIM := "ual2/Idle_FoldArms"

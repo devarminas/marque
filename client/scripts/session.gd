@@ -159,6 +159,9 @@ var _use_from := -1
 var _bag_size := 0
 var _bag_indices := PackedInt32Array()
 var _bag_kinds := PackedStringArray()
+var _quest_ids := PackedStringArray()
+var _quest_titles := PackedStringArray()
+var _quest_objectives := PackedStringArray()
 var _quest_statuses := PackedStringArray()
 var _give_dismissed := false
 var _selected_player_id := 0
@@ -447,7 +450,10 @@ func request_talk(npc_id: int) -> void:
 			"session: talk for npc %d, which this client does not know; ignoring" % npc_id
 		)
 		return
-	if dummy.kind != NpcDummyScript.KindQuestGiver:
+	if (
+		dummy.kind != NpcDummyScript.KindQuestGiver
+		and dummy.kind != NpcDummyScript.KindImpQuestGiver
+	):
 		push_warning("session: talk refused for non-quest-giver npc %d" % npc_id)
 		return
 	talk_requested.emit(npc_id)
@@ -1060,6 +1066,9 @@ func _on_disconnected(code: int, reason: String) -> void:
 		_dialog.clear()
 	if _give != null:
 		_give.clear()
+	_quest_ids = PackedStringArray()
+	_quest_titles = PackedStringArray()
+	_quest_objectives = PackedStringArray()
 	_quest_statuses = PackedStringArray()
 	_give_dismissed = false
 	var resume := not _logout_requested and not _base_url.is_empty()
@@ -1147,7 +1156,10 @@ func _on_player_clicked(body: Node3D) -> void:
 		)
 		return
 	select_player(npc_id)
-	if dummy.kind == NpcDummyScript.KindQuestGiver:
+	if (
+		dummy.kind == NpcDummyScript.KindQuestGiver
+		or dummy.kind == NpcDummyScript.KindImpQuestGiver
+	):
 		request_talk(npc_id)
 
 
@@ -1233,6 +1245,9 @@ func _on_quest_log_changed(
 	objectives: PackedStringArray,
 	statuses: PackedStringArray,
 ) -> void:
+	_quest_ids = ids
+	_quest_titles = titles
+	_quest_objectives = objectives
 	_quest_statuses = statuses
 	if _quest_log == null:
 		push_error("session: quest_log arrived with no panel to draw it")
