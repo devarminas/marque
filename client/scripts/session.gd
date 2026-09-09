@@ -13,6 +13,7 @@ const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const NpcDummyScene := preload("res://scenes/npc_dummy.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const DialogPanelScript := preload("res://scripts/dialog_panel.gd")
+const QuestLogPanelScript := preload("res://scripts/quest_log_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
 const ClassHudScript := preload("res://scripts/class_hud.gd")
@@ -93,6 +94,7 @@ signal respawn_requested()
 @export var ground_picker: Node
 @export var inventory_panel: Node
 @export var dialog_panel: Node
+@export var quest_log_panel: Node
 @export var equipment_panel: Node
 @export var hp_hud: Node
 @export var class_hud: Node
@@ -106,6 +108,7 @@ var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
 var _panel: InventoryPanelScript = null
 var _dialog: DialogPanelScript = null
+var _quest_log: QuestLogPanelScript = null
 var _equipment: EquipmentPanelScript = null
 var _hp_hud: HpHudScript = null
 var _class_hud: ClassHudScript = null
@@ -180,6 +183,7 @@ func _ready() -> void:
 	_net.node_state_changed.connect(_on_node_state_changed)
 	_net.inventory_changed.connect(_on_inventory_changed)
 	_net.dialog_changed.connect(_on_dialog_changed)
+	_net.quest_log_changed.connect(_on_quest_log_changed)
 	_net.equipment_changed.connect(_on_equipment_changed)
 	_net.class_changed.connect(_on_class_changed)
 	_net.skills_changed.connect(_on_skills_changed)
@@ -210,6 +214,10 @@ func _ready() -> void:
 		push_error("Session.dialog_panel must point at a node running dialog_panel.gd")
 	else:
 		_dialog.option_chosen.connect(_on_dialog_option_chosen)
+
+	_quest_log = quest_log_panel as QuestLogPanelScript
+	if _quest_log == null:
+		push_error("Session.quest_log_panel must point at a node running quest_log_panel.gd")
 
 	_equipment = equipment_panel as EquipmentPanelScript
 	if _equipment == null:
@@ -1102,6 +1110,18 @@ func _on_dialog_changed(npc_id: int, lines: PackedStringArray, option_ids: Packe
 		push_error("session: dialog arrived with no panel to draw it")
 		return
 	_dialog.apply(npc_id, lines, option_ids)
+
+
+func _on_quest_log_changed(
+	ids: PackedStringArray,
+	titles: PackedStringArray,
+	objectives: PackedStringArray,
+	statuses: PackedStringArray,
+) -> void:
+	if _quest_log == null:
+		push_error("session: quest_log arrived with no panel to draw it")
+		return
+	_quest_log.apply(ids, titles, objectives, statuses)
 
 
 func _on_dialog_option_chosen(npc_id: int, option_id: String) -> void:

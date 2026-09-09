@@ -21,6 +21,8 @@ const CURSOR_APIS := [
 const CHROME_PATHS := [
 	"UI/RightDock",
 	"UI/InventoryToggle",
+	"UI/QuestLogToggle",
+	"UI/QuestLogPanel",
 	"UI/ClassHud",
 	"UI/ClassDebug",
 	"UI/HpHud",
@@ -32,6 +34,7 @@ const CHROME_PATHS := [
 const CHROME_UNDER_TEST := [
 	"UI/RightDock",
 	"UI/InventoryToggle",
+	"UI/QuestLogToggle",
 	"UI/Hotbar",
 	"UI/ErrorHud",
 ]

@@ -78,6 +78,13 @@ signal mana_changed(id: int, mana: int, max_mana: int)
 
 signal dialog_changed(npc_id: int, lines: PackedStringArray, option_ids: PackedStringArray)
 
+signal quest_log_changed(
+	ids: PackedStringArray,
+	titles: PackedStringArray,
+	objectives: PackedStringArray,
+	statuses: PackedStringArray,
+)
+
 signal server_error(re: String, message: String)
 
 signal unknown_message(key: String)
@@ -395,6 +402,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_mana(body, text)
 		"dialog":
 			_on_dialog(body, text)
+		"quest_log":
+			_on_quest_log(body, text)
 		"tick":
 			_on_tick(body, text)
 		"error":
@@ -996,6 +1005,57 @@ func _on_dialog(body: Dictionary, text: String) -> void:
 		option_ids.append(option_id)
 
 	dialog_changed.emit(npc_id, lines, option_ids)
+
+
+func _on_quest_log(body: Dictionary, text: String) -> void:
+	var raw_quests: Variant = body.get("quests")
+	if body.has("quests") and _is_null_list(raw_quests, "quest_log.quests", text):
+		raw_quests = []
+	if typeof(raw_quests) != TYPE_ARRAY:
+		push_error("net_client: quest_log.quests is missing or not an array: %s" % text)
+		return
+
+	var ids := PackedStringArray()
+	var titles := PackedStringArray()
+	var objectives := PackedStringArray()
+	var statuses := PackedStringArray()
+	for entry: Variant in raw_quests as Array:
+		if typeof(entry) != TYPE_DICTIONARY:
+			push_error("net_client: quest_log.quests entry is not an object: %s" % text)
+			return
+		var quest: Dictionary = entry
+		if typeof(quest.get("id")) != TYPE_STRING:
+			push_error("net_client: quest_log.quests entry has no id string: %s" % text)
+			return
+		var quest_id: String = quest["id"]
+		if quest_id.is_empty():
+			push_error("net_client: quest_log.quests entry has an empty id: %s" % text)
+			return
+		if ids.has(quest_id):
+			push_error('net_client: quest_log.quests names id "%s" twice: %s' % [quest_id, text])
+			return
+		if typeof(quest.get("title")) != TYPE_STRING:
+			push_error("net_client: quest_log.quests entry has no title string: %s" % text)
+			return
+		if typeof(quest.get("objective")) != TYPE_STRING:
+			push_error("net_client: quest_log.quests entry has no objective string: %s" % text)
+			return
+		if typeof(quest.get("status")) != TYPE_STRING:
+			push_error("net_client: quest_log.quests entry has no status string: %s" % text)
+			return
+		var status: String = quest["status"]
+		if status != "active" and status != "complete":
+			push_error(
+				'net_client: quest_log.quests status must be "active" or "complete", got "%s": %s'
+				% [status, text]
+			)
+			return
+		ids.append(quest_id)
+		titles.append(quest["title"])
+		objectives.append(quest["objective"])
+		statuses.append(status)
+
+	quest_log_changed.emit(ids, titles, objectives, statuses)
 
 
 func _on_tick(body: Dictionary, text: String) -> void:
