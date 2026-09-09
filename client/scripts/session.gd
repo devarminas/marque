@@ -12,6 +12,7 @@ const ResourceNodeScene := preload("res://scenes/resource_node.tscn")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const NpcDummyScene := preload("res://scenes/npc_dummy.tscn")
 const NpcQuestGiverScene := preload("res://scenes/npc_quest_giver.tscn")
+const NpcImpScene := preload("res://scenes/npc_imp.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const DialogPanelScript := preload("res://scripts/dialog_panel.gd")
 const GivePanelScript := preload("res://scripts/give_panel.gd")
@@ -1482,6 +1483,8 @@ func _ensure_npc(id: int, kind: String, faction: String) -> NpcDummyScript:
 	var scene := NpcDummyScene
 	if kind == NpcDummyScript.KindQuestGiver:
 		scene = NpcQuestGiverScene
+	elif kind == NpcDummyScript.KindImp:
+		scene = NpcImpScene
 	var body := scene.instantiate() as NpcDummyScript
 	if body == null:
 		push_error("session: npc scene did not instantiate as an NpcDummy")
