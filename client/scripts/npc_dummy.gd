@@ -8,13 +8,29 @@ const FactionNeutral := "neutral"
 const KindDummy := "dummy"
 const KindQuestGiver := "quest_giver"
 
+const IDLE_ANIM := "ual2/Idle_FoldArms"
+
 var npc_id := 0
 var kind := KindDummy
 var faction := FactionHostile
 
+var _body_mesh: MeshInstance3D = null
+
 @onready var _selection_ring: MeshInstance3D = $SelectionRing
-@onready var _body_mesh: MeshInstance3D = $Body
 @onready var _hp_label: Label3D = $HpLabel
+
+
+func _ready() -> void:
+	var body := get_node_or_null("Body")
+	if body is MeshInstance3D:
+		_body_mesh = body as MeshInstance3D
+	var missing := get_node_or_null("MissingBody") as MeshInstance3D
+	if missing != null and get_node_or_null("Body/Armature/Skeleton3D") == null:
+		missing.visible = true
+	var anim := get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if anim != null and anim.has_animation(IDLE_ANIM):
+		anim.play(IDLE_ANIM)
+	_apply_faction_color()
 
 
 func configure(id: int, npc_kind: String, npc_faction: String) -> void:
