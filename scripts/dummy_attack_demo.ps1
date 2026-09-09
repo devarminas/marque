@@ -55,7 +55,13 @@ try {
         Pop-Location
     }
 
-    $server = Start-Process -FilePath $binary -ArgumentList @("-addr", "127.0.0.1:0") `
+    $mageJoinKit = @(
+        "-join-kit", "cloth_hood",
+        "-join-kit", "cloth_robe",
+        "-join-kit", "cloth_skirt",
+        "-join-kit", "staff"
+    )
+    $server = Start-Process -FilePath $binary -ArgumentList (@("-addr", "127.0.0.1:0") + $mageJoinKit) `
         -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr `
         -NoNewWindow -PassThru
 

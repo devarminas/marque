@@ -27,9 +27,11 @@ client panel is M3b onward and nothing under an **M3a** marker describes it.
 `shared/sets.json` (worn-slot keys including `feet`, authored 1H `slot`, empty join kit, no prototype `axe`) and is
 shipped with this file. **M7g** seeds those set kinds on the ground via `-seed-class-kits` for
 demo/test without expanding `DefaultJoinKit`. **M7c** is the server half of class derivation, skill XP, and the gather class gate, and
-is shipped with this file: five classes in `shared/classes.json`, the `class` and `skills`
+is shipped with this file: five classes in `shared/classes.json` (each with a `family` of
+`Combat` or `Gathering`; illegal/missing `family` fails closed at load), the `class` and `skills`
 restatements, `ClassOf` from worn equipment with missing-piece reporting, per-skill XP with a
 level function, and gather gated on the active class's skill rather than a hardcoded tool kind.
+**ARM-203** gates `attack` on Combat family and `cast` of heal/fireball on mage.
 A marker reading plain **M7** is reserved. Class logic is M7c and nothing under an **M7b**
 marker describes it.
 
@@ -41,7 +43,8 @@ and is shipped with this file: the `use` intent and logs→sticks. A marker read
 is reserved. The client draw of nodes is a later unit and nothing under an **M4a** or **M4c**
 marker describes it.
 
-**M5 is in progress.** **M5a** is the server half of PvP combat and is shipped with this
+**M5 is in progress.** **M5a** is the server half of combat (originally PvP; **ARM-203** turns
+PvP `attack` off and gates melee on Combat-family class) and is shipped with this
 file: public hit points on player records, the `attack` and `respawn` intents, pending engage
 shaped like pickup and gather, constant-damage hits on a tick period, death at HP 0, and the
 `hp` restatement. A marker reading plain **M5** is reserved. Client click-to-attack, HP draw,
@@ -401,13 +404,13 @@ the same space `drop.slot` and `equip.slot` use, and for the same reason: the cl
 positions in its cached inventory and the server looks up what is actually there. Semantics are
 in *Crafting*.
 
-### `attack`. **M5a**
+### `attack`. **M5a** / **ARM-203**
 
     {"attack":{"player":2}}
 
-A request to engage another player in melee. `player` is a player id, the same space as
-`welcome.you`, `spawn.id`, and `path.id`; see *Entity naming*. It is **not** an item id and
-**not** a node id. Semantics are in *Combat*.
+A request to engage a hostile NPC in melee. `player` is an actor id in the shared player/NPC
+id space (see *Entity naming*). It is **not** an item id and **not** a node id. Semantics are
+in *Combat*. Player targets are refused (PvP off).
 
 ### `respawn`. **M5a**
 
@@ -1725,11 +1728,17 @@ a GDScript client will get it subtly wrong.
   `slot` field on the wire that is not an index, which is why the intent that names one is
   spelled `worn` instead.
 
-## Combat. **M5a**
+## Combat. **M5a** / **ARM-203**
 
-PvP only. The target of an attack is a durable player id. There are no NPCs on this contract.
-Equipped weapon is ignored for damage. There is no ranged aiming, no defence roll, and no
-death loot.
+Melee `attack` is player-versus-hostile-NPC only. Player-versus-player `attack` is refused
+(`wrong_target`, detail "player vs player is disabled"). Equipped weapon is ignored for damage.
+There is no ranged aiming, no defence roll, and no death loot.
+
+**Class family gate (ARM-203).** `attack` is accepted only when the attacker's worn set activates
+a class whose `family` in `shared/classes.json` is `Combat` (knight, archer, mage). Gathering
+classes (miner, lumberjack), incomplete sets, and no active class are refused with `needs_class`.
+Illegal or missing `family` values fail closed at catalog load. Gathering and no-class players
+still have HP, take damage, die, and `respawn` normally.
 
 ### Tunables
 
@@ -1747,8 +1756,8 @@ write GAMELOG `mana_spend` / `mana_refund`. Casting does not spend mana in M6b.
 
 ### `attack` is pending engage, then period hits
 
-**Clicking a player walks you into range and then hits them on a period for as long as you stay
-engaged.** That is RuneScape's answer and it is taken without further argument. The shape is
+**Clicking a hostile NPC walks you into range and then hits them on a period for as long as you
+stay engaged.** That is RuneScape's answer and it is taken without further argument. The shape is
 pickup and gather's pending action, not an instantaneous one-shot.
 
 - **`attack` is a pending attack on `player`, plus a path toward that player's current
@@ -1833,14 +1842,16 @@ There is no auto-respawn timer. Death ends only on a successful `respawn`.
 
 The server answers with `error` naming `attack`, and sets no pending attack, when:
 
-- `player` is not a live player id (`unknown_player`) — stale and fabricated are one case, as
-  with unknown items and nodes
-- `player` is the attacker's own id (`self`)
-- the target's current HP is 0 (`target_dead`)
 - the attacker is dead (`dead`)
+- `player` is the attacker's own id (`self`)
+- the attacker has no active Combat-family class (`needs_class`) — **ARM-203**
 - `player` names a live NPC whose `faction` is not `hostile` (`wrong_target`) — **M6e** / **M6f**
+- `player` names a live player (`wrong_target`, PvP disabled) — **ARM-203**
+- `player` is not a live player or NPC id (`unknown_player`) — stale and fabricated are one case, as
+  with unknown items and nodes
+- the NPC target's current HP is 0 (`target_dead`)
 
-A suspended target is still in the world and may be engaged; suspension is not death.
+A suspended target is still in the world; with PvP off it cannot be engaged via `attack`.
 
 ### Suspension and combat
 
@@ -1870,8 +1881,8 @@ restatement are broadcasts (or join-scoped world restatements). Private restatem
 | `respawn` | `player`, `seq` | one completed respawn |
 | `respawn_rejected` | `player`, `reason`, `detail`, `re` | a `respawn` refused on receipt |
 
-`attack_rejected.reason` is one of `unknown_player`, `self`, `target_dead`, `dead`, or
-`wrong_target`.
+`attack_rejected.reason` is one of `unknown_player`, `self`, `target_dead`, `dead`,
+`needs_class`, or `wrong_target`.
 `respawn_rejected.reason` is `not_dead`.
 
 `attack_cancelled.cause` is one of `move_to`, `move`, `pickup`, `gather`, `replaced`, or
@@ -1926,18 +1937,20 @@ The server looks up `cast.ability` in the shared catalog and applies that row on
 
 1. Dead casters are refused (`dead`).
 2. Unknown ability ids are refused (`unknown_ability`).
-3. Target rule from JSON:
+3. **Mage gate (ARM-203).** `heal` and `fireball` require an active `mage` class (full worn set).
+   Otherwise `needs_class`. Other ability ids are not gated here.
+4. Target rule from JSON:
    - `self`: caster only; a named `player` other than the caster is `wrong_target`.
    - `friendly`: the caster, or a living NPC whose `faction` is `friendly`. Missing `player` is
      `no_target`. Another living player is `wrong_target`. A hostile NPC is `wrong_target`.
    - `hostile`: another living player, or a living NPC whose `faction` is `hostile`. Missing
      `player` is `no_target`. Self and friendly NPCs are `wrong_target`. Dead / unknown ids
      reuse `target_dead` / `unknown_player`.
-4. Range: distance on the ground plane must be `<=` the ability's `range`. Self casts skip the
+5. Range: distance on the ground plane must be `<=` the ability's `range`. Self casts skip the
    check. Out of range is `out_of_range` with **no mana spend and no HP change** (no walk-in).
-5. Mana: spend `mana_cost` from the JSON via the M6b helper. Failure is `insufficient_mana`
+6. Mana: spend `mana_cost` from the JSON via the M6b helper. Failure is `insufficient_mana`
    with no effect.
-6. Effect: `heal` raises target HP by `effect.amount` capped at `MaxHP`; `damage` lowers it
+7. Effect: `heal` raises target HP by `effect.amount` capped at `MaxHP`; `damage` lowers it
    floored at 0 and may kill. Amounts come from JSON only. Success broadcasts `mana` (from the
    spend) and `hp` for the target (player or NPC id).
 

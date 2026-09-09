@@ -36,6 +36,8 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 		return _fail("no welcome with two practice npcs after %dms" % JOIN_TIMEOUT_MSEC)
 
 	print("DEMO joined %d" % _session.own_id())
+	if not await _equip_mage_kit():
+		return 1
 	var npcs: Dictionary = _session.get("_npcs")
 	var friendly_id := 0
 	var hostile_id := 0
@@ -142,6 +144,24 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 
 	print("DEMO done")
 	return 0
+
+
+func _equip_mage_kit() -> bool:
+	var indices: PackedInt32Array = _session.get("_bag_indices")
+	if indices.is_empty():
+		_fail("mage join kit never arrived in the bag")
+		return false
+	for slot: int in indices:
+		_session.request_equip(slot)
+		await _tree.process_frame
+	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		if _session.active_class_id() == "mage":
+			print("DEMO class mage")
+			return true
+		await _tree.process_frame
+	_fail("worn set never activated mage")
+	return false
 
 
 func _on_cast_effect(target_id: int, ability_id: String) -> void:

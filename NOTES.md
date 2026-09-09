@@ -531,9 +531,18 @@ selectable as hostile targets.
 
 ### Right-click basic attack (M6f)
 
-Right-click on a hostile (remote player or enemy practice dummy) sets selection to the clicked
-actor and sends `attack`. Friendly dummies are selected but refused (no pending attack).
-Left-click stays select-only.
+Right-click on a hostile actor (enemy practice dummy; players are refused server-side under
+ARM-203 PvP-off) sets selection to the clicked actor and sends `attack`. Friendly dummies are
+selected but refused (no pending attack). Left-click stays select-only. `attack` also requires
+an active Combat-family class; heal/fireball `cast` requires mage.
+
+### Class families (ARM-203)
+
+Every row in `shared/classes.json` carries `family`: `Combat` (knight, archer, mage) or
+`Gathering` (miner, lumberjack). The catalog fails closed on a missing or unknown family at
+load. `attack` needs Combat; `cast` of heal/fireball needs mage. Player-vs-player `attack` is
+always refused. Gathering and no-class players still take damage and can die/respawn. The old
+two-client PvP `combat_demo` harness is retired in favor of dummy / tab combat demos.
 
 ### Bag slot gestures (ARM-151)
 
