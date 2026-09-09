@@ -23,6 +23,8 @@ const CHROME_PATHS := [
 	"UI/InventoryToggle",
 	"UI/QuestLogToggle",
 	"UI/QuestLogPanel",
+	"UI/PartyToggle",
+	"UI/PartyPanel",
 	"UI/ClassHud",
 	"UI/ClassDebug",
 	"UI/HpHud",
@@ -35,6 +37,7 @@ const CHROME_UNDER_TEST := [
 	"UI/RightDock",
 	"UI/InventoryToggle",
 	"UI/QuestLogToggle",
+	"UI/PartyToggle",
 	"UI/Hotbar",
 	"UI/ErrorHud",
 ]

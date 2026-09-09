@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/test_party.gd" id="1_party"]
+
+[node name="TestParty" type="Node3D"]
+script = ExtResource("1_party")
+
+[node name="World" type="Node3D" parent="."]

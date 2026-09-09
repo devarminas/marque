@@ -1,4 +1,4 @@
-[gd_scene load_steps=37 format=3]
+[gd_scene load_steps=38 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://scripts/dialog_panel.gd" id="18_dialog_panel"]
 [ext_resource type="Script" path="res://scripts/give_panel.gd" id="39_give_panel"]
 [ext_resource type="Script" path="res://scripts/quest_log_panel.gd" id="38_quest_log_panel"]
+[ext_resource type="Script" path="res://scripts/party_panel.gd" id="40_party_panel"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/basic_bar2.png" id="19_tray"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_line.png" id="20_hp_line"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/mana_line.png" id="21_mana_line"]
@@ -302,6 +303,120 @@ mouse_filter = 2
 theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
 theme_override_font_sizes/font_size = 14
 autowrap_mode = 3
+
+[node name="PartyToggle" type="Button" parent="." unique_id=1881881888]
+custom_minimum_size = Vector2(32, 32)
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -36.0
+offset_top = -108.0
+offset_right = -4.0
+offset_bottom = -76.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/normal = SubResource("style_inv_toggle")
+theme_override_styles/pressed = SubResource("style_inv_toggle_off")
+theme_override_styles/hover = SubResource("style_inv_toggle_hover")
+theme_override_styles/disabled = SubResource("style_inv_toggle")
+theme_override_styles/focus = SubResource("style_inv_toggle")
+theme_override_font_sizes/font_size = 14
+text = "P"
+flat = true
+
+[node name="PartyPanel" type="PanelContainer" parent="." unique_id=1881881889 node_paths=PackedStringArray("empty_label", "members_label", "invite_button", "invite_row", "invite_label", "accept_button", "decline_button", "leave_button")]
+visible = false
+anchors_preset = 0
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 16.0
+offset_top = 48.0
+offset_right = 300.0
+offset_bottom = 320.0
+grow_horizontal = 0
+grow_vertical = 0
+custom_minimum_size = Vector2(200, 160)
+theme_override_styles/panel = SubResource("style_dock_panel")
+script = ExtResource("40_party_panel")
+empty_label = NodePath("Margin/Rows/Empty")
+members_label = NodePath("Margin/Rows/Members")
+invite_button = NodePath("Margin/Rows/Invite")
+invite_row = NodePath("Margin/Rows/InviteRow")
+invite_label = NodePath("Margin/Rows/InviteRow/Notice")
+accept_button = NodePath("Margin/Rows/InviteRow/Accept")
+decline_button = NodePath("Margin/Rows/InviteRow/Decline")
+leave_button = NodePath("Margin/Rows/Leave")
+
+[node name="Margin" type="MarginContainer" parent="PartyPanel" unique_id=1881881890]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="Rows" type="VBoxContainer" parent="PartyPanel/Margin" unique_id=1881881891]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Heading" type="Label" parent="PartyPanel/Margin/Rows" unique_id=1881881892]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 14
+text = "Party"
+
+[node name="Empty" type="Label" parent="PartyPanel/Margin/Rows" unique_id=1881881893]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.78, 0.8, 0.82, 1)
+theme_override_font_sizes/font_size = 14
+text = "Not in a party."
+
+[node name="Members" type="Label" parent="PartyPanel/Margin/Rows" unique_id=1881881894]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 14
+autowrap_mode = 3
+
+[node name="Invite" type="Button" parent="PartyPanel/Margin/Rows" unique_id=1881881895]
+layout_mode = 2
+text = "Invite selected"
+
+[node name="InviteRow" type="HBoxContainer" parent="PartyPanel/Margin/Rows" unique_id=1881881896]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Notice" type="Label" parent="PartyPanel/Margin/Rows/InviteRow" unique_id=1881881897]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 14
+text = "Invite from 0"
+
+[node name="Accept" type="Button" parent="PartyPanel/Margin/Rows/InviteRow" unique_id=1881881898]
+layout_mode = 2
+text = "Accept"
+
+[node name="Decline" type="Button" parent="PartyPanel/Margin/Rows/InviteRow" unique_id=1881881899]
+layout_mode = 2
+text = "Decline"
+
+[node name="Leave" type="Button" parent="PartyPanel/Margin/Rows" unique_id=1881881900]
+visible = false
+layout_mode = 2
+text = "Leave party"
 
 [node name="ClassHud" type="Control" parent="." unique_id=1393223960 node_paths=PackedStringArray("name_label", "hint_label")]
 visible = false
@@ -842,4 +957,5 @@ stretch_mode = 6
 
 [connection signal="pressed" from="InventoryToggle" to="RightDock" method="toggle"]
 [connection signal="pressed" from="QuestLogToggle" to="QuestLogPanel" method="toggle"]
+[connection signal="pressed" from="PartyToggle" to="PartyPanel" method="toggle"]
 [connection signal="timeout" from="ErrorHud/Linger" to="ErrorHud" method="clear"]
