@@ -6,9 +6,14 @@ const NetClientScript := preload("res://scripts/net_client.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const NpcDummyScene := preload("res://scenes/npc_dummy.tscn")
 const NpcQuestGiverScene := preload("res://scenes/npc_quest_giver.tscn")
+const NpcImpScene := preload("res://scenes/npc_imp.tscn")
 const Assertions := preload("res://tests/assertions.gd")
 
 const QUEST_GIVER_BODY_SKIN := "Superhero_Female"
+const IMP_BODY_SKIN := "Imp_Body"
+const PLAYER_HEIGHT_BAND_MIN := 1.6
+const PLAYER_HEIGHT_BAND_MAX := 1.8
+const MAGENTA := Color(0.95, 0.08, 0.85, 1)
 
 @onready var _world: Node3D = $World
 
@@ -39,6 +44,8 @@ func _ready() -> void:
 
 	_test_quest_giver_scene_is_female_rig()
 	_test_dummy_scene_stays_capsule()
+	_test_imp_scene_uses_bestiary_mesh()
+	_test_imp_missing_body_draws_magenta()
 
 	_root = MainScene.instantiate() as Node3D
 	_root.name = "NpcClient"
@@ -64,6 +71,7 @@ func _ready() -> void:
 
 	_test_bodies_and_select()
 	_test_quest_giver_spawns_from_welcome()
+	_test_imp_spawns_from_welcome()
 	_test_cast_targets()
 	_test_attack_targets()
 
@@ -105,6 +113,62 @@ func _test_dummy_scene_stays_capsule() -> void:
 	dummy.queue_free()
 
 
+func _test_imp_scene_uses_bestiary_mesh() -> void:
+	var imp := NpcImpScene.instantiate() as NpcDummyScript
+	_check(imp != null, "npc_imp.tscn instantiates as NpcDummy")
+	if imp == null:
+		return
+	_world.add_child(imp)
+	var skeleton := imp.get_node_or_null("Body/Armature/Skeleton3D") as Skeleton3D
+	_check(skeleton != null, "imp Body/Armature/Skeleton3D exists")
+	var skin_names := PackedStringArray()
+	if skeleton != null:
+		for node in skeleton.get_children():
+			if node is MeshInstance3D:
+				skin_names.append(String(node.name))
+	_check(
+		skin_names.has(IMP_BODY_SKIN),
+		"imp skins include %s, got [%s]" % [IMP_BODY_SKIN, ", ".join(skin_names)],
+	)
+	_check(not (imp.get_node("Body") is MeshInstance3D), "imp Body is not a capsule mesh")
+	var missing := imp.get_node_or_null("MissingBody") as MeshInstance3D
+	_check(missing != null and not missing.visible, "healthy imp keeps magenta fallback hidden")
+	var body_mesh := imp.get_node_or_null("Body/Armature/Skeleton3D/Imp_Body") as MeshInstance3D
+	_check(body_mesh != null, "Imp_Body mesh instance exists")
+	if body_mesh != null:
+		var height := body_mesh.get_aabb().size.y
+		_check(
+			height >= PLAYER_HEIGHT_BAND_MIN and height <= PLAYER_HEIGHT_BAND_MAX,
+			"imp mesh height sits in the ~1.7u player band, got %f" % height,
+		)
+	imp.queue_free()
+
+
+func _test_imp_missing_body_draws_magenta() -> void:
+	var imp := NpcImpScene.instantiate() as NpcDummyScript
+	_check(imp != null, "magenta check instantiates npc_imp")
+	if imp == null:
+		return
+	var body := imp.get_node("Body")
+	imp.remove_child(body)
+	body.queue_free()
+	_world.add_child(imp)
+	var fallback := imp.get_node_or_null("MissingBody") as MeshInstance3D
+	_check(fallback != null and fallback.visible, "a vanished imp body shows the magenta fallback")
+	var material := fallback.get_active_material(0) if fallback != null else null
+	var albedo := Color(0.0, 0.0, 0.0, 0.0)
+	if material != null and "albedo_color" in material:
+		albedo = material.albedo_color
+	_check(
+		is_equal_approx(albedo.r, MAGENTA.r)
+		and is_equal_approx(albedo.g, MAGENTA.g)
+		and is_equal_approx(albedo.b, MAGENTA.b)
+		and is_equal_approx(albedo.a, MAGENTA.a),
+		"the imp fallback is the palette magenta, got %s" % albedo,
+	)
+	imp.queue_free()
+
+
 func _feed_welcome_with_npcs() -> void:
 	_net.ingest_text_frame(
 		'{"welcome":{"you":3,"tick_ms":150,"tick":1,"heartbeat_ticks":10,'
@@ -113,14 +177,15 @@ func _feed_welcome_with_npcs() -> void:
 		+ '"npcs":['
 		+ '{"id":1000001,"kind":"dummy","faction":"friendly","x":-3.0,"z":0.0,"hp":100,"max_hp":100},'
 		+ '{"id":1000002,"kind":"dummy","faction":"hostile","x":3.0,"z":0.0,"hp":100,"max_hp":100},'
-		+ '{"id":1000003,"kind":"quest_giver","faction":"friendly","x":0.0,"z":-3.0,"hp":100,"max_hp":100}'
+		+ '{"id":1000003,"kind":"quest_giver","faction":"friendly","x":0.0,"z":-3.0,"hp":100,"max_hp":100},'
+		+ '{"id":1000004,"kind":"imp","faction":"hostile","x":12.0,"z":8.0,"hp":50,"max_hp":50}'
 		+ "]}}"
 	)
 
 
 func _test_bodies_and_select() -> void:
 	var npcs: Dictionary = _session.get("_npcs")
-	_check(npcs.size() == 3, "session registry holds three npcs")
+	_check(npcs.size() == 4, "session registry holds four npcs")
 	var friendly: NpcDummyScript = npcs.get(1000001)
 	var hostile: NpcDummyScript = npcs.get(1000002)
 	_check(friendly != null and hostile != null, "both dummy bodies exist")
@@ -150,6 +215,25 @@ func _test_quest_giver_spawns_from_welcome() -> void:
 		"welcome quest giver uses the female rig scene",
 	)
 	_check(not (giver.get_node("Body") is MeshInstance3D), "welcome quest giver is not a capsule")
+
+
+func _test_imp_spawns_from_welcome() -> void:
+	var npcs: Dictionary = _session.get("_npcs")
+	var imp: NpcDummyScript = npcs.get(1000004)
+	_check(imp != null, "imp body exists from welcome")
+	if imp == null:
+		return
+	_check(imp.kind == NpcDummyScript.KindImp, "id 1000004 kind is imp")
+	_check(imp.faction == NpcDummyScript.FactionHostile, "welcome imp is hostile")
+	_check(
+		imp.get_node_or_null("Body/Armature/Skeleton3D") != null,
+		"welcome imp uses the bestiary Imp scene",
+	)
+	_check(not (imp.get_node("Body") is MeshInstance3D), "welcome imp is not a capsule")
+	_check(
+		imp.get_node_or_null("MissingBody") != null and not imp.get_node("MissingBody").visible,
+		"welcome imp hides magenta",
+	)
 
 
 func _test_cast_targets() -> void:
@@ -195,6 +279,15 @@ func _test_attack_targets() -> void:
 		"hostile dummy becomes one attack naming 1000002, got %s" % [_attacks],
 	)
 	_check(_attack_refuses.is_empty(), "hostile dummy does not refuse")
+
+	_attacks.clear()
+	_attack_refuses.clear()
+	_session.request_attack(1000004)
+	_check(
+		_attacks.size() == 1 and _attacks[0] == 1000004,
+		"hostile imp becomes one attack naming 1000004, got %s" % [_attacks],
+	)
+	_check(_attack_refuses.is_empty(), "hostile imp does not refuse")
 
 
 func _check(cond: bool, msg: String) -> void:
