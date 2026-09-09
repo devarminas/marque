@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	mrand "math/rand/v2"
 	"time"
 
 	"github.com/devarminas/marque/server/internal/abilitydef"
@@ -233,6 +234,9 @@ type World struct {
 	npcOrder  []mnet.PlayerID
 	nextNpcID mnet.PlayerID
 
+	camps []*camp
+	rng   *mrand.Rand
+
 	byConn map[*mnet.Conn]*player
 
 	bySession map[string]*player
@@ -363,6 +367,7 @@ func (w *World) step() {
 	}
 
 	w.respawnNodes()
+	w.respawnCamps()
 	w.expireSuspended()
 }
 

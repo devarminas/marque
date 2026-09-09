@@ -585,13 +585,14 @@ rule and integer types as `hp` / `max_hp`. A fresh join seeds mana at `MaxMana`.
 ignores the new fields under compatibility rule 2.
 
 **M6e.** `welcome` gains `npcs`, listing every seeded NPC as of the same tick (two practice
-dummies; **M9b** also includes the quest giver; **ARM-206** adds one Imp camp seed):
+dummies; **M9b** also includes the quest giver; **ARM-207** fills one Imp camp pool of five):
 
     {"welcome":{...,"npcs":[
       {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100,"max_hp":100},
       {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100},
       {"id":1000003,"kind":"quest_giver","faction":"neutral","x":0,"z":-4,"hp":100,"max_hp":100},
-      {"id":1000004,"kind":"imp","faction":"hostile","x":12,"z":8,"hp":50,"max_hp":50}
+      {"id":1000004,"kind":"imp","faction":"hostile","x":...,"z":...,"hp":50,"max_hp":50},
+      ...
     ]}}
 
 A pre-M6e client ignores `npcs` under compatibility rule 2. See *Practice dummies* and *Imp NPC*.
@@ -2051,19 +2052,22 @@ with `faction: "neutral"` (see *Quests dialog*). Their ids sit in a reserved ban
 `1000001` so dense player ids stay untouched; `cast.player`, `attack.player`, and `talk.npc`
 still name them. Dummies never path, never attack, and never despawn.
 
-`welcome` carries them as `npcs` (plus the Imp camp seed from ARM-206):
+`welcome` carries them as `npcs` (plus the Imp camp pool from ARM-207: five hostile
+`imp` entries inside the starter-town camp radius):
 
     {"welcome":{...,"npcs":[
       {"id":1000001,"kind":"dummy","faction":"friendly","x":-3,"z":0,"hp":100,"max_hp":100},
       {"id":1000002,"kind":"dummy","faction":"hostile","x":3,"z":0,"hp":100,"max_hp":100},
       {"id":1000003,"kind":"quest_giver","faction":"neutral","x":0,"z":-4,"hp":100,"max_hp":100},
-      {"id":1000004,"kind":"imp","faction":"hostile","x":12,"z":8,"hp":50,"max_hp":50}
+      {"id":1000004,"kind":"imp","faction":"hostile","x":...,"z":...,"hp":50,"max_hp":50},
+      ...
     ]}}
 
 HP restatements for NPCs reuse the existing `hp` frame with the NPC's id. There is no separate
 `npc_spawn` in M6e: seeded NPCs exist for the life of the process and every joiner learns them
 from `welcome`. Imp death is the exception: the live instance is removed and the server
-broadcasts `despawn` for that id (pool respawn is ARM-207).
+broadcasts `despawn` for that id; the camp pool respawns a new id after the death timer
+(ARM-207).
 
 Client left-click selects a living dummy with the same local chrome as a remote player. Faction
 rules for cast are above. Attack may engage a hostile dummy or Imp; a friendly or neutral NPC is
@@ -2075,12 +2079,22 @@ rules for cast are above. Attack may engage a hostile dummy or Imp; a friendly o
 - No client-authoritative NPC spawn.
 - No separate NPC message family beyond `welcome.npcs`, reused `hp` / `path` / `despawn` frames.
 
-## Imp NPC. **ARM-206**
+## Imp NPC. **ARM-206** / camp pool **ARM-207**
 
-The server seeds one hostile `kind: "imp"` at a hardcoded camp home `(12, 8)` until ARM-207 owns
-the camp pool. Stats: `max_hp` 50, melee damage 5, threat range 8u, leash range 16u from home.
-Attack period and melee range match the existing player basic-attack constants
-(`AttackPeriodTicks`, `AttackRange`).
+The server seeds one starter-town Imp camp (`starter_town_imps`) whose content shape is:
+
+- `id` string
+- `center` `(x, z)` — starter town uses `(12, 8)`
+- `radius` float — authoring metaphor for an invisible sphere; clients never receive a sphere mesh
+- `kind` — currently `"imp"` only
+- `pool_max` — concurrent live members (5)
+- `death_timer_ticks` — base respawn delay (40)
+- `jitter_ticks` — added delay in `[0, jitter]` inclusive (20)
+
+At process start the camp fills to `pool_max`. Each live Imp gets its own `home` inside the
+radius and uses the ARM-206 AI (patrol / aggro / leash) relative to that home. Stats stay
+`max_hp` 50, melee damage 5, threat range 8u, leash range 16u from home. Attack period and
+melee range match player basic-attack constants (`AttackPeriodTicks`, `AttackRange`).
 
 AI is a three-phase machine on the server tick:
 
@@ -2093,14 +2107,18 @@ AI is a three-phase machine on the server tick:
    to patrol and may re-aggro.
 
 Combat classes may `attack` an Imp; Gathering / no-class is `needs_class` (ARM-203). Death logs
-GAMELOG `death` with `npc` / `kind` / `killer` and removes the instance (`despawn`). Respawn is
-out of scope (ARM-207). Imp mesh / client path-follow for NPC ids is out of scope (ARM-208).
+GAMELOG `death` with `npc` / `kind` / `killer` / `camp`, then `npc_despawned` with the same
+`camp`, and removes the instance (`despawn`). After `death_timer_ticks + jitter` the camp
+spawns a new Imp id inside the radius (GAMELOG `npc_spawned` includes `camp`) and never exceeds
+`pool_max`. Imp mesh / client path-follow for NPC ids is out of scope (ARM-208). Editor sphere
+visualization is ARM-202.
 
-### Deliberately absent (Imp). **ARM-206**
+### Deliberately absent (Imp / camp). **ARM-206** / **ARM-207**
 
-- No camp pool, death timer, or jitter respawn.
+- No multiple camps or shared JSON camp tables yet (Go seed table is enough for one camp).
 - No Imp art, abilities, or loot.
 - No threat table or multi-target aggro.
+- No Godot-visible camp spheres (ARM-202).
 
 ## Tab targeting. **M6c**
 
