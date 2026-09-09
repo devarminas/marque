@@ -127,6 +127,7 @@ func (w *World) give(p *player, msg mnet.Give, seq mnet.Seq) {
 		"consume": done.Consume,
 		"rewards": len(done.Rewards),
 	})
+	w.closeDialog(p)
 	w.sendInventory(p)
 	w.sendQuestLog(p)
 }
