@@ -80,7 +80,7 @@ stale is the only way it can fail.
   `{"move_to":{"x":1.0,"z":2.0}}` is one message named `move_to`.
 - Binary frames are a protocol error.
 
-Key-as-tag rather than a `{"type":...}` discriminator, matching the convention in `CLAUDE.md`.
+Key-as-tag rather than a `{"type":...}` discriminator, matching the convention in `AGENTS.md`.
 It decodes cleanly on both ends. In Go, unmarshal to `map[string]json.RawMessage`, assert one
 key, switch, then unmarshal the body. In GDScript, take `keys()[0]` and match.
 
@@ -975,7 +975,7 @@ is a contest rather than a lookup.
 - **A pending pickup resolves inside the tick loop, in `step`, after movement has advanced.**
   Removing the item from the world, writing it to the player's inventory, broadcasting
   `item_despawn`, and sending that player their new `inventory` all happen in that one tick on
-  the state-owning goroutine. That is the transaction boundary (`CLAUDE.md`), and it is why
+  the state-owning goroutine. That is the transaction boundary (`AGENTS.md`), and it is why
   exactly one player can win.
 - **A player has at most one pending pickup.** A second `pickup` replaces the first. A `move_to`
   cancels it, because clicking the ground is telling the server you wanted something else.
@@ -1114,7 +1114,7 @@ the wearables map: an unwearable kind seeds and then earns `equip_rejected` like
 
 **It is one transaction across both containers.** The kind leaves the bag slot and lands in its
 worn slot in the same step on the state-owning goroutine, which is the transaction boundary
-(`CLAUDE.md`). There is no point at which the item is in both places, and none at which it is in
+(`AGENTS.md`). There is no point at which the item is in both places, and none at which it is in
 neither. The player is then sent one `inventory` and one `equipment`, both full restatements,
 because both containers changed.
 

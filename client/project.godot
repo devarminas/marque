@@ -1,6 +1,6 @@
 ; Project Marque — Godot client.
 ;
-; Forward+ renderer, desktop only (STANDING-ORDERS.md). Nothing here is
+; Forward+ renderer, desktop only (AGENTS.md). Nothing here is
 ; constrained by web or mobile limits.
 
 config_version=5

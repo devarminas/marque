@@ -9,22 +9,11 @@ by WebGL limits or by download size.
 Server is Go 1.27, single authoritative server. Transport is WebSocket carrying JSON.
 
 Settled decisions that are closed to re-litigation live in
-[STANDING-ORDERS.md](STANDING-ORDERS.md). This file holds the design detail behind them.
+[AGENTS.md](AGENTS.md). This file holds the design detail behind them.
 
 Installed and verified: Godot 4.7.2, Go 1.27.0, git 2.55, gh 2.97.0.
 
-## Headless testing
-
-```bash
-godot --headless --path . --script res://tests/run_tests.gd
-```
-
-- No rendering server. Logic, physics, signals, resources all run.
-- `print()` → stdout. `quit(1)` → exit code. `--quit-after N` bounds runaway loops.
-- Test framework: GdUnit4 (check it supports the Godot version before committing).
-- Anything visual (shaders, viewport textures) does not work headless.
-- Visual checks: game screenshots itself, don't automate the desktop.
-  `get_viewport().get_texture().get_image().save_png("user://shot.png")`
+Headless client tests and race recipes live in [AGENTS.md](AGENTS.md).
 
 ## Godot authoring traps
 
@@ -430,7 +419,7 @@ The game is a database with a game attached; Go has the ecosystem for that (pgx)
 | DB | Postgres | Durable state, written transactionally |
 | Transport | WebSocket | Godot `WebSocketPeer` ↔ Go |
 
-- `CLAUDE.md` owns the invariants (intents not facts, client state is a cache, one goroutine
+- `AGENTS.md` owns the invariants (intents not facts, client state is a cache, one goroutine
   owns the state). The reason is the dupe section below. Every rule there assumes the server is
   the only writer.
 - Shared data (items, recipes, XP tables, map) = JSON in one folder, read by both. One source of truth, two languages.
@@ -450,7 +439,7 @@ reason a 2D A* is sufficient. RuneScape does the same thing, a plane with per-ti
 Revisitable if verticality ever becomes a game rule rather than scenery, which would mean
 bridges you can walk under. It does not today.
 
-- Pathfinding lives only on the server (`CLAUDE.md`), because a client pathfinder is a second
+- Pathfinding lives only on the server (`AGENTS.md`), because a client pathfinder is a second
   copy that diverges.
 - Client walks the polyline and interpolates → smooth movement regardless of tick rate.
 - Cost is one round trip before the character moves. That was written for click-to-move, which
@@ -475,7 +464,7 @@ Bake in the Godot editor → export vertices/polygons as JSON → Go loads at bo
 
 ## Tick rate
 
-The rule is settled item 4 in `STANDING-ORDERS.md`: 150 ms, one named constant on the server,
+The rule is settled in `AGENTS.md` (and historically as standing order item 4): 150 ms, one named constant on the server,
 nothing else hardcodes a tick duration, revisitable once when there is gameplay to feel. The
 reasoning:
 
@@ -862,7 +851,7 @@ godot --headless --path client --script res://tools/build_world_map.gd
 ```
 
 Two runs produce a byte-identical file, so a regenerated scene with no diff is proof that the
-generator did not change. The scene-authoring rule in `CLAUDE.md` still holds: the committed
+generator did not change. The scene-authoring rule in `AGENTS.md` still holds: the committed
 `.tscn` is what the editor opens, what diffs, and what the game loads, and nothing at runtime
 builds it. The generator exists because 3,011 instanced nodes are not hand-placeable, and it
 stays because a hand edit to the scene is lost on the next run. Move a house by moving its lot

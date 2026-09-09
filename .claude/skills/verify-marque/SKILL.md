@@ -369,10 +369,10 @@ number and report what you got rather than comparing against a figure written he
   display-less CI, only `interop_test.ps1`-style headless runs and Go tests exist.
 - **A captured PNG is the whole visual story.** No video, no motion capture, no human
   aesthetic judgment — only assertions computable from the files.
-- **`go test -race` needs the PATH export first.** The LLVM-MinGW toolchain is
-  installed but not on PATH by default; `STANDING-ORDERS.md`, *Verified tooling*, has
-  the export line and the recipe (`CGO_ENABLED=1 go test -race ./...` from `server/`).
-  This entry used to say no C compiler existed. That was true until 2026-09-02.
+- **`go test -race` needs a C toolchain on PATH first.** The LLVM-MinGW toolchain is
+  installed but not on PATH by default. Put a C toolchain Go can use as `CC` on PATH,
+  then from `server/`: `CGO_ENABLED=1 go test -race ./...`. This entry used to say no C
+  compiler existed. That was true until 2026-09-02.
 - **No desktop automation.** The game drives and screenshots itself; nothing moves
   the real mouse. What the flag path cannot reach, a raw protocol probe must.
 - **One shared `user://`.** Anything two clients both write must go to absolute
