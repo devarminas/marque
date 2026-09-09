@@ -343,6 +343,7 @@ type frame struct {
 	NodeSpawn   *mnet.NodeSpawn   `json:"node_spawn"`
 	NodeDespawn *mnet.NodeDespawn `json:"node_despawn"`
 	NodeState   *mnet.NodeUpdate  `json:"node_state"`
+	NpcSpawn    *mnet.NpcSpawn    `json:"npc_spawn"`
 	Inventory   *mnet.Inventory   `json:"inventory"`
 	Equipment   *mnet.Equipment   `json:"equipment"`
 	Class       *mnet.Class       `json:"class"`
@@ -377,6 +378,8 @@ func (f frame) kind() string {
 		return "node_despawn"
 	case f.NodeState != nil:
 		return "node_state"
+	case f.NpcSpawn != nil:
+		return "npc_spawn"
 	case f.Inventory != nil:
 		return "inventory"
 	case f.Equipment != nil:

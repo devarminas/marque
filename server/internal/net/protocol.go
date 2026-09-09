@@ -150,6 +150,8 @@ type NodeDespawn struct {
 
 type NodeUpdate NodeState
 
+type NpcSpawn NpcState
+
 type Inventory struct {
 	Size  int             `json:"size"`
 	Slots []InventorySlot `json:"slots"`
@@ -246,6 +248,7 @@ func (ItemDespawn) isServerMessage()       {}
 func (NodeSpawn) isServerMessage()         {}
 func (NodeDespawn) isServerMessage()       {}
 func (NodeUpdate) isServerMessage()        {}
+func (NpcSpawn) isServerMessage()          {}
 func (Inventory) isServerMessage()         {}
 func (Equipment) isServerMessage()         {}
 func (Class) isServerMessage()             {}
@@ -388,6 +391,7 @@ type serverEnvelope struct {
 	NodeSpawn         *NodeSpawn         `json:"node_spawn,omitempty"`
 	NodeDespawn       *NodeDespawn       `json:"node_despawn,omitempty"`
 	NodeState         *NodeUpdate        `json:"node_state,omitempty"`
+	NpcSpawn          *NpcSpawn          `json:"npc_spawn,omitempty"`
 	Inventory         *Inventory         `json:"inventory,omitempty"`
 	Equipment         *Equipment         `json:"equipment,omitempty"`
 	Class             *Class             `json:"class,omitempty"`
@@ -424,6 +428,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.NodeDespawn = &v
 	case NodeUpdate:
 		env.NodeState = &v
+	case NpcSpawn:
+		env.NpcSpawn = &v
 	case Inventory:
 		env.Inventory = &v
 	case Equipment:

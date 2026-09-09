@@ -2063,11 +2063,15 @@ still name them. Dummies never path, never attack, and never despawn.
       ...
     ]}}
 
-HP restatements for NPCs reuse the existing `hp` frame with the NPC's id. There is no separate
-`npc_spawn` in M6e: seeded NPCs exist for the life of the process and every joiner learns them
-from `welcome`. Imp death is the exception: the live instance is removed and the server
-broadcasts `despawn` for that id; the camp pool respawns a new id after the death timer
-(ARM-207).
+HP restatements for NPCs reuse the existing `hp` frame with the NPC's id. Joiners learn the
+current set from `welcome.npcs`. When an NPC enters the world after welcome — notably an Imp
+camp respawn (ARM-207 / ARM-224) — the server broadcasts `npc_spawn` with the same payload as a
+welcome NPC entry:
+
+    {"npc_spawn":{"id":1000006,"kind":"imp","faction":"hostile","x":...,"z":...,"hp":50,"max_hp":50}}
+
+Imp death removes the live instance and broadcasts `despawn` for that id; the camp pool then
+respawns a new id after the death timer and announces it with `npc_spawn`.
 
 Client left-click selects a living dummy with the same local chrome as a remote player. Faction
 rules for cast are above. Attack may engage a hostile dummy or Imp; a friendly or neutral NPC is
@@ -2080,7 +2084,8 @@ Practice dummies are immortal for class testing (**ARM-209**): player damage and
 never reduce dummy hp below 1. Dummies seed at max_hp: 100000; the client may show
 rolling ~5s DPS/HPS meters from observed hp restatements (and cast effects as fallback).
 - No client-authoritative NPC spawn.
-- No separate NPC message family beyond `welcome.npcs`, reused `hp` / `path` / `despawn` frames.
+- No separate NPC message family beyond `welcome.npcs` / `npc_spawn`, plus reused
+  `hp` / `path` / `despawn` frames.
 
 ## Imp NPC. **ARM-206** / camp pool **ARM-207**
 
@@ -2112,9 +2117,9 @@ AI is a three-phase machine on the server tick:
 Combat classes may `attack` an Imp; Gathering / no-class is `needs_class` (ARM-203). Death logs
 GAMELOG `death` with `npc` / `kind` / `killer` / `camp`, then `npc_despawned` with the same
 `camp`, and removes the instance (`despawn`). After `death_timer_ticks + jitter` the camp
-spawns a new Imp id inside the radius (GAMELOG `npc_spawned` includes `camp`) and never exceeds
-`pool_max`. Imp mesh / client path-follow for NPC ids is out of scope (ARM-208). Editor sphere
-visualization is ARM-202.
+spawns a new Imp id inside the radius (GAMELOG `npc_spawned` includes `camp`; live clients also
+receive `npc_spawn`) and never exceeds `pool_max`. Imp mesh / client path-follow for NPC ids is
+out of scope (ARM-208). Editor sphere visualization is ARM-202.
 
 ### Deliberately absent (Imp / camp). **ARM-206** / **ARM-207**
 
