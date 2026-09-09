@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -202,6 +202,9 @@ func run() error {
 		return err
 	}
 	if err := world.SeedQuestGiver(); err != nil {
+		return err
+	}
+	if err := world.SeedImpQuestGiver(); err != nil {
 		return err
 	}
 	if err := world.SeedImpCamp(); err != nil {

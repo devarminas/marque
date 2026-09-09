@@ -1,4 +1,4 @@
-package game
+﻿package game
 
 import (
 	"errors"
@@ -31,7 +31,7 @@ func (w *World) give(p *player, msg mnet.Give, seq mnet.Seq) {
 		})
 		return
 	}
-	if n.kind != KindQuestGiver {
+	if !w.isQuestTalkNPC(n.kind) {
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonWrongTarget,
 			Detail:      "that npc does not take quest turn-ins",
@@ -54,6 +54,15 @@ func (w *World) give(p *player, msg mnet.Give, seq mnet.Seq) {
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonOutOfRange,
 			Detail:      "too far from npc",
+			Re:          mnet.MsgGive,
+			Disposition: mnet.ReplyError,
+		})
+			return
+	}
+	if !q.IsDeliver() {
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonWrongTarget,
+			Detail:      "that quest turns in with talk, not give",
 			Re:          mnet.MsgGive,
 			Disposition: mnet.ReplyError,
 		})

@@ -1,4 +1,4 @@
-package game
+﻿package game
 
 import (
 	"context"
@@ -180,7 +180,8 @@ type player struct {
 
 	pendingTalk mnet.PlayerID
 	dialogNPC   mnet.PlayerID
-	quests      map[string]questStatus
+	quests            map[string]questStatus
+	questKillProgress map[string]int
 
 	partyID           mnet.PartyID
 	pendingInviteFrom mnet.PlayerID
@@ -443,7 +444,8 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		pos:     Point{X: spawnX, Z: spawnZ},
 		hp:      MaxHP,
 		mana:    MaxMana,
-		quests:  make(map[string]questStatus),
+		quests:            make(map[string]questStatus),
+		questKillProgress: make(map[string]int),
 	}
 	w.players[p.id] = p
 	w.byConn[conn] = p

@@ -1,6 +1,7 @@
-package game
+﻿package game
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/devarminas/marque/server/internal/gamelog"
@@ -39,7 +40,7 @@ func (w *World) talk(p *player, msg mnet.Talk, seq mnet.Seq) {
 		})
 		return
 	}
-	if n.kind != KindQuestGiver {
+	if !w.isQuestTalkNPC(n.kind) {
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonWrongTarget,
 			Detail:      "that npc is not talkable",
@@ -73,7 +74,7 @@ func (w *World) talk(p *player, msg mnet.Talk, seq mnet.Seq) {
 
 func (w *World) resolveTalk(p *player) {
 	n, ok := w.npcs[p.pendingTalk]
-	if !ok || n.kind != KindQuestGiver {
+	if !ok || !w.isQuestTalkNPC(n.kind) {
 		p.pendingTalk = 0
 		return
 	}
@@ -114,7 +115,7 @@ func (w *World) dialogOption(p *player, msg mnet.DialogOptionPick, seq mnet.Seq)
 		return
 	}
 	n, ok := w.npcs[p.dialogNPC]
-	if !ok || n.kind != KindQuestGiver {
+	if !ok || !w.isQuestTalkNPC(n.kind) {
 		w.closeDialog(p)
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonUnknownPlayer,
@@ -139,6 +140,8 @@ func (w *World) dialogOption(p *player, msg mnet.DialogOptionPick, seq mnet.Seq)
 		w.closeDialog(p)
 	case mnet.OptionAcceptQuest:
 		w.acceptQuest(p, n)
+	case mnet.OptionTurnInQuest:
+		w.turnInQuest(p, n)
 	default:
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonUnknownOption,
@@ -188,6 +191,78 @@ func (w *World) acceptQuest(p *player, n *npc) {
 	w.sendQuestLog(p)
 }
 
+func (w *World) turnInQuest(p *player, n *npc) {
+	q, ok := w.questForTalkNPC(n.kind)
+	if !ok {
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonWrongTarget,
+			Detail:      "no quest for that npc",
+			Re:          mnet.MsgDialogOption,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	}
+	if !q.IsKill() {
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonWrongTarget,
+			Detail:      "that quest turns in with give, not talk",
+			Re:          mnet.MsgDialogOption,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	}
+	switch p.quests[q.ID] {
+	case questStatusActive:
+	case questStatusComplete:
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonQuestComplete,
+			Detail:      "quest already complete",
+			Re:          mnet.MsgDialogOption,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	default:
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonQuestInactive,
+			Detail:      "quest is not active",
+			Re:          mnet.MsgDialogOption,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	}
+	if !w.killQuestReady(p, q) {
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonQuestIncomplete,
+			Detail:      "kill objective not complete",
+			Re:          mnet.MsgDialogOption,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	}
+	if err := w.items.GrantInventoryKinds(p.id, q.RewardKinds); err != nil {
+		if errors.Is(err, ErrInventoryFull) {
+			w.refuse(p, &mnet.RejectError{
+				Reason:      mnet.ReasonInventoryFull,
+				Detail:      "inventory is full",
+				Re:          mnet.MsgDialogOption,
+				Disposition: mnet.ReplyError,
+			})
+			return
+		}
+		panic(fmt.Sprintf("game: granting kill quest rewards for player %d: %v", p.id, err))
+	}
+	p.quests[q.ID] = questStatusComplete
+	w.log.Event(w.tick, EvQuestCompleted, gamelog.Fields{
+		"player":  p.id,
+		"quest":   q.ID,
+		"npc":     n.id,
+		"rewards": len(q.RewardKinds),
+	})
+	w.closeDialog(p)
+	w.sendInventory(p)
+	w.sendQuestLog(p)
+}
+
 func (w *World) openDialog(p *player, n *npc, q questdef.Quest) {
 	p.dialogNPC = n.id
 	w.send(p, w.dialogMessage(p, n, q))
@@ -210,6 +285,26 @@ func (w *World) dialogMessage(p *player, n *npc, q questdef.Quest) mnet.Dialog {
 	status := p.quests[q.ID]
 	switch status {
 	case questStatusActive:
+		if q.IsKill() {
+			progress := p.questKillCount(q.ID)
+			if w.killQuestReady(p, q) {
+				return mnet.Dialog{
+					NPC:   n.id,
+					Lines: []string{fmt.Sprintf("%s is done. Claim your reward.", q.Name)},
+					Options: []mnet.DialogOption{
+						{ID: mnet.OptionTurnInQuest},
+						{ID: mnet.OptionStopTalking},
+					},
+				}
+			}
+			return mnet.Dialog{
+				NPC:   n.id,
+				Lines: []string{fmt.Sprintf("%s: %s", q.Name, questObjective(q, progress))},
+				Options: []mnet.DialogOption{
+					{ID: mnet.OptionStopTalking},
+				},
+			}
+		}
 		return mnet.Dialog{
 			NPC:   n.id,
 			Lines: []string{fmt.Sprintf("You are already on %s.", q.Name)},

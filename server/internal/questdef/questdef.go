@@ -1,4 +1,4 @@
-package questdef
+﻿package questdef
 
 import (
 	"encoding/json"
@@ -18,14 +18,23 @@ type Deliver struct {
 	Qty  int    `json:"qty"`
 }
 
+type Kill struct {
+	Kind string `json:"kind"`
+	Qty  int    `json:"qty"`
+}
+
 type Quest struct {
 	ID          string
 	Name        string
 	TalkNPC     string
 	Deliver     Deliver
+	Kill        Kill
 	RewardSet   string
 	RewardKinds []string
 }
+
+func (q Quest) IsDeliver() bool { return q.Deliver.Kind != "" }
+func (q Quest) IsKill() bool    { return q.Kill.Kind != "" }
 
 type Catalog struct {
 	byID map[string]Quest
@@ -36,6 +45,7 @@ type fileQuest struct {
 	Name      string  `json:"name"`
 	TalkNPC   string  `json:"talk_npc"`
 	Deliver   Deliver `json:"deliver"`
+	Kill      Kill    `json:"kill"`
 	RewardSet string  `json:"reward_set"`
 }
 
@@ -92,11 +102,19 @@ func bind(raw fileQuest, sets *classdef.Catalog) (Quest, error) {
 	if raw.TalkNPC == "" {
 		return Quest{}, fmt.Errorf("%q: missing talk_npc", raw.ID)
 	}
-	if raw.Deliver.Kind == "" {
-		return Quest{}, fmt.Errorf("%q: deliver.kind required", raw.ID)
+	hasDeliver := raw.Deliver.Kind != ""
+	hasKill := raw.Kill.Kind != ""
+	if hasDeliver == hasKill {
+		return Quest{}, fmt.Errorf("%q: exactly one of deliver or kill required", raw.ID)
 	}
-	if raw.Deliver.Qty < 1 {
-		return Quest{}, fmt.Errorf("%q: deliver.qty must be >= 1", raw.ID)
+	if hasDeliver {
+		if raw.Deliver.Qty < 1 {
+			return Quest{}, fmt.Errorf("%q: deliver.qty must be >= 1", raw.ID)
+		}
+	} else {
+		if raw.Kill.Qty < 1 {
+			return Quest{}, fmt.Errorf("%q: kill.qty must be >= 1", raw.ID)
+		}
 	}
 	if raw.RewardSet == "" {
 		return Quest{}, fmt.Errorf("%q: reward_set required", raw.ID)
@@ -114,6 +132,7 @@ func bind(raw fileQuest, sets *classdef.Catalog) (Quest, error) {
 		Name:        raw.Name,
 		TalkNPC:     raw.TalkNPC,
 		Deliver:     raw.Deliver,
+		Kill:        raw.Kill,
 		RewardSet:   raw.RewardSet,
 		RewardKinds: kinds,
 	}, nil

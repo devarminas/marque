@@ -39,7 +39,7 @@ marker describes it.
 with this file: the third entity family, `gather`, node restatement frames, class gate (M7c;
 was axe gate in M4a), deplete
 and respawn, and contested first-completer-wins. **M4c** is the server half of one craft recipe
-and is shipped with this file: the `use` intent and logs→sticks. A marker reading plain **M4**
+and is shipped with this file: the `use` intent and logsâ†’sticks. A marker reading plain **M4**
 is reserved. The client draw of nodes is a later unit and nothing under an **M4a** or **M4c**
 marker describes it.
 
@@ -161,9 +161,9 @@ The client's half is specified below and was implemented in **M2c**.
 
 The client compares `t` against its own `estimated_tick()` **at receipt**, and:
 
-- **`t` differs from the estimate.** Re-anchor the clock at `t` — the same `anchor(t, tick_ms)`
+- **`t` differs from the estimate.** Re-anchor the clock at `t` â€” the same `anchor(t, tick_ms)`
   call `welcome` makes, so a heartbeat, a reconnect and a join correct the clock through one
-  code path — and log the signed delta on one line:
+  code path â€” and log the signed delta on one line:
 
       session: clock corrected by %+d tick(s) at heartbeat %d
 
@@ -198,7 +198,7 @@ defaulted the field to anything else would abandon every session it opened again
 timer, which looks exactly like a network fault. A `heartbeat_ticks` that is present but
 negative or not a number is logged and read as zero rather than dropping the whole `welcome`:
 that is the same call this file already makes for `welcome.items` being `null`, and for the same
-reason — the cost of strictness there is that the client never joins and sits frozen forever.
+reason â€” the cost of strictness there is that the client never joins and sits frozen forever.
 
 With `heartbeat_ticks > 0`, the client abandons the socket once no `tick` has arrived for
 
@@ -211,8 +211,8 @@ lost or late heartbeat is not a disconnect. The client logs loudly first.
 
 **The window is a lower bound.** A client tests its deadline at whatever rate it polls, so it
 abandons at some point at or after the window and never before it. Three intervals is chosen to
-be wide enough that this granularity — and a heartbeat that arrives in the same breath as the
-deadline expiring — cannot decide the outcome.
+be wide enough that this granularity â€” and a heartbeat that arrives in the same breath as the
+deadline expiring â€” cannot decide the outcome.
 
 **The window closes with the connection and does not reopen.** A `tick` arriving after the
 socket has gone re-arms nothing: there is no longer anything that could send the next one, and a
@@ -237,7 +237,7 @@ Ground-plane `(x, z)` floats in Godot world units, `y` up. **`y` never appears o
 The world is 3D but movement is not. `y` is whatever the ground is at that point and is the
 client's business. See the Movement section of `NOTES.md`.
 
-World bounds are `x, z ∈ [-128.0, 128.0]`. One named constant on the server. Revisitable once
+World bounds are `x, z âˆˆ [-128.0, 128.0]`. One named constant on the server. Revisitable once
 there is map content; it is a placeholder chosen to be finite, not chosen to be right.
 
 ## Messages, client to server
@@ -567,7 +567,7 @@ as it was before. A pre-M4a client ignores `nodes` the same way.
 
 **M5a.** Each entry of `welcome.players` gains `hp` and `max_hp`:
 
-    {"welcome":{"you":1,"session":"…","last_seq":0,
+    {"welcome":{"you":1,"session":"â€¦","last_seq":0,
                 "tick_ms":150,"tick":142,"heartbeat_ticks":10,
                 "players":[{"id":1,"x":0.0,"z":0.0,"hp":100,"max_hp":100},
                            {"id":2,"x":5.0,"z":5.0,"hp":70,"max_hp":100}],
@@ -607,8 +607,8 @@ reading consistent with `welcome` being the whole world restated: anything the c
 beforehand is stale by definition.
 
 **M2a makes that true on the wire rather than hypothetical.** A resumed connection receives the
-ordinary welcome step — the same `you`, the same `session`, the world as of now, the path
-replays, then its `inventory` — and it is a second `welcome` for that player by construction. It
+ordinary welcome step â€” the same `you`, the same `session`, the world as of now, the path
+replays, then its `inventory` â€” and it is a second `welcome` for that player by construction. It
 is one connection's first `welcome` and one player's second, and the rule above is written from
 the player's side because that is the side that has stale beliefs to discard. This paragraph
 used to end "the server sends exactly one today, so nothing depends on this yet"; something
@@ -900,8 +900,7 @@ statuses, on `inventory`'s doctrine and for its reason: a restatement cannot dri
 handful of quests is nothing on the wire.
 
 `quests` lists **only quests the player has a recorded status for** (`active` or `complete`),
-each carrying its content `id`, `title` (`name` from `shared/quests.json`), `objective`
-(derived from that quest's `deliver` requirement as `Deliver <qty> <kind>`), and `status`.
+each carrying its content `id`, `title` (`name` from `shared/quests.json`), `objective` (deliver quests: `Deliver <qty> <kind>`; kill quests: `Slay <qty> <kind>s (<progress>/<qty>)`), and `status`.
 Unknown content still restates `id` and `status` with empty `title` and `objective`. An empty
 log is `{"quest_log":{"quests":[]}}`. The list is never `null`.
 
@@ -1107,13 +1106,13 @@ copy of the closed set as authority. The client authors fixed chrome for those n
 not grow worn widgets from the restatement list.
 
 **A kind belongs to at most one worn slot (or both hands when two-handed), and the server
-owns that mapping from `shared/sets.json`.** Wearability is derived at boot into a kind → worn
+owns that mapping from `shared/sets.json`.** Wearability is derived at boot into a kind â†’ worn
 slots table; a kind that belongs to no slot cannot be worn, which is how `acorn` is refused: it
 is a lookup that misses, not a special case naming the kinds that are not wearable. The client
 is never told the mapping and never needs it, because `equip` names a bag slot and the server
 resolves the destination.
 
-### Handedness. **M7b** → **M7f**
+### Handedness. **M7b** â†’ **M7f**
 
 **A kind is one-handed or two-handed, names the slot or slots it occupies, and the server owns
 both facts from the sets-derived wearables table.** Handedness is the exclusivity mechanism, and it couples the hand
@@ -1134,7 +1133,7 @@ When a two-handed kind goes on, whatever was in `left hand` and `right hand` com
 same move. When a two-handed kind comes off, it clears both hands in the same move. A kind's
 handedness is the whole reason a slot is left alone: nothing displaces a hand it does not occupy.
 
-### Wearable kinds. **M7b** → **M7f**
+### Wearable kinds. **M7b** â†’ **M7f**
 
 Wearable kinds are the armor and tools authored in `shared/sets.json`, including class require
 kinds such as `sword`, `shield`, `staff`, `bow`, `lumberjack_axe`, `pickaxe`, and
@@ -1149,8 +1148,8 @@ seed stories supply wearable kinds. An inventory holds kinds rather than ids
 (*Drop*), so an item that was never on the ground has nothing an id could name.
 
 **`-seed-class-kits` (M7g).** Optional marqued flag. When set, the server places one ground item
-per unique kind from `shared/sets.json` (armor slots and tools — the same source as Wearables)
-on a grid near spawn before the world opens. Layout: sorted set id → Z row, kinds within a set
+per unique kind from `shared/sets.json` (armor slots and tools â€” the same source as Wearables)
+on a grid near spawn before the world opens. Layout: sorted set id â†’ Z row, kinds within a set
 spaced along X from origin `(1, 2)` with spacing `(1.5, 2.0)`. See `game.ClassKitSeeds`. The
 flag does not expand `DefaultJoinKit`. Repeated `-item` seeds still apply and append after the
 class-kit grid. `server_started` carries `seed_class_kits` and `class_kit_seeds`.
@@ -1385,7 +1384,7 @@ The server answers with `error` naming `use`, and the bag is exactly as it was, 
 
 - `slot` or `on` is outside `0 .. inventory.size-1` (`no_such_slot`)
 - `slot` is empty (`empty_slot`)
-- `on` ≠ `slot`, or `slot` holds anything other than `logs` (`no_recipe`)
+- `on` â‰  `slot`, or `slot` holds anything other than `logs` (`no_recipe`)
 - the bag has no free slot for `sticks` (`inventory_full`)
 
 ### Log vocabulary. **M4c**
@@ -1470,14 +1469,14 @@ either side of the wire branches on a detail, and the server writes both into
 
 | `reason` | `detail` | What happened |
 |---|---|---|
-| `closed` | — | The peer sent a close frame, and nothing else produces this. Not a condemnation. |
+| `closed` | â€” | The peer sent a close frame, and nothing else produces this. Not a condemnation. |
 | `slow_client` | `send_buffer_full` | The 64-frame send queue was already full. |
 | `slow_client` | `write_timeout` | One frame's write outlived the five-second write timeout. |
 | `peer_gone` | `read_error` | A read failed on something other than a close frame. |
 | `peer_gone` | `write_error` | A write failed for a reason that was not the timeout. |
-| `server_shutdown` | — | The server is going away. |
-| `protocol_error` | — | The client sent an uninterpretable frame and was told so first. |
-| `refused` | — | **M2a.** The connection presented a session token whose player is still connected, and was closed at the door. |
+| `server_shutdown` | â€” | The server is going away. |
+| `protocol_error` | â€” | The client sent an uninterpretable frame and was told so first. |
+| `refused` | â€” | **M2a.** The connection presented a session token whose player is still connected, and was closed at the door. |
 
 **`refused` is the one reason that never appears in a `client_disconnected` line, and that is
 the rule rather than an omission.** Every other row describes a connection the world admitted
@@ -1495,7 +1494,7 @@ logged here. *When the connection dies*, server half, is where the refusal itsel
 section did not cover it: it named the write *timeout* as a slow-client detector and said
 nothing about a write that fails outright. The call is that "the peer went away or the socket
 broke" above already describes it exactly, and the only thing that differs from the read-side
-case is which pump happened to touch the socket first — which is a detector, and detectors do
+case is which pump happened to touch the socket first â€” which is a detector, and detectors do
 not get to be reasons. So it is `peer_gone` with `detail: "write_error"`.
 
 Revisit if a class of write failure ever turns out to mean something a server can act on
@@ -1508,8 +1507,8 @@ is told why before the socket goes. The latch therefore does not hold the reason
 A client that reads the `error` and closes cleanly in reaction can get its own close frame
 latched as `closed` first, and the server loses the record that it was hung up on for a protocol
 violation. **This cannot happen today**: the Godot client only warns on a server `error` and does
-not close. It is recorded because the obvious next behaviour for a client — close when told you
-sent garbage — is the one that triggers it, and because a violation logged as an ordinary logout
+not close. It is recorded because the obvious next behaviour for a client â€” close when told you
+sent garbage â€” is the one that triggers it, and because a violation logged as an ordinary logout
 is precisely the confusion the cause-over-detector rule exists to prevent. Fix it, if a client
 ever does that, by latching at the world's decision rather than at dequeue.
 
@@ -1523,7 +1522,7 @@ first, and lets the resulting close abort the write. By the time anything else c
 socket the reason is already recorded.
 
 **The race is measured; the mechanism above is read.** Reverting the fix makes the ordering test
-fail repeatedly and reproducibly — five runs in ten when this was written, three in ten and six
+fail repeatedly and reproducibly â€” five runs in ten when this was written, three in ten and six
 in twenty when a reviewer reran it on a differently loaded machine, every failure the identical
 line. That the *cause* is `setupWriteTimeout`'s close timer is inference from the source, and this
 file has been wrong about this library's internals three times. It is flagged rather than
@@ -1536,7 +1535,7 @@ it is handed in a five-second one (`write.go:277`), `context.Background()` inclu
 when the wait expires (`conn.go:291`). The write mutex is held for the whole of a jammed data
 frame, so a pong queues behind it and dies on the library's clock, on the *read* goroutine. We can
 neither remove that deadline nor shorten it. It reaches the read pump as
-`failed to acquire lock: context deadline exceeded` — which is why `readReason` classifies a
+`failed to acquire lock: context deadline exceeded` â€” which is why `readReason` classifies a
 context error as `peer_gone` and not as `closed`. Reporting it as a clean logout is the same
 rule-2 failure wearing different clothes, and the first version of this section shipped exactly
 that bug because it reasoned that `context.Background()` has no deadline instead of checking what
@@ -1546,7 +1545,7 @@ the library does with it. `TestAJammedPongCondemnsTheClientAsPeerGone` stages it
 blamed `finishRead`'s `ctx.Err()` overwrite at `read.go:255` and the connection-closing timer at
 `conn.go:171`. Both were wrong here. `finishRead` tests the context it was *passed*, which on this
 path is `readPump`'s `context.Background()`, whose `Err` is always nil; and nothing in the library
-closes the connection in this scenario — our own `close` does, after the classification. **Three
+closes the connection in this scenario â€” our own `close` does, after the classification. **Three
 separate mechanisms for this library were established by reading during M1f and all three were
 wrong, while the behaviour each described was real.** That is the combination worth naming: the
 symptom happens, so the explanation feels confirmed, and nobody re-checks it. Against this
@@ -1555,7 +1554,7 @@ trustworthy until they are.
 
 Two dependency claims sit under that, and both were probed against a real jammed peer rather than
 assumed. A deadline-bearing write *does* fail with something `errors.Is`-comparable to
-`context.DeadlineExceeded`, so the original design was not wrong about the error — it was wrong
+`context.DeadlineExceeded`, so the original design was not wrong about the error â€” it was wrong
 about the ordering, which is a thing no amount of reading the error would have revealed. And
 closing the socket from another goroutine unblocks a write jammed on it, which is what the
 server's own timer relies on; `TestClosingTheSocketUnblocksABlockedWrite` pins it, because if a
@@ -1729,7 +1728,7 @@ identity was lost.
 
 **Backoff is 0.5 s, doubling to a cap of 5 s, then 5 s forever.** A number, parked in
 `FOLLOW-UPS.md`. The first attempt after a death waits 0.5 s; a dead URL walks
-0.5, 1, 2, 4, 5, 5, … until something answers. A well-formed URL that stays in
+0.5, 1, 2, 4, 5, 5, â€¦ until something answers. A well-formed URL that stays in
 `CONNECTING` is abandoned after 5 s and then walks the same schedule.
 
 **Client strictness stays lenient** after reconnect exists. A malformed frame is still logged
@@ -1814,7 +1813,7 @@ pickup and gather's pending action, not an instantaneous one-shot.
   rules as pickup and gather. A degenerate attack by a stationary player already inside
   `AttackRange` is allowed: no path, pending stays, period ticks begin on later `step`s.
 - **`AttackRange` governs hit resolution and whether the attacker needs to walk, never a
-  refusal to path.** Out of range → walk (and keep chasing). In range → hits may land. There is
+  refusal to path.** Out of range â†’ walk (and keep chasing). In range â†’ hits may land. There is
   no distance at which the server declines to engage a living target it knows.
 - **A player has at most one pending attack.** A second `attack` replaces the first (retarget).
   Starting an attack clears a pending pickup and a pending gather. Starting a pickup or gather
@@ -1836,7 +1835,7 @@ attacker is outside `AttackRange` of the target, each `step` (after movement) re
 attacker toward the target's **current** position with the ordinary path helpers. That is the
 chase. When the attacker is inside `AttackRange` and still walking, the server assigns a
 one-element halt path at the attacker's current position so the walk does not carry them back
-out before the next hit — the same "halt here" tool pickup already uses when an item vanishes.
+out before the next hit â€” the same "halt here" tool pickup already uses when an item vanishes.
 
 `AttackRange` is not coupled to `WalkSpeed * tick_ms` by a silent margin the way an early
 pickup carve-out was. Path assignment keys on the ordinary minimum path length; range keys only
@@ -1845,7 +1844,7 @@ the hit / halt decision.
 ### Hits
 
 Hits resolve inside the tick loop, in `step`, after movement has advanced, on the state-owning
-goroutine — the same transaction boundary pickup and gather use.
+goroutine â€” the same transaction boundary pickup and gather use.
 
 - **Period ticks accumulate only while the attacker is within `AttackRange` of a living
   target** and still has that player as its pending attack. Out-of-range ticks do not advance
@@ -1893,10 +1892,10 @@ The server answers with `error` naming `attack`, and sets no pending attack, whe
 
 - the attacker is dead (`dead`)
 - `player` is the attacker's own id (`self`)
-- the attacker has no active Combat-family class (`needs_class`) — **ARM-203**
-- `player` names a live NPC whose `faction` is not `hostile` (`wrong_target`) — **M6e** / **M6f**
-- `player` names a live player (`wrong_target`, PvP disabled) — **ARM-203**
-- `player` is not a live player or NPC id (`unknown_player`) — stale and fabricated are one case, as
+- the attacker has no active Combat-family class (`needs_class`) â€” **ARM-203**
+- `player` names a live NPC whose `faction` is not `hostile` (`wrong_target`) â€” **M6e** / **M6f**
+- `player` names a live player (`wrong_target`, PvP disabled) â€” **ARM-203**
+- `player` is not a live player or NPC id (`unknown_player`) â€” stale and fabricated are one case, as
   with unknown items and nodes
 - the NPC target's current HP is 0 (`target_dead`)
 
@@ -2087,12 +2086,12 @@ rolling ~5s DPS/HPS meters from observed hp restatements (and cast effects as fa
 The server seeds one starter-town Imp camp (`starter_town_imps`) whose content shape is:
 
 - `id` string
-- `center` `(x, z)` — starter town uses `(12, 8)`
-- `radius` float — authoring metaphor for an invisible sphere; clients never receive a sphere mesh
-- `kind` — currently `"imp"` only
-- `pool_max` — concurrent live members (5)
-- `death_timer_ticks` — base respawn delay (40)
-- `jitter_ticks` — added delay in `[0, jitter]` inclusive (20)
+- `center` `(x, z)` â€” starter town uses `(12, 8)`
+- `radius` float â€” authoring metaphor for an invisible sphere; clients never receive a sphere mesh
+- `kind` â€” currently `"imp"` only
+- `pool_max` â€” concurrent live members (5)
+- `death_timer_ticks` â€” base respawn delay (40)
+- `jitter_ticks` â€” added delay in `[0, jitter]` inclusive (20)
 
 At process start the camp fills to `pool_max`. Each live Imp gets its own `home` inside the
 radius and uses the ARM-206 AI (patrol / aggro / leash) relative to that home. Stats stay
@@ -2172,14 +2171,12 @@ that actor when the body is living and selectable.
 ## Quests. **M9a**
 
 Quest definitions are content, not code. The checked-in file `shared/quests.json` is the only
-source for quest ids, the talk NPC id, the deliver requirement (item kind and quantity), and
-the reward set id. Reward item kinds are resolved from that set in `shared/sets.json` (slots
+source for quest ids, the talk NPC kind, exactly one objective (`deliver` or `kill`), and the reward set id. Reward item kinds are resolved from that set in `shared/sets.json` (slots
 and tools); they are not invented in the quest file. The server refuses to start if the quest
 file is missing or malformed, if a quest names an unknown or incomplete set, or if expanded
 reward kinds are empty.
 
-The shipped quest delivers the craft product `sticks` (same kind as **M4c**). No separate
-singular `stick` kind exists.
+The shipped deliver quest (`bring_a_stick`) delivers the craft product `sticks` (same kind as **M4c**). **ARM-210** adds a kill quest (`slay_imps`) whose objective is `kill: { kind: imp, qty: 5 }`. No separate singular `stick` kind exists.
 
 M9a does not put talk, deliver, or reward on the wire.
 
@@ -2203,7 +2200,7 @@ A request to open dialog with an NPC. `npc` is a player-id-band NPC id (same spa
 
 - **Pending approach like pickup.** `talk` is `move_to` at the NPC's position plus a pending
   talk. `TalkRange` equals `PickupRange` and gates resolution only.
-- **Only `kind:quest_giver` accepts talk.** Other kinds refuse with `wrong_target`.
+- **Only NPC kinds named by a quest `talk_npc` accept talk** (e.g. `quest_giver`, `imp_quest_giver`). Other kinds refuse with `wrong_target`.
 - **On resolve**, the server opens a private dialog session for that player and restates
   `dialog` with server-authored `lines` and `options` (option `id` strings only).
 - A player has at most one pending talk. A second `talk` replaces the first. Starting talk
@@ -2221,11 +2218,12 @@ Known option ids:
 | id | effect |
 | --- | --- |
 | `accept_quest` | If the NPC's quest is available, record it accepted (`active`) for that player and close the dialog. If already `active` or `complete`, refuse with a clear `error` and leave status unchanged. |
-| `stop_talking` | Close the dialog without accepting. |
+| stop_talking | Close the dialog without accepting. |
+| 	urn_in_quest | **ARM-210.** Kill quests only. When the kill objective is complete, grant rewards and mark complete. Deliver quests refuse (use give). Incomplete kill objectives refuse with quest_incomplete. |
 
 Out-of-range options refuse. An option with no open dialog, or for a different NPC, refuses.
 
-### `dialog` (server → client, private). **M9b**
+### `dialog` (server â†’ client, private). **M9b**
 
     {"dialog":{"npc":1000003,"lines":["Will you accept Bring Sticks?"],"options":[{"id":"accept_quest"},{"id":"stop_talking"}]}}
 
@@ -2252,8 +2250,7 @@ Death clears a pending talk and closes an open dialog the same way it clears a p
 
 Private quest status restatement for the journal. The client caches what the server sends;
 it never invents title or objective text. Accept already records `active` under **M9b**;
-**M9c** puts that map on the wire and includes it in the join catch-up step beside
-`inventory`. `complete` is set only by a successful turn-in (**M9d**); **M9c** restates it
+**M9c** puts that map on the wire and includes it in the join catch-up step beside `inventory`. Kill progress restates on each credited kill (**ARM-210**). `complete` is set only by a successful turn-in (**M9d** deliver / **ARM-210** talk turn-in); **M9c** restates it
 when present and refuses double-accept of a complete quest the way **M9b** already does.
 
 ### Deliberately absent (quest log). **M9c**
@@ -2277,10 +2274,10 @@ Semantics:
 
 - **Immediate, range-gated.** `GiveRange` equals `TalkRange` / `PickupRange`. Out of range
   refuses; there is no pending walk for `give` (the client walks first, or talks first).
-- **Only `kind:quest_giver` accepts give.** Other kinds refuse with `wrong_target`.
-- **Quest must be `active`.** Missing / inactive → `quest_inactive`. Already `complete` →
+- **Only NPC kinds named by a deliver quest `talk_npc` accept give.** Kill quests refuse (`wrong_target`; use `turn_in_quest`). Other kinds refuse with `wrong_target`.
+- **Quest must be `active`.** Missing / inactive â†’ `quest_inactive`. Already `complete` â†’
   `quest_complete`. Status is unchanged on every refuse.
-- **Named slot must hold the quest's `deliver.kind`.** Empty → `empty_slot`. Wrong kind →
+- **Named slot must hold the quest's `deliver.kind`.** Empty â†’ `empty_slot`. Wrong kind â†’
   `wrong_item`. This unit's content delivers qty 1 from one slot.
 - **Bag must fit every reward after the consume frees its slot.** Otherwise `inventory_full`
   and the sticks stay. No partial grant.
@@ -2300,6 +2297,26 @@ GAMELOG refuse reasons for give (never on the wire; the player sees `error.msg`)
 - No multi-slot deliver qty greater than one on this intent.
 - No currency, trade window, or bank.
 
+
+## Kill quests. **ARM-210**
+
+Second quest-giver `imp_quest_giver` near starter town (seeded beside the stick giver). Quest `slay_imps` requires five Imp kills. Progress is server-side per player; `quest_log` restates after each credit.
+
+### Party credit rule
+
+When an Imp dies, every **party member anywhere on the map** who has `slay_imps` **active** receives +1 progress (capped at 5). Solo killers credit only themselves. Members without the quest active, or not in the killer's party, get nothing. No range check: party credit is intentionally map-wide so split groups still share kill progress.
+
+GAMELOG `quest_kill_progress` fields: `player`, `quest`, `count`, `need`.
+
+### Turn-in
+
+Kill quests complete via `dialog_option` `turn_in_quest` at the quest NPC (preferred over inventing a give flow). Rewards grant like **M9d** but without consuming a bag slot. Refuse `quest_incomplete` until progress reaches the objective qty.
+
+### Deliberately absent (kill quests). **ARM-210**
+
+- No quest XP amounts (**ARM-211** owns XP tables).
+- No DPS meters (**ARM-209**).
+- No client scene art for the second giver beyond seeded NPC kind (visual contract unchanged).
 ## Party. **M11 party**
 
 Thin cooperative grouping. The server owns membership. Clients send intents; members receive
@@ -2381,12 +2398,12 @@ world) removes the player from their party with the same leadership rules as `pa
 | `party_kicked` | member removed by kick |
 | `party_leader` | leadership transferred (`party`, `leader`, `from`) |
 | `party_disbanded` | last member gone |
-| `party_invite_rejected` / `party_accept_rejected` / … | refuse path via `rejectionEvent` |
+| `party_invite_rejected` / `party_accept_rejected` / â€¦ | refuse path via `rejectionEvent` |
 
 ### Deliberately absent (party). **M11 party**
 
 - No client party roster UI (ARM-205).
-- No shared loot, party chat, or shared XP outside later kill-quest credit (ARM-210).
+- No shared loot, party chat, or shared XP. Kill-quest party credit is **ARM-210** (see *Kill quests*).
 - No raid size, alliances, or cross-party invites.
 - No promoting a non-leader without the leader leaving.
 
@@ -2407,7 +2424,7 @@ Named so nobody adds them thinking they were forgotten.
   login.
 - No banking, trading, or item stacking. One item per slot, and, until **M3a**, the ground as
   the only container outside a player's own inventory. M3a adds worn slots as a second one.
-  **M4c** adds one self-use craft (`logs`→`sticks`) and changes nothing else on this line: still
+  **M4c** adds one self-use craft (`logs`â†’`sticks`) and changes nothing else on this line: still
   no stacking, still no trading, still no container anybody but its owner can address, and no
   second recipe.
 - No item ownership, drop timers, or per-player visibility. RuneScape hides a drop from everyone

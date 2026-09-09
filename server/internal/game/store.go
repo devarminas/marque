@@ -1,4 +1,4 @@
-package game
+﻿package game
 
 import (
 	"errors"
@@ -115,6 +115,8 @@ type Store interface {
 	CraftInventorySlot(player mnet.PlayerID, slot int, consumeKind, produceKind string) (Crafted, error)
 
 	DeliverInventorySlot(player mnet.PlayerID, slot int, consumeKind string, rewards []string) (Delivered, error)
+
+	GrantInventoryKinds(player mnet.PlayerID, kinds []string) error
 
 	Inventory(mnet.PlayerID) []Slot
 
@@ -400,6 +402,38 @@ func (s *memStore) DeliverInventorySlot(player mnet.PlayerID, slot int, consumeK
 		out = append(out, Slot{Index: index, Kind: reward})
 	}
 	return Delivered{From: slot, Consume: consumeKind, Rewards: out}, nil
+}
+
+func (s *memStore) GrantInventoryKinds(player mnet.PlayerID, kinds []string) error {
+	if len(kinds) == 0 {
+		panic(fmt.Sprintf("game: grant with no kinds for player %d", player))
+	}
+	for _, kind := range kinds {
+		if kind == "" {
+			panic(fmt.Sprintf("game: grant with empty kind for player %d", player))
+		}
+	}
+	held, known := s.held[player]
+	if !known {
+		return fmt.Errorf("grant for player %d: %w", player, ErrNoSuchPlayer)
+	}
+	free := 0
+	for _, kind := range held.bag {
+		if kind == "" {
+			free++
+		}
+	}
+	if free < len(kinds) {
+		return fmt.Errorf("grant for player %d: %w", player, ErrInventoryFull)
+	}
+	for _, reward := range kinds {
+		index, room := held.free()
+		if !room {
+			panic(fmt.Sprintf("game: grant counted room for player %d and still found none", player))
+		}
+		held.bag[index] = reward
+	}
+	return nil
 }
 
 func (s *memStore) Inventory(player mnet.PlayerID) []Slot {

@@ -1,4 +1,4 @@
-package game
+﻿package game
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ func (w *World) questLogMessage(p *player) mnet.QuestLog {
 		if w.quests != nil {
 			if q, ok := w.quests.Get(id); ok {
 				entry.Title = q.Name
-				entry.Objective = questObjective(q)
+				entry.Objective = questObjective(q, p.questKillCount(id))
 			}
 		}
 		quests = append(quests, entry)
@@ -36,6 +36,12 @@ func (w *World) questLogMessage(p *player) mnet.QuestLog {
 	return mnet.QuestLog{Quests: quests}
 }
 
-func questObjective(q questdef.Quest) string {
+func questObjective(q questdef.Quest, killProgress int) string {
+	if q.IsKill() {
+		if killProgress > q.Kill.Qty {
+			killProgress = q.Kill.Qty
+		}
+		return fmt.Sprintf("Slay %d %ss (%d/%d)", q.Kill.Qty, q.Kill.Kind, killProgress, q.Kill.Qty)
+	}
 	return fmt.Sprintf("Deliver %d %s", q.Deliver.Qty, q.Deliver.Kind)
 }

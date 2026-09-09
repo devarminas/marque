@@ -9,6 +9,16 @@
         "qty": 1
       },
       "reward_set": "miner"
+    },
+    {
+      "id": "slay_imps",
+      "name": "Imp Patrol",
+      "talk_npc": "imp_quest_giver",
+      "kill": {
+        "kind": "imp",
+        "qty": 5
+      },
+      "reward_set": "knight"
     }
   ]
 }

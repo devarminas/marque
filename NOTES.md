@@ -954,3 +954,11 @@ respawn points once towns mean something.
 **Follow-ups, none owned yet.** The nature kit ships no water and the village kit's free cut
 ships no well or stall, so the plazas are bare brick; `Wall_Arch` and
 `Stairs_Exterior_Straight` are staged and unused for whoever dresses them.
+
+## ARM-210 kill quest (Imp Patrol)
+
+- Content: `shared/quests.json` quest `slay_imps`, NPC kind `imp_quest_giver` seeded at (4, -4).
+- Party credit: anywhere-in-party, quest must be active, one credit per Imp death per member.
+- Turn-in: talk `turn_in_quest` when progress is 5/5; knight reward set grants to bag.
+- XP grant hooks deferred to ARM-211.
+
