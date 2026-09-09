@@ -201,5 +201,8 @@ func (w *World) killImp(n *npc, killer mnet.PlayerID) {
 	w.log.Event(w.tick, EvDeath, fields)
 	w.noteCampDespawn(n)
 	w.creditImpKill(killer)
+	if killerP, ok := w.players[killer]; ok {
+		w.grantClassSkillXP(killerP, SkillXPKill)
+	}
 	w.despawnNPC(n)
 }
