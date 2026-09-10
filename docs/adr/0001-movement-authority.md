@@ -2,9 +2,7 @@
 
 ## Status
 
-Accepted (M13a / ARM-233). Binding for M13b–h implementation. Supersedes the Movement and Tick rate sections of `NOTES.md`, and the player `move` / `move_to` / `path` locomotion model in `PROTOCOL.md`, once those units land. Until then, code may still ship the old polyline walker. Inventory intents-never-facts and single-goroutine game ownership are unchanged.
-
-Arena base: candidate-1. Grafts: candidate-3 ability locomotion table and remote-pose line; candidate-2 parse-time locomotion-fact denylist and idle pose heartbeat. Rejected: candidate-2 octant quantization and `y`-off-wire.
+Accepted (M13a / ARM-233). Binding for M13b–h implementation. Supersedes the Movement and Tick rate sections of `NOTES.md`, and the player `move` / `move_to` / `path` locomotion model in `PROTOCOL.md`, once those units land. Until then, code may still ship the old polyline walker.
 
 ## Context
 
@@ -12,12 +10,7 @@ Players move with WASD. The live stack still treats locomotion as sticky `move` 
 
 `AGENTS.md` already dropped polyline walking as an invariant. The replacement authority model was not written down. Milestone M13 Action movement requires server-owned pose at roughly 25 Hz with client prediction, jump, ability locomotion hooks, and retirement of player polylines.
 
-Unchanged constraints this ADR must keep:
-
-- The client sends intents, never facts, for inventory and interaction.
-- The client's world state is a cache of what the server last sent.
-- One goroutine owns all game state. The tick loop is the transaction boundary.
-- Game logic never reaches into the visual tree.
+This ADR decides movement authority only. Global invariants stay in `AGENTS.md`. Other systems (inventory, equipment, dupes) get their own ADRs when they change.
 
 Out of scope for this ADR: navmesh, client-authored positions, a full `PROTOCOL.md` rewrite, deleting `NOTES.md`, and shipping code.
 
@@ -29,32 +22,33 @@ Out of scope for this ADR: navmesh, client-authored positions, a full `PROTOCOL.
 2. The server **integrates** those inputs each tick, clamps and resolves collisions it owns, and stores the authoritative player pose `(x, y, z)` plus whatever locomotion flags later units need (for example grounded, rooted, airborne).
 3. The owning client **predicts** locally with the same integration rules it can know, renders the predicted pose, and **reconciles** when a server pose arrives. On conflict, the server pose wins. Soft correction is allowed. Hard snap is allowed when error exceeds a named threshold later units pick. Remote clients render from server pose only (interpolation allowed; no remote prediction required in M13).
 4. **Illegal samples.** Refuse at the wire boundary, before game handlers run, any client→server movement body that asserts player locomotion facts. Named refusal: `illegal_sample` (or the project's existing malformed-intent error shape carrying that message). Denylist keys for movement intents include `x`, `z`, `y`, `pos`, `position`, `pose`, `path`, `velocity`, `vx`, `vz`, `vy` (and clear aliases). Non-finite wish components are refused the same way. Do not apply the body. Log it. Keep the connection. Scope the denylist to movement intents; do not ban those keys from unrelated messages.
+5. Movement integration runs inside the existing tick step on the game-state owner. This ADR does not add a second simulation loop.
 
 ### Tick
 
-5. One simulation clock. `TickDuration` stays the only authority period. Default **25 Hz / 40 ms**. Implementers may tune inside **20–30 Hz** without a new ADR if cast grace and heartbeat math stay expressed in wall-clock ms. Do not add a second movement clock.
-6. Amend the old 150 ms law. Continuous WASD with prediction needs denser samples than polyline interpolation needed. Cast and heartbeat tick counts retune to keep wall-clock feel (M13b / ARM-234).
+6. One simulation clock. `TickDuration` stays the only authority period. Default **25 Hz / 40 ms**. Implementers may tune inside **20–30 Hz** without a new ADR if cast grace and heartbeat math stay expressed in wall-clock ms. Do not add a second movement clock.
+7. Amend the old 150 ms law. Continuous WASD with prediction needs denser samples than polyline interpolation needed. Cast and heartbeat tick counts retune to keep wall-clock feel (M13b / ARM-234).
 
 ### Wire shape (sketch; M13c names exact JSON)
 
-7. Client→server movement replaces sticky polyline-driving `move` as the player locomotion intent. Sketch: wish `dx`/`dz` plus `jump` edge. Samples may repeat while keys are held. About one sample per tick is enough. Holding a key is still not a reason to claim a world position.
-8. Server→client player locomotion broadcasts **pose** (or an equivalent restatement that includes pose), not player `path` polylines. Sketch: player id, tick, `x`, `y`, `z`, and any small locomotion flags needed to reconcile. Waypoint lists are not how players move. Broadcast pose when the player moves or locomotion flags change, and **at least once per second while idle** so late joiners and reconciliation keep an anchor.
-9. `welcome` and late-join restatements carry the same pose fields the live pose channel uses. No separate in-flight polyline replay for players.
+8. Client→server movement replaces sticky polyline-driving `move` as the player locomotion intent. Sketch: wish `dx`/`dz` plus `jump` edge. Samples may repeat while keys are held. About one sample per tick is enough. Holding a key is still not a reason to claim a world position.
+9. Server→client player locomotion broadcasts **pose** (or an equivalent restatement that includes pose), not player `path` polylines. Sketch: player id, tick, `x`, `y`, `z`, and any small locomotion flags needed to reconcile. Waypoint lists are not how players move. Broadcast pose when the player moves or locomotion flags change, and **at least once per second while idle** so late joiners and reconciliation keep an anchor.
+10. `welcome` and late-join restatements carry the same pose fields the live pose channel uses. No separate in-flight polyline replay for players.
 
 ### Jump and `y`
 
-10. Jump is a **server-resolved** response to a jump edge on a legal grounded (or otherwise allowed) pose. Jump stays a **movement input edge** under the same integrator, not a standalone ability type in M13. The client may predict the jump. It may not dictate landing position.
-11. Amend "y never appears on the wire." Player **pose** messages include `y` because vertical motion is now a game rule, not only scenery. Ground wish stays `(x, z)`. Map authoring may still treat most of the world as a height field. Bridges-you-can-walk-under remain a later problem. This ADR does not design navmesh.
+11. Jump is a **server-resolved** response to a jump edge on a legal grounded (or otherwise allowed) pose. Jump stays a **movement input edge** under the same integrator, not a standalone ability type in M13. The client may predict the jump. It may not dictate landing position.
+12. Amend "y never appears on the wire." Player **pose** messages include `y` because vertical motion is now a game rule, not only scenery. Ground wish stays `(x, z)`. Map authoring may still treat most of the world as a height field. Bridges-you-can-walk-under remain a later problem. This ADR does not design navmesh.
 
 ### Player `move_to` and `path`
 
-12. Player **`move_to` dies** for production play. The live Godot client must not send it. When M13 wire work lands, the server refuses player `move_to` (or stops parsing it for players). Scripted demos and headless drivers that need locomotion send the same movement-sample inputs, or drive pose only through server-side test hooks. They do not reintroduce destination facts on the player wire.
-13. Player **`path` polylines retire** for locomotion (M13g). Pickup, gather, and similar "get near this id" flows become server-side approach goals resolved by the same pose integrator, or stay as range checks without a client-visible polyline. Exact approach AI is a later unit. The invariant is that players never advance by walking a broadcast polyline.
-14. **NPC** `path` / polyline walking may remain. NPCs are not under the player prediction contract in M13.
+13. Player **`move_to` dies** for production play. The live Godot client must not send it. When M13 wire work lands, the server refuses player `move_to` (or stops parsing it for players). Scripted demos and headless drivers that need locomotion send the same movement-sample inputs, or drive pose only through server-side test hooks. They do not reintroduce destination facts on the player wire.
+14. Player **`path` polylines retire** for locomotion (M13g). Pickup, gather, and similar "get near this id" flows become server-side approach goals resolved by the same pose integrator, or stay as range checks without a client-visible polyline. Exact approach AI is a later unit. The invariant is that players never advance by walking a broadcast polyline.
+15. **NPC** `path` / polyline walking may remain. NPCs are not under the player prediction contract in M13.
 
 ### Ability locomotion (hook only)
 
-15. Abilities do not invent a second movement authority. They attach to locomotion policy on the mover. Server locomotion state is readable on the tick that resolves combat.
+16. Abilities do not invent a second movement authority. They attach to locomotion policy on the mover. Server locomotion state is readable on the tick that resolves combat.
 
 | Hook | Feel | Default use |
 |---|---|---|
@@ -64,14 +58,9 @@ Out of scope for this ADR: navmesh, client-authored positions, a full `PROTOCOL.
 
 M13 locks these hooks and the melee-movable / cast-cancel-or-root defaults. Map them onto existing cast interrupt and `CastGraceTicks` behavior in M13f. Do not design the full ability catalog here.
 
-### Unchanged
-
-16. Inventory, equipment, pickup targets, and use/slot intents stay intents-never-facts.
-17. One goroutine owns game state. Movement integration runs inside the tick step with everything else.
-
 ## Consequences
 
-- `AGENTS.md` replaces the temporary "Movement authority is under rewrite" note with durable bullets that match this ADR.
+- `AGENTS.md` replaces the temporary "Movement authority is under rewrite" note with durable movement bullets that match this ADR.
 - M13b raises `TickDuration` into the locked band and retunes cast/heartbeat math in wall-clock ms.
 - M13c–d replace player `move`+`path` with input samples and pose restatements, and teach the client to predict and reconcile.
 - M13e adds jump against server pose including `y`.
@@ -85,7 +74,7 @@ M13 locks these hooks and the melee-movable / cast-cancel-or-root defaults. Map 
 
 - Client-authoritative or client-sampled positions on the wire.
 - Navmesh or building collision.
-- Changing inventory or dupe doctrine.
+- Decisions for other systems (inventory, equipment, dupes). Those get their own ADRs.
 - Forcing NPC locomotion onto the player pose channel in M13.
 - Octant or otherwise quantized wish direction as the M13 uplink.
 - Deriving authoritative `y` client-side from an airborne flag alone.
