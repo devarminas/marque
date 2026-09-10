@@ -1,4 +1,4 @@
-[gd_scene load_steps=39 format=3]
+[gd_scene load_steps=40 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://scripts/quest_log_panel.gd" id="38_quest_log_panel"]
 [ext_resource type="Script" path="res://scripts/party_panel.gd" id="40_party_panel"]
 [ext_resource type="Script" path="res://scripts/esc_menu.gd" id="41_esc_menu"]
+[ext_resource type="Script" path="res://scripts/keybinds_panel.gd" id="42_keybinds_panel"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/basic_bar2.png" id="19_tray"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_line.png" id="20_hp_line"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/mana_line.png" id="21_mana_line"]
@@ -956,7 +957,7 @@ texture = ExtResource("37_pattern")
 expand_mode = 1
 stretch_mode = 6
 
-[node name="EscMenu" type="Control" parent="." unique_id=2180000001 node_paths=PackedStringArray("resume_button", "options_button", "exit_button", "options_panel", "options_back_button")]
+[node name="EscMenu" type="Control" parent="." unique_id=2180000001 node_paths=PackedStringArray("resume_button", "options_button", "exit_button", "options_panel", "options_back_button", "keybinds_panel")]
 visible = false
 layout_mode = 3
 anchors_preset = 15
@@ -970,6 +971,7 @@ options_button = NodePath("Center/Column/Options")
 exit_button = NodePath("Center/Column/Exit")
 options_panel = NodePath("OptionsPanel")
 options_back_button = NodePath("OptionsPanel/Center/Column/Back")
+keybinds_panel = NodePath("OptionsPanel/Center/Column/Keybinds")
 
 [node name="Dim" type="ColorRect" parent="EscMenu" unique_id=2180000002]
 layout_mode = 1
@@ -1055,12 +1057,51 @@ theme_override_font_sizes/font_size = 24
 text = "Options"
 horizontal_alignment = 1
 
-[node name="Stub" type="Label" parent="EscMenu/OptionsPanel/Center/Column" unique_id=2180000014]
+[node name="Keybinds" type="VBoxContainer" parent="EscMenu/OptionsPanel/Center/Column" unique_id=2190000001 node_paths=PackedStringArray("inventory_button", "quest_log_button", "status_label")]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.8, 0.82, 0.86, 1)
-theme_override_font_sizes/font_size = 16
-text = "Keybinds arrive in ARM-219."
+theme_override_constants/separation = 8
+script = ExtResource("42_keybinds_panel")
+inventory_button = NodePath("InventoryRow/Bind")
+quest_log_button = NodePath("QuestLogRow/Bind")
+status_label = NodePath("Status")
+
+[node name="InventoryRow" type="HBoxContainer" parent="EscMenu/OptionsPanel/Center/Column/Keybinds" unique_id=2190000002]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Label" type="Label" parent="EscMenu/OptionsPanel/Center/Column/Keybinds/InventoryRow" unique_id=2190000003]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.91, 0.93, 1)
+text = "Inventory"
+
+[node name="Bind" type="Button" parent="EscMenu/OptionsPanel/Center/Column/Keybinds/InventoryRow" unique_id=2190000004]
+custom_minimum_size = Vector2(120, 32)
+layout_mode = 2
+text = "I"
+
+[node name="QuestLogRow" type="HBoxContainer" parent="EscMenu/OptionsPanel/Center/Column/Keybinds" unique_id=2190000005]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Label" type="Label" parent="EscMenu/OptionsPanel/Center/Column/Keybinds/QuestLogRow" unique_id=2190000006]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.91, 0.93, 1)
+text = "Quest Log"
+
+[node name="Bind" type="Button" parent="EscMenu/OptionsPanel/Center/Column/Keybinds/QuestLogRow" unique_id=2190000007]
+custom_minimum_size = Vector2(120, 32)
+layout_mode = 2
+text = "J"
+
+[node name="Status" type="Label" parent="EscMenu/OptionsPanel/Center/Column/Keybinds" unique_id=2190000008]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.7, 0.55, 1)
+theme_override_font_sizes/font_size = 14
 horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="Back" type="Button" parent="EscMenu/OptionsPanel/Center/Column" unique_id=2180000015]
 custom_minimum_size = Vector2(200, 36)
