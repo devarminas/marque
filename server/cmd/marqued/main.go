@@ -198,6 +198,11 @@ func run() error {
 			return err
 		}
 	}
+	for _, rock := range game.StarterTownRocks {
+		if err := world.SeedResourceNode(game.KindRock, rock.X, rock.Z); err != nil {
+			return err
+		}
+	}
 	if err := world.SeedPracticeDummies(); err != nil {
 		return err
 	}

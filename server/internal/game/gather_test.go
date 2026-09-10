@@ -298,6 +298,117 @@ func TestMoveToCancelsPendingGather(t *testing.T) {
 	}
 }
 
+func TestNodeSkillMapsRockToMining(t *testing.T) {
+	if got := nodeSkill(KindRock); got != "mining" {
+		t.Fatalf("nodeSkill(rock)=%q, want mining", got)
+	}
+	if got := nodeYield(KindRock); got != KindCopperOre {
+		t.Fatalf("nodeYield(rock)=%q, want %s", got, KindCopperOre)
+	}
+}
+
+func TestMinerGathersRockForCopperOre(t *testing.T) {
+	pw := newGatherProbe(t)
+	alice := pw.joinWithClass("miner")
+	node := pw.seedRock()
+	alice.pos = Point{X: SeedRockX, Z: SeedRockZ}
+
+	pw.gather(alice, node.id)
+	for range GatherDurationTicks {
+		pw.w.step()
+	}
+
+	if bag := countKind(pw.w.items.Inventory(alice.id), KindCopperOre); bag != 1 {
+		t.Fatalf("inventory holds %d copper_ore after duration, want 1", bag)
+	}
+	if !node.depleted {
+		t.Fatal("rock stayed full after a completed gather")
+	}
+	if got := alice.skillXP["mining"]; got != SkillXPGather {
+		t.Fatalf("mining xp=%d, want %d", got, SkillXPGather)
+	}
+	if got := pw.events(EvGatherResolved); len(got) != 1 {
+		t.Fatalf("logged %d %s, want 1", len(got), EvGatherResolved)
+	}
+	if got := pw.events(EvGatherResolved)[0]["kind"]; got != KindCopperOre {
+		t.Fatalf("gather_resolved kind=%v, want %s", got, KindCopperOre)
+	}
+}
+
+func TestLumberjackRefusedOnRock(t *testing.T) {
+	pw := newGatherProbe(t)
+	alice := pw.joinWithLumberjack()
+	node := pw.seedRock()
+	alice.pos = Point{X: SeedRockX, Z: SeedRockZ}
+
+	pw.gather(alice, node.id)
+
+	if alice.gatherNode != 0 {
+		t.Fatalf("gatherNode=%d after refusal, want 0", alice.gatherNode)
+	}
+	if node.depleted {
+		t.Fatal("refused gather depleted the rock")
+	}
+	if bag := countKind(pw.w.items.Inventory(alice.id), KindCopperOre); bag != 0 {
+		t.Fatalf("lumberjack gather granted %d copper_ore", bag)
+	}
+	rejected := pw.events(EvGatherRejected)
+	if len(rejected) != 1 {
+		t.Fatalf("logged %d %s, want 1", len(rejected), EvGatherRejected)
+	}
+	if rejected[0]["reason"] != string(mnet.ReasonNeedsClass) {
+		t.Fatalf("reason=%v, want %s", rejected[0]["reason"], mnet.ReasonNeedsClass)
+	}
+}
+
+func TestMinerRefusedOnTree(t *testing.T) {
+	pw := newGatherProbe(t)
+	alice := pw.joinWithClass("miner")
+	node := pw.seedTree()
+	alice.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
+
+	pw.gather(alice, node.id)
+
+	if alice.gatherNode != 0 {
+		t.Fatalf("gatherNode=%d after refusal, want 0", alice.gatherNode)
+	}
+	rejected := pw.events(EvGatherRejected)
+	if len(rejected) != 1 {
+		t.Fatalf("logged %d %s, want 1", len(rejected), EvGatherRejected)
+	}
+	if rejected[0]["reason"] != string(mnet.ReasonNeedsClass) {
+		t.Fatalf("reason=%v, want %s", rejected[0]["reason"], mnet.ReasonNeedsClass)
+	}
+}
+
+func TestDepletedRockRespawnsAfterNodeRespawnTicks(t *testing.T) {
+	pw := newGatherProbe(t)
+	alice := pw.joinWithClass("miner")
+	node := pw.seedRock()
+	alice.pos = Point{X: SeedRockX, Z: SeedRockZ}
+	pw.gather(alice, node.id)
+	for range GatherDurationTicks {
+		pw.w.step()
+	}
+	if !node.depleted {
+		t.Fatal("rock not depleted before respawn wait")
+	}
+
+	for range NodeRespawnTicks - 1 {
+		pw.w.step()
+		if !node.depleted {
+			t.Fatal("rock respawned before NodeRespawnTicks")
+		}
+	}
+	pw.w.step()
+	if node.depleted {
+		t.Fatal("rock stayed depleted after NodeRespawnTicks")
+	}
+	if got := pw.events(EvNodeRespawned); len(got) != 1 {
+		t.Fatalf("logged %d %s, want 1", len(got), EvNodeRespawned)
+	}
+}
+
 type gatherProbe struct {
 	*probeWorld
 }
@@ -320,6 +431,19 @@ func (pw *gatherProbe) seedTree() *resourceNode {
 		pw.t.Fatalf("seed tree: %v", err)
 	}
 	return pw.w.nodes[pw.w.nextNodeID]
+}
+
+func (pw *gatherProbe) seedRock() *resourceNode {
+	pw.t.Helper()
+	if err := pw.w.SeedResourceNode(KindRock, SeedRockX, SeedRockZ); err != nil {
+		pw.t.Fatalf("seed rock: %v", err)
+	}
+	return pw.w.nodes[pw.w.nextNodeID]
+}
+
+func (pw *gatherProbe) joinWithClass(id string) *player {
+	pw.t.Helper()
+	return (&classProbe{probeWorld: pw.probeWorld}).joinWithClass(id)
 }
 
 func (pw *gatherProbe) joinBare() *player {

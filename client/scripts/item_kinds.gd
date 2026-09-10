@@ -3,7 +3,7 @@ extends RefCounted
 
 const ClassDefs := preload("res://scripts/class_defs.gd")
 
-const LOOSE_KINDS: PackedStringArray = ["acorn", "logs", "sticks"]
+const LOOSE_KINDS: PackedStringArray = ["acorn", "logs", "sticks", "copper_ore"]
 
 static var _known := PackedStringArray()
 static var _resolved := false
