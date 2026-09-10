@@ -6,7 +6,7 @@ description: Drive Project Marque the way a player does — the real marqued Go 
 # Verify Marque
 
 Project Marque is a Go WebSocket server (`server/`, binary `marqued`) and a Godot 4.7
-Forward+ desktop client (`client/`) speaking one-key JSON messages (`PROTOCOL.md`).
+Forward+ desktop client (`client/`) speaking one-key JSON messages (wire of record: `server/`, `client/`, and their tests).
 This skill is how an agent launches the real stack, drives it like a player, and reads
 back what actually happened. It was written against M0 (connect, walk, see each other
 walk) and now covers M1 (items, pickup, drop, the contested-pickup demo,
@@ -298,7 +298,7 @@ pickup(s)", and both clients reported holding an acorn.
 For a wire-level claim the flag path cannot reach (malformed frames, out-of-bounds
 intents), write a throwaway WebSocket client in a scratch directory **outside the
 repo** (Go with its own `go.mod` works; the module proxy is reachable) and speak
-`PROTOCOL.md` at a running server, asserting on the reply frames and on the GAMELOG.
+one-key JSON at a running server, asserting on the reply frames and on the GAMELOG.
 The headless suites already prove the client's *handling* of `error`, `despawn`, and
 halt paths against scripted frames; a probe is for the server's side of the same
 contract.
@@ -350,7 +350,7 @@ a read error provoked by a client that was already dropped for being slow is sti
 `slow_client`. An optional `detail` names the detector — `send_buffer_full`, `write_timeout`,
 `read_error`, `write_error` — and is absent where only one detector could have fired. Read
 `detail` to learn how a death was noticed; never branch on it, and never read it as the cause.
-`PROTOCOL.md`, "Which reason is authoritative", has the full table.
+`server/internal/net/hub.go` (`Disconnect*` / `Detail*`) and `condemnation_test.go` encode the table.
 
 **DEMO line grammar** (client stdout, written to be grepped):
 

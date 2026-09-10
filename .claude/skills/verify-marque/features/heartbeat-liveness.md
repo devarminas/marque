@@ -73,5 +73,5 @@ Preconditions:
   `push_error` goes to stderr (`client-*.stderr.log`), the `server_unresponsive`
   report and the reconnect schedule go to stdout. Read both tails.
 - **Do not shrink the window to make a test faster.** The suites cap
-  `Engine.max_fps` for their own duration instead (NOTES.md, "Godot authoring
-  traps"); a shortened window is a different feature.
+  `Engine.max_fps` for their own duration instead (`test_heartbeat.gd`,
+  `test_heartbeat_edges.gd`); a shortened window is a different feature.

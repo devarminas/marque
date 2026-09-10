@@ -32,7 +32,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Follow this dependency graph. Start dependent work only after its parent merges, or base it on the parent branch when the execution playbook stacks.
   - [ ] ARM-226 and ARM-227 are independent and first. Both branch from `main`. Stack order still places ARM-226 then ARM-227.
   - [ ] ARM-228 after ARM-227 in the stack (no code depend). ARM-229 after ARM-228. ARM-230 after ARM-226. ARM-231 after ARM-227 and ARM-229 and ARM-230. ARM-232 after ARM-229.
-- [ ] Hold the file boundaries. ARM-226 touches only `.claude/skills/verify-marque/**`. ARM-227 touches doctor, allowlist, CI, and skill rule lines. ARM-228 touches client NPC scenes and npc_dummy plus tests. ARM-229 touches DEMO helpers and enemy quest demo. ARM-230 touches server net tests and skill cites. ARM-231 touches scripts/*.ps1 library. ARM-232 touches server game NPC arrival and PROTOCOL.
+- [ ] Hold the file boundaries. ARM-226 touches only `.claude/skills/verify-marque/**`. ARM-227 touches doctor, allowlist, CI, and skill rule lines. ARM-228 touches client NPC scenes and npc_dummy plus tests. ARM-229 touches DEMO helpers and enemy quest demo. ARM-230 touches server net tests and skill cites. ARM-231 touches scripts/*.ps1 library. ARM-232 touches server game NPC arrival and verify-marque GAMELOG vocabulary.
 - [ ] Hold the review gate. ARM-228 and ARM-229 change an interaction. They wait for the operator's review in chat with screenshots and a video before merge.
 
 ### PR mechanics, for every PR
@@ -411,7 +411,7 @@ Each live lane runs in its own remote worktree at the PR head. Drive through `co
 
 - [ ] Edit `server/internal/game/imp.go` and or `world.go`.
 - [ ] Edit `server/internal/game/imp_test.go`.
-- [ ] Edit `PROTOCOL.md` and verify-marque skill vocabulary.
+- [ ] Edit verify-marque skill GAMELOG vocabulary (wire of record stays in code + tests).
 
 **Build.**
 
@@ -432,7 +432,7 @@ Each live lane runs in its own remote worktree at the PR head. Drive through `co
 - [ ] Lane 2. Unit forces aggro chase then path end. Save `arm-232-lane-2-chase-path.png`. Pass when arrived npc event exists.
 - [ ] Lane 3. Leash return completion logs arrival or documented skip. Save `arm-232-lane-3-leash-home.png`. Pass when event or explicit skip.
 - [ ] Lane 4. Player arrived still uses player field. Save `arm-232-lane-4-player-unchanged.png`. Pass when no regression in move tests.
-- [ ] Lane 5. PROTOCOL.md documents the event. Save `arm-232-lane-5-protocol.png`. Pass when npc field described.
+- [ ] Lane 5. Named Go test asserts `arrived` with `npc` field. Save `arm-232-lane-5-go-arrived.png`. Pass when test names the field.
 - [ ] Lane 6. SKILL.md GAMELOG vocabulary updated. Save `arm-232-lane-6-skill-vocab.png`. Pass when event listed.
 - [ ] Lane 7. Record sabotage red in feature or test note. Save `arm-232-lane-7-sabotage-red.png`. Pass when red run cited.
 - [ ] Lane 8. Confirm wire path broadcast unchanged. Save `arm-232-lane-8-wire-optional.png`. Pass when clients still get path frames.
@@ -467,7 +467,7 @@ No prototype run. Open questions were settled from the prior investigation and c
 
 ## Appendix B. Alternatives rejected
 
-Split verify-marque into client and server skills. Rejected because two-layer movement proofs need one drive. Full NOTES JSON mode first. Rejected as high build cost for multiplayer. Per-quest windowed demos forever. Rejected as O(N) cost. Scenario DSL before shared DEMO fields and allowlist. Rejected as premature.
+Split verify-marque into client and server skills. Rejected because two-layer movement proofs need one drive. Full client JSON-mode verify first. Rejected as high build cost for multiplayer. Per-quest windowed demos forever. Rejected as O(N) cost. Scenario DSL before shared DEMO fields and allowlist. Rejected as premature.
 
 ## Appendix C. Risks
 
@@ -480,6 +480,5 @@ ARM-228 push_error can red enemy_quest until Imp scene gains AnimationPlayer. Ow
 - Atlas feature map template https://github.com/poteto/verification-skill-example/blob/main/.cursor/skills/verify-atlas/references/features/README.md (and `sign-in.md`). ARM-226 follows that four-H2 contract. Evidence and rung live inside Sub-features, Driving, and Gotchas. No fifth H2.
 - `.claude/skills/verify-marque/SKILL.md`
 - `server/internal/net/harness_test.go`
-- `NOTES.md` JSON mode (aspirational only)
 - how and interrogate on ARM-230 and ARM-232 if wire or event shape debates reopen
 - Decision trail per show-me-your-work during autopilot-stack

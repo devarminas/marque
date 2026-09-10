@@ -1,5 +1,11 @@
 # Project Marque
 
+## Source of truth
+
+- Settled cross-cutting rules live in this file.
+- Settled mechanic decisions live under `docs/adr/`. One ADR per mechanic.
+- The live wire is the code (`server/`, `client/`) and its tests. There is no `PROTOCOL.md` or `NOTES.md`. Do not recreate them. Do not treat deleted prototype docs as law.
+
 ## Git branches
 
 | Kind | Pattern | Rule |

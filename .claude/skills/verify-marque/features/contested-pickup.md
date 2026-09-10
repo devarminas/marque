@@ -130,7 +130,7 @@ Preconditions:
   keep them out of the panel's rect, measured as (1024, 272) to (1264, 704) at
   1280x720.
 - **The dropped item lands under the dropper's feet**, because that is what a drop
-  does (`PROTOCOL.md`, *Drop*). In the third capture it sits at the base of the
+  does (`TestDropIsImmediateAndReachesEveryoneIncludingTheDropper`). In the third capture it sits at the base of the
   winner's avatar — this demo seeds an **acorn**, drawn as the default green
   box in `ground_item.tscn` (only `lumberjack_axe` has its own model scene). Expect
   overlap with the avatar, not a clear silhouette. Assert it from the `DEMO item`
