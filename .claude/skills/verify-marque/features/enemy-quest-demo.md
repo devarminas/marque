@@ -77,5 +77,9 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-enemy-quest`.
   tank survives Imp multi-pull.
 - **Turn-in is talk `turn_in_quest`.** Deliver give is not used. The dialog
   Accept button relabels to Turn in when that option is present.
+- **Imp walk animation is unverified.** `npc_imp.tscn` authors an
+  `AnimationPlayer` so a missing player no longer silent-no-ops (ARM-228), but
+  Imp-compatible walk/idle clips are not wired yet. `has_animation` soft-skips,
+  so chase motion is still a root transform only until clips land.
 - **Cite.** Pattern matches `scripts/quest_demo.ps1` / `gather_craft_demo.ps1`
   and verify-marque two-client evidence layout.

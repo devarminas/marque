@@ -37,6 +37,9 @@ visible = false
 mesh = SubResource("CapsuleMesh_missing")
 surface_material_override/0 = SubResource("Mat_missing")
 
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("../Body")
+
 [node name="ClickBody" type="StaticBody3D" parent="."]
 collision_layer = 4
 collision_mask = 0
