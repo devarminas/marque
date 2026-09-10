@@ -146,6 +146,7 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 	p.mana = MaxMana
 	p.pos = Point{X: spawnX, Z: spawnZ}
 	p.y = 0
+	p.vy = 0
 	p.remaining = nil
 	p.clearSteer()
 	w.broadcastPose(p)
