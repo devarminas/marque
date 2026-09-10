@@ -7,6 +7,7 @@ const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const NpcDummyScene := preload("res://scenes/npc_dummy.tscn")
 const NpcQuestGiverScene := preload("res://scenes/npc_quest_giver.tscn")
 const NpcImpScene := preload("res://scenes/npc_imp.tscn")
+const DemoNpcCapture := preload("res://scripts/demo_npc_capture.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
 const QUEST_GIVER_BODY_SKIN := "Superhero_Female"
@@ -75,6 +76,7 @@ func _ready() -> void:
 	_test_quest_giver_spawns_from_welcome()
 	_test_imp_spawns_from_welcome()
 	_test_imp_follows_path_frames()
+	_test_demo_npc_capture_dump()
 	_test_cast_targets()
 	_test_attack_targets()
 	_test_despawn_forgets_npc()
@@ -297,13 +299,16 @@ func _test_imp_follows_path_frames() -> void:
 	_net.ingest_text_frame(
 		'{"path":{"id":1000004,"start_tick":1,"speed":3.0,"points":[[12.0,8.0],[0.0,0.0]]}}'
 	)
+	_check(imp.has_path(), "imp has_path after path frame")
 	imp.update_to_tick(1)
+	_check(imp.is_walking(), "imp is_walking at path start_tick")
 	_check(
 		is_equal_approx(imp.position.x, 12.0) and is_equal_approx(imp.position.z, 8.0),
 		"imp at path start on start_tick, got %s" % imp.position,
 	)
 	# 3 u/s * 150ms = 0.45u per tick; 10 ticks ≈ 4.5u toward origin from (12,8).
 	imp.update_to_tick(11)
+	_check(imp.is_walking(), "imp still walking mid-path at tick 11")
 	var moved := Vector2(imp.position.x, imp.position.z).distance_to(Vector2(12.0, 8.0))
 	_check(moved >= 3.0, "imp mesh advanced ≥3u along path by tick 11, moved=%.3f at %s" % [moved, imp.position])
 	_check(
@@ -311,6 +316,25 @@ func _test_imp_follows_path_frames() -> void:
 		< Vector2(12.0, 8.0).distance_to(Vector2.ZERO),
 		"imp closer to player origin than camp after chase path",
 	)
+
+
+func _test_demo_npc_capture_dump() -> void:
+	var npcs: Dictionary = _session.get("_npcs")
+	_check(not npcs.is_empty(), "session has npcs before capture dump")
+	var imp: NpcDummyScript = npcs.get(1000004)
+	_check(imp != null and imp.has_path(), "imp still has_path for capture dump")
+	_check(not imp.current_anim_clip().is_empty(), "current_anim_clip returns a string")
+	var lines := DemoNpcCapture.dump(_session)
+	_check(lines.size() >= 2, "demo_npc_capture.dump emits npc+anim lines, got %d" % lines.size())
+	var saw_imp_npc := false
+	var saw_imp_anim := false
+	for line: String in lines:
+		if line.begins_with("DEMO npc 1000004 ") and line.contains("walking=1") and line.contains("has_path=1"):
+			saw_imp_npc = true
+		if line.begins_with("DEMO anim 1000004 "):
+			saw_imp_anim = true
+	_check(saw_imp_npc, "capture dump includes walking imp DEMO npc line")
+	_check(saw_imp_anim, "capture dump includes DEMO anim for imp")
 
 
 func _test_cast_targets() -> void:

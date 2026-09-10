@@ -110,6 +110,27 @@ func follow_path(points: PackedVector2Array, start_tick: int, speed: float) -> v
 	_walker.set_path(points, start_tick, speed)
 
 
+func has_path() -> bool:
+	return _walker != null and _walker.has_path()
+
+
+func is_walking() -> bool:
+	if not has_path():
+		return false
+	if clock == null or not clock.is_anchored():
+		return true
+	return not _walker.is_finished_at_tick(clock.estimated_tick())
+
+
+func current_anim_clip() -> String:
+	if _animation == null:
+		return "none"
+	var clip := _animation.current_animation
+	if clip.is_empty():
+		return "none"
+	return clip
+
+
 func update_to_tick(tick: int) -> void:
 	if _walker == null or not _walker.has_path():
 		_set_walking(false)
