@@ -149,8 +149,6 @@ func _test_options_stub_and_back() -> void:
 		_session.is_esc_menu_open() and not _menu.is_options_open(),
 		"Escape from options returns to the menu",
 	)
-	_menu.options_back_button.pressed.emit()
-	await get_tree().process_frame
 	_menu.open_options()
 	_check(_menu.is_options_open(), "Options opens again for Back")
 	_menu.options_back_button.pressed.emit()
