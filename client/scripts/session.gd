@@ -418,12 +418,12 @@ func request_move_to(x: float, z: float) -> void:
 	_net.send_move_to(x, z)
 
 
-func request_move(dx: float, dz: float) -> void:
+func request_move(dx: float, dz: float, jump: bool = false) -> void:
 	move_requested.emit(dx, dz)
 	if _net == null or not _net.is_open():
 		push_warning("session: move (%f, %f) dropped, the socket is not open" % [dx, dz])
 		return
-	_net.send_move(dx, dz)
+	_net.send_move(dx, dz, 0, jump)
 
 
 func request_pickup(item_id: int) -> void:
@@ -984,7 +984,7 @@ func _advance_locomotion(delta: float) -> void:
 		_local_mover.advance_to_tick(est)
 		_local_mover.soft_pull_display(delta)
 		var ground := _local_mover.display_xz()
-		_local.present_at(ground.x, ground.y, _local_mover.moving())
+		_local.present_at(ground.x, ground.y, _local_mover.moving(), _local_mover.display_height())
 	var render_tick := _render_tick_fraction()
 	for id in _remote_poses.keys():
 		if int(id) == _you:
@@ -997,8 +997,8 @@ func _advance_locomotion(delta: float) -> void:
 		var buf: PoseInterp = _remote_poses[id]
 		if buf == null:
 			continue
-		var sample := buf.sample_xz(render_tick)
-		avatar.present_at(sample.x, sample.y, buf.moving())
+		var sample := buf.sample_xyz(render_tick)
+		avatar.present_at(sample.x, sample.z, buf.moving(), sample.y)
 
 
 func _render_tick_fraction() -> float:
@@ -1038,22 +1038,24 @@ func _poll_move_intent() -> void:
 		dx = world.x
 		dz = world.y
 
+	var jump := Input.is_action_just_pressed("jump")
 	var holding := dx != 0.0 or dz != 0.0
-	if not holding and not _move_held:
+	if not holding and not _move_held and not jump:
 		return
 	var changed := (
 		not is_equal_approx(dx, _last_move_dx) or not is_equal_approx(dz, _last_move_dz)
 	)
 	var now := Time.get_ticks_msec()
 	var due := now - _last_move_sent_msec >= MOVE_INTENT_PERIOD_MSEC
-	if changed or due or (not holding and _move_held):
-		_send_move_chord(dx, dz)
+	if changed or due or (not holding and _move_held) or jump:
+		_send_move_chord(dx, dz, jump)
 
 
-func _send_move_chord(dx: float, dz: float) -> void:
-	request_move(dx, dz)
+func _send_move_chord(dx: float, dz: float, jump: bool = false) -> void:
+	request_move(dx, dz, jump)
 	if _local_mover != null:
 		_local_mover.apply_wish(dx, dz)
+		_local_mover.apply_jump(jump)
 	_last_move_dx = dx
 	_last_move_dz = dz
 	_last_move_sent_msec = Time.get_ticks_msec()
@@ -1203,16 +1205,16 @@ func _on_path_assigned(
 	push_warning("session: path for unknown id %d; ignoring" % id)
 
 
-func _on_pose_received(id: int, tick: int, x: float, _y: float, z: float) -> void:
+func _on_pose_received(id: int, tick: int, x: float, y: float, z: float) -> void:
 	if id == _you:
 		if _local_mover == null:
 			_local_mover = LocalMover.new()
-			_local_mover.reset_at(tick, x, z)
+			_local_mover.reset_at(tick, x, z, y)
 		else:
-			_local_mover.reconcile_server_pose(tick, x, z)
+			_local_mover.reconcile_server_pose(tick, x, z, y)
 		if _local != null:
 			var ground := _local_mover.display_xz()
-			_local.present_at(ground.x, ground.y, _local_mover.moving())
+			_local.present_at(ground.x, ground.y, _local_mover.moving(), _local_mover.display_height())
 		return
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar == null:
@@ -1221,12 +1223,12 @@ func _on_pose_received(id: int, tick: int, x: float, _y: float, z: float) -> voi
 	var buf: PoseInterp = _remote_poses.get(id)
 	if buf == null:
 		buf = PoseInterp.new()
-		buf.reset_at(tick, x, z)
+		buf.reset_at(tick, x, z, y)
 		_remote_poses[id] = buf
 	else:
-		buf.push_pose(tick, x, z)
-	var sample := buf.sample_xz(_render_tick_fraction())
-	avatar.present_at(sample.x, sample.y, buf.moving())
+		buf.push_pose(tick, x, z, y)
+	var sample := buf.sample_xyz(_render_tick_fraction())
+	avatar.present_at(sample.x, sample.z, buf.moving(), sample.y)
 
 
 func _on_server_error(re: String, message: String) -> void:
