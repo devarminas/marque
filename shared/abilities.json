@@ -21,6 +21,7 @@
       "name": "Fireball",
       "mana_cost": 35,
       "cooldown_ticks": 8,
+      "cast_ticks": 8,
       "range": 8,
       "target": "hostile",
       "effect": {

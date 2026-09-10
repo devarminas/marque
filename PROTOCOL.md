@@ -2040,6 +2040,54 @@ The client never predicts HP or mana from the cast.
 - No cooldown enforcement, no VFX, no full 12-slot fill.
 - No client-authored damage, heal, or mana fields on `cast`.
 
+## Pending cast, interrupt, and grace. **ARM-217**
+
+Abilities may declare `cast_ticks` in `shared/abilities.json`. Zero or omitted means
+instant resolve (heal stays instant). Fireball uses `cast_ticks: 8`.
+
+When `cast_ticks > 0`:
+
+1. The server validates the cast the same way as an instant cast (dead, ability, mage gate,
+   target, range, enough mana) and then starts a **pending cast**. Mana is **not** spent yet
+   (**charge-on-resolve**). An interrupt never needs a refund because nothing was charged.
+2. The caster receives a private `casting` restatement:
+
+       {"casting":{"ability":"fireball","progress":0,"total":8}}
+
+   Each tick advances `progress` by one and restates `casting` to the caster. Other clients
+   never see `casting`.
+3. When `progress` reaches `total`, the server clears the pending cast, sends an idle
+   `casting` frame (`ability` empty, `progress` 0, `total` 0), then spends mana and applies
+   the effect exactly as an instant cast would. Success still broadcasts `mana` and `hp` and
+   logs `cast` then `cast_effect`. GAMELOG also records `cast_begin` at start.
+4. **Walk interrupt.** A `move` or `move_to` intent cancels the pending cast when
+   `total - progress > 2` (outside the last-two-tick grace). Cancel clears pending state,
+   sends idle `casting`, logs `cast_cancelled` with `cause` `move` / `move_to`, and spends
+   no mana. Inside grace (`total - progress <= 2`), walk still moves the body but the cast
+   finishes and the effect applies.
+5. Starting gather or attack, or dying, also cancels a pending cast (`cast_cancelled`).
+
+### `casting`. **ARM-217**
+
+    {"casting":{"ability":"fireball","progress":3,"total":8}}
+    {"casting":{"ability":"","progress":0,"total":0}}
+
+Sent to **the caster only**. A full restatement of that player's pending cast, not a delta.
+Empty `ability` with zero `progress`/`total` means idle (cancel or success). The client cast
+bar follows these frames and clears on idle.
+
+### Mana regen. **ARM-217**
+
+Every tick, each living player below `MaxMana` (100) gains `+1` mana, capped at `MaxMana`.
+Each change broadcasts a `mana` restatement. Dead players do not regenerate.
+
+### Deliberately absent (pending cast). **ARM-217**
+
+- No heal cast time.
+- No cooldown enforcement.
+- No bystander-visible cast channel.
+- No walk-into-range; OOR still refuses at cast start.
+
 ## Cast effect on target. **M6h**
 
 The client does not invent a new wire frame for impact VFX. A successful cast already

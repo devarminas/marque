@@ -94,3 +94,32 @@ func TestRefundManaCapsAndLogs(t *testing.T) {
 		t.Fatalf("mana_refund events=%d, want 1", len(got))
 	}
 }
+
+func TestManaRegenTicksTowardMax(t *testing.T) {
+	pw := newProbeWorld(t)
+	alice := pw.join()
+	alice.mana = 50
+	pw.w.step()
+	if alice.mana != 51 {
+		t.Fatalf("mana=%d after one regen tick, want 51", alice.mana)
+	}
+	pw.w.stepNForTest(60)
+	if alice.mana != MaxMana {
+		t.Fatalf("mana=%d after catch-up, want %d", alice.mana, MaxMana)
+	}
+	pw.w.step()
+	if alice.mana != MaxMana {
+		t.Fatalf("mana exceeded max: %d", alice.mana)
+	}
+}
+
+func TestManaRegenSkipsDead(t *testing.T) {
+	pw := newProbeWorld(t)
+	alice := pw.join()
+	alice.mana = 10
+	alice.hp = 0
+	pw.w.step()
+	if alice.mana != 10 {
+		t.Fatalf("dead player regen mana=%d, want 10", alice.mana)
+	}
+}

@@ -1,4 +1,4 @@
-﻿package game
+package game
 
 import (
 	"context"
@@ -178,8 +178,8 @@ type player struct {
 	gatherNode     mnet.NodeID
 	gatherProgress int
 
-	pendingTalk mnet.PlayerID
-	dialogNPC   mnet.PlayerID
+	pendingTalk       mnet.PlayerID
+	dialogNPC         mnet.PlayerID
 	quests            map[string]questStatus
 	questKillProgress map[string]int
 
@@ -188,6 +188,12 @@ type player struct {
 
 	attackTarget   mnet.PlayerID
 	attackProgress int
+
+	castAbility  string
+	castTarget   mnet.PlayerID
+	castProgress int
+	castTotal    int
+	castCost     int
 
 	hp   int
 	mana int
@@ -330,6 +336,7 @@ func (w *World) step() {
 	if w.tick%HeartbeatEveryTicks == 0 {
 		w.broadcast(mnet.Tick{T: w.tick}, nil)
 	}
+	w.regenMana()
 	distance := WalkSpeed * TickDuration.Seconds()
 
 	for _, p := range w.order {
@@ -364,6 +371,9 @@ func (w *World) step() {
 		}
 		if p.attackTarget != 0 {
 			w.resolveAttack(p)
+		}
+		if p.casting() {
+			w.advanceCast(p)
 		}
 	}
 
@@ -438,12 +448,12 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 	}
 	w.nextID++
 	p := &player{
-		id:      w.nextID,
-		session: newSessionToken(),
-		conn:    conn,
-		pos:     Point{X: spawnX, Z: spawnZ},
-		hp:      MaxHP,
-		mana:    MaxMana,
+		id:                w.nextID,
+		session:           newSessionToken(),
+		conn:              conn,
+		pos:               Point{X: spawnX, Z: spawnZ},
+		hp:                MaxHP,
+		mana:              MaxMana,
 		quests:            make(map[string]questStatus),
 		questKillProgress: make(map[string]int),
 	}
@@ -789,6 +799,7 @@ func (w *World) moveTo(p *player, msg mnet.MoveTo, seq mnet.Seq) {
 	w.closeDialog(p)
 	w.cancelGather(p)
 	w.cancelAttack(p, CauseMoveTo)
+	w.interruptCastOnMove(p, CauseMoveTo)
 	p.clearSteer()
 	w.assignPath(p, points)
 }

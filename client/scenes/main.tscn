@@ -51,7 +51,7 @@ wait_time = 0.25
 autostart = true
 
 [node name="UI" parent="." unique_id=1728807949 instance=ExtResource("8_hud")]
-[node name="Session" type="Node" parent="." unique_id=1289844251 node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "dialog_panel", "give_panel", "quest_log_panel", "party_panel", "equipment_panel", "hp_hud", "class_hud", "class_debug", "error_hud", "death_overlay", "esc_menu", "hotbar", "camera_rig")]
+[node name="Session" type="Node" parent="." unique_id=1289844251 node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "dialog_panel", "give_panel", "quest_log_panel", "party_panel", "equipment_panel", "hp_hud", "class_hud", "class_debug", "error_hud", "death_overlay", "esc_menu", "hotbar", "cast_bar", "camera_rig")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../Player")
@@ -73,6 +73,7 @@ error_hud = NodePath("../UI/ErrorHud")
 death_overlay = NodePath("../UI/DeathOverlay")
 esc_menu = NodePath("../UI/EscMenu")
 hotbar = NodePath("../UI/Hotbar")
+cast_bar = NodePath("../UI/CastBar")
 camera_rig = NodePath("../CameraRig")
 
 [node name="Net" type="Node" parent="Session" unique_id=1040748530]

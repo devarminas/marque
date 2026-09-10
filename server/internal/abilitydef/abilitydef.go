@@ -35,6 +35,7 @@ type Ability struct {
 	Name          string  `json:"name"`
 	ManaCost      float64 `json:"mana_cost"`
 	CooldownTicks int     `json:"cooldown_ticks"`
+	CastTicks     int     `json:"cast_ticks"`
 	Range         float64 `json:"range"`
 	Target        string  `json:"target"`
 	Effect        Effect  `json:"effect"`
@@ -99,6 +100,9 @@ func validate(a Ability) error {
 	}
 	if a.CooldownTicks < 0 {
 		return fmt.Errorf("%q: cooldown_ticks must be >= 0", a.ID)
+	}
+	if a.CastTicks < 0 {
+		return fmt.Errorf("%q: cast_ticks must be >= 0", a.ID)
 	}
 	if a.Range < 0 {
 		return fmt.Errorf("%q: range must be >= 0", a.ID)

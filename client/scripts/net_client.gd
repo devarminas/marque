@@ -85,6 +85,8 @@ signal hp_changed(id: int, hp: int, max_hp: int)
 
 signal mana_changed(id: int, mana: int, max_mana: int)
 
+signal casting_changed(ability: String, progress: int, total: int)
+
 signal dialog_changed(npc_id: int, lines: PackedStringArray, option_ids: PackedStringArray)
 
 signal quest_log_changed(
@@ -455,6 +457,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_hp(body, text)
 		"mana":
 			_on_mana(body, text)
+		"casting":
+			_on_casting(body, text)
 		"dialog":
 			_on_dialog(body, text)
 		"quest_log":
@@ -923,6 +927,15 @@ func _on_mana(body: Dictionary, text: String) -> void:
 	if not _has_numbers(body, ["id", "mana", "max_mana"], text):
 		return
 	mana_changed.emit(int(body["id"]), int(body["mana"]), int(body["max_mana"]))
+
+
+func _on_casting(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["progress", "total"], text):
+		return
+	if typeof(body.get("ability", null)) != TYPE_STRING:
+		push_error("net_client: casting.ability must be a string: %s" % text)
+		return
+	casting_changed.emit(String(body["ability"]), int(body["progress"]), int(body["total"]))
 
 
 static func _read_hit_points(state: Dictionary, text: String, out: Array) -> Error:

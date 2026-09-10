@@ -27,6 +27,7 @@ const ClassDefs := preload("res://scripts/class_defs.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const EscMenuScript := preload("res://scripts/esc_menu.gd")
 const HotbarScript := preload("res://scripts/hotbar.gd")
+const CastBarScript := preload("res://scripts/cast_bar.gd")
 const Keybinds := preload("res://scripts/keybinds.gd")
 const AbilityDefs := preload("res://scripts/ability_defs.gd")
 const CastHitFx := preload("res://scripts/cast_hit_fx.gd")
@@ -121,6 +122,7 @@ signal respawn_requested()
 @export var death_overlay: Node
 @export var esc_menu: Node
 @export var hotbar: Node
+@export var cast_bar: Node
 @export var camera_rig: Node
 
 var _net: NetClientScript = null
@@ -141,6 +143,7 @@ var _active_class_id := ""
 var _death_overlay: DeathOverlayScript = null
 var _esc_menu: EscMenuScript = null
 var _hotbar: HotbarScript = null
+var _cast_bar: CastBarScript = null
 var _hp := {}
 var _mana := {}
 var _local: PlayerAvatarScript = null
@@ -224,6 +227,7 @@ func _ready() -> void:
 	_net.skills_changed.connect(_on_skills_changed)
 	_net.hp_changed.connect(_on_hp_changed)
 	_net.mana_changed.connect(_on_mana_changed)
+	_net.casting_changed.connect(_on_casting_changed)
 	_net.server_error.connect(_on_server_error)
 	_net.disconnected.connect(_on_disconnected)
 
@@ -311,6 +315,11 @@ func _ready() -> void:
 		push_error("Session.hotbar must point at a node running hotbar.gd")
 	else:
 		_hotbar.ability_activated.connect(_on_hotbar_ability)
+	_cast_bar = cast_bar as CastBarScript
+	if _cast_bar == null:
+		push_error("Session.cast_bar must point at a node running cast_bar.gd")
+	else:
+		_cast_bar.clear()
 
 	var url := _server_from_command_line()
 	if not url.is_empty():
@@ -1146,6 +1155,8 @@ func _on_disconnected(code: int, reason: String) -> void:
 	_connection_over = true
 	_liveness_deadline_msec = 0
 	_casts_awaiting_mana.clear()
+	if _cast_bar != null:
+		_cast_bar.clear()
 	if _dialog != null:
 		_dialog.clear()
 	if _give != null:
@@ -1484,6 +1495,13 @@ func _on_mana_changed(id: int, mana: int, max_mana: int) -> void:
 	_apply_mana(id, mana, max_mana)
 	if id == _you and prior >= 0 and mana < prior and not _casts_awaiting_mana.is_empty():
 		_resolve_cast_on_mana_spend()
+
+
+func _on_casting_changed(ability: String, progress: int, total: int) -> void:
+	if _cast_bar != null:
+		_cast_bar.apply(ability, progress, total)
+	if ability.is_empty() and total <= 0 and not _casts_awaiting_mana.is_empty():
+		_casts_awaiting_mana.pop_front()
 
 
 func _resolve_cast_on_mana_spend() -> void:
