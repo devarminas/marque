@@ -32,6 +32,8 @@ const Keybinds := preload("res://scripts/keybinds.gd")
 const AbilityDefs := preload("res://scripts/ability_defs.gd")
 const CastHitFx := preload("res://scripts/cast_hit_fx.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
+const LocalMover := preload("res://scripts/local_mover.gd")
+const PoseInterp := preload("res://scripts/pose_interp.gd")
 
 const SERVER_ARG := "--server"
 
@@ -177,6 +179,8 @@ var _last_move_dx := 0.0
 var _last_move_dz := 0.0
 var _last_move_sent_msec := 0
 var _move_held := false
+var _local_mover: LocalMover = null
+var _remote_poses := {}
 
 
 func _ready() -> void:
@@ -805,12 +809,21 @@ func _on_welcomed(
 			continue
 		var ground := player_positions[index]
 		avatar.teleport_to(ground.x, ground.y)
+		if id == _you:
+			_local_mover = LocalMover.new()
+			_local_mover.reset_at(tick, ground.x, ground.y)
+		else:
+			var buf := PoseInterp.new()
+			buf.reset_at(tick, ground.x, ground.y)
+			_remote_poses[id] = buf
 
 	if not _avatars.has(_you):
 		push_error("session: welcome.players did not include our own id %d" % _you)
 		var self_avatar := _ensure_avatar(_you)
 		if self_avatar != null:
 			self_avatar.teleport_to(_local.position.x, _local.position.z)
+			_local_mover = LocalMover.new()
+			_local_mover.reset_at(tick, _local.position.x, _local.position.z)
 
 	if previous_you != 0 and previous_you == _you:
 		print("session: resumed as %d at tick %d, %d player(s)" % [_you, tick, _avatars.size()])
@@ -946,9 +959,10 @@ func _claim_expired_window() -> int:
 	return _liveness_window_msec()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_maybe_reconnect()
 	_poll_move_intent()
+	_advance_locomotion(delta)
 	var window := _claim_expired_window()
 	if window == 0:
 		return
@@ -961,6 +975,39 @@ func _process(_delta: float) -> void:
 	server_unresponsive.emit(window)
 	_net.abandon()
 
+
+func _advance_locomotion(delta: float) -> void:
+	if not _clock.is_anchored():
+		return
+	var est := _clock.estimated_tick()
+	if _local_mover != null and _local != null:
+		_local_mover.advance_to_tick(est)
+		_local_mover.soft_pull_display(delta)
+		var ground := _local_mover.display_xz()
+		_local.present_at(ground.x, ground.y, _local_mover.moving())
+	var render_tick := _render_tick_fraction()
+	for id in _remote_poses.keys():
+		if int(id) == _you:
+			continue
+		var avatar: PlayerAvatarScript = _avatars.get(id)
+		if avatar == null:
+			continue
+		if avatar.has_follow_path() and not avatar.is_idle_at_tick(est):
+			continue
+		var buf: PoseInterp = _remote_poses[id]
+		if buf == null:
+			continue
+		var sample := buf.sample_xz(render_tick)
+		avatar.present_at(sample.x, sample.y, buf.moving())
+
+
+func _render_tick_fraction() -> float:
+	if not _clock.is_anchored() or _tick_ms <= 0:
+		return float(_clock.estimated_tick())
+	var now := Time.get_ticks_usec()
+	var tick := _clock.estimated_tick_at(now)
+	var phase := float(_clock.phase_usec_at(now))
+	return float(tick) + phase / float(_tick_ms * 1000)
 
 func _poll_move_intent() -> void:
 	if _net == null or not _net.is_open() or not _clock.is_anchored():
@@ -1005,6 +1052,8 @@ func _poll_move_intent() -> void:
 
 func _send_move_chord(dx: float, dz: float) -> void:
 	request_move(dx, dz)
+	if _local_mover != null:
+		_local_mover.apply_wish(dx, dz)
 	_last_move_dx = dx
 	_last_move_dz = dz
 	_last_move_sent_msec = Time.get_ticks_msec()
@@ -1103,6 +1152,9 @@ func _on_spawned(id: int, spawn_position: Vector2) -> void:
 	if id == _you:
 		push_error("session: spawn carried our own id %d; repositioning instead" % id)
 		_local.teleport_to(spawn_position.x, spawn_position.y)
+		if _local_mover == null:
+			_local_mover = LocalMover.new()
+		_local_mover.reset_at(_clock.estimated_tick(), spawn_position.x, spawn_position.y)
 		return
 	if _avatars.has(id):
 		push_warning("session: spawn for known player %d replaces the existing body" % id)
@@ -1111,6 +1163,9 @@ func _on_spawned(id: int, spawn_position: Vector2) -> void:
 	if avatar == null:
 		return
 	avatar.teleport_to(spawn_position.x, spawn_position.y)
+	var buf := PoseInterp.new()
+	buf.reset_at(_clock.estimated_tick(), spawn_position.x, spawn_position.y)
+	_remote_poses[id] = buf
 
 
 func _on_despawned(id: int) -> void:
@@ -1131,7 +1186,15 @@ func _on_path_assigned(
 ) -> void:
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar != null:
+		avatar.clock = _clock
 		avatar.follow_path(points, start_tick, speed)
+		if id != _you and points.size() > 0:
+			var end: Vector2 = points[points.size() - 1]
+			var buf: PoseInterp = _remote_poses.get(id)
+			if buf == null:
+				buf = PoseInterp.new()
+				_remote_poses[id] = buf
+			buf.reset_at(start_tick, end.x, end.y)
 		return
 	var dummy: NpcDummyScript = _npcs.get(id)
 	if dummy != null:
@@ -1140,12 +1203,30 @@ func _on_path_assigned(
 	push_warning("session: path for unknown id %d; ignoring" % id)
 
 
-func _on_pose_received(id: int, _tick: int, x: float, _y: float, z: float) -> void:
-	var avatar: PlayerAvatarScript = _avatars.get(id)
-	if avatar != null:
-		avatar.teleport_to(x, z)
+func _on_pose_received(id: int, tick: int, x: float, _y: float, z: float) -> void:
+	if id == _you:
+		if _local_mover == null:
+			_local_mover = LocalMover.new()
+			_local_mover.reset_at(tick, x, z)
+		else:
+			_local_mover.reconcile_server_pose(tick, x, z)
+		if _local != null:
+			var ground := _local_mover.display_xz()
+			_local.present_at(ground.x, ground.y, _local_mover.moving())
 		return
-	push_warning("session: pose for unknown player %d; ignoring" % id)
+	var avatar: PlayerAvatarScript = _avatars.get(id)
+	if avatar == null:
+		push_warning("session: pose for unknown player %d; ignoring" % id)
+		return
+	var buf: PoseInterp = _remote_poses.get(id)
+	if buf == null:
+		buf = PoseInterp.new()
+		buf.reset_at(tick, x, z)
+		_remote_poses[id] = buf
+	else:
+		buf.push_pose(tick, x, z)
+	var sample := buf.sample_xz(_render_tick_fraction())
+	avatar.present_at(sample.x, sample.y, buf.moving())
 
 
 func _on_server_error(re: String, message: String) -> void:
@@ -1569,7 +1650,7 @@ func _ensure_avatar(id: int) -> PlayerAvatarScript:
 			return null
 		avatar.name = "Player%d" % id
 	avatar.configure(id, _tick_ms)
-	avatar.clock = _clock
+	avatar.clock = null
 	if id != _you:
 		remote_players.add_child(avatar)
 	_avatars[id] = avatar
@@ -1583,8 +1664,10 @@ func _forget(id: int) -> void:
 	if avatar == null:
 		return
 	_avatars.erase(id)
+	_remote_poses.erase(id)
 	if avatar == _local:
 		_local.clock = null
+		_local_mover = null
 		return
 	var parent := avatar.get_parent()
 	if parent != null:

@@ -140,8 +140,24 @@ func configure(id: int, tick_ms: int) -> void:
 	_walker = PolylineWalker.new(tick_ms)
 
 
+func has_follow_path() -> bool:
+	return _walker != null and _walker.has_path()
+
+
 func teleport_to(x: float, z: float) -> void:
+	present_at(x, z, false)
+
+
+func present_at(x: float, z: float, walking: bool) -> void:
+	var prior := Vector2(position.x, position.z)
 	position = Vector3(x, ground_y, z)
+	_set_walking(walking)
+	if not face_travel_direction or not walking:
+		return
+	var delta := Vector2(x - prior.x, z - prior.y)
+	if delta.length_squared() < 1e-8:
+		return
+	_desired_yaw = _yaw_facing(delta)
 
 
 func set_hit_points(hp: int, max_hp: int) -> void:
@@ -206,14 +222,20 @@ func _process(delta: float) -> void:
 
 
 func _set_walking(walking: bool) -> void:
+	if _animation == null:
+		return
 	if walking:
 		if _animation.current_animation != WALK_ANIM:
 			_animation.play(WALK_ANIM)
-		_animation.speed_scale = _walker.speed() / WALK_CLIP_SPEED
+		if _walker != null and _walker.has_path() and _walker.speed() > 0.0:
+			_animation.speed_scale = _walker.speed() / WALK_CLIP_SPEED
+		else:
+			_animation.speed_scale = 1.0
 		return
 	if _animation.current_animation != IDLE_ANIM:
 		_animation.play(IDLE_ANIM)
 	_animation.speed_scale = 1.0
+
 
 
 func _grip_socket(worn: String) -> GripSocket:
