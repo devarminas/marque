@@ -102,6 +102,90 @@ func TestImpLeashClearsCombatAndReturnsHome(t *testing.T) {
 	if distanceBetween(imp.pos, imp.home) > MinPathLength {
 		t.Fatalf("not home after return: %v", imp.pos)
 	}
+	if !hasNPCArrived(pw.events(EvArrived), imp.id) {
+		t.Fatal("expected arrived with npc after leash return / snap home")
+	}
+}
+
+// TestImpChasePathLogsArrived proves GAMELOG arrived carries npc after a chase
+// path ends (melee halt). Sabotage: suppress logNPCArrived — this test fails
+// with "expected arrived with npc after chase path".
+func TestImpChasePathLogsArrived(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	seedDeterministicCamp(t, pw.w)
+	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
+	imp.remaining = nil
+	imp.patrolOut = false
+	imp.pos = imp.home
+	alice.pos = Point{X: imp.home.X + 5, Z: imp.home.Z}
+
+	pw.w.step()
+	if imp.phase != phaseCombat || len(imp.remaining) == 0 {
+		t.Fatalf("expected chase path after aggro, phase=%d rem=%d", imp.phase, len(imp.remaining))
+	}
+	before := len(pw.events(EvArrived))
+
+	for i := 0; i < 200 && len(imp.remaining) > 0; i++ {
+		pw.w.step()
+	}
+	if len(imp.remaining) > 0 {
+		t.Fatal("chase never stopped walking")
+	}
+	if distanceBetween(imp.pos, alice.pos) > AttackRange {
+		t.Fatalf("expected melee range after chase, dist=%v", distanceBetween(imp.pos, alice.pos))
+	}
+
+	var npcArrivals []map[string]any
+	for _, ev := range pw.events(EvArrived)[before:] {
+		if ev["player"] != nil {
+			t.Fatalf("npc chase arrived must not set player: %v", ev)
+		}
+		if ev["npc"] == float64(imp.id) {
+			npcArrivals = append(npcArrivals, ev)
+		}
+	}
+	if len(npcArrivals) == 0 {
+		t.Fatal("expected arrived with npc after chase path")
+	}
+	last := npcArrivals[len(npcArrivals)-1]
+	if last["x"] == nil || last["z"] == nil {
+		t.Fatalf("arrived missing coords: %v", last)
+	}
+}
+
+func TestPlayerArrivedStillUsesPlayerField(t *testing.T) {
+	pw := newProbeWorld(t)
+	alice := pw.join()
+	alice.pos = Point{}
+	pw.w.moveTo(alice, mnet.MoveTo{X: 2, Z: 0}, 1)
+	for i := 0; i < 80 && alice.walking(); i++ {
+		pw.w.step()
+	}
+	if alice.walking() {
+		t.Fatal("player never arrived")
+	}
+	got := pw.events(EvArrived)
+	if len(got) == 0 {
+		t.Fatal("expected player arrived")
+	}
+	last := got[len(got)-1]
+	if last["player"] != float64(alice.id) {
+		t.Fatalf("player arrived fields=%v", last)
+	}
+	if last["npc"] != nil {
+		t.Fatalf("player arrived must not set npc: %v", last)
+	}
+}
+
+func hasNPCArrived(events []map[string]any, id mnet.PlayerID) bool {
+	for _, ev := range events {
+		if ev["npc"] == float64(id) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestImpMeleeDamagesPlayer(t *testing.T) {

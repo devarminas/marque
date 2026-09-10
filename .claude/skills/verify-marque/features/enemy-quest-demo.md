@@ -75,7 +75,9 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-enemy-quest`.
 
 - **chase-visibility is polyline, not clip.** `walking=1` / `has_path=1` prove
   unfinished path state on the client. `DEMO anim` may still print `none` until
-  Imp-compatible walk/idle clips land.
+  Imp-compatible walk/idle clips land. Server chase completion is GAMELOG
+  `arrived` with `npc` (Go: `TestImpChasePathLogsArrived`); this demo does not
+  require that line for `ENEMY QUEST DEMO OK`.
 - **Knight kit is a harness seed.** `DefaultJoinKit` stays empty; the demo
   passes five `-join-kit` flags. Clients equip into class `knight` before
   fighting.
