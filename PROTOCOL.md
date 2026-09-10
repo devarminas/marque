@@ -2114,6 +2114,11 @@ AI is a three-phase machine on the server tick:
    world, combat clears and the Imp paths home. GAMELOG `npc_leash`. After arrival it returns
    to patrol and may re-aggro.
 
+**GAMELOG `arrived` for NPCs (ARM-232).** Same event name as player walk completion. Player
+lines carry `player`; NPC lines carry `npc` (never both). Fields: `npc`, `x`, `z`, plus `t` /
+`ev`. Emitted when an Imp finishes a path segment (Advance empties the polyline), halts into
+melee after a chase, or snaps home at the end of leash return. Wire `path` frames are unchanged.
+
 Combat classes may `attack` an Imp; Gathering / no-class is `needs_class` (ARM-203). Death logs
 GAMELOG `death` with `npc` / `kind` / `killer` / `camp`, then `npc_despawned` with the same
 `camp`, and removes the instance (`despawn`). After `death_timer_ticks + jitter` the camp

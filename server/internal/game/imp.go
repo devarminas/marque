@@ -16,35 +16,62 @@ func (w *World) stepNPCs(distance float64) {
 }
 
 func (w *World) stepImp(n *npc, distance float64) {
+	arrived := false
 	if len(n.remaining) > 0 {
 		n.pos, n.remaining = Advance(n.pos, n.remaining, distance)
+		if len(n.remaining) == 0 {
+			arrived = true
+		}
 	}
 
 	switch n.phase {
 	case phaseReturn:
-		w.stepImpReturn(n)
+		if w.stepImpReturn(n) {
+			arrived = true
+		}
 	case phaseCombat:
+		walking := len(n.remaining) > 0
 		w.stepImpCombat(n)
+		// Chase refreshes the path every tick until melee; halt clears remaining
+		// without Advance, so treat that stop as arrival for GAMELOG symmetry.
+		if walking && len(n.remaining) == 0 {
+			arrived = true
+		}
 	default:
 		if target := w.firstLivingPlayerInRange(n.pos, ImpThreatRange); target != nil {
 			w.beginImpAggro(n, target)
+			if arrived {
+				w.logNPCArrived(n)
+			}
 			return
 		}
 		w.stepImpPatrol(n)
 	}
+	if arrived {
+		w.logNPCArrived(n)
+	}
 }
 
-func (w *World) stepImpReturn(n *npc) {
+func (w *World) logNPCArrived(n *npc) {
+	w.log.Event(w.tick, EvArrived, gamelog.Fields{
+		"npc": n.id,
+		"x":   n.pos.X,
+		"z":   n.pos.Z,
+	})
+}
+
+func (w *World) stepImpReturn(n *npc) (snapped bool) {
 	if distanceBetween(n.pos, n.home) <= MinPathLength {
 		n.pos = n.home
 		n.remaining = nil
 		n.phase = phaseIdle
 		n.patrolOut = false
-		return
+		return true
 	}
 	if len(n.remaining) == 0 {
 		w.assignNPCPath(n, n.home)
 	}
+	return false
 }
 
 func (w *World) stepImpCombat(n *npc) {

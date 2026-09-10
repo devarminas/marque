@@ -88,8 +88,9 @@ H2. Feature files keep Atlas's four H2s only. Name the default driver rung in
 `Driving` when the recipe has one.
 
 **outcome-not-chase.** `ENEMY QUEST DEMO OK` proves party, camp kills, and quest
-complete. It does not prove Imp chase or walk-anim. Chase stays Go or GAMELOG
-unless a later unit asserts it (`features/enemy-quest-demo.md`).
+complete. It does not prove Imp chase or walk-anim. Chase timing is Go/GAMELOG:
+`arrived` with `npc` after a chase path (`TestImpChasePathLogsArrived`). Live
+mid-chase remains DEMO npc/anim (`features/enemy-quest-demo.md`).
 
 ## Launch
 
@@ -337,6 +338,8 @@ remaining explanation and nobody has reproduced the timeout under it.
 `client_disconnected`, `move_to`, `move_to_rejected`, `intent_ignored`, `path_assigned`,
 `arrived`, `path_replayed`, `ticks_dropped`, `frame_dropped`. The constants live in
 `server/internal/game/world.go`; M1 adds new `ev` values rather than changing these.
+`arrived` is shared: players set `player`, NPCs set `npc` (ARM-232 chase/leash/patrol
+path completion). `path_assigned` already follows the same field split.
 
 **`client_disconnected` carries a latched, cause-authoritative `reason` (M1f).** The reason
 names why the connection died, never which component noticed: `closed` for a clean logout,
