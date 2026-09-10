@@ -1,9 +1,10 @@
 # Fail-closed allowlist of windowed demos. doctor.ps1 fails when a matching
-# scripts/*demo*.ps1, client/scripts/*demo*.gd, or main.gd --*-shots flag is
+# scripts/*_demo.ps1, client/scripts/*_demo.gd, or main.gd --*-shots flag is
 # absent from this file. Paths are repo-relative with forward slashes.
 # Lines starting with # are comments. Trailing # comments on entry lines are ok.
+# Helpers (marque-demo-lib.ps1, demo_npc_capture.gd) are not scanned.
 
-# scripts/*demo*.ps1
+# scripts/*_demo.ps1
 scripts/combat_demo.ps1  # retired ARM-203 stub; keep listed so doctor stays green
 scripts/contested_pickup_demo.ps1
 scripts/dummy_attack_demo.ps1
@@ -18,7 +19,7 @@ scripts/tab_combat_demo.ps1
 scripts/two_client_demo.ps1
 scripts/wasd_demo.ps1
 
-# client/scripts/*demo*.gd
+# client/scripts/*_demo.gd
 client/scripts/combat_demo.gd
 client/scripts/dummy_attack_demo.gd
 client/scripts/dummy_cast_demo.gd

@@ -152,10 +152,12 @@ One read-only check that answers "is this checkout worth driving?":
 
 `DOCTOR OK` means Go and Godot 4.7 answer on PATH and the repo has the server, the
 client, and both canonical scripts where this skill expects them. It also fails closed
-on windowed demos: every `scripts/*demo*.ps1`, every `client/scripts/*demo*.gd`, and
+on windowed demos: every `scripts/*_demo.ps1`, every `client/scripts/*_demo.gd`, and
 every `--*-shots` string literal in `client/scripts/main.gd` must appear in
 `.claude/skills/verify-marque/demo-allowlist.txt`. An unlisted file or flag fails
-doctor. There is no `.github/` workflow tree in this repo; **doctor is the gate**.
+doctor. Helpers such as `scripts/marque-demo-lib.ps1` and
+`client/scripts/demo_npc_capture.gd` are not windowed demos and are not scanned.
+There is no `.github/` workflow tree in this repo; **doctor is the gate**.
 It warns — with the exact warm-up command — when `client/.godot/` is missing. Run it
 first whenever anything looks off.
 

@@ -9,6 +9,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "marque-demo-lib.ps1")
+
 $SticksKind = "sticks"
 $QuestId = "bring_a_stick"
 $KitBagSlot = 0
@@ -30,21 +32,9 @@ New-Item -ItemType Directory -Path $work | Out-Null
 $binary = Join-Path $work "marqued.exe"
 $serverOut = Join-Path $OutDir "server.stdout.ndjson"
 $serverErr = Join-Path $OutDir "server.stderr.log"
-$evidenceMarker = Join-Path $OutDir ".marque-evidence"
 
 $server = $null
-$failures = New-Object System.Collections.Generic.List[string]
-
-function Add-Failure([string] $message) { $failures.Add($message) }
-
-function Show-File([string] $label, [string] $path) {
-    if (-not (Test-Path $path)) { return }
-    $content = Get-Content -Path $path -Raw
-    if ([string]::IsNullOrWhiteSpace($content)) { return }
-    Write-Host ""
-    Write-Host "--- $label ---"
-    Write-Host $content.TrimEnd()
-}
+$failures = New-MarqueDemoFailures
 
 function Read-ClientReport([string] $path) {
     $report = @{
@@ -105,50 +95,8 @@ function Read-ClientReport([string] $path) {
     return $report
 }
 
-function Read-GameLog([string] $path) {
-    $events = New-Object System.Collections.Generic.List[object]
-    if (-not (Test-Path $path)) { return , $events }
-    foreach ($line in Get-Content -Path $path) {
-        if (-not $line.StartsWith("GAMELOG ")) { continue }
-        $events.Add(($line.Substring(8) | ConvertFrom-Json))
-    }
-    return , $events
-}
-
-function Select-PlayerEvents($events, [string] $kind, [int] $player) {
-    $hits = New-Object System.Collections.Generic.List[object]
-    foreach ($event in $events) {
-        if ($event.ev -ne $kind) { continue }
-        if ($event.PSObject.Properties.Name -notcontains "player") { continue }
-        if ([int]$event.player -ne $player) { continue }
-        $hits.Add($event)
-    }
-    return , $hits
-}
-
-function Test-HasKind($slots, [string] $kind) {
-    if ($null -eq $slots) { return $false }
-    foreach ($key in $slots.Keys) {
-        if ($slots[$key] -eq $kind) { return $true }
-    }
-    return $false
-}
-
 try {
-    if (Test-Path $OutDir) {
-        $stale = @(Get-ChildItem -LiteralPath $OutDir -Force)
-        if ($stale.Count -gt 0) {
-            if (-not (Test-Path $evidenceMarker)) {
-                throw ("$OutDir is not empty and carries no .marque-evidence marker; refusing to run.")
-            }
-            Write-Host "==> clearing $($stale.Count) leftover item(s) from $OutDir"
-            Remove-Item -LiteralPath $stale.FullName -Recurse -Force
-        }
-    } else {
-        New-Item -ItemType Directory -Path $OutDir | Out-Null
-    }
-    Set-Content -LiteralPath $evidenceMarker -Encoding utf8 `
-        -Value "Evidence from scripts/quest_demo.ps1. Its next run empties this directory."
+    $null = Initialize-MarqueEvidenceDir -OutDir $OutDir -SourceScript "scripts/quest_demo.ps1"
 
     Write-Host "==> building marqued"
     Push-Location $serverDir
@@ -231,12 +179,7 @@ try {
         -RedirectStandardOutput $stdout -RedirectStandardError $stderr
     $null = $client.Handle
 
-    if ($client.WaitForExit($ClientTimeoutSeconds * 1000)) {
-        $client.WaitForExit()
-    } else {
-        Add-Failure "client did not finish within $ClientTimeoutSeconds seconds"
-        Stop-Process -Id $client.Id -Force -ErrorAction SilentlyContinue
-    }
+    $null = Wait-MarqueClient -Process $client -TimeoutSeconds $ClientTimeoutSeconds
 
     Show-File "client stdout" $stdout
     Show-File "client stderr" $stderr
@@ -392,12 +335,7 @@ try {
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
 
-Write-Host ""
-Write-Host "evidence (screenshots, client log, server event log): $OutDir"
-if ($failures.Count -eq 0) {
-    Write-Host "QUEST DEMO OK"
-    exit 0
-}
-Write-Host "QUEST DEMO FAILED"
-foreach ($failure in $failures) { Write-Host "  - $failure" }
-exit 1
+Write-MarqueDemoResult `
+    -OkMarker "QUEST DEMO OK" `
+    -FailMarker "QUEST DEMO FAILED" `
+    -EvidenceLine "evidence (screenshots, client log, server event log): $OutDir"

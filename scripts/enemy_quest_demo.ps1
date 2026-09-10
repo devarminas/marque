@@ -9,6 +9,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "marque-demo-lib.ps1")
+
 $QuestId = "slay_imps"
 $NeedKills = 5
 $CampId = "starter_town_imps"
@@ -38,22 +40,10 @@ New-Item -ItemType Directory -Path $work | Out-Null
 $binary = Join-Path $work "marqued.exe"
 $serverOut = Join-Path $OutDir "server.stdout.ndjson"
 $serverErr = Join-Path $OutDir "server.stderr.log"
-$evidenceMarker = Join-Path $OutDir ".marque-evidence"
 
 $server = $null
 $clients = @()
-$failures = New-Object System.Collections.Generic.List[string]
-
-function Add-Failure([string] $message) { $failures.Add($message) }
-
-function Show-File([string] $label, [string] $path) {
-    if (-not (Test-Path $path)) { return }
-    $content = Get-Content -Path $path -Raw
-    if ([string]::IsNullOrWhiteSpace($content)) { return }
-    Write-Host ""
-    Write-Host "--- $label ---"
-    Write-Host $content.TrimEnd()
-}
+$failures = New-MarqueDemoFailures
 
 function Read-ClientReport([string] $path) {
     $report = @{
@@ -149,37 +139,6 @@ function Read-ClientReport([string] $path) {
     return $report
 }
 
-function Read-GameLog([string] $path) {
-    $events = New-Object System.Collections.Generic.List[object]
-    if (-not (Test-Path $path)) { return , $events }
-    foreach ($line in Get-Content -Path $path) {
-        if (-not $line.StartsWith("GAMELOG ")) { continue }
-        $events.Add(($line.Substring(8) | ConvertFrom-Json))
-    }
-    return , $events
-}
-
-function Select-Events($events, [string] $kind, [int] $player = -1) {
-    $hits = New-Object System.Collections.Generic.List[object]
-    foreach ($event in $events) {
-        if ($event.ev -ne $kind) { continue }
-        if ($player -ge 0) {
-            if ($event.PSObject.Properties.Name -notcontains "player") { continue }
-            if ([int]$event.player -ne $player) { continue }
-        }
-        $hits.Add($event)
-    }
-    return , $hits
-}
-
-function Test-HasKind($slots, [string] $kind) {
-    if ($null -eq $slots) { return $false }
-    foreach ($key in $slots.Keys) {
-        if ($slots[$key] -eq $kind) { return $true }
-    }
-    return $false
-}
-
 function Test-MidchaseMotion($report) {
     if ($report.MidchaseWalking -ge 1 -or $report.MidchaseHasPath -ge 1) {
         return $true
@@ -202,20 +161,7 @@ function Test-MidchaseMotion($report) {
 }
 
 try {
-    if (Test-Path $OutDir) {
-        $stale = @(Get-ChildItem -LiteralPath $OutDir -Force)
-        if ($stale.Count -gt 0) {
-            if (-not (Test-Path $evidenceMarker)) {
-                throw ("$OutDir is not empty and carries no .marque-evidence marker; refusing to run.")
-            }
-            Write-Host "==> clearing $($stale.Count) leftover item(s) from $OutDir"
-            Remove-Item -LiteralPath $stale.FullName -Recurse -Force
-        }
-    } else {
-        New-Item -ItemType Directory -Path $OutDir | Out-Null
-    }
-    Set-Content -LiteralPath $evidenceMarker -Encoding utf8 `
-        -Value "Evidence from scripts/enemy_quest_demo.ps1. Its next run empties this directory."
+    $null = Initialize-MarqueEvidenceDir -OutDir $OutDir -SourceScript "scripts/enemy_quest_demo.ps1"
 
     Write-Host "==> building marqued"
     Push-Location $serverDir
@@ -307,21 +253,9 @@ try {
         }
     }
 
-    $deadline = (Get-Date).AddSeconds($ClientTimeoutSeconds)
-    while ((Get-Date) -lt $deadline) {
-        $alive = @($clients | Where-Object { -not $_.Process.HasExited })
-        if ($alive.Count -eq 0) { break }
-        Start-Sleep -Milliseconds 200
-    }
+    Wait-MarqueClients -Clients $clients -TimeoutSeconds $ClientTimeoutSeconds
 
     foreach ($client in $clients) {
-        if (-not $client.Process.HasExited) {
-            Add-Failure "client-$($client.Name) did not finish within $ClientTimeoutSeconds seconds"
-            Stop-Process -Id $client.Process.Id -Force -ErrorAction SilentlyContinue
-            $client.Process.WaitForExit(5000) | Out-Null
-        } else {
-            $client.Process.WaitForExit() | Out-Null
-        }
         Show-File "client-$($client.Name) stdout" $client.Stdout
         Show-File "client-$($client.Name) stderr" $client.Stderr
         if ($client.Process.HasExited) {
@@ -540,12 +474,7 @@ try {
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
 
-Write-Host ""
-Write-Host "evidence (screenshots, client logs, server event log): $OutDir"
-if ($failures.Count -eq 0) {
-    Write-Host "ENEMY QUEST DEMO OK"
-    exit 0
-}
-Write-Host "ENEMY QUEST DEMO FAILED"
-foreach ($failure in $failures) { Write-Host "  - $failure" }
-exit 1
+Write-MarqueDemoResult `
+    -OkMarker "ENEMY QUEST DEMO OK" `
+    -FailMarker "ENEMY QUEST DEMO FAILED" `
+    -EvidenceLine "evidence (screenshots, client logs, server event log): $OutDir"
