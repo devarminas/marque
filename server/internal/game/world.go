@@ -25,6 +25,9 @@ const PoseIdleEveryTicks int64 = 25
 // Tuning: ARM-13.
 const WalkSpeed = 3.0
 
+const JumpSpeed = 5.0
+const Gravity = 20.0
+
 const WorldHalfExtent = 128.0
 
 const MinPathLength = 1e-3
@@ -170,7 +173,8 @@ type player struct {
 
 	pos Point
 
-	y float64
+	y  float64
+	vy float64
 
 	remaining []Point
 
@@ -343,11 +347,16 @@ func (w *World) step() {
 		w.broadcast(mnet.Tick{T: w.tick}, nil)
 	}
 	w.regenMana()
-	distance := WalkSpeed * TickDuration.Seconds()
+	dt := TickDuration.Seconds()
+	distance := WalkSpeed * dt
 
 	for _, p := range w.order {
 		if p.steering() {
-			w.stepSteer(p, distance)
+			xzMoved := w.stepSteer(p, distance)
+			yMoved := w.stepVertical(p, dt)
+			if xzMoved || yMoved {
+				w.broadcastPose(p)
+			}
 			continue
 		}
 		if p.walking() {
@@ -359,7 +368,13 @@ func (w *World) step() {
 					"z":      p.pos.Z,
 				})
 			}
+			if w.stepVertical(p, dt) {
+				w.broadcastPose(p)
+			}
 			continue
+		}
+		if w.stepVertical(p, dt) {
+			w.broadcastPose(p)
 		}
 	}
 
