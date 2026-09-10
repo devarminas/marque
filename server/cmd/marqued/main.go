@@ -203,6 +203,11 @@ func run() error {
 			return err
 		}
 	}
+	for _, smelter := range game.StarterTownSmelters {
+		if err := world.SeedResourceNode(game.KindSmelter, smelter.X, smelter.Z); err != nil {
+			return err
+		}
+	}
 	if err := world.SeedPracticeDummies(); err != nil {
 		return err
 	}

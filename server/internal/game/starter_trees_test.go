@@ -42,3 +42,28 @@ func TestStarterTownRocksAreOnRoad(t *testing.T) {
 		t.Fatalf("StarterTownRocks missing primary rock (%v,%v)", SeedRockX, SeedRockZ)
 	}
 }
+
+func TestStarterTownSmeltersAreOnRoad(t *testing.T) {
+	if len(StarterTownSmelters) < 1 {
+		t.Fatalf("StarterTownSmelters has %d entries, want at least 1", len(StarterTownSmelters))
+	}
+	seen := map[Point]struct{}{}
+	for _, p := range StarterTownTrees {
+		seen[p] = struct{}{}
+	}
+	for _, p := range StarterTownRocks {
+		seen[p] = struct{}{}
+	}
+	for _, p := range StarterTownSmelters {
+		if _, ok := seen[p]; ok {
+			t.Fatalf("starter smelter overlaps a node at %+v", p)
+		}
+		seen[p] = struct{}{}
+		if reason, detail := checkCoordinates(p.X, p.Z); reason != "" {
+			t.Fatalf("starter smelter %+v: %s (%s)", p, reason, detail)
+		}
+	}
+	if _, ok := seen[Point{X: SeedSmelterX, Z: SeedSmelterZ}]; !ok {
+		t.Fatalf("StarterTownSmelters missing primary smelter (%v,%v)", SeedSmelterX, SeedSmelterZ)
+	}
+}

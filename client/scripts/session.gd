@@ -227,6 +227,7 @@ func _ready() -> void:
 	else:
 		_picker.item_clicked.connect(_on_item_clicked)
 		_picker.node_gather_clicked.connect(_on_node_gather_clicked)
+		_picker.node_clicked.connect(_on_node_clicked)
 		_picker.player_clicked.connect(_on_player_clicked)
 		_picker.player_attack_clicked.connect(_on_player_attack_clicked)
 
@@ -1151,6 +1152,10 @@ func _on_node_gather_clicked(body: Node3D) -> void:
 			"session: the picker reported a click on %s, which is not a resource node" % body
 		)
 		return
+	if _try_use_on_node(resource_node):
+		return
+	if not resource_node.is_gatherable():
+		return
 	var id := _id_of_node_body(resource_node)
 	if id == 0:
 		push_warning(
@@ -1159,6 +1164,31 @@ func _on_node_gather_clicked(body: Node3D) -> void:
 		)
 		return
 	request_gather(id)
+
+
+func _on_node_clicked(body: Node3D) -> void:
+	var resource_node := body as ResourceNodeScript
+	if resource_node == null:
+		push_error(
+			"session: the picker reported a click on %s, which is not a resource node" % body
+		)
+		return
+	_try_use_on_node(resource_node)
+
+
+func _try_use_on_node(resource_node: ResourceNodeScript) -> bool:
+	if not has_pending_use():
+		return false
+	var id := _id_of_node_body(resource_node)
+	if id == 0:
+		push_warning(
+			"session: clicked a node body this session has no registry entry for (%s); ignoring"
+			% resource_node.name
+		)
+		return true
+	var from := _use_from
+	request_use(from, id)
+	return true
 
 
 func _on_player_clicked(body: Node3D) -> void:

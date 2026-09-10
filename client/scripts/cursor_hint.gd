@@ -2,6 +2,7 @@ extends Node
 
 const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
+const ResourceNodeScript := preload("res://scripts/resource_node.gd")
 
 enum Hint {
 	POINTER,
@@ -98,7 +99,10 @@ func over_chrome() -> bool:
 static func hint_for(picked: Dictionary, own_avatar: Node3D) -> Hint:
 	match picked["target"]:
 		GroundPickerScript.Target.NODE:
-			return Hint.CHOP
+			var resource_node := picked["node"] as ResourceNodeScript
+			if resource_node != null and resource_node.is_gatherable():
+				return Hint.CHOP
+			return Hint.POINTER
 		GroundPickerScript.Target.PLAYER:
 			var dummy := picked["player"] as NpcDummyScript
 			if dummy != null:
