@@ -105,7 +105,7 @@ func TestAdvanceRejectsNegativeDistance(t *testing.T) {
 func TestTickConstantIsTheDecidedOne(t *testing.T) {
 	t.Parallel()
 
-	if game.TickDuration.Milliseconds() != 150 {
-		t.Fatalf("TickDuration is %v, want 150ms", game.TickDuration)
+	if game.TickDuration.Milliseconds() != 40 {
+		t.Fatalf("TickDuration is %v, want 40ms", game.TickDuration)
 	}
 }

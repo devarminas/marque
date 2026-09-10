@@ -4,7 +4,7 @@
       "id": "heal",
       "name": "Heal",
       "mana_cost": 20,
-      "cooldown_ticks": 10,
+      "cooldown_ticks": 38,
       "range": 8,
       "target": "friendly",
       "effect": {
@@ -20,8 +20,8 @@
       "id": "fireball",
       "name": "Fireball",
       "mana_cost": 35,
-      "cooldown_ticks": 8,
-      "cast_ticks": 8,
+      "cooldown_ticks": 30,
+      "cast_ticks": 30,
       "range": 8,
       "target": "hostile",
       "effect": {

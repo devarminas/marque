@@ -46,7 +46,7 @@ func TestGatherWalkThenYieldsAfterDuration(t *testing.T) {
 	node := pw.seedTree()
 
 	pw.gather(alice, node.id)
-	for i := 0; i < 40 && (alice.gatherNode != 0 || alice.walking()); i++ {
+	for i := 0; i < 200 && (alice.gatherNode != 0 || alice.walking()); i++ {
 		pw.w.step()
 	}
 	if alice.walking() {

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	CastGraceTicks = 2
+	CastGraceTicks = 8
 
 	EvCastBegin     = "cast_begin"
 	EvCastCancelled = "cast_cancelled"
