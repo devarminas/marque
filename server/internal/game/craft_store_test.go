@@ -83,3 +83,81 @@ func TestCraftFillsTheLowestFreeSlotAfterConsume(t *testing.T) {
 		t.Fatalf("sticks landed in slot %d, want 1 (emptied ingredient, lowest free after consume)", done.Into)
 	}
 }
+
+func TestCraftBarAndSticksIntoSword(t *testing.T) {
+	s := NewMemoryStore(NoWearables)
+	s.AddPlayer(1)
+	if _, err := s.SpawnInventoryItem(1, KindCopperBar); err != nil {
+		t.Fatalf("seeding copper_bar: %v", err)
+	}
+	if _, err := s.SpawnInventoryItem(1, KindSticks); err != nil {
+		t.Fatalf("seeding sticks: %v", err)
+	}
+
+	done, err := s.CraftInventoryRecipe(1, 0, []string{KindCopperBar, KindSticks}, KindSword)
+	if err != nil {
+		t.Fatalf("craft: %v", err)
+	}
+	if done.Consume != KindCopperBar || done.Produce != KindSword {
+		t.Fatalf("crafted %+v, want copper_bar→sword", done)
+	}
+	got := s.Inventory(1)
+	if len(got) != 1 || got[0].Kind != KindSword {
+		t.Fatalf("inventory %+v, want one sword", got)
+	}
+}
+
+func TestCraftSwordFromSticksSlot(t *testing.T) {
+	s := NewMemoryStore(NoWearables)
+	s.AddPlayer(1)
+	if _, err := s.SpawnInventoryItem(1, KindCopperBar); err != nil {
+		t.Fatalf("seeding copper_bar: %v", err)
+	}
+	if _, err := s.SpawnInventoryItem(1, KindSticks); err != nil {
+		t.Fatalf("seeding sticks: %v", err)
+	}
+
+	done, err := s.CraftInventoryRecipe(1, 1, []string{KindCopperBar, KindSticks}, KindSword)
+	if err != nil {
+		t.Fatalf("craft: %v", err)
+	}
+	if done.From != 1 || done.Consume != KindSticks || done.Produce != KindSword {
+		t.Fatalf("crafted %+v, want sticks slot → sword", done)
+	}
+	got := s.Inventory(1)
+	if len(got) != 1 || got[0].Kind != KindSword {
+		t.Fatalf("inventory %+v, want one sword", got)
+	}
+}
+
+func TestCraftSwordRefusesMissingSticks(t *testing.T) {
+	s := NewMemoryStore(NoWearables)
+	s.AddPlayer(1)
+	if _, err := s.SpawnInventoryItem(1, KindCopperBar); err != nil {
+		t.Fatalf("seeding copper_bar: %v", err)
+	}
+
+	if _, err := s.CraftInventoryRecipe(1, 0, []string{KindCopperBar, KindSticks}, KindSword); !errors.Is(err, ErrNoRecipe) {
+		t.Fatalf("craft returned %v, want ErrNoRecipe", err)
+	}
+	got := s.Inventory(1)
+	if len(got) != 1 || got[0].Kind != KindCopperBar {
+		t.Fatalf("inventory %+v after refuse, want the copper_bar unchanged", got)
+	}
+}
+
+func TestCraftSwordRefusesMissingBar(t *testing.T) {
+	s := NewMemoryStore(NoWearables)
+	s.AddPlayer(1)
+	if _, err := s.SpawnInventoryItem(1, KindSticks); err != nil {
+		t.Fatalf("seeding sticks: %v", err)
+	}
+
+	if _, err := s.CraftInventoryRecipe(1, 0, []string{KindCopperBar, KindSticks}, KindSword); !errors.Is(err, ErrNoRecipe) {
+		t.Fatalf("craft returned %v, want ErrNoRecipe", err)
+	}
+	got := s.Inventory(1)
+	if len(got) != 1 || got[0].Kind != KindSticks {
+		t.Fatalf("inventory %+v after refuse, want the sticks unchanged", got)
+	}
+}

@@ -10,13 +10,57 @@ import (
 
 const KindSticks = "sticks"
 
+type selfUseRecipe struct {
+	Consumes []string
+	Produce  string
+}
+
+var selfUseRecipes = []selfUseRecipe{
+	{Consumes: []string{KindLogs}, Produce: KindSticks},
+	{Consumes: []string{KindCopperBar, KindSticks}, Produce: KindSword},
+}
+
+func selfUseRecipeFor(kind string) (selfUseRecipe, bool) {
+	for _, recipe := range selfUseRecipes {
+		for _, need := range recipe.Consumes {
+			if need == kind {
+				return recipe, true
+			}
+		}
+	}
+	return selfUseRecipe{}, false
+}
+
 func (w *World) use(p *player, msg mnet.Use, seq mnet.Seq) {
 	if msg.On != msg.Slot {
 		w.useOnStation(p, msg, seq)
 		return
 	}
 
-	done, err := w.items.CraftInventorySlot(p.id, msg.Slot, KindLogs, KindSticks)
+	if msg.Slot < 0 || msg.Slot >= InventorySize {
+		w.refuseCraft(p, msg.Slot, ErrNoSuchSlot)
+		return
+	}
+
+	kind := ""
+	for _, held := range w.items.Inventory(p.id) {
+		if held.Index == msg.Slot {
+			kind = held.Kind
+			break
+		}
+	}
+	if kind == "" {
+		w.refuseCraft(p, msg.Slot, ErrEmptySlot)
+		return
+	}
+
+	recipe, ok := selfUseRecipeFor(kind)
+	if !ok {
+		w.refuseCraft(p, msg.Slot, ErrNoRecipe)
+		return
+	}
+
+	done, err := w.items.CraftInventoryRecipe(p.id, msg.Slot, recipe.Consumes, recipe.Produce)
 	if err != nil {
 		w.refuseCraft(p, msg.Slot, err)
 		return

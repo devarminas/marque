@@ -152,6 +152,91 @@ func TestDuplicateUseSeqDoesNotCraftTwice(t *testing.T) {
 	}
 }
 
+func TestUseCraftsSwordFromCopperBarAndSticks(t *testing.T) {
+	h := newHarnessWithKit(t, []string{game.KindCopperBar, game.KindSticks})
+
+	alice := h.dial("alice")
+	alice.welcome()
+
+	alice.use(0, 0)
+
+	inv := alice.awaitInventory()
+	if len(inv.Slots) != 1 || inv.Slots[0].Kind != game.KindSword {
+		t.Fatalf("inventory %+v, want one sword", inv.Slots)
+	}
+	done := h.awaitEvents(game.EvUse, 1)
+	if got := done[0]["from"]; got != game.KindCopperBar {
+		t.Errorf("%s from=%v, want %q", game.EvUse, got, game.KindCopperBar)
+	}
+	if got := done[0]["to"]; got != game.KindSword {
+		t.Errorf("%s to=%v, want %q", game.EvUse, got, game.KindSword)
+	}
+	alice.expectSilence()
+}
+
+func TestUseCopperBarWithoutSticksIsRefused(t *testing.T) {
+	h := newHarnessWithKit(t, []string{game.KindCopperBar})
+
+	alice := h.dial("alice")
+	world := alice.welcome()
+
+	alice.use(0, 0)
+
+	got := alice.awaitError()
+	if got.Re != mnet.MsgUse {
+		t.Fatalf("refusal names %q, want %q: %+v", got.Re, mnet.MsgUse, got)
+	}
+	rejected := h.awaitEvents(game.EvUseRejected, 1)
+	if r := rejected[0]["reason"]; r != string(mnet.ReasonNoRecipe) {
+		t.Errorf("%s reason %v, want %q", game.EvUseRejected, r, mnet.ReasonNoRecipe)
+	}
+
+	alice.destroy()
+	resumed := readJoinStep(h.dialResume("alice-again", world.Session))
+	if len(resumed.inventory.Slots) != 1 || resumed.inventory.Slots[0].Kind != game.KindCopperBar {
+		t.Fatalf("bag %+v after refuse, want the copper_bar untouched", resumed.inventory.Slots)
+	}
+	if crafted := h.eventsNamed(game.EvUse); len(crafted) != 0 {
+		t.Fatalf("logged %s on a refuse: %+v", game.EvUse, crafted)
+	}
+}
+
+func TestCraftedSwordStillEquipsRightHand(t *testing.T) {
+	h := newHarnessWithKit(t, []string{game.KindCopperBar, game.KindSticks})
+
+	alice := h.dial("alice")
+	alice.welcome()
+
+	alice.use(0, 0)
+	inv := alice.awaitInventory()
+	if len(inv.Slots) != 1 || inv.Slots[0].Kind != game.KindSword {
+		t.Fatalf("craft left %+v, want one sword", inv.Slots)
+	}
+	swordSlot := inv.Slots[0].Slot
+	h.awaitEvents(game.EvUse, 1)
+
+	alice.equip(swordSlot)
+	h.awaitEvents(game.EvEquip, 1)
+	frames := alice.collect(silenceWindow)
+	var held mnet.Inventory
+	var worn mnet.Equipment
+	for _, f := range frames {
+		switch {
+		case f.Inventory != nil:
+			held = *f.Inventory
+		case f.Equipment != nil:
+			worn = *f.Equipment
+		}
+	}
+	kind, ok := wornKind(worn, game.SlotRightHand)
+	if !ok || kind != game.KindSword {
+		t.Fatalf("equipment %+v, want sword in right hand", worn.Slots)
+	}
+	if len(held.Slots) != 0 {
+		t.Fatalf("bag %+v after equip, want empty", held.Slots)
+	}
+}
+
 func TestDecodeUse(t *testing.T) {
 	t.Parallel()
 

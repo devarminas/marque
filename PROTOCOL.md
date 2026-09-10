@@ -40,7 +40,8 @@ with this file: the third entity family, `gather`, node restatement frames, clas
 was axe gate in M4a), deplete
 and respawn, and contested first-completer-wins. **M4c** is the server half of one craft recipe
 and is shipped with this file: the `use` intent and logs→sticks. **ARM-215** extends `use` with
-station use-on (`copper_ore`→`copper_bar` at a seeded `smelter` node). A marker reading plain **M4**
+station use-on (`copper_ore`→`copper_bar` at a seeded `smelter` node). **ARM-216** adds a
+self-use recipe `copper_bar` + `sticks` → existing `sword`. A marker reading plain **M4**
 is reserved. The client draw of nodes is a later unit and nothing under an **M4a** or **M4c**
 marker describes it.
 
@@ -397,14 +398,14 @@ A name it does not have is refused, and so is one it has but that holds nothing.
 A request to chop a resource node. `node` is a node id, which is **not** a player id and **not**
 an item id; see *Entity naming*. Semantics are in *Gathering*.
 
-### `use`. **M4c** / **ARM-215**
+### `use`. **M4c** / **ARM-215** / **ARM-216**
 
     {"use":{"slot":3,"on":3}}
     {"use":{"slot":0,"on":4}}
 
 A request to use the item in bag slot `slot`. When `on` equals `slot`, that is self-use (M4c
-logs→sticks). When `on` differs, `on` names a resource-node id for station use-on (ARM-215
-smelter). Semantics are in *Crafting*.
+logs→sticks; ARM-216 copper_bar+sticks→sword). When `on` differs, `on` names a resource-node id
+for station use-on (ARM-215 smelter). Semantics are in *Crafting*.
 
 ### `attack`. **M5a** / **ARM-203**
 
@@ -1365,30 +1366,32 @@ any other pending gather for that node then refuses/empties with no second yield
 completion into the turn-in player's `ClassOf` skill), `XPPerLevel = 100`. No active class means
 no kill/quest XP. Levels still unlock nothing.
 
-## Crafting. **M4c** / **ARM-215**
+## Crafting. **M4c** / **ARM-215** / **ARM-216**
 
-M4c ships exactly one self-use recipe: consume one `logs` and produce one `sticks`. **M4a** already
-named `logs` as the gather yield; **M4c** adds `sticks` as a kind. **ARM-215** adds station
-use-on: consume one `copper_ore` at a `smelter` node and produce one `copper_bar`. Nothing stacks;
-one item per slot still holds.
+M4c ships self-use `logs` → `sticks`. **M4a** already named `logs` as the gather yield; **M4c**
+adds `sticks` as a kind. **ARM-215** adds station use-on: consume one `copper_ore` at a `smelter`
+node and produce one `copper_bar`. **ARM-216** adds self-use `copper_bar` + one `sticks` → the
+existing `sword` kind (no new sword kind; no anvil). Self-use recipes live in one table keyed by
+the kind in the used bag slot; multi-ingredient recipes also consume matching kinds from other
+bag slots in the same Store transaction. Nothing stacks; one item per slot still holds.
 
 ### `use` is immediate
 
 - **`use` resolves on receipt.** No walk, no pending, no duration. Unlike `gather` and
   `pickup`, arriving is not part of the action.
-- **Self-use when `on` equals `slot`.** The M4c recipe converts the `logs` in that bag slot into
-  `sticks`. Later units may teach `on` a second bag slot; this one does not.
+- **Self-use when `on` equals `slot`.** The used slot must hold a kind that starts a self-use
+  recipe. One-for-one: `logs` → `sticks`. Multi-ingredient: `copper_bar` or `sticks` starts the
+  sword recipe and also consumes the other ingredient from another bag slot. `on` is not a second
+  bag slot; station use-on already owns `on` ≠ `slot`.
 - **Station use-on when `on` differs from `slot`.** `on` names a resource-node id. The named
   node must be a station (`smelter`). The player must stand within `StationRange` (`PickupRange`).
   The bag slot must hold a kind the station accepts (`copper_ore` at `smelter` → `copper_bar`).
   A frame whose `on` is not a live station, or whose slot holds the wrong kind, is refused as
   `no_recipe`. Out of range is `out_of_range`. An empty slot is `empty_slot`.
-- **Consume then produce, in one Store transaction.** The ingredient leaves `slot`. One product
-  lands in the **lowest free bag slot**. Room is checked **before** the consume: a full bag
-  refuses with `inventory_full` even though emptying the ingredient slot would free space. That keeps
-  "no room for the product" a real refusal for a one-for-one recipe, matching `unequip`'s full-bag
-  path rather than inventing an in-place rewrite. Revisitable when a recipe should replace
-  in place.
+- **Consume then produce, in one Store transaction.** Every ingredient leaves its bag slot. One
+  product lands in the **lowest free bag slot**. Room uses `empty + consumed_slots >= 2` for a
+  single product: a full bag still refuses a one-for-one craft with `inventory_full` (no in-place
+  rewrite), while a two-for-one craft on a full bag succeeds.
 - **One `inventory` restatement** on success. Nothing is broadcast: the bag is private.
 - **Duplicate `seq` does not craft twice**, under *Sequence numbers*' ordinary high-water mark.
   A refused `use` still consumes a valid `seq`.
@@ -1399,16 +1402,17 @@ The server answers with `error` naming `use`, and the bag is exactly as it was, 
 
 - `slot` is outside `0 .. inventory.size-1` (`no_such_slot`)
 - `slot` is empty (`empty_slot`)
-- self-use (`on` = `slot`) and `slot` holds anything other than `logs` (`no_recipe`)
+- self-use (`on` = `slot`) and the slot kind has no self-use recipe, or a required extra
+  ingredient is missing (`no_recipe`)
 - station use-on and `on` is not a live station, or the slot kind has no station recipe (`no_recipe`)
 - station use-on and the player is farther than `StationRange` (`out_of_range`)
-- the bag has no free slot for the product (`inventory_full`)
+- the bag has no free slot for the product after the planned consumes (`inventory_full`)
 
-### Log vocabulary. **M4c** / **ARM-215**
+### Log vocabulary. **M4c** / **ARM-215** / **ARM-216**
 
 | Event | Fields | When |
 |---|---|---|
-| `use` | `player`, `slot`, `on`, `from`, `to`, `seq`, `station` | one completed craft (`from` is the consumed kind, `to` the produced kind; `seq` when the frame carried one; `station` is the node id on station use-on and is omitted on self-use) |
+| `use` | `player`, `slot`, `on`, `from`, `to`, `seq`, `station` | one completed craft (`from` is the kind that was in the used slot, `to` the produced kind; extra consumed kinds are not listed; `seq` when the frame carried one; `station` is the node id on station use-on and is omitted on self-use) |
 | `use_rejected` | `player`, `reason`, `detail`, `re` | a `use` refused on receipt |
 
 `use_rejected.reason` is one of `no_such_slot`, `empty_slot`, `no_recipe`, `out_of_range`, or `inventory_full`.
