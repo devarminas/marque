@@ -29,6 +29,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/contested_pickup_demo.ps1` | `CONTESTED PICKUP DEMO OK` |
 | `scripts/equip_demo.ps1` | `EQUIP DEMO OK` |
 | `scripts/gather_craft_demo.ps1` | `GATHER CRAFT DEMO OK` |
+| `scripts/craft_cast_demo.ps1` | `CRAFT CAST DEMO OK` |
 | `scripts/gather_error_demo.ps1` | `GATHER ERROR DEMO OK` |
 | `scripts/dummy_cast_demo.ps1` | `DUMMY CAST DEMO OK` |
 | `scripts/dummy_attack_demo.ps1` | `DUMMY ATTACK DEMO OK` |
@@ -182,6 +183,7 @@ enforces the allowlist; the skill text alone is not enough.
 | `--drop-click fx,fy` | Where the winner of that contest clicks the ground before dropping, as viewport fractions. Required alongside `--pickup-shots`, and refused rather than defaulted if it will not parse. |
 | `--equip-shots <abs-prefix>` | Enter the equip milestone demo mode (`equip_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M3d.** Single client; the demo starts marqued with `-join-kit sword`. Absolute host path required. |
 | `--gather-craft-shots <abs-prefix>` | Enter the gather-then-craft milestone demo mode (`gather_craft_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M4e.** Two clients; both equip then race the primary seeded tree at (5, 0). Absolute host path required. |
+| `--craft-cast-shots <abs-prefix>` | Enter the M12 craft+cast milestone demo (`craft_cast_demo.gd`); write `<prefix>_1.png` … `<prefix>_6.png`. Single client: mine→smelt→craft sword, then fireball cast-bar resolve and walk interrupt. Absolute host path required. |
 | `--gather-error-shots <abs-prefix>` | Enter the refused-gather demo mode (`gather_error_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **ARM-147.** One client; right-clicks the tree unarmed, reads the refusal, wears a ground-seeded lumberjack set, chops. Absolute host path required. |
 | `--combat-shots <abs-prefix>` | Still wired in `main.gd` / `combat_demo.gd`, but **`scripts/combat_demo.ps1` is retired** (ARM-203 stub, exit 0, no marker). Do not drive the PS1 for proof. |
 | `--combat-role attacker\|victim` | Paired with `--combat-shots`. Same retired-PS1 rule. |

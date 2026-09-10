@@ -7,10 +7,12 @@ const NetClientScript := preload("res://scripts/net_client.gd")
 const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
+const CastBarScript := preload("res://scripts/cast_bar.gd")
 const PickupDemoScript := preload("res://scripts/pickup_demo.gd")
 const EquipDemoScript := preload("res://scripts/equip_demo.gd")
 const GatherCraftDemoScript := preload("res://scripts/gather_craft_demo.gd")
 const GatherErrorDemoScript := preload("res://scripts/gather_error_demo.gd")
+const CraftCastDemoScript := preload("res://scripts/craft_cast_demo.gd")
 const CombatDemoScript := preload("res://scripts/combat_demo.gd")
 const DummyCastDemoScript := preload("res://scripts/dummy_cast_demo.gd")
 const DummyAttackDemoScript := preload("res://scripts/dummy_attack_demo.gd")
@@ -44,6 +46,7 @@ const EQUIP_SHOTS_FLAG := "--equip-shots"
 const GATHER_CRAFT_SHOTS_FLAG := "--gather-craft-shots"
 
 const GATHER_ERROR_SHOTS_FLAG := "--gather-error-shots"
+const CRAFT_CAST_SHOTS_FLAG := "--craft-cast-shots"
 
 const COMBAT_SHOTS_FLAG := "--combat-shots"
 const DUMMY_CAST_FLAG := "--dummy-cast"
@@ -90,6 +93,9 @@ func _ready() -> void:
 		return
 	if GATHER_ERROR_SHOTS_FLAG in args:
 		await _run_gather_error_demo(args)
+		return
+	if CRAFT_CAST_SHOTS_FLAG in args:
+		await _run_craft_cast_demo(args)
 		return
 	if COMBAT_SHOTS_FLAG in args:
 		await _run_combat_demo(args)
@@ -249,6 +255,27 @@ func _run_gather_error_demo(args: Array) -> void:
 
 	var demo := GatherErrorDemoScript.new()
 	var code: int = await demo.run(self, session, inventory, equipment, error_hud, prefix)
+	get_tree().quit(code)
+
+
+func _run_craft_cast_demo(args: Array) -> void:
+	var prefix := _argument_after(args, CRAFT_CAST_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % CRAFT_CAST_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+
+	var session := get_node_or_null("Session") as SessionScript
+	var inventory := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
+	var equipment := get_node_or_null("UI/RightDock") as EquipmentPanelScript
+	var cast_bar := get_node_or_null("UI/CastBar") as CastBarScript
+	if session == null or inventory == null or equipment == null or cast_bar == null:
+		push_error("main.tscn is missing Session, UI/RightDock, or UI/CastBar")
+		get_tree().quit(1)
+		return
+
+	var demo := CraftCastDemoScript.new()
+	var code: int = await demo.run(self, session, inventory, equipment, cast_bar, prefix)
 	get_tree().quit(code)
 
 
