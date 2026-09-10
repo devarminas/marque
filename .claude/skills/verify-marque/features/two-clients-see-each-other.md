@@ -23,12 +23,24 @@ interpolates the polyline it was handed. That sabotage was run against this exac
 scenario and the demo passed it, with displacements byte-identical to a healthy run,
 until `see-server-moved` existed.
 
+Minimum evidence:
+
+| Claim | GAMELOG | DEMO | Pixel |
+|---|---|---|---|
+| Walker moved | `move_to`, `path_assigned` span ≥2.0, `arrived` at endpoint | `DEMO pos` displacement ≥2.0 on walker | walker top-quarter fails quiet band |
+| Watcher saw it | (same `arrived`) | watcher `DEMO pos` for walker id | watcher frame-pair diff in [0.2%, 10%] |
+| Camera still | n/a | n/a | watcher top quarter quiet (<0.5% px, Δ≤2) |
+| Layers agree | phase-1 `arrived` xyz | both clients' shot-4 `DEMO pos` within 0.05 | optional |
+
 ## How to get to it (user POV)
 
 - Two people launch clients against one server; one clicks the ground while the
   other stands still, then they swap.
 
 ## Driving it with scripts/two_client_demo.ps1
+
+Default driver rung: **live windowed demo** (pixels + two-client phases). Go
+proves path assignment and arrival math; it cannot prove the still-camera band.
 
 Preconditions:
 
@@ -70,6 +82,8 @@ Preconditions:
 
 ## Gotchas
 
+- **Both layers or it is half-proven.** `DEMO pos` alone is client interpolation;
+  `arrived` alone is server belief. Movement claims need both.
 - **The sky-band flake waiver is retired (ARM-183).** The still-camera control no
   longer demands byte-exactness, so the GPU noise that used to trip it is inside the
   tolerance. A top-quarter failure is a finding, not something to rerun away. See

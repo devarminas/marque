@@ -1,69 +1,58 @@
-# Kill and respawn (PvP combat)
+# Kill and respawn
 
-The M5 milestone: two clients place themselves outside `AttackRange`, the
-attacker click-engages the victim, walks in, lands period hits of 10 until HP
-0, the victim shows the death overlay, respawns to HP 100, and can act again.
+M5 combat outcomes: period hits to death, death overlay, respawn to full HP, act
+again. The two-client PvP windowed demo (`scripts/combat_demo.ps1`) is **retired**
+(ARM-203; PvP attack refused). Live proof now uses NPC demos; player death/respawn
+store rules stay on the Go rung.
 
 ## Sub-features
 
-- `out-of-range-engage` — shot 1 distance exceeds `AttackRange`; GAMELOG has
-  `attack` then a `path_assigned` for the attacker (walk-in, not an in-range
-  degenerate hit).
-- `period-hits-to-death` — exactly ten `attack_hit` events of damage 10 with
-  descending `target_hp` to 0, plus one `death`.
-- `death-overlay-then-respawn` — victim shot 2 reports overlay visible and HP 0;
-  shot 3 reports overlay hidden and HP 100; GAMELOG has one `respawn`.
-- `act-after-respawn` — victim issues a post-respawn `move_to` via the demo API
-  (`request_move_to`); GAMELOG has a `move_to` at or after that `respawn`. UI
-  players would use WASD instead (ARM-145).
-- `demo-pass` — harness exits 0 with `COMBAT DEMO OK` as its last line, and both
-  clients print `DEMO done`.
+- `period-hits` — GAMELOG `attack` / `attack_hit` on a hostile (dummy or player
+  under Go). Live: ≥1 `attack_hit` via `dummy_attack_demo.ps1`.
+- `death-and-respawn` — Go: `death` then `respawn` restores HP 100 / clears walk
+  (`server/internal/game/combat_test.go`). No live PvP recipe.
+- `act-after-respawn` — Go: post-respawn intents accepted; refused when not dead
+  (`respawn_rejected`).
+- `live-melee-loop` — `tab_combat_demo.ps1` covers right-click attack among cast
+  and WASD (`TAB COMBAT DEMO OK`).
+- `demo-pass` — live markers are `DUMMY ATTACK DEMO OK` or `TAB COMBAT DEMO OK`
+  on the last line with exit 0. Never require `COMBAT DEMO OK`.
+
+Minimum evidence:
+
+| Claim | GAMELOG | DEMO | Pixel | Default rung |
+|---|---|---|---|---|
+| Melee hits land | `attack`, `attack_hit` | `attackok` / attack DEMO | optional | live `dummy_attack` |
+| Player death/respawn | `death`, `respawn`, HP 100 | n/a (no live PvP) | n/a | **Go** |
+| Tab combat loop | `cast_effect`, `attack_hit`, `move` | fireball/heal/attack/move DEMO | optional | live `tab_combat` |
 
 ## How to get to it (user POV)
 
-- Walk away from the other player until you are outside melee range. Right-click
-  their body: you path in and hit every `AttackPeriodTicks` for 10 damage until
-  they die. (Left-click only selects; it does not attack.) On death the overlay
-  appears; press Respawn to return to full HP at the join spawn, then move again.
+- Right-click a hostile practice dummy: you path in and land period hits.
+- Player death overlay and Respawn are still in the client UI; exercise them via
+  Go when proving store rules. Do not run `combat_demo.ps1` for proof.
 
-## Driving it with scripts/combat_demo.ps1
+## Driving it with dummy_attack / tab_combat (not combat_demo)
+
+Default driver rung by claim: **Go** for death/respawn; **live** `scripts/dummy_attack_demo.ps1`
+for NPC melee; **live** `scripts/tab_combat_demo.ps1` for the M6i loop.
 
 Preconditions:
 
-- `DOCTOR OK`; a real desktop session; nothing else importing `client/.godot`.
-- Run `powershell -ExecutionPolicy Bypass -File scripts/combat_demo.ps1`.
-- Marker: `COMBAT DEMO OK` on the **last line** of stdout. Exit code must also
-  be 0.
-
-The script builds marqued, warms Godot once, starts the server on a free port,
-launches client a as `--combat-role attacker` and client b as `--combat-role
-victim` with `--combat-shots`, and asserts:
-
-- Server layer: one `attack` from attacker naming victim; a `path_assigned` for
-  the attacker at or after that attack; exactly ten `attack_hit` of damage 10
-  down to `target_hp` 0; one `death`; one `respawn`; a post-respawn `move_to`
-  for the victim; no `attack_rejected` / `respawn_rejected`.
-- Client layer: shot 1 distance outside range on both; victim shot 2
-  `deathvisible 1` and HP 0; victim shot 3 `deathvisible 0` and HP 100; attacker
-  prints `attackclick`; victim prints `relocate`, `respawnclick`, `postmove`.
-- Six PNGs over 4KB each and `DEMO done` on both clients.
-
-Evidence lands in `-OutDir`, default `$env:TEMP\marque-combat`: six PNGs, both
-client stdout/stderr logs, and `server.stdout.ndjson`.
+- `DOCTOR OK`; desktop for live demos.
+- NPC melee: `powershell -ExecutionPolicy Bypass -File scripts/dummy_attack_demo.ps1`.
+  Marker: `DUMMY ATTACK DEMO OK` last line; exit 0.
+- Combat loop: `powershell -ExecutionPolicy Bypass -File scripts/tab_combat_demo.ps1`.
+  Marker: `TAB COMBAT DEMO OK` last line; exit 0.
+- Death/respawn store: from `server/`, `CGO_ENABLED=1 go test -race ./internal/game/ -run Combat` (or the focused death/respawn cases in `combat_test.go`).
+- **Do not** treat `scripts/combat_demo.ps1` as a proof. It is a stub that exits 0
+  without a marker.
 
 ## Gotchas
 
-- **Roles are asymmetric.** Unlike gather-craft, the clients are not identical:
-  one relocates and dies, the other click-attacks. Join order still races, so
-  resolve ids from `DEMO joined`, never from window labels alone.
-- **Both spawn stacked.** The victim must walk out of `AttackRange` before the
-  attack click, or the walk-in claim is vacuous and the harness fails shot 1.
-- **Click the body, not `request_attack`.** The demo unprojects the remote
-  avatar and pushes a real **right** click through the picker (left-click is
-  select-only after M6c).
-- **Kill takes wall time.** Ten period hits at 4 ticks × 150 ms, plus the walk,
-  so the client timeout is 180 s. Do not treat a slow idle desktop as a hang
-  until that budget expires.
-- **Overlay blocks the world.** Respawn is a click on the authored Respawn
-  button; a ground click while dead is refused by the server and would not clear
-  the overlay.
+- **`COMBAT DEMO OK` is gone.** Recipes that still cite it are stale. Point at
+  `DUMMY ATTACK DEMO OK` / `TAB COMBAT DEMO OK` / Go.
+- **Left-click is not attack.** After M6c, demos must right-click (or call
+  `request_attack`).
+- **Roles / join order.** Resolve ids from `DEMO joined`, never from window labels.
+- **Friendly dummy refuses.** See `right-click-basic-attack.md`.

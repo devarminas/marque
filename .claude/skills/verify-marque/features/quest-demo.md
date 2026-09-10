@@ -18,6 +18,15 @@ combat and Progression are not involved.
 - `demo-pass` — harness exits 0 with `QUEST DEMO OK` as its last line, and the
   client prints `DEMO done`.
 
+Minimum evidence:
+
+| Claim | GAMELOG | DEMO | Pixel |
+|---|---|---|---|
+| Join kit sticks | `join_seeded` / `server_started` join kit | shot 1 bag holds `sticks` | optional |
+| Accept | `quest_accepted` | `DEMO accepted bring_a_stick active` | optional |
+| Give + rewards | `quest_completed` consume=`sticks`, five rewards | invslots miner kinds, no sticks | optional |
+| Quest log | (via complete) | shot 3 `DEMO questlog` `bring_a_stick complete` | PNG >4KB |
+
 ## How to get to it (user POV)
 
 - Join a server whose bag was seeded with craft `sticks` (M4c product from logs).
@@ -27,6 +36,9 @@ combat and Progression are not involved.
 
 ## Driving it with scripts/quest_demo.ps1
 
+Default driver rung: **live windowed demo** (dialog / give UI). Go covers store
+and reward tables; do not add a new windowed demo for another deliver-quest id.
+
 Preconditions:
 
 - `DOCTOR OK`; a real desktop session; nothing else importing `client/.godot`.
@@ -35,16 +47,8 @@ Preconditions:
 
 The script builds marqued, warms Godot once, starts the server on a free port with
 `-join-kit sticks` (quest_giver is always seeded; join kit is not the wardrobe
-DefaultJoinKit), launches one windowed client with `--quest-shots`, and asserts:
-
-- Server layer: `join_seeded` for `sticks`, one `quest_accepted`, one
-  `quest_completed` with `consume=sticks` and five rewards; no talk/dialog/give
-  rejects.
-- Client layer: `DEMO accepted` / `DEMO complete`, shot 1 bag holds `sticks`,
-  shot 3 bag holds miner kinds only, shot 3 questlog is complete. The client
-  waits for dialog / give panels, then sends `dialog_option` / `give` through
-  Session (same gates as the UI).
-- Three PNGs over 4KB each and `DEMO done` on the client.
+DefaultJoinKit), launches one windowed client with `--quest-shots`, and asserts
+the minimum evidence table above plus no talk/dialog/give rejects and `DEMO done`.
 
 Evidence lands in `-OutDir`, default `$env:TEMP\marque-quest`: three PNGs,
 `client.stdout.log`, `client.stderr.log`, and `server.stdout.ndjson`.
@@ -54,7 +58,7 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-quest`: three PNGs,
 - **Deliver is craft `sticks`.** Quest `deliver.kind` is the M4c product. Wrong
   kind fails give with `wrong_item`.
 - **Empty DefaultJoinKit.** Proof uses `-join-kit sticks` only. Do not patch
-  `DefaultJoinKit` with wardrobe.
+  `DefaultJoinKit` with sticks.
 - **Talk then re-talk for give.** Accept closes dialog. Give UI opens on a later
   talk while the quest is `active` (ARM-191). Give itself is immediate and
   range-gated (`GiveRange` == `TalkRange`); the first talk walks the player in.
