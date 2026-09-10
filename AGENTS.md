@@ -28,8 +28,11 @@ running the game. Script-built trees are none of those.
 - The client's game state is a cache of what the server last sent. It has zero authority.
 - One goroutine owns all game state. The tick loop is the transaction boundary.
 - Game logic never reaches into the visual tree. Talk to visuals through the visual contract.
-
-Movement authority is under rewrite (Linear M13). Do not treat the old polyline walker as an invariant.
+- Client sends movement inputs (ground-plane wish `dx`/`dz` and jump edge), never position, velocity, or pose facts. Illegal movement samples are refused at the wire boundary (`illegal_sample`).
+- Server integrates movement each tick and owns player pose `(x, y, z)`. Default sim tick is 25 Hz (40 ms), tunable only inside 20–30 Hz on the same clock.
+- Client may predict locally and must reconcile to server pose. Server pose wins. Remotes follow server pose only (interpolation allowed).
+- Players do not walk server polylines. Player `move_to` and player `path` locomotion are retired. NPC path or polyline walking may remain.
+- Ability locomotion uses server policy hooks (`movable`, `rooted`, `interrupt_on_move` with grace). It does not author a second pose.
 
 ## Testing
 
