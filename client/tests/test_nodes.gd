@@ -59,6 +59,7 @@ func _ready() -> void:
 	_test_an_unknown_kind_is_magenta()
 	_test_the_tree_art_resolved()
 	_test_the_rock_art_and_state()
+	_test_the_smelter_art()
 	_test_the_click_target_covers_the_art()
 	await _test_a_click_ray_reaches_the_body()
 	_test_a_second_welcome_frees_nodes()
@@ -306,6 +307,29 @@ func _test_the_rock_art_and_state() -> void:
 	_check(not body.rock_depleted_visual.visible, "pebble leaves")
 
 
+func _test_the_smelter_art() -> void:
+	_feed(_welcome_empty())
+	_feed('{"node_spawn":{"id":16,"kind":"smelter","x":0.0,"z":3.0,"state":"full"}}')
+	var body: ResourceNodeScript = _session.node_for(16)
+	_check(body != null, "smelter node builds a body")
+	if body == null:
+		return
+	_check(body.is_kind_known(), "smelter is a known kind")
+	_check(body.is_smelter(), "kind is smelter")
+	_check(not body.is_gatherable(), "smelter is not gatherable")
+	_check(
+		body.showing() == ResourceNodeScript.Look.TREE,
+		"full smelter uses the full look, got %s" % _look_name(body.showing()),
+	)
+	_check(body.smelter_visual != null and body.smelter_visual.visible, "smelter visual on")
+	_check(body.tree_visual != null and not body.tree_visual.visible, "tree art stays off")
+	_check(body.rock_visual != null and not body.rock_visual.visible, "rock art stays off")
+	_check(body.canopy_shape != null and body.canopy_shape.disabled, "smelter has no canopy hitbox")
+	_check(_visible_visuals(body) == 1, "exactly one smelter visual visible")
+	var meshes := body.smelter_visual.find_children("*", "MeshInstance3D", true, false)
+	_check(meshes.size() >= 1, "smelter holds vendor mesh art, found %d" % meshes.size())
+
+
 func _test_the_click_target_covers_the_art() -> void:
 	_feed(_welcome_empty())
 	_feed('{"node_spawn":{"id":14,"kind":"tree","x":0.0,"z":0.0,"state":"full"}}')
@@ -423,6 +447,7 @@ func _visible_visuals(body: ResourceNodeScript) -> int:
 		body.stump_visual,
 		body.rock_visual,
 		body.rock_depleted_visual,
+		body.smelter_visual,
 		body.missing_visual,
 	]:
 		if visual != null and visual.visible:

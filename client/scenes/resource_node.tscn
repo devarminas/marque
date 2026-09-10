@@ -1,9 +1,10 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/resource_node.gd" id="1_resource_node"]
 [ext_resource type="PackedScene" path="res://assets/quaternius/nature/CommonTree_1.gltf" id="2_common_tree"]
 [ext_resource type="PackedScene" path="res://assets/quaternius/nature/Rock_Medium_1.gltf" id="3_rock"]
 [ext_resource type="PackedScene" path="res://assets/quaternius/nature/Pebble_Round_1.gltf" id="4_pebble"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/village/Prop_Chimney.gltf" id="5_smelter"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stump"]
 albedo_color = Color(0.35, 0.32, 0.28, 1)
@@ -29,7 +30,7 @@ radius = 0.6
 [sub_resource type="SphereShape3D" id="SphereShape3D_canopy"]
 radius = 2.2
 
-[node name="ResourceNode" type="StaticBody3D" node_paths=PackedStringArray("tree_visual", "stump_visual", "rock_visual", "rock_depleted_visual", "missing_visual", "trunk_shape", "canopy_shape")]
+[node name="ResourceNode" type="StaticBody3D" node_paths=PackedStringArray("tree_visual", "stump_visual", "rock_visual", "rock_depleted_visual", "smelter_visual", "missing_visual", "trunk_shape", "canopy_shape")]
 collision_layer = 8
 collision_mask = 0
 script = ExtResource("1_resource_node")
@@ -38,6 +39,7 @@ tree_visual = NodePath("TreeVisual")
 stump_visual = NodePath("StumpVisual")
 rock_visual = NodePath("RockVisual")
 rock_depleted_visual = NodePath("RockDepletedVisual")
+smelter_visual = NodePath("SmelterVisual")
 missing_visual = NodePath("MissingVisual")
 trunk_shape = NodePath("TrunkShape")
 canopy_shape = NodePath("CanopyShape")
@@ -55,6 +57,9 @@ mesh = SubResource("CylinderMesh_stump")
 visible = false
 
 [node name="RockDepletedVisual" parent="." instance=ExtResource("4_pebble")]
+visible = false
+
+[node name="SmelterVisual" parent="." instance=ExtResource("5_smelter")]
 visible = false
 
 [node name="MissingVisual" type="MeshInstance3D" parent="."]

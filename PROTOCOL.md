@@ -39,7 +39,8 @@ marker describes it.
 with this file: the third entity family, `gather`, node restatement frames, class gate (M7c;
 was axe gate in M4a), deplete
 and respawn, and contested first-completer-wins. **M4c** is the server half of one craft recipe
-and is shipped with this file: the `use` intent and logsâ†’sticks. A marker reading plain **M4**
+and is shipped with this file: the `use` intent and logs→sticks. **ARM-215** extends `use` with
+station use-on (`copper_ore`→`copper_bar` at a seeded `smelter` node). A marker reading plain **M4**
 is reserved. The client draw of nodes is a later unit and nothing under an **M4a** or **M4c**
 marker describes it.
 
@@ -396,14 +397,14 @@ A name it does not have is refused, and so is one it has but that holds nothing.
 A request to chop a resource node. `node` is a node id, which is **not** a player id and **not**
 an item id; see *Entity naming*. Semantics are in *Gathering*.
 
-### `use`. **M4c**
+### `use`. **M4c** / **ARM-215**
 
     {"use":{"slot":3,"on":3}}
+    {"use":{"slot":0,"on":4}}
 
-A request to use the item in bag slot `slot` on the item in bag slot `on`. Both are bag indices,
-the same space `drop.slot` and `equip.slot` use, and for the same reason: the client names
-positions in its cached inventory and the server looks up what is actually there. Semantics are
-in *Crafting*.
+A request to use the item in bag slot `slot`. When `on` equals `slot`, that is self-use (M4c
+logs→sticks). When `on` differs, `on` names a resource-node id for station use-on (ARM-215
+smelter). Semantics are in *Crafting*.
 
 ### `attack`. **M5a** / **ARM-203**
 
@@ -749,7 +750,8 @@ never announced.
 
 `kind` is an item type name. M1 ships exactly one, `acorn`. **M3a** introduced a prototype
 `axe` join-kit kind; **M7f** removed it. Wearable kinds now come from `shared/sets.json`.
-**M4a** adds `logs`, the gather yield. **M4c** adds `sticks`, the craft product. **A client that does not know a `kind` renders it magenta and keeps
+**M4a** adds `logs`, the gather yield. **M4c** adds `sticks`, the craft product. **ARM-214**
+adds `copper_ore`. **ARM-215** adds `copper_bar`. **A client that does not know a `kind` renders it magenta and keeps
 going** (`NOTES.md`, the palette), because a missing asset must scream rather than render
 nothing, and because unknown kinds are how content is added without a client release.
 
@@ -1272,10 +1274,12 @@ takes the ordinary path and gets a reason rather than an event of its own.
 ## Gathering. **M4a** / **ARM-214**
 
 Resource nodes are the third entity family. M4a shipped `tree`. **ARM-214** adds `rock`.
+**ARM-215** adds `smelter` as a station node (empty `skill`, never gathered, never depletes).
 M10 seeds two starter trees on the Northmere road (`SeedTreeX/Z` = 5, 0 and `SeedTree2X/Z` =
 -5, 2) via `StarterTownTrees`. ARM-214 seeds one starter rock (`SeedRockX/Z` = 2, 3) via
-`StarterTownRocks`. The client draws each with `resource_node.tscn` from server positions
-(tree or rock art by `kind`). Decorative trees and rocks in `world_map.tscn` are not nodes.
+`StarterTownRocks`. ARM-215 seeds one starter smelter (`SeedSmelterX/Z` = 0, 3) via
+`StarterTownSmelters`. The client draws each with `resource_node.tscn` from server positions
+(tree, rock, or smelter art by `kind`). Decorative trees and rocks in `world_map.tscn` are not nodes.
 A live full tree yields one `logs`; a live full rock yields one `copper_ore` into the lowest
 free bag slot when a gather resolves.
 
@@ -1361,23 +1365,28 @@ any other pending gather for that node then refuses/empties with no second yield
 completion into the turn-in player's `ClassOf` skill), `XPPerLevel = 100`. No active class means
 no kill/quest XP. Levels still unlock nothing.
 
-## Crafting. **M4c**
+## Crafting. **M4c** / **ARM-215**
 
-M4c ships exactly one recipe: consume one `logs` and produce one `sticks`. **M4a** already
-named `logs` as the gather yield; **M4c** adds `sticks` as a kind. Nothing stacks; one item per
-slot still holds.
+M4c ships exactly one self-use recipe: consume one `logs` and produce one `sticks`. **M4a** already
+named `logs` as the gather yield; **M4c** adds `sticks` as a kind. **ARM-215** adds station
+use-on: consume one `copper_ore` at a `smelter` node and produce one `copper_bar`. Nothing stacks;
+one item per slot still holds.
 
-### `use` is immediate self-use
+### `use` is immediate
 
 - **`use` resolves on receipt.** No walk, no pending, no duration. Unlike `gather` and
   `pickup`, arriving is not part of the action.
-- **M4c is self-use only.** `on` must equal `slot`. The one recipe converts the `logs` in that
-  bag slot into `sticks`. A frame whose `on` differs from `slot` is refused as `no_recipe`; the
-  bag is unchanged. Later units may teach `on` a second slot; this one does not.
-- **Consume then produce, in one Store transaction.** The `logs` leave `slot`. One `sticks`
+- **Self-use when `on` equals `slot`.** The M4c recipe converts the `logs` in that bag slot into
+  `sticks`. Later units may teach `on` a second bag slot; this one does not.
+- **Station use-on when `on` differs from `slot`.** `on` names a resource-node id. The named
+  node must be a station (`smelter`). The player must stand within `StationRange` (`PickupRange`).
+  The bag slot must hold a kind the station accepts (`copper_ore` at `smelter` → `copper_bar`).
+  A frame whose `on` is not a live station, or whose slot holds the wrong kind, is refused as
+  `no_recipe`. Out of range is `out_of_range`. An empty slot is `empty_slot`.
+- **Consume then produce, in one Store transaction.** The ingredient leaves `slot`. One product
   lands in the **lowest free bag slot**. Room is checked **before** the consume: a full bag
-  refuses with `inventory_full` even though emptying the logs slot would free space. That keeps
-  "no room for sticks" a real refusal for a one-for-one recipe, matching `unequip`'s full-bag
+  refuses with `inventory_full` even though emptying the ingredient slot would free space. That keeps
+  "no room for the product" a real refusal for a one-for-one recipe, matching `unequip`'s full-bag
   path rather than inventing an in-place rewrite. Revisitable when a recipe should replace
   in place.
 - **One `inventory` restatement** on success. Nothing is broadcast: the bag is private.
@@ -1388,19 +1397,21 @@ slot still holds.
 
 The server answers with `error` naming `use`, and the bag is exactly as it was, when:
 
-- `slot` or `on` is outside `0 .. inventory.size-1` (`no_such_slot`)
+- `slot` is outside `0 .. inventory.size-1` (`no_such_slot`)
 - `slot` is empty (`empty_slot`)
-- `on` â‰  `slot`, or `slot` holds anything other than `logs` (`no_recipe`)
-- the bag has no free slot for `sticks` (`inventory_full`)
+- self-use (`on` = `slot`) and `slot` holds anything other than `logs` (`no_recipe`)
+- station use-on and `on` is not a live station, or the slot kind has no station recipe (`no_recipe`)
+- station use-on and the player is farther than `StationRange` (`out_of_range`)
+- the bag has no free slot for the product (`inventory_full`)
 
-### Log vocabulary. **M4c**
+### Log vocabulary. **M4c** / **ARM-215**
 
 | Event | Fields | When |
 |---|---|---|
-| `use` | `player`, `slot`, `on`, `from`, `to`, `seq` | one completed craft (`from` is the consumed kind, `to` the produced kind; `seq` when the frame carried one) |
+| `use` | `player`, `slot`, `on`, `from`, `to`, `seq`, `station` | one completed craft (`from` is the consumed kind, `to` the produced kind; `seq` when the frame carried one; `station` is the node id on station use-on and is omitted on self-use) |
 | `use_rejected` | `player`, `reason`, `detail`, `re` | a `use` refused on receipt |
 
-`use_rejected.reason` is one of `no_such_slot`, `empty_slot`, `no_recipe`, or `inventory_full`.
+`use_rejected.reason` is one of `no_such_slot`, `empty_slot`, `no_recipe`, `out_of_range`, or `inventory_full`.
 
 ## Ordering and the join race
 

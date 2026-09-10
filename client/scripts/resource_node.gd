@@ -16,6 +16,7 @@ var state := ""
 @export var stump_visual: MeshInstance3D
 @export var rock_visual: Node3D
 @export var rock_depleted_visual: Node3D
+@export var smelter_visual: Node3D
 @export var missing_visual: MeshInstance3D
 @export var trunk_shape: CollisionShape3D
 @export var canopy_shape: CollisionShape3D
@@ -50,6 +51,14 @@ func is_depleted() -> bool:
 
 func is_rock() -> bool:
 	return kind == NodeKinds.KIND_ROCK
+
+
+func is_smelter() -> bool:
+	return kind == NodeKinds.KIND_SMELTER
+
+
+func is_gatherable() -> bool:
+	return NodeKinds.is_gatherable(kind)
 
 
 func showing() -> Look:
@@ -90,6 +99,8 @@ func _show(next: Look) -> void:
 		unassigned.append("rock_visual")
 	if rock_depleted_visual == null:
 		unassigned.append("rock_depleted_visual")
+	if smelter_visual == null:
+		unassigned.append("smelter_visual")
 	if missing_visual == null:
 		unassigned.append("missing_visual")
 	if trunk_shape == null:
@@ -101,15 +112,17 @@ func _show(next: Look) -> void:
 		return
 
 	var rock := is_rock()
+	var smelter := is_smelter()
 	var full := next == Look.TREE
 	var depleted := next == Look.STUMP
 	var missing := next == Look.MISSING
 
-	tree_visual.visible = full and not rock
-	stump_visual.visible = depleted and not rock
+	tree_visual.visible = full and not rock and not smelter
+	stump_visual.visible = depleted and not rock and not smelter
 	rock_visual.visible = full and rock
 	rock_depleted_visual.visible = depleted and rock
+	smelter_visual.visible = smelter and not missing
 	missing_visual.visible = missing
 
-	canopy_shape.disabled = not full or rock
+	canopy_shape.disabled = not full or rock or smelter
 	_look = next
