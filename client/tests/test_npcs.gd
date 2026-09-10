@@ -45,6 +45,8 @@ func _ready() -> void:
 	_test_quest_giver_scene_is_female_rig()
 	_test_dummy_scene_stays_capsule()
 	_test_imp_scene_uses_bestiary_mesh()
+	_test_imp_authors_animation_player()
+	_test_mobile_npc_without_animation_player_reports_once()
 	_test_imp_missing_body_draws_magenta()
 
 	_root = MainScene.instantiate() as Node3D
@@ -113,6 +115,7 @@ func _test_dummy_scene_stays_capsule() -> void:
 		dummy.get_node_or_null("Body/Armature/Skeleton3D") == null,
 		"practice dummy has no female Armature",
 	)
+	_check(dummy.static_mesh, "practice dummy is flagged static_mesh (no AnimationPlayer required)")
 	dummy.queue_free()
 
 
@@ -145,6 +148,48 @@ func _test_imp_scene_uses_bestiary_mesh() -> void:
 			"imp mesh height sits in the ~1.7u player band, got %f" % height,
 		)
 	imp.queue_free()
+
+
+func _test_imp_authors_animation_player() -> void:
+	var imp := NpcImpScene.instantiate() as NpcDummyScript
+	_check(imp != null, "imp AnimationPlayer check instantiates npc_imp")
+	if imp == null:
+		return
+	_world.add_child(imp)
+	_check(not imp.static_mesh, "imp is a mobile NPC (static_mesh off)")
+	var animation := imp.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	_check(animation != null, "npc_imp.tscn authors an AnimationPlayer")
+	_check(
+		imp.get("_animation") == animation,
+		"imp _ready binds the authored AnimationPlayer",
+	)
+	imp.call("_set_walking", true)
+	_check(
+		not imp.get("_missing_animation_reported"),
+		"imp with AnimationPlayer does not take the missing-player loud path",
+	)
+	imp.queue_free()
+
+
+func _test_mobile_npc_without_animation_player_reports_once() -> void:
+	var body := NpcDummyScript.new()
+	body.name = "SabotagedMobile"
+	body.kind = NpcDummyScript.KindImp
+	body.static_mesh = false
+	_world.add_child(body)
+	_check(body.get_node_or_null("AnimationPlayer") == null, "sabotage body has no AnimationPlayer")
+	_check(not body.get("_missing_animation_reported"), "loud path starts unset")
+	body.call("_set_walking", true)
+	_check(
+		body.get("_missing_animation_reported"),
+		"mobile NPC without AnimationPlayer latches the loud missing-player path",
+	)
+	body.call("_set_walking", true)
+	_check(
+		body.get("_missing_animation_reported"),
+		"a second _set_walking keeps the missing-player latch set",
+	)
+	body.queue_free()
 
 
 func _test_imp_missing_body_draws_magenta() -> void:

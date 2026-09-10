@@ -27,6 +27,7 @@ var clock: TickClock = null
 @export var ground_y := 0.0
 @export var face_travel_direction := true
 @export var turn_degrees_per_second := 540.0
+@export var static_mesh := false
 
 var _body_mesh: MeshInstance3D = null
 var _meter: DummyMeterScript = null
@@ -36,6 +37,7 @@ var _walker: PolylineWalker = null
 var _tick_ms := 0
 var _desired_yaw := 0.0
 var _animation: AnimationPlayer = null
+var _missing_animation_reported := false
 
 @onready var _selection_ring: MeshInstance3D = $SelectionRing
 @onready var _hp_label: Label3D = $HpLabel
@@ -198,6 +200,12 @@ func _apply_faction_color() -> void:
 
 func _set_walking(walking: bool) -> void:
 	if _animation == null:
+		if not static_mesh and not _missing_animation_reported:
+			_missing_animation_reported = true
+			push_error(
+				"NpcDummy '%s' (kind=%s): mobile NPC lacks AnimationPlayer; walk/idle will no-op"
+				% [name, kind]
+			)
 		return
 	if walking:
 		if _animation.has_animation(WALK_ANIM) and _animation.current_animation != WALK_ANIM:
