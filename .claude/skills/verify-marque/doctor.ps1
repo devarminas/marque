@@ -87,6 +87,58 @@ if (-not (Test-Path (Join-Path $repo "client\.godot"))) {
     Write-Host "    run.ps1 does this itself; standalone godot commands will not."
 }
 
+$allowlistPath = Join-Path $PSScriptRoot "demo-allowlist.txt"
+if (-not (Test-Path $allowlistPath)) {
+    $failures.Add("missing .claude/skills/verify-marque/demo-allowlist.txt")
+} else {
+    $allowed = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($raw in Get-Content -LiteralPath $allowlistPath) {
+        $line = $raw
+        $hash = $line.IndexOf('#')
+        if ($hash -ge 0) { $line = $line.Substring(0, $hash) }
+        $line = $line.Trim()
+        if ($line.Length -eq 0) { continue }
+        [void]$allowed.Add($line.Replace('\', '/'))
+    }
+
+    function Get-RepoRelativeForwardSlash {
+        param([string] $FullPath)
+        $full = [System.IO.Path]::GetFullPath($FullPath)
+        $root = [System.IO.Path]::GetFullPath($repo)
+        if (-not $full.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $full.Replace('\', '/')
+        }
+        $rel = $full.Substring($root.Length).TrimStart('\', '/')
+        return $rel.Replace('\', '/')
+    }
+
+    foreach ($dirRel in @("scripts", "client\scripts")) {
+        $dir = Join-Path $repo $dirRel
+        if (-not (Test-Path -LiteralPath $dir)) { continue }
+        $filter = if ($dirRel -eq "scripts") { "*demo*.ps1" } else { "*demo*.gd" }
+        Get-ChildItem -LiteralPath $dir -File -Filter $filter | ForEach-Object {
+            $rel = Get-RepoRelativeForwardSlash $_.FullName
+            if (-not $allowed.Contains($rel)) {
+                $failures.Add("unlisted windowed demo: $rel (add to demo-allowlist.txt or delete it)")
+            }
+        }
+    }
+
+    $mainGd = Join-Path $repo "client\scripts\main.gd"
+    if (Test-Path -LiteralPath $mainGd) {
+        $mainText = Get-Content -LiteralPath $mainGd -Raw
+        $shotMatches = [regex]::Matches($mainText, '"--(?:[a-z0-9]+-)*shots"')
+        $seenShots = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+        foreach ($m in $shotMatches) {
+            $flag = $m.Value.Trim('"')
+            if (-not $seenShots.Add($flag)) { continue }
+            if (-not $allowed.Contains($flag)) {
+                $failures.Add("unlisted --*-shots flag in main.gd: $flag (add to demo-allowlist.txt or remove it)")
+            }
+        }
+    }
+}
+
 Write-Host ""
 if ($failures.Count -eq 0) {
     Write-Host "DOCTOR OK"
