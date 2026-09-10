@@ -54,7 +54,8 @@ and the death/respawn UI are later units and nothing under an **M5a** marker des
 **M6 is closed by observation under M6i.** **M6a** is the shared ability content table and the `cast` ability-id
 field on the wire. Ability stats live in `shared/abilities.json` only. **M6b** is the mana pool
 and its restatement. **M6c** is client tab targeting: left-click selects a living remote player
-with local chrome and does not send `attack`; Escape clears the selection. **M6d** is center
+with local chrome and does not send `attack`; Escape clears use-on, then selection, then opens
+the local ESC menu (soft input pause only; server keeps ticking). **M6d** is center
 hotbar chrome and server cast resolution from that JSON
 (mana spend, heal/damage, refusals). **M6e** is practice dummy NPCs (one friendly, one hostile),
 seeded into the world, selectable, and valid cast/attack targets by faction. **M6f** is
