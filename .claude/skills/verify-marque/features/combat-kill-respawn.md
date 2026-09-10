@@ -7,12 +7,14 @@ store rules stay on the Go rung.
 
 ## Sub-features
 
-- `period-hits` — GAMELOG `attack` / `attack_hit` on a hostile (dummy or player
-  under Go). Live: ≥1 `attack_hit` via `dummy_attack_demo.ps1`.
+- `period-hits` — Go: ten `attack_hit` of damage 10 to death on an Imp
+  (`TestTenHitsKillImpFromFull`). Live smoke: ≥1 `attack_hit` via
+  `dummy_attack_demo.ps1`.
 - `death-and-respawn` — Go: `death` then `respawn` restores HP 100 / clears walk
-  (`server/internal/game/combat_test.go`). No live PvP recipe.
+  (`TestRespawnRestoresAtJoinSpawn`, `TestDeadRefusesOrdinaryIntents`). No live
+  PvP recipe.
 - `act-after-respawn` — Go: post-respawn intents accepted; refused when not dead
-  (`respawn_rejected`).
+  (`TestLivingRespawnRefused`).
 - `live-melee-loop` — `tab_combat_demo.ps1` covers right-click attack among cast
   and WASD (`TAB COMBAT DEMO OK`).
 - `demo-pass` — live markers are `DUMMY ATTACK DEMO OK` or `TAB COMBAT DEMO OK`
@@ -22,7 +24,8 @@ Minimum evidence:
 
 | Claim | GAMELOG | DEMO | Pixel | Default rung |
 |---|---|---|---|---|
-| Melee hits land | `attack`, `attack_hit` | `attackok` / attack DEMO | optional | live `dummy_attack` |
+| Period hits to kill | ten `attack_hit` dmg 10 → HP 0 (`TestTenHitsKillImpFromFull`, `TestAttackOutOfRangePathsInThenHitsOnPeriod`) | n/a | n/a | **Go** |
+| Live NPC melee smoke | ≥1 `attack_hit` | attack DEMO | optional | live `dummy_attack` |
 | Player death/respawn | `death`, `respawn`, HP 100 | n/a (no live PvP) | n/a | **Go** |
 | Tab combat loop | `cast_effect`, `attack_hit`, `move` | fireball/heal/attack/move DEMO | optional | live `tab_combat` |
 
@@ -34,19 +37,22 @@ Minimum evidence:
 
 ## Driving it with dummy_attack / tab_combat (not combat_demo)
 
-Default driver rung by claim: **Go** for death/respawn; **live** `scripts/dummy_attack_demo.ps1`
-for NPC melee; **live** `scripts/tab_combat_demo.ps1` for the M6i loop.
+Default driver rung by claim: **Go** for period-kill cadence and death/respawn;
+**live** `scripts/dummy_attack_demo.ps1` for NPC melee smoke; **live**
+`scripts/tab_combat_demo.ps1` for the M6i loop.
 
 Preconditions:
 
 - `DOCTOR OK`; desktop for live demos.
-- NPC melee: `powershell -ExecutionPolicy Bypass -File scripts/dummy_attack_demo.ps1`.
+- NPC melee smoke: `powershell -ExecutionPolicy Bypass -File scripts/dummy_attack_demo.ps1`.
   Marker: `DUMMY ATTACK DEMO OK` last line; exit 0.
 - Combat loop: `powershell -ExecutionPolicy Bypass -File scripts/tab_combat_demo.ps1`.
   Marker: `TAB COMBAT DEMO OK` last line; exit 0.
-- Death/respawn store: from `server/`, `CGO_ENABLED=1 go test -race ./internal/game/ -run Combat` (or the focused death/respawn cases in `combat_test.go`).
+- Period hits + death/respawn store: from `server/`,
+  `CGO_ENABLED=1 go test -race ./internal/game/ -run 'TenHitsKillImpFromFull|AttackOutOfRangePathsInThenHitsOnPeriod|DeadRefuses|RespawnRestores|LivingRespawn|GatheringPlayerStillDies'`.
 - **Do not** treat `scripts/combat_demo.ps1` as a proof. It is a stub that exits 0
-  without a marker.
+  without a marker. Client `--combat-shots` wiring may still exist; the PS1 is what
+  agents must not run for markers.
 
 ## Gotchas
 

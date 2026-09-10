@@ -170,8 +170,8 @@ anything looks off.
 | `--equip-shots <abs-prefix>` | Enter the equip milestone demo mode (`equip_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M3d.** Single client; the demo starts marqued with `-join-kit sword`. Absolute host path required. |
 | `--gather-craft-shots <abs-prefix>` | Enter the gather-then-craft milestone demo mode (`gather_craft_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M4e.** Two clients; both equip then race the primary seeded tree at (5, 0). Absolute host path required. |
 | `--gather-error-shots <abs-prefix>` | Enter the refused-gather demo mode (`gather_error_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **ARM-147.** One client; right-clicks the tree unarmed, reads the refusal, wears a ground-seeded lumberjack set, chops. Absolute host path required. |
-| `--combat-shots <abs-prefix>` | **Retired (ARM-203).** Stub only; do not drive for proof. |
-| `--combat-role attacker\|victim` | **Retired.** Paired with `--combat-shots`. |
+| `--combat-shots <abs-prefix>` | Still wired in `main.gd` / `combat_demo.gd`, but **`scripts/combat_demo.ps1` is retired** (ARM-203 stub, exit 0, no marker). Do not drive the PS1 for proof. |
+| `--combat-role attacker\|victim` | Paired with `--combat-shots`. Same retired-PS1 rule. |
 | `--dummy-cast <abs-prefix>` | Dummy cast demo (`dummy_cast_demo.gd`). Absolute host path required. |
 | `--dummy-attack <abs-prefix>` | Hostile-dummy melee demo (`dummy_attack_demo.gd`). Absolute host path required. |
 | `--wasd-shots <abs-prefix>` | WASD move demo (`wasd_demo.gd`). Absolute host path required. |
