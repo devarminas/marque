@@ -97,7 +97,7 @@ It also prints the walk clip's ground speed, 0.6527 u/s, measured from the plant
 
 Left out on purpose: the pack's `Godot_Setup.png`. Anything under `client/` is imported as a game resource and shipped in the export, and a setup screenshot is not a game resource. Read it in the source pack.
 
-Left in the bundle: `UAL2_Standard_RM.glb`, the 8.1 MB root-motion variant. The server owns position and the client walks server-supplied polylines, which is an architecture invariant in `AGENTS.md`. Root motion would drive the transform from the animation, so the RM file can never be used here.
+Left in the bundle: `UAL2_Standard_RM.glb`, the 8.1 MB root-motion variant. Today the client still advances along server `path` frames, so root motion must not drive the transform. M13 may change how pose is owned; keep the RM file parked until that ADR says otherwise.
 
 ### `quaternius/outfits_fantasy/` (70,192,161 bytes)
 

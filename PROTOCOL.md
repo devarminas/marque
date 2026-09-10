@@ -1748,9 +1748,9 @@ identity was lost.
 `welcome` restarts outbound `seq` from `last_seq + 1`.
 
 **Backoff is 0.5 s, doubling to a cap of 5 s, then 5 s forever.** A number, parked in
-`FOLLOW-UPS.md`. The first attempt after a death waits 0.5 s; a dead URL walks
-0.5, 1, 2, 4, 5, 5, â€¦ until something answers. A well-formed URL that stays in
-`CONNECTING` is abandoned after 5 s and then walks the same schedule.
+Linear ARM-243 (backoff) and ARM-244 (CONNECTING abandon). The first attempt after a death
+waits 0.5 s; a dead URL walks 0.5, 1, 2, 4, 5, 5, … until something answers. A well-formed
+URL that stays in `CONNECTING` is abandoned after 5 s and then walks the same schedule.
 
 **Client strictness stays lenient** after reconnect exists. A malformed frame is still logged
 and dropped, and the connection is kept. Revisitable. See *Compatibility*.

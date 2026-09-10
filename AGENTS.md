@@ -26,9 +26,10 @@ running the game. Script-built trees are none of those.
 
 - Client sends intents, never facts. `{"use":{"slot":3,"on":7}}`, never an inventory payload.
 - The client's game state is a cache of what the server last sent. It has zero authority.
-- Pathfinding lives only on the server. The client walks polylines it is given.
 - One goroutine owns all game state. The tick loop is the transaction boundary.
 - Game logic never reaches into the visual tree. Talk to visuals through the visual contract.
+
+Movement authority is under rewrite (Linear M13). Do not treat the old polyline walker as an invariant.
 
 ## Testing
 
