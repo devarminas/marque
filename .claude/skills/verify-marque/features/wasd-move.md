@@ -36,7 +36,7 @@ Proof map for ARM-114 ACs:
 - AC1: `DEMO pos` + `DEMO move_displacement` and GAMELOG `path_assigned`
 - AC2: Go `TestClientCannotAuthorPositionViaMove` (large `dx` still one WalkSpeed step)
 - AC3: Go `TestMoveCancelsPendingAttack`
-- AC4: PROTOCOL.md `move` + Go `TestLastIntentWinsMoveAndMoveTo`
+- AC4: Go `TestLastIntentWinsMoveAndMoveTo`
 
 ## Gotchas
 

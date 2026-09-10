@@ -1,8 +1,8 @@
 shader_type spatial;
 
-// World-space checker (NOTES.md, "Color as semantics"). The pattern is driven by
-// world position, not UVs, so a 1m square stays a 1m square no matter how the
-// mesh is scaled or tiled. Untextured primitives get a readable sense of scale.
+// World-space checker. The pattern is driven by world position, not UVs, so a
+// 1m square stays a 1m square no matter how the mesh is scaled or tiled.
+// Untextured primitives get a readable sense of scale.
 //
 // Lit rather than unlit: this unit has to show that the lighting works, and a
 // shadow on a flat gray plane is the cheapest proof of that.

@@ -128,7 +128,7 @@ try {
     if (-not (Test-Path (Join-Path $clientDir ".godot"))) {
         # Fresh checkout. Without the editor cache, headless Godot fails to parse
         # any script naming a global class_name and the errors point everywhere
-        # but here (NOTES.md, "Godot authoring traps").
+        # but here. `test_scene_files.gd` guards the related uid trap.
         Write-Host "==> client\.godot is absent; building the editor cache once"
         $editorWarm = Start-Process -FilePath $Godot `
             -ArgumentList @("--headless", "--path", ('"' + $clientDir + '"'), "--editor", "--quit") `

@@ -595,7 +595,7 @@ try {
                 $droppedId = [int]$drop.item
                 if ($droppedId -eq $seedItem) {
                     Add-Failure ("the dropped item kept id $droppedId; a dropped item gets a fresh one " +
-                        "(PROTOCOL.md, Drop)")
+                        "(TestDropIsOneMove / drop_store_test.go)")
                 }
                 $dropSpawns = Select-Events $events "item_spawned" -1 $droppedId
                 if ($dropSpawns.Count -ne 1) {

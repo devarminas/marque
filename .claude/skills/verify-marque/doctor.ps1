@@ -33,22 +33,17 @@ try {
 }
 
 try {
-    # Captured through a pipeline on purpose, which is the half of this that
-    # matters. Measured on this machine and recorded in NOTES.md, "Godot
-    # authoring traps": `$v = godot --version` reads back empty, and so do the
-    # `@(...)`, `(...)` and `$(...)` forms, while `| Out-String`,
-    # `| ForEach-Object` and `| Select-Object -First 1` all capture
-    # `4.7.2.stable.official...`. A preflight written as
-    # `if (-not ($v = godot --version)) { fail }` therefore reports Godot
-    # missing on a machine where it is installed and on PATH.
+    # Captured through a pipeline on purpose. `$v = godot --version` reads
+    # back empty (as do `@(...)`, `(...)`, `$(...)`), while `| Out-String`,
+    # `| ForEach-Object`, and `| Select-Object -First 1` capture the version
+    # string. A preflight written as `if (-not ($v = godot --version))` therefore
+    # reports Godot missing on a machine where it is installed and on PATH.
     #
     # The `cmd /c` wrapper is here for `2>nul` — keeping Godot's stderr off
     # this script's error stream — not for the capture. The
     # `| Select-Object -First 1` after it is what captures, and it works
     # without the wrapper.
     #
-    # No mechanism is claimed. NOTES.md records that table as observed
-    # behaviour and marks the GUI-subsystem explanation explicitly unverified.
     # The run scripts are immune either way, because Start-Process
     # -RedirectStandardOutput hands the process a real file handle rather than
     # a pipeline.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (M13a / ARM-233). Binding for M13b–h implementation. Supersedes the Movement and Tick rate sections of `NOTES.md`, and the player `move` / `move_to` / `path` locomotion model in `PROTOCOL.md`, once those units land. Until then, code may still ship the old polyline walker.
+Accepted (M13a / ARM-233). Binding for M13b–h implementation. Until those units land, code may still ship the old polyline walker.
 
 ## Context
 
@@ -12,7 +12,7 @@ Players move with WASD. The live stack still treats locomotion as sticky `move` 
 
 This ADR decides movement authority only. Global invariants stay in `AGENTS.md`. Other systems (inventory, equipment, dupes) get their own ADRs when they change.
 
-Out of scope for this ADR: navmesh, client-authored positions, a full `PROTOCOL.md` rewrite, deleting `NOTES.md`, and shipping code.
+Out of scope for this ADR: navmesh, client-authored positions, and shipping the movement code (M13b–h).
 
 ## Decision
 
@@ -60,15 +60,14 @@ M13 locks these hooks and the melee-movable / cast-cancel-or-root defaults. Map 
 
 ## Consequences
 
-- `AGENTS.md` replaces the temporary "Movement authority is under rewrite" note with durable movement bullets that match this ADR.
+- `AGENTS.md` carries durable movement bullets that match this ADR.
 - M13b raises `TickDuration` into the locked band and retunes cast/heartbeat math in wall-clock ms.
 - M13c–d replace player `move`+`path` with input samples and pose restatements, and teach the client to predict and reconcile.
 - M13e adds jump against server pose including `y`.
 - M13f hooks abilities into the locomotion policy table above.
 - M13g deletes player polyline walking. NPC polyline may stay.
 - M13h demos prove WASD, jump, and no player polyline on the wire.
-- `PROTOCOL.md` gains a pointer that M13 supersedes the old movement sections when code lands. A full rewrite is a follow-up, not this unit.
-- `NOTES.md` Movement and Tick rate sections become historical until a docs follow-up retires them. Do not delete them in M13a.
+- Wire details land in code and tests. New mechanic polish lands in new ADRs. Do not revive a monolithic protocol or notes file.
 
 ## Non-goals
 

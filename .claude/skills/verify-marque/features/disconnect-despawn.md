@@ -98,8 +98,7 @@ Preconditions:
   its exit code.
 - **`reason` is a cause and `detail` is a detector. Assert the first; read the second
   and do not branch on it.** Since M1f the `Disconnect*` and `Detail*` constants in
-  `server/internal/net/hub.go` are the whole list, and they agree with
-  `PROTOCOL.md`'s M1 section:
+  `server/internal/net/hub.go` are the whole list (`condemnation_test.go` locks them):
 
   | Logged `reason` | Logged `detail` | When |
   |---|---|---|

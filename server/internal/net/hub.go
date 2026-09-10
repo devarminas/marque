@@ -264,8 +264,7 @@ func readReason(err error) (reason, detail string) {
 
 // writePump owns the write deadline itself: a deadline-bearing context makes
 // coder/websocket tear the connection down before returning the error, and the
-// read pump would then win the reason (PROTOCOL.md, "The server owns the write
-// deadline for data frames").
+// read pump would then win the reason.
 func (c *Conn) writePump() {
 	for {
 		select {

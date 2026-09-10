@@ -33,7 +33,7 @@ distinguishable from packet loss.
 
 Preconditions:
 
-- A running marqued from SKILL.md's Launch, its URL in hand; `PROTOCOL.md` open.
+- A running marqued from SKILL.md's Launch, its URL in hand; assert against the live server reply and GAMELOG.
 
 - **Client-side handling (already covered headless).** `powershell
   -ExecutionPolicy Bypass -File scripts/interop_test.ps1` (marker `INTEROP OK`)
@@ -74,7 +74,7 @@ Preconditions:
 - The close-on-malformed rule is the server's only. The client must never close on a
   bad server frame; it logs and drops the frame. Do not "fix" either side to match
   the other.
-- Rejection is the designed behaviour for unreachable clicks going forward
-  (`NOTES.md`), so `move_to_rejected` in a log is not by itself a defect.
+- Rejection is the designed behaviour for unreachable clicks going forward,
+  so `move_to_rejected` in a log is not by itself a defect.
 - JSON cannot carry NaN/Infinity literals; the live hazard is a large finite float
   like `1e30`, which is exactly what `reject-oob` exists to stop.
