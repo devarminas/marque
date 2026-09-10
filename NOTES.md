@@ -535,7 +535,9 @@ management, Postgres behind `Store`.
 ### Tab targeting (M6c)
 
 Left-click on another living player selects them (yellow ring under the feet). Selection does
-not send `attack`. Escape clears the selection (after any pending inventory use-on). A ground
+not send `attack`. Escape clears a pending inventory use-on first, then clears the selection,
+then opens the local resume/options/exit menu. While that menu is open, the client soft-pauses
+local input (no new move chords) and the server keeps ticking. A ground
 click does nothing at all and leaves the selection alone (ARM-145). Self and corpses are not
 selectable as hostile targets.
 
