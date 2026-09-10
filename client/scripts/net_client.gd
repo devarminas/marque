@@ -44,6 +44,8 @@ signal despawned(id: int)
 
 signal path_assigned(id: int, start_tick: int, points: PackedVector2Array, speed: float)
 
+signal pose_received(id: int, tick: int, x: float, y: float, z: float)
+
 signal item_spawned(id: int, kind: String, position: Vector2)
 
 signal item_despawned(id: int)
@@ -433,6 +435,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_despawn(body, text)
 		"path":
 			_on_path(body, text)
+		"pose":
+			_on_pose(body, text)
 		"item_spawn":
 			_on_item_spawn(body, text)
 		"item_despawn":
@@ -699,6 +703,18 @@ func _on_path(body: Dictionary, text: String) -> void:
 		points.append(Vector2(pair[0], pair[1]))
 
 	path_assigned.emit(int(body["id"]), int(body["start_tick"]), points, float(body["speed"]))
+
+
+func _on_pose(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["id", "tick", "x", "y", "z"], text):
+		return
+	pose_received.emit(
+		int(body["id"]),
+		int(body["tick"]),
+		float(body["x"]),
+		float(body["y"]),
+		float(body["z"]),
+	)
 
 
 func _on_item_spawn(body: Dictionary, text: String) -> void:
