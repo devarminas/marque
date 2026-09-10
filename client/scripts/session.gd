@@ -25,8 +25,10 @@ const ClassDebugScript := preload("res://scripts/class_debug.gd")
 const ErrorHudScript := preload("res://scripts/error_hud.gd")
 const ClassDefs := preload("res://scripts/class_defs.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
+const EscMenuScript := preload("res://scripts/esc_menu.gd")
 const HotbarScript := preload("res://scripts/hotbar.gd")
 const CastBarScript := preload("res://scripts/cast_bar.gd")
+const Keybinds := preload("res://scripts/keybinds.gd")
 const AbilityDefs := preload("res://scripts/ability_defs.gd")
 const CastHitFx := preload("res://scripts/cast_hit_fx.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
@@ -118,6 +120,7 @@ signal respawn_requested()
 @export var class_debug: Node
 @export var error_hud: Node
 @export var death_overlay: Node
+@export var esc_menu: Node
 @export var hotbar: Node
 @export var cast_bar: Node
 @export var camera_rig: Node
@@ -138,6 +141,7 @@ var _classes: Dictionary = {}
 var _skill_levels := {}
 var _active_class_id := ""
 var _death_overlay: DeathOverlayScript = null
+var _esc_menu: EscMenuScript = null
 var _hotbar: HotbarScript = null
 var _cast_bar: CastBarScript = null
 var _hp := {}
@@ -197,6 +201,8 @@ func _ready() -> void:
 		push_error("Session.npcs must point at a container node")
 		return
 
+	Keybinds.apply_saved()
+
 	_net.welcomed.connect(_on_welcomed)
 	_net.welcome_items.connect(_on_welcome_items)
 	_net.welcome_nodes.connect(_on_welcome_nodes)
@@ -231,6 +237,7 @@ func _ready() -> void:
 	else:
 		_picker.item_clicked.connect(_on_item_clicked)
 		_picker.node_gather_clicked.connect(_on_node_gather_clicked)
+		_picker.node_clicked.connect(_on_node_clicked)
 		_picker.player_clicked.connect(_on_player_clicked)
 		_picker.player_attack_clicked.connect(_on_player_attack_clicked)
 
@@ -297,6 +304,12 @@ func _ready() -> void:
 		push_error("Session.death_overlay must point at a node running death_overlay.gd")
 	else:
 		_death_overlay.respawn_requested.connect(_on_respawn_requested)
+	_esc_menu = esc_menu as EscMenuScript
+	if _esc_menu == null:
+		push_error("Session.esc_menu must point at a node running esc_menu.gd")
+	else:
+		_esc_menu.resume_requested.connect(_on_esc_resume_requested)
+		_esc_menu.exit_requested.connect(_on_esc_exit_requested)
 	_hotbar = hotbar as HotbarScript
 	if _hotbar == null:
 		push_error("Session.hotbar must point at a node running hotbar.gd")
@@ -703,11 +716,51 @@ func clear_selection() -> bool:
 func _input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
+	if _esc_menu != null and _esc_menu.is_options_open():
+		if _esc_menu.cancel_keybind_capture():
+			get_viewport().set_input_as_handled()
+			return
+		_esc_menu.close_options()
+		get_viewport().set_input_as_handled()
+		return
+	if _esc_menu != null and _esc_menu.is_open():
+		_close_esc_menu()
+		get_viewport().set_input_as_handled()
+		return
 	if clear_use_selection():
 		get_viewport().set_input_as_handled()
 		return
 	if clear_selection():
 		get_viewport().set_input_as_handled()
+		return
+	_open_esc_menu()
+	get_viewport().set_input_as_handled()
+
+
+func is_esc_menu_open() -> bool:
+	return _esc_menu != null and _esc_menu.is_open()
+
+
+func _open_esc_menu() -> void:
+	if _esc_menu == null:
+		return
+	if _move_held:
+		_send_move_chord(0.0, 0.0)
+	_esc_menu.open_menu()
+
+
+func _close_esc_menu() -> void:
+	if _esc_menu == null:
+		return
+	_esc_menu.close_menu()
+
+
+func _on_esc_resume_requested() -> void:
+	_close_esc_menu()
+
+
+func _on_esc_exit_requested() -> void:
+	get_tree().quit()
 
 
 func _on_welcomed(
@@ -910,6 +963,8 @@ func _process(_delta: float) -> void:
 
 func _poll_move_intent() -> void:
 	if _net == null or not _net.is_open() or not _clock.is_anchored():
+		return
+	if is_esc_menu_open():
 		return
 
 	var local_x := 0.0
@@ -1162,6 +1217,10 @@ func _on_node_gather_clicked(body: Node3D) -> void:
 			"session: the picker reported a click on %s, which is not a resource node" % body
 		)
 		return
+	if _try_use_on_node(resource_node):
+		return
+	if not resource_node.is_gatherable():
+		return
 	var id := _id_of_node_body(resource_node)
 	if id == 0:
 		push_warning(
@@ -1170,6 +1229,31 @@ func _on_node_gather_clicked(body: Node3D) -> void:
 		)
 		return
 	request_gather(id)
+
+
+func _on_node_clicked(body: Node3D) -> void:
+	var resource_node := body as ResourceNodeScript
+	if resource_node == null:
+		push_error(
+			"session: the picker reported a click on %s, which is not a resource node" % body
+		)
+		return
+	_try_use_on_node(resource_node)
+
+
+func _try_use_on_node(resource_node: ResourceNodeScript) -> bool:
+	if not has_pending_use():
+		return false
+	var id := _id_of_node_body(resource_node)
+	if id == 0:
+		push_warning(
+			"session: clicked a node body this session has no registry entry for (%s); ignoring"
+			% resource_node.name
+		)
+		return true
+	var from := _use_from
+	request_use(from, id)
+	return true
 
 
 func _on_player_clicked(body: Node3D) -> void:

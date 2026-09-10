@@ -37,6 +37,8 @@ const SCENE_SUITES: Array = [
 	{"name": "class", "scene": "res://tests/test_class.tscn"},
 	{"name": "class debug", "scene": "res://tests/test_class_debug.tscn"},
 	{"name": "error hud", "scene": "res://tests/test_error_hud.tscn"},
+	{"name": "esc menu", "scene": "res://tests/test_esc_menu.tscn"},
+	{"name": "keybinds", "scene": "res://tests/test_keybinds.tscn"},
 	{"name": "dialog", "scene": "res://tests/test_dialog.tscn"},
 	{"name": "quest log", "scene": "res://tests/test_quest_log.tscn"},
 	{"name": "party", "scene": "res://tests/test_party.tscn"},
