@@ -85,7 +85,7 @@ func TestNoFrameOfASessionCarriesANull(t *testing.T) {
 }
 
 func TestANilListWouldGoOutAsNull(t *testing.T) {
-	payload, err := mnet.Encode(mnet.Welcome{You: 1, TickMS: 150})
+	payload, err := mnet.Encode(mnet.Welcome{You: 1, TickMS: 40})
 	if err != nil {
 		t.Fatalf("encoding a welcome: %v", err)
 	}

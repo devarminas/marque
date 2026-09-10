@@ -282,7 +282,7 @@ const sharedAbilitiesJSON = `{
       "id": "heal",
       "name": "Heal",
       "mana_cost": 20,
-      "cooldown_ticks": 10,
+      "cooldown_ticks": 38,
       "range": 8,
       "target": "friendly",
       "effect": {"kind": "heal", "amount": 25},
@@ -292,8 +292,8 @@ const sharedAbilitiesJSON = `{
       "id": "fireball",
       "name": "Fireball",
       "mana_cost": 35,
-      "cooldown_ticks": 8,
-      "cast_ticks": 8,
+      "cooldown_ticks": 30,
+      "cast_ticks": 30,
       "range": 8,
       "target": "hostile",
       "effect": {"kind": "damage", "amount": 40},
@@ -317,7 +317,7 @@ const suicideAbilityJSON = `{
       "id": "heal",
       "name": "Heal",
       "mana_cost": 20,
-      "cooldown_ticks": 10,
+      "cooldown_ticks": 38,
       "range": 8,
       "target": "friendly",
       "effect": {"kind": "heal", "amount": 25},
@@ -327,8 +327,8 @@ const suicideAbilityJSON = `{
       "id": "fireball",
       "name": "Fireball",
       "mana_cost": 35,
-      "cooldown_ticks": 8,
-      "cast_ticks": 8,
+      "cooldown_ticks": 30,
+      "cast_ticks": 30,
       "range": 8,
       "target": "hostile",
       "effect": {"kind": "damage", "amount": 40},
@@ -338,7 +338,7 @@ const suicideAbilityJSON = `{
       "id": "friendly_blast",
       "name": "Friendly Blast",
       "mana_cost": 5,
-      "cooldown_ticks": 8,
+      "cooldown_ticks": 30,
       "range": 8,
       "target": "friendly",
       "effect": {"kind": "damage", "amount": 10},
@@ -423,7 +423,7 @@ func TestFireballWalkInterruptsOutsideGrace(t *testing.T) {
 	if alice.casting() {
 		t.Fatal("walk outside grace left pending cast")
 	}
-	pw.w.stepNForTest(8)
+	pw.w.stepNForTest(alice.castTotal)
 	if bob.hp != beforeHP {
 		t.Fatalf("interrupted cast still damaged: hp=%d", bob.hp)
 	}

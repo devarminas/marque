@@ -16,7 +16,7 @@ import (
 	"github.com/devarminas/marque/server/internal/questdef"
 )
 
-const TickDuration = 150 * time.Millisecond
+const TickDuration = 40 * time.Millisecond
 
 const MaxCatchUpTicks = 5
 
