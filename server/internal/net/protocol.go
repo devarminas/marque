@@ -34,6 +34,7 @@ type EquipSlot string
 const (
 	MsgMoveTo       = "move_to"
 	MsgMove         = "move"
+	MsgPose         = "pose"
 	MsgPickup       = "pickup"
 	MsgDrop         = "drop"
 	MsgEquip        = "equip"
@@ -60,6 +61,7 @@ const (
 type PlayerState struct {
 	ID      PlayerID `json:"id"`
 	X       float64  `json:"x"`
+	Y       float64  `json:"y"`
 	Z       float64  `json:"z"`
 	HP      int      `json:"hp"`
 	MaxHP   int      `json:"max_hp"`
@@ -129,6 +131,14 @@ type Path struct {
 	StartTick int64    `json:"start_tick"`
 	Points    []Point  `json:"points"`
 	Speed     float64  `json:"speed"`
+}
+
+type Pose struct {
+	ID   PlayerID `json:"id"`
+	Tick int64    `json:"tick"`
+	X    float64  `json:"x"`
+	Y    float64  `json:"y"`
+	Z    float64  `json:"z"`
 }
 
 type Error struct {
@@ -248,6 +258,7 @@ func (Welcome) isServerMessage()           {}
 func (Spawn) isServerMessage()             {}
 func (Despawn) isServerMessage()           {}
 func (Path) isServerMessage()              {}
+func (Pose) isServerMessage()              {}
 func (Error) isServerMessage()             {}
 func (ItemSpawn) isServerMessage()         {}
 func (ItemDespawn) isServerMessage()       {}
@@ -279,8 +290,9 @@ type MoveTo struct {
 }
 
 type Move struct {
-	DX float64 `json:"dx"`
-	DZ float64 `json:"dz"`
+	DX   float64 `json:"dx"`
+	DZ   float64 `json:"dz"`
+	Jump bool    `json:"jump,omitempty"`
 }
 
 type Pickup struct {
@@ -392,6 +404,7 @@ type serverEnvelope struct {
 	Spawn             *Spawn             `json:"spawn,omitempty"`
 	Despawn           *Despawn           `json:"despawn,omitempty"`
 	Path              *Path              `json:"path,omitempty"`
+	Pose              *Pose              `json:"pose,omitempty"`
 	Error             *Error             `json:"error,omitempty"`
 	ItemSpawn         *ItemSpawn         `json:"item_spawn,omitempty"`
 	ItemDespawn       *ItemDespawn       `json:"item_despawn,omitempty"`
@@ -424,6 +437,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.Despawn = &v
 	case Path:
 		env.Path = &v
+	case Pose:
+		env.Pose = &v
 	case Error:
 		env.Error = &v
 	case ItemSpawn:
@@ -480,6 +495,7 @@ const (
 	ReasonUnknownMessage   RejectReason = "unknown_message"
 	ReasonMissingField     RejectReason = "missing_field"
 	ReasonNonFinite        RejectReason = "non_finite"
+	ReasonIllegalSample    RejectReason = "illegal_sample"
 	ReasonOutOfBounds      RejectReason = "out_of_bounds"
 	ReasonDegenerate       RejectReason = "degenerate"
 	ReasonUnknownItem      RejectReason = "unknown_item"
@@ -560,14 +576,16 @@ func rejectIntent(reason RejectReason, re, format string, args ...any) error {
 	}
 }
 
-type moveToWire struct {
-	X *float64 `json:"x"`
-	Z *float64 `json:"z"`
+type moveWire struct {
+	DX   *float64 `json:"dx"`
+	DZ   *float64 `json:"dz"`
+	Jump *bool    `json:"jump"`
 }
 
-type moveWire struct {
-	DX *float64 `json:"dx"`
-	DZ *float64 `json:"dz"`
+// Pose-fact keys on move bodies only; unrelated messages may still carry these names.
+var movePoseFactKeys = []string{
+	"x", "z", "y", "pos", "position", "pose", "path",
+	"velocity", "vx", "vz", "vy",
 }
 
 type pickupWire struct {
@@ -727,20 +745,28 @@ func decodeSeq(payload []byte, re string) (Seq, error) {
 }
 
 func decodeMoveTo(payload []byte) (ClientMessage, error) {
-	var wire moveToWire
-	if err := json.Unmarshal(payload, &wire); err != nil {
-		return nil, rejectIntent(ReasonMalformedJSON, MsgMoveTo, "move_to: %v", err)
+	return nil, rejectIntent(ReasonIllegalSample, MsgMoveTo,
+		"illegal_sample: move_to is retired; send move wish samples")
+}
+
+func gateMoveBody(payload []byte) error {
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &keys); err != nil {
+		return rejectIntent(ReasonMalformedJSON, MsgMove, "move: %v", err)
 	}
-	if wire.X == nil || wire.Z == nil {
-		return nil, rejectIntent(ReasonMissingField, MsgMoveTo, "move_to needs both x and z")
+	for _, banned := range movePoseFactKeys {
+		if _, ok := keys[banned]; ok {
+			return rejectIntent(ReasonIllegalSample, MsgMove,
+				"illegal_sample: forbidden key %q", banned)
+		}
 	}
-	if !finite(*wire.X) || !finite(*wire.Z) {
-		return nil, rejectIntent(ReasonNonFinite, MsgMoveTo, "move_to coordinates must be finite")
-	}
-	return MoveTo{X: *wire.X, Z: *wire.Z}, nil
+	return nil
 }
 
 func decodeMove(payload []byte) (ClientMessage, error) {
+	if err := gateMoveBody(payload); err != nil {
+		return nil, err
+	}
 	var wire moveWire
 	if err := json.Unmarshal(payload, &wire); err != nil {
 		return nil, rejectIntent(ReasonMalformedJSON, MsgMove, "move: %v", err)
@@ -749,9 +775,13 @@ func decodeMove(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonMissingField, MsgMove, "move needs both dx and dz")
 	}
 	if !finite(*wire.DX) || !finite(*wire.DZ) {
-		return nil, rejectIntent(ReasonNonFinite, MsgMove, "move components must be finite")
+		return nil, rejectIntent(ReasonIllegalSample, MsgMove, "illegal_sample: move components must be finite")
 	}
-	return Move{DX: *wire.DX, DZ: *wire.DZ}, nil
+	msg := Move{DX: *wire.DX, DZ: *wire.DZ}
+	if wire.Jump != nil {
+		msg.Jump = *wire.Jump
+	}
+	return msg, nil
 }
 
 func decodePickup(payload []byte) (ClientMessage, error) {

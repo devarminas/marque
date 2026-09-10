@@ -25,6 +25,7 @@ func (p *player) wireState() mnet.PlayerState {
 	return mnet.PlayerState{
 		ID:      p.id,
 		X:       p.pos.X,
+		Y:       p.y,
 		Z:       p.pos.Z,
 		HP:      p.hp,
 		MaxHP:   MaxHP,
@@ -144,9 +145,10 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 	p.hp = MaxHP
 	p.mana = MaxMana
 	p.pos = Point{X: spawnX, Z: spawnZ}
+	p.y = 0
 	p.remaining = nil
 	p.clearSteer()
-	w.assignPath(p, []Point{p.pos})
+	w.broadcastPose(p)
 	w.broadcastHP(p)
 	w.broadcastMana(p)
 	w.log.Event(w.tick, EvRespawn, withSeq(gamelog.Fields{"player": p.id}, seq))

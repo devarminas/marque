@@ -1,6 +1,5 @@
 package net_test
 
-
 import (
 	"testing"
 	"time"
@@ -9,15 +8,16 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
-const walkDest = 30.0
+const approachDest = 10.0
 
 func TestJoinReplayLogsTheReAnchoredPath(t *testing.T) {
-	h := newHarness(t)
+	h := newHarness(t, acornAt(approachDest, 0))
 
 	alice := h.dial("alice")
-	aliceID := alice.welcome().You
+	aw := alice.welcome()
+	aliceID := aw.You
 
-	alice.moveTo(walkDest, 0)
+	alice.pickup(aw.Items[0].ID)
 	assigned := h.awaitEvents(game.EvPathAssigned, 1)[0]
 	alice.path()
 
@@ -73,25 +73,28 @@ func TestJoinReplayLogsTheReAnchoredPath(t *testing.T) {
 		t.Errorf("%s logs points[0] = %v, the origin of the original walk; want alice's position at the join",
 			game.EvPathReplayed, replayPoints[0])
 	}
-	if last := replayPoints[len(replayPoints)-1]; last != mnet.Pt(walkDest, 0) {
+	if last := replayPoints[len(replayPoints)-1]; last != mnet.Pt(approachDest, 0) {
 		t.Errorf("%s ends at %v, want alice's original destination [%v 0]",
-			game.EvPathReplayed, last, walkDest)
+			game.EvPathReplayed, last, approachDest)
 	}
 }
 
 func TestJoinReplayLogsOncePerWalker(t *testing.T) {
-	h := newHarness(t)
+	h := newHarness(t, acornAt(approachDest, 0), acornAt(0, approachDest))
 
 	alice := h.dial("alice")
-	aliceID := alice.welcome().You
+	aw := alice.welcome()
+	aliceID := aw.You
 	bob := h.dial("bob")
-	bobID := bob.welcome().You
+	bw := bob.welcome()
+	bobID := bw.You
+	alice.spawn()
 
-	alice.moveTo(walkDest, 0)
-	bob.moveTo(0, walkDest)
+	alice.pickup(aw.Items[0].ID)
+	bob.pickup(bw.Items[1].ID)
 	h.awaitEvents(game.EvPathAssigned, 2)
-	alice.drain()
-	bob.drain()
+	_ = alice.path()
+	_ = bob.path()
 
 	carol := h.dial("carol")
 	carolWelcome := carol.welcomeFrame()
@@ -130,14 +133,14 @@ func TestHaltedPlayerLogsNoReplay(t *testing.T) {
 	bob.welcome()
 	alice.spawn()
 
-	halt := haltMidWalk(t, alice)
+	halt := haltMidSteer(t, alice)
 	bob.drain()
 
 	carol := h.dial("carol")
 	carolWelcome := carol.welcome()
-	if carolWelcome.Tick <= halt.StartTick {
+	if carolWelcome.Tick <= halt.Tick {
 		t.Fatalf("carol joined at tick %d, not after the halt at %d; the test proved nothing",
-			carolWelcome.Tick, halt.StartTick)
+			carolWelcome.Tick, halt.Tick)
 	}
 
 	carol.expectSilence()

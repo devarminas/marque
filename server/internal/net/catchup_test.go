@@ -2,19 +2,19 @@ package net_test
 
 import (
 	"bytes"
+	"math"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/devarminas/marque/server/internal/game"
-	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
 func TestCatchUpBoundHoldsUnderAStalledLoop(t *testing.T) {
 	const (
-		stall = 8 * game.TickDuration
+		stall    = 8 * game.TickDuration
 		leastDue = 6
-		stallOn = `"ev":"` + game.EvMoveTo + `"`
+		stallOn  = `"ev":"` + game.EvMove + `"`
 	)
 
 	h := newHarness(t)
@@ -32,9 +32,9 @@ func TestCatchUpBoundHoldsUnderAStalledLoop(t *testing.T) {
 	})
 
 	alice := h.dial("alice")
-	me := alice.welcome().You
+	alice.welcome()
 
-	alice.moveTo(4, 4)
+	alice.move(1, 1)
 
 	select {
 	case <-stalling:
@@ -60,11 +60,13 @@ func TestCatchUpBoundHoldsUnderAStalledLoop(t *testing.T) {
 		t.Errorf("the loop reports due=%v ran=%v dropped=%v, which do not add up", due, ran, dropped)
 	}
 
+	alice.move(0, 0)
+	halt := alice.awaitPose()
+	alice.noteSelfPose(halt)
 	alice.drain()
-	alice.moveTo(9, 9)
-	points := alice.awaitPath(me).Points
-	if got := points[len(points)-1]; got != mnet.Pt(9, 9) {
-		t.Fatalf("after the stall a click ended at %v, want [9 9]", got)
+	alice.walkTo(9, 9)
+	if math.Hypot(alice.x-9, alice.z-9) > tickStep*1.5 {
+		t.Fatalf("after the stall alice ended at (%v,%v), want near [9 9]", alice.x, alice.z)
 	}
 }
 

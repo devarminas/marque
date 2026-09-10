@@ -1,6 +1,7 @@
 package net_test
 
 import (
+	"math"
 	"net"
 	"regexp"
 	"testing"
@@ -278,10 +279,8 @@ func TestAResumedWalkerIsToldWhereItsOwnBodyIs(t *testing.T) {
 
 	alice := h.dial("alice")
 	first := alice.welcome()
-	alice.moveTo(destination, 0)
-	if start := alice.path().Points[0]; start != mnet.Pt(0, 0) {
-		t.Fatalf("the walk starts at %v, want the spawn point", start)
-	}
+	alice.move(1, 0)
+	alice.awaitPose()
 
 	time.Sleep(4 * game.TickDuration)
 	alice.destroy()
@@ -289,26 +288,15 @@ func TestAResumedWalkerIsToldWhereItsOwnBodyIs(t *testing.T) {
 	time.Sleep(waitInsideTheGrace)
 
 	step := readJoinStep(h.dialResume("alice-again", first.Session))
-	replay, ok := step.pathFor(first.You)
-	if !ok {
-		t.Fatalf("the resume step carried no path for the resuming player (%d), only %+v; a client with no replay for its own body draws it at a stale position",
-			first.You, step.paths)
+	if _, ok := step.pathFor(first.You); ok {
+		t.Fatalf("resume replayed a path for a steering player; steer is pose-only")
 	}
-	if replay.StartTick != step.welcome.Tick {
-		t.Fatalf("the replayed path starts at tick %d, want the welcome's tick %d; a replay is re-anchored, never resent verbatim",
-			replay.StartTick, step.welcome.Tick)
-	}
-	if got := replay.Points[len(replay.Points)-1]; got != mnet.Pt(destination, 0) {
-		t.Fatalf("the replayed path ends at %v, want the destination alice was walking to", got)
-	}
-
 	here := positionOf(t, step.welcome, first.You)
-	if replay.Points[0] != mnet.Pt(here.X, here.Z) {
-		t.Fatalf("the replay starts at %v but welcome puts the body at (%v, %v); those two would only agree by luck if the replay were not re-anchored",
-			replay.Points[0], here.X, here.Z)
-	}
 	if here.X <= 0 {
-		t.Fatalf("the body is at x=%v after four ticks of walking, want it to have kept walking while nobody was listening", here.X)
+		t.Fatalf("welcome puts resumed body at x=%v, want progress along +x", here.X)
+	}
+	if here.Y != 0 {
+		t.Fatalf("welcome y=%v, want 0", here.Y)
 	}
 }
 
@@ -388,9 +376,9 @@ func TestATokenWhosePlayerIsConnectedIsRefused(t *testing.T) {
 	}
 	intruder.expectClosed()
 
-	alice.moveTo(5, 5)
-	if got := alice.path().ID; got != first.You {
-		t.Fatalf("alice's move produced a path for player %d, want %d", got, first.You)
+	alice.walkTo(5, 5)
+	if math.Hypot(alice.x-5, alice.z-5) > tickStep*1.5 {
+		t.Fatalf("alice ended at (%v,%v), want near [5 5]", alice.x, alice.z)
 	}
 
 	h.awaitEvents(game.EvResumeRefused, 1)

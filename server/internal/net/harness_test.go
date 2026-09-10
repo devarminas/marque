@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -247,7 +248,7 @@ func (h *harness) churnOnce() error {
 		}
 	}
 
-	if err := ws.Write(ctx, websocket.MessageText, []byte(`{"move_to":{"x":5,"z":5}}`)); err != nil {
+	if err := ws.Write(ctx, websocket.MessageText, []byte(`{"move":{"dx":1,"dz":0}}`)); err != nil {
 		return nil
 	}
 	if err := ws.Close(websocket.StatusNormalClosure, "test done"); err != nil {
@@ -347,6 +348,8 @@ type client struct {
 	t      *testing.T
 	ws     *websocket.Conn
 	name   string
+	id     mnet.PlayerID
+	x, z   float64
 	frames chan frame
 }
 
@@ -355,6 +358,7 @@ type frame struct {
 	Spawn       *mnet.Spawn       `json:"spawn"`
 	Despawn     *mnet.Despawn     `json:"despawn"`
 	Path        *mnet.Path        `json:"path"`
+	Pose        *mnet.Pose        `json:"pose"`
 	Error       *mnet.Error       `json:"error"`
 	ItemSpawn   *mnet.ItemSpawn   `json:"item_spawn"`
 	ItemDespawn *mnet.ItemDespawn `json:"item_despawn"`
@@ -386,6 +390,8 @@ func (f frame) kind() string {
 		return "despawn"
 	case f.Path != nil:
 		return "path"
+	case f.Pose != nil:
+		return "pose"
 	case f.Error != nil:
 		return "error"
 	case f.ItemSpawn != nil:
@@ -487,20 +493,46 @@ func (c *client) pickup(item mnet.ItemID) {
 	c.sendRaw(fmt.Sprintf(`{"pickup":{"item":%d}}`, item))
 }
 
-func (c *client) moveTo(x, z float64) {
+func (c *client) move(dx, dz float64) {
 	c.t.Helper()
-	c.sendRaw(fmt.Sprintf(`{"move_to":{"x":%v,"z":%v}}`, x, z))
+	c.sendRaw(fmt.Sprintf(`{"move":{"dx":%v,"dz":%v}}`, dx, dz))
 }
 
-func (c *client) moveToBackground(x, z float64) error {
+func (c *client) moveBackground(dx, dz float64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), readTimeout)
 	defer cancel()
 
-	payload := fmt.Sprintf(`{"move_to":{"x":%v,"z":%v}}`, x, z)
+	payload := fmt.Sprintf(`{"move":{"dx":%v,"dz":%v}}`, dx, dz)
 	if err := c.ws.Write(ctx, websocket.MessageText, []byte(payload)); err != nil {
 		return fmt.Errorf("client %s: write %s: %w", c.name, payload, err)
 	}
 	return nil
+}
+
+func (c *client) walkTo(x, z float64) {
+	c.t.Helper()
+	step := game.WalkSpeed * game.TickDuration.Seconds()
+	travel := time.Duration(math.Ceil(math.Hypot(x-c.x, z-c.z)/game.WalkSpeed)*1000) * time.Millisecond
+	deadline := time.Now().Add(travel + 2*time.Second)
+	for time.Now().Before(deadline) {
+		dx, dz := x-c.x, z-c.z
+		dist := math.Hypot(dx, dz)
+		if dist <= step*1.5 {
+			c.move(0, 0)
+			c.awaitPose()
+			return
+		}
+		c.move(dx, dz)
+		c.awaitPose()
+	}
+	c.t.Fatalf("client %s: walkTo(%.3f,%.3f) timed out at (%.3f,%.3f)", c.name, x, z, c.x, c.z)
+}
+
+func (c *client) noteSelfPose(p mnet.Pose) {
+	if c.id != 0 && p.ID != c.id {
+		return
+	}
+	c.x, c.z = p.X, p.Z
 }
 
 func (c *client) drop(slot int) {
@@ -632,6 +664,13 @@ func (c *client) tryNext(within time.Duration) (frame, bool) {
 func (c *client) welcome() mnet.Welcome {
 	c.t.Helper()
 	got := c.welcomeFrame()
+	c.id = got.You
+	for _, p := range got.Players {
+		if p.ID == got.You {
+			c.x, c.z = p.X, p.Z
+			break
+		}
+	}
 	c.inventory()
 	c.equipment()
 	c.classFrame()
@@ -661,6 +700,49 @@ func (c *client) path() mnet.Path {
 		c.t.Fatalf("client %s: got a %s frame, want path: %s", c.name, f.kind(), f.raw)
 	}
 	return *f.Path
+}
+
+func (c *client) pose() mnet.Pose {
+	c.t.Helper()
+	f := c.next()
+	if f.Pose == nil {
+		c.t.Fatalf("client %s: got a %s frame, want pose: %s", c.name, f.kind(), f.raw)
+	}
+	return *f.Pose
+}
+
+func (c *client) awaitPose() mnet.Pose {
+	c.t.Helper()
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(time.Until(deadline))
+		if !ok {
+			break
+		}
+		if f.Pose != nil {
+			c.noteSelfPose(*f.Pose)
+			return *f.Pose
+		}
+	}
+	c.t.Fatalf("client %s: no pose frame within %v", c.name, readTimeout)
+	return mnet.Pose{}
+}
+
+func (c *client) awaitPlayerPose(id mnet.PlayerID) mnet.Pose {
+	c.t.Helper()
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(readTimeout)
+		if !ok {
+			break
+		}
+		if f.Pose != nil && f.Pose.ID == id {
+			c.noteSelfPose(*f.Pose)
+			return *f.Pose
+		}
+	}
+	c.t.Fatalf("client %s: no pose for player %d within %v", c.name, id, readTimeout)
+	return mnet.Pose{}
 }
 
 func (c *client) spawn() mnet.Spawn {
@@ -861,19 +943,14 @@ func (c *client) awaitPath(id mnet.PlayerID) mnet.Path {
 
 func (c *client) awaitHaltPath(id mnet.PlayerID) mnet.Path {
 	c.t.Helper()
-
-	deadline := time.Now().Add(readTimeout)
-	for time.Now().Before(deadline) {
-		f, ok := c.tryNext(readTimeout)
-		if !ok {
-			break
-		}
-		if f.Path != nil && f.Path.ID == id && len(f.Path.Points) == 1 {
-			return *f.Path
-		}
+	// Halt is pose now; return a one-point Path so existing assertions keep working.
+	p := c.awaitPlayerPose(id)
+	return mnet.Path{
+		ID:        id,
+		StartTick: p.Tick,
+		Points:    []mnet.Point{mnet.Pt(p.X, p.Z)},
+		Speed:     game.WalkSpeed,
 	}
-	c.t.Fatalf("client %s: no halt path for player %d within %v", c.name, id, readTimeout)
-	return mnet.Path{}
 }
 
 func (c *client) expectSilence() {

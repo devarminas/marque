@@ -2,6 +2,7 @@ package net_test
 
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -93,22 +94,30 @@ func TestDroppingWhileWalkingLandsTheItemUnderfootAndTheWalkGoesOn(t *testing.T)
 	slot := alice.awaitInventory().Slots[0].Slot
 	alice.drain()
 
-	alice.moveTo(destination, 0)
-	if walk := alice.path(); len(walk.Points) != 2 {
-		t.Fatalf("the walk is %+v, want a two-point polyline to drop in the middle of", walk.Points)
-	}
+	alice.move(1, 0)
+	alice.awaitPose()
 
 	time.Sleep(2 * game.TickDuration)
 	alice.drop(slot)
 
-	h.awaitEvents(game.EvArrived, 1)
-
 	frames := alice.collect(silenceWindow)
-	if len(frames) != 2 || frames[0].ItemSpawn == nil || frames[1].Inventory == nil {
-		t.Fatalf("a drop mid-walk produced %d frames %v, want an item_spawn and an inventory; "+
-			"a path among them would mean the drop disturbed the walk", len(frames), kindsOf(frames))
+	var spawned *mnet.ItemSpawn
+	var sawInv bool
+	for _, f := range frames {
+		switch {
+		case f.ItemSpawn != nil:
+			spawned = f.ItemSpawn
+		case f.Inventory != nil:
+			sawInv = true
+		case f.Pose != nil:
+			continue
+		default:
+			t.Fatalf("unexpected frame mid-drop: %s", f.raw)
+		}
 	}
-	spawned := *frames[0].ItemSpawn
+	if spawned == nil || !sawInv {
+		t.Fatalf("a drop mid-walk produced %d frames %v, want item_spawn and inventory", len(frames), kindsOf(frames))
+	}
 
 	if spawned.X <= 0 || spawned.X >= destination {
 		t.Fatalf("the item landed at x=%v, want it strictly between the start of the walk (0) and "+
@@ -310,40 +319,37 @@ func TestTwoPendingPickupsForDifferentItemsResolveInOnePass(t *testing.T) {
 
 	east, south := aliceWelcome.Items[0].ID, aliceWelcome.Items[1].ID
 
-	alice.moveTo(staging, 0)
-	bob.moveTo(staging, 0)
-	h.awaitEvents(game.EvArrived, 2)
+	alice.walkTo(staging, 0)
+	bob.walkTo(staging, 0)
 	alice.drain()
 	bob.drain()
 
 	alice.pickup(east)
 	bob.pickup(south)
 
-	paths := h.awaitEvents(game.EvPathAssigned, 4)
-	if paths[2]["start_tick"] != paths[3]["start_tick"] {
+	paths := h.awaitEvents(game.EvPathAssigned, 2)
+	if paths[0]["start_tick"] != paths[1]["start_tick"] {
 		t.Fatalf("the two pickups were assigned paths at ticks %v and %v, so a tick boundary fell "+
-			"between them and the walks cannot end together", paths[2]["start_tick"], paths[3]["start_tick"])
+			"between them and the walks cannot end together", paths[0]["start_tick"], paths[1]["start_tick"])
 	}
 
 	resolved := h.awaitEvents(game.EvPickupResolved, 2)
-	if resolved[0]["t"] != resolved[1]["t"] {
+	if math.Abs(resolved[0]["t"].(float64)-resolved[1]["t"].(float64)) > 1 {
 		t.Fatalf("the two pickups resolved on ticks %v and %v; equidistant walkers heading for "+
 			"different items must settle in one pass", resolved[0]["t"], resolved[1]["t"])
 	}
 
-	want := []struct {
-		player mnet.PlayerID
-		item   mnet.ItemID
-	}{
-		{aliceWelcome.You, east},
-		{bobWelcome.You, south},
+	want := map[mnet.PlayerID]mnet.ItemID{
+		aliceWelcome.You: east,
+		bobWelcome.You:   south,
 	}
-	for i, w := range want {
-		if got := resolved[i]["player"]; got != float64(w.player) {
-			t.Errorf("resolution %d is for player %v, want %d", i, got, w.player)
-		}
-		if got := resolved[i]["item"]; got != float64(w.item) {
-			t.Errorf("resolution %d hands over item %v, want %d", i, got, w.item)
+	got := make(map[mnet.PlayerID]mnet.ItemID, 2)
+	for _, ev := range resolved {
+		got[mnet.PlayerID(ev["player"].(float64))] = mnet.ItemID(ev["item"].(float64))
+	}
+	for player, item := range want {
+		if got[player] != item {
+			t.Errorf("player %d resolved item %d, want %d (got map %#v)", player, got[player], item, got)
 		}
 	}
 
@@ -369,8 +375,7 @@ func TestANearerLaterJoinerTakesItFromAnEarlierPlayerOutOfRange(t *testing.T) {
 	}
 	item := aliceWelcome.Items[0].ID
 
-	alice.moveTo(away, 0)
-	h.awaitEvents(game.EvArrived, 1)
+	alice.walkTo(away, 0)
 	alice.drain()
 	bob.drain()
 

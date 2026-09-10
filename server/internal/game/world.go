@@ -20,6 +20,8 @@ const TickDuration = 40 * time.Millisecond
 
 const MaxCatchUpTicks = 5
 
+const PoseIdleEveryTicks int64 = 25
+
 // Tuning: ARM-13.
 const WalkSpeed = 3.0
 
@@ -168,10 +170,14 @@ type player struct {
 
 	pos Point
 
+	y float64
+
 	remaining []Point
 
 	steerDX float64
 	steerDZ float64
+
+	lastPoseTick int64
 
 	pending mnet.ItemID
 
@@ -344,16 +350,16 @@ func (w *World) step() {
 			w.stepSteer(p, distance)
 			continue
 		}
-		if !p.walking() {
+		if p.walking() {
+			p.pos, p.remaining = Advance(p.pos, p.remaining, distance)
+			if !p.walking() {
+				w.log.Event(w.tick, EvArrived, gamelog.Fields{
+					"player": p.id,
+					"x":      p.pos.X,
+					"z":      p.pos.Z,
+				})
+			}
 			continue
-		}
-		p.pos, p.remaining = Advance(p.pos, p.remaining, distance)
-		if !p.walking() {
-			w.log.Event(w.tick, EvArrived, gamelog.Fields{
-				"player": p.id,
-				"x":      p.pos.X,
-				"z":      p.pos.Z,
-			})
 		}
 	}
 
@@ -454,6 +460,7 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		pos:               Point{X: spawnX, Z: spawnZ},
 		hp:                MaxHP,
 		mana:              MaxMana,
+		lastPoseTick:      w.tick,
 		quests:            make(map[string]questStatus),
 		questKillProgress: make(map[string]int),
 	}
@@ -622,10 +629,7 @@ func (w *World) handleFrame(ev mnet.Event) {
 
 	switch msg := ev.Msg.(type) {
 	case mnet.MoveTo:
-		if w.refuseIfDead(p, mnet.MsgMoveTo) {
-			return
-		}
-		w.moveTo(p, msg, ev.Seq)
+		panic("game: move_to must not reach the game loop")
 	case mnet.Move:
 		if w.refuseIfDead(p, mnet.MsgMove) {
 			return
@@ -771,39 +775,6 @@ func withSeq(f gamelog.Fields, seq mnet.Seq) gamelog.Fields {
 	return f
 }
 
-func (w *World) moveTo(p *player, msg mnet.MoveTo, seq mnet.Seq) {
-	w.log.Event(w.tick, EvMoveTo, withSeq(gamelog.Fields{
-		"player": p.id,
-		"x":      msg.X,
-		"z":      msg.Z,
-	}, seq))
-
-	if rejection := w.validate(msg); rejection != nil {
-		w.refuse(p, rejection)
-		return
-	}
-
-	points, assign := destinationPath(p, Point{X: msg.X, Z: msg.Z})
-	if !assign {
-		w.refuse(p, &mnet.RejectError{
-			Reason:      mnet.ReasonDegenerate,
-			Detail:      "already there",
-			Re:          mnet.MsgMoveTo,
-			Disposition: mnet.ReplyError,
-		})
-		return
-	}
-
-	p.pending = 0
-	w.clearPendingTalk(p)
-	w.closeDialog(p)
-	w.cancelGather(p)
-	w.cancelAttack(p, CauseMoveTo)
-	w.interruptCastOnMove(p, CauseMoveTo)
-	p.clearSteer()
-	w.assignPath(p, points)
-}
-
 func destinationPath(p *player, dest Point) (points []Point, assign bool) {
 	line := StraightLine(p.pos, dest)
 	if length(line) >= MinPathLength {
@@ -834,19 +805,6 @@ func pathLogFields(msg mnet.Path) gamelog.Fields {
 		"start_tick": msg.StartTick,
 		"points":     msg.Points,
 		"speed":      msg.Speed,
-	}
-}
-
-func (w *World) validate(msg mnet.MoveTo) *mnet.RejectError {
-	reason, detail := checkCoordinates(msg.X, msg.Z)
-	if reason == "" {
-		return nil
-	}
-	return &mnet.RejectError{
-		Reason:      reason,
-		Detail:      mnet.MsgMoveTo + ": " + detail,
-		Re:          mnet.MsgMoveTo,
-		Disposition: mnet.ReplyError,
 	}
 }
 

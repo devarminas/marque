@@ -24,14 +24,14 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				TickMS:  40,
 				Tick:    142,
 				Players: []mnet.PlayerState{
-					{ID: 1, X: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100},
-					{ID: 2, X: 5, Z: 5, HP: 70, MaxHP: 100, Mana: 40, MaxMana: 100},
+					{ID: 1, X: 0, Y: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100},
+					{ID: 2, X: 5, Y: 0, Z: 5, HP: 70, MaxHP: 100, Mana: 40, MaxMana: 100},
 				},
 				Items: []mnet.ItemState{{ID: 7, Kind: "acorn", X: 3, Z: -2}},
 				Nodes: []mnet.NodeState{},
 				Npcs:  []mnet.NpcState{},
 			},
-			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":40,"tick":142,"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},{"id":2,"x":5,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[],"npcs":[]}}`,
+			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":40,"tick":142,"players":[{"id":1,"x":0,"y":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},{"id":2,"x":5,"y":0,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[],"npcs":[]}}`,
 		},
 		{
 			name: "welcome with an empty world",
@@ -98,8 +98,13 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 		},
 		{
 			name: "spawn",
-			msg:  mnet.Spawn{ID: 2, X: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100},
-			want: `{"spawn":{"id":2,"x":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100}}`,
+			msg:  mnet.Spawn{ID: 2, X: 0, Y: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100},
+			want: `{"spawn":{"id":2,"x":0,"y":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100}}`,
+		},
+		{
+			name: "pose",
+			msg:  mnet.Pose{ID: 7, Tick: 1042, X: 1.2, Y: 0, Z: -0.4},
+			want: `{"pose":{"id":7,"tick":1042,"x":1.2,"y":0,"z":-0.4}}`,
 		},
 		{
 			name: "hp",
@@ -238,37 +243,37 @@ func assertExactlyOneKey(t *testing.T, frame []byte) {
 	}
 }
 
-func TestDecodeMoveTo(t *testing.T) {
+func TestDecodeMoveToRetired(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name    string
-		frame   string
-		wantSeq mnet.Seq
+		name  string
+		frame string
 	}{
-		{"plain", `{"move_to":{"x":42.3,"z":17.8}}`, 0},
-		{"with a seq", `{"move_to":{"x":42.3,"z":17.8,"seq":9}}`, 9},
-		{"with the largest seq an int64 holds", `{"move_to":{"x":42.3,"z":17.8,"seq":9223372036854775807}}`, 9223372036854775807},
-		{"with an explicitly null seq", `{"move_to":{"x":42.3,"z":17.8,"seq":null}}`, 0},
-		{"with a field nobody has invented yet", `{"move_to":{"x":42.3,"z":17.8,"whatever":true}}`, 0},
+		{"plain", `{"move_to":{"x":42.3,"z":17.8}}`},
+		{"with a seq", `{"move_to":{"x":42.3,"z":17.8,"seq":9}}`},
+		{"with invented field", `{"move_to":{"x":42.3,"z":17.8,"whatever":true}}`},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			msg, seq, err := mnet.Decode([]byte(tc.frame))
-			if err != nil {
-				t.Fatalf("Decode(%s) failed: %v", tc.frame, err)
+			msg, _, err := mnet.Decode([]byte(tc.frame))
+			if err == nil {
+				t.Fatalf("Decode(%s) accepted %#v, want illegal_sample", tc.frame, msg)
 			}
-			got, ok := msg.(mnet.MoveTo)
+			rejection, ok := mnet.Rejection(err)
 			if !ok {
-				t.Fatalf("Decode returned %T, want MoveTo", msg)
+				t.Fatalf("Decode(%s) returned %v, want rejection", tc.frame, err)
 			}
-			if got.X != 42.3 || got.Z != 17.8 {
-				t.Fatalf("Decode gave %+v, want {X:42.3 Z:17.8}", got)
+			if rejection.Reason != mnet.ReasonIllegalSample {
+				t.Fatalf("reason=%q, want %q", rejection.Reason, mnet.ReasonIllegalSample)
 			}
-			if seq != tc.wantSeq {
-				t.Fatalf("Decode(%s) gave seq %d, want %d", tc.frame, seq, tc.wantSeq)
+			if rejection.Re != mnet.MsgMoveTo {
+				t.Fatalf("re=%q, want %q", rejection.Re, mnet.MsgMoveTo)
+			}
+			if rejection.Disposition != mnet.ReplyError {
+				t.Fatalf("disposition=%v, want ReplyError", rejection.Disposition)
 			}
 		})
 	}
@@ -285,7 +290,7 @@ func TestDecodeMove(t *testing.T) {
 	if !ok {
 		t.Fatalf("Decode returned %T, want Move", msg)
 	}
-	if got.DX != 0.5 || got.DZ != -0.5 {
+	if got.DX != 0.5 || got.DZ != -0.5 || got.Jump {
 		t.Fatalf("Decode gave %+v", got)
 	}
 	if seq != 3 {
@@ -293,11 +298,59 @@ func TestDecodeMove(t *testing.T) {
 	}
 }
 
+func TestDecodeMoveWithJump(t *testing.T) {
+	t.Parallel()
+
+	msg, _, err := mnet.Decode([]byte(`{"move":{"dx":0,"dz":1,"jump":true,"seq":13}}`))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	got, ok := msg.(mnet.Move)
+	if !ok {
+		t.Fatalf("Decode returned %T, want Move", msg)
+	}
+	if !got.Jump || got.DX != 0 || got.DZ != 1 {
+		t.Fatalf("Decode gave %+v", got)
+	}
+}
+
+func TestDecodeMoveIllegalSample(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		frame string
+	}{
+		{"pose fact x", `{"move":{"dx":1,"dz":0,"x":3.2}}`},
+		{"pose fact path", `{"move":{"dx":1,"dz":0,"path":[]}}`},
+		{"pose fact velocity", `{"move":{"dx":1,"dz":0,"velocity":1}}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			msg, _, err := mnet.Decode([]byte(tc.frame))
+			if err == nil {
+				t.Fatalf("Decode(%s) accepted %#v", tc.frame, msg)
+			}
+			rejection, ok := mnet.Rejection(err)
+			if !ok {
+				t.Fatalf("Decode(%s) returned %v", tc.frame, err)
+			}
+			if rejection.Reason != mnet.ReasonIllegalSample {
+				t.Fatalf("reason=%q, want illegal_sample", rejection.Reason)
+			}
+			if rejection.Re != mnet.MsgMove {
+				t.Fatalf("re=%q, want move", rejection.Re)
+			}
+		})
+	}
+}
+
 func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct{ key, frame string }{
-		{mnet.MsgMoveTo, `{"move_to":{"x":1,"z":2}}`},
 		{mnet.MsgMove, `{"move":{"dx":0,"dz":-1}}`},
 		{mnet.MsgPickup, `{"pickup":{"item":7}}`},
 		{mnet.MsgDrop, `{"drop":{"slot":3}}`},
@@ -335,7 +388,7 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 func TestABodyRejectionStillReportsItsSequenceNumber(t *testing.T) {
 	t.Parallel()
 
-	const frame = `{"move_to":{"x":1,"seq":5}}`
+	const frame = `{"move":{"dx":1,"seq":5}}`
 
 	msg, seq, err := mnet.Decode([]byte(frame))
 	if err == nil {
@@ -367,20 +420,22 @@ func TestDecodeRejections(t *testing.T) {
 		{"not json", `hello`, mnet.ReasonMalformedJSON, mnet.ReplyError, ""},
 		{"not an object", `[1,2,3]`, mnet.ReasonMalformedJSON, mnet.ReplyError, ""},
 		{"empty object", `{}`, mnet.ReasonProtocolError, mnet.ReplyErrorAndClose, ""},
-		{"two keys", `{"move_to":{"x":1,"z":2},"use":{}}`, mnet.ReasonProtocolError, mnet.ReplyErrorAndClose, ""},
+		{"two keys", `{"move":{"dx":1,"dz":2},"use":{}}`, mnet.ReasonProtocolError, mnet.ReplyErrorAndClose, ""},
 		{"unknown message", `{"teleport":{"x":1,"z":2}}`, mnet.ReasonUnknownMessage, mnet.Ignore, "teleport"},
-		{"missing z", `{"move_to":{"x":5}}`, mnet.ReasonMissingField, mnet.ReplyError, "move_to"},
-		{"missing x", `{"move_to":{"z":5}}`, mnet.ReasonMissingField, mnet.ReplyError, "move_to"},
-		{"null payload", `{"move_to":null}`, mnet.ReasonMissingField, mnet.ReplyError, "move_to"},
-		{"wrong type", `{"move_to":{"x":"far","z":2}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		{"nan literal", `{"move_to":{"x":NaN,"z":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, ""},
-		{"overflowing literal", `{"move_to":{"x":1e400,"z":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		{"zero seq", `{"move_to":{"x":1,"z":1,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		{"negative seq", `{"move_to":{"x":1,"z":1,"seq":-1}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		{"fractional seq", `{"move_to":{"x":1,"z":1,"seq":1.5}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		{"quoted seq", `{"move_to":{"x":1,"z":1,"seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		{"seq past what an int64 holds", `{"move_to":{"x":1,"z":1,"seq":9223372036854775808}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
-		{"a bad seq on a body that is also broken", `{"move_to":{"x":1,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move_to"},
+		{"retired move_to", `{"move_to":{"x":5,"z":5}}`, mnet.ReasonIllegalSample, mnet.ReplyError, "move_to"},
+		{"retired move_to missing fields", `{"move_to":{"x":5}}`, mnet.ReasonIllegalSample, mnet.ReplyError, "move_to"},
+		{"retired move_to null", `{"move_to":null}`, mnet.ReasonIllegalSample, mnet.ReplyError, "move_to"},
+		{"move missing dz", `{"move":{"dx":5}}`, mnet.ReasonMissingField, mnet.ReplyError, "move"},
+		{"move missing dx", `{"move":{"dz":5}}`, mnet.ReasonMissingField, mnet.ReplyError, "move"},
+		{"move wrong type", `{"move":{"dx":"far","dz":2}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move"},
+		{"nan literal", `{"move":{"dx":NaN,"dz":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, ""},
+		{"move overflow", `{"move":{"dx":1e400,"dz":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move"},
+		{"zero seq", `{"move":{"dx":1,"dz":1,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move"},
+		{"negative seq", `{"move":{"dx":1,"dz":1,"seq":-1}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move"},
+		{"fractional seq", `{"move":{"dx":1,"dz":1,"seq":1.5}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move"},
+		{"quoted seq", `{"move":{"dx":1,"dz":1,"seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move"},
+		{"seq past what an int64 holds", `{"move":{"dx":1,"dz":1,"seq":9223372036854775808}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move"},
+		{"a bad seq on a body that is also broken", `{"move":{"dx":1,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move"},
 		{"a bad seq on an unknown message", `{"teleport":{"seq":0}}`, mnet.ReasonUnknownMessage, mnet.Ignore, "teleport"},
 		{"a bad seq on a pickup", `{"pickup":{"item":7,"seq":0}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "pickup"},
 		{"a bad seq on a drop", `{"drop":{"slot":3,"seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "drop"},
@@ -394,6 +449,7 @@ func TestDecodeRejections(t *testing.T) {
 		{"a bad seq on an unequip", `{"unequip":{"worn":"right hand","seq":"7"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "unequip"},
 		{"a gather naming no node", `{"gather":{}}`, mnet.ReasonMissingField, mnet.ReplyError, "gather"},
 		{"a gather whose node is not a number", `{"gather":{"node":"tree"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "gather"},
+		{"jump not bool", `{"move":{"dx":1,"dz":0,"jump":1}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move"},
 	}
 
 	for _, tc := range cases {
@@ -423,14 +479,14 @@ func TestDecodeRejections(t *testing.T) {
 	}
 }
 
-func TestLargeFiniteCoordinateDecodesCleanly(t *testing.T) {
+func TestLargeFiniteWishDecodesCleanly(t *testing.T) {
 	t.Parallel()
 
-	msg, _, err := mnet.Decode([]byte(`{"move_to":{"x":1e30,"z":0}}`))
+	msg, _, err := mnet.Decode([]byte(`{"move":{"dx":1e30,"dz":0}}`))
 	if err != nil {
-		t.Fatalf("Decode rejected a finite coordinate: %v", err)
+		t.Fatalf("Decode rejected a finite wish: %v", err)
 	}
-	if got := msg.(mnet.MoveTo); got.X != 1e30 {
-		t.Fatalf("decoded x=%v, want 1e30", got.X)
+	if got := msg.(mnet.Move); got.DX != 1e30 {
+		t.Fatalf("decoded dx=%v, want 1e30", got.DX)
 	}
 }

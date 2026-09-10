@@ -129,7 +129,8 @@ func (w *World) losePickup(p *player) {
 }
 
 func (w *World) assignHalt(p *player) {
-	w.assignPath(p, []Point{p.pos})
+	p.remaining = nil
+	w.broadcastPose(p)
 }
 
 func (w *World) sendInventory(p *player) {

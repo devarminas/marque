@@ -1,8 +1,8 @@
 package net_test
 
-
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -118,24 +118,26 @@ func TestALowerSequenceNumberIsDroppedAndAGapIsAccepted(t *testing.T) {
 	alice := h.dial("alice")
 	alice.welcome()
 
-	alice.sendRaw(`{"move_to":{"x":5,"z":5,"seq":3}}`)
-	if got := alice.path(); got.Points[len(got.Points)-1] != mnet.Pt(5, 5) {
-		t.Fatalf("the first path ends at %v, want [5 5]", got.Points[len(got.Points)-1])
+	alice.sendRaw(`{"move":{"dx":1,"dz":0,"seq":3}}`)
+	first := alice.awaitPose()
+	if first.X <= 0 {
+		t.Fatalf("first pose x=%v, want progress along +x", first.X)
 	}
 
-	alice.sendRaw(`{"move_to":{"x":-5,"z":-5,"seq":2}}`)
+	alice.sendRaw(`{"move":{"dx":-1,"dz":0,"seq":2}}`)
 	h.awaitEvents(game.EvIntentDuplicate, 1)
-	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 1 {
-		t.Fatalf("%d %s events after a seq below the mark, want 1: an arrival the server has already "+
-			"passed is not a new intent", len(assigned), game.EvPathAssigned)
+	moved := h.eventsNamed(game.EvMove)
+	if len(moved) != 1 {
+		t.Fatalf("%d %s events after a seq below the mark, want 1", len(moved), game.EvMove)
 	}
 
-	alice.sendRaw(`{"move_to":{"x":7,"z":7,"seq":10}}`)
-	if got := alice.path(); got.Points[len(got.Points)-1] != mnet.Pt(7, 7) {
-		t.Fatalf("the path after the gap ends at %v, want [7 7]", got.Points[len(got.Points)-1])
+	alice.sendRaw(`{"move":{"dx":0,"dz":1,"seq":10}}`)
+	second := alice.awaitPose()
+	if second.Tick <= first.Tick {
+		t.Fatalf("pose after gap tick %d, want after %d", second.Tick, first.Tick)
 	}
-	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 2 {
-		t.Fatalf("%d %s events after the gap, want 2", len(assigned), game.EvPathAssigned)
+	if len(h.eventsNamed(game.EvMove)) != 2 {
+		t.Fatalf("%d %s events after the gap, want 2", len(h.eventsNamed(game.EvMove)), game.EvMove)
 	}
 }
 
@@ -145,12 +147,12 @@ func TestAnUnsequencedIntentAfterASequencedOneIsApplied(t *testing.T) {
 	alice := h.dial("alice")
 	first := alice.welcome()
 
-	alice.sendRaw(`{"move_to":{"x":100,"z":0,"seq":10}}`)
-	alice.path()
+	alice.sendRaw(`{"move":{"dx":1,"dz":0,"seq":10}}`)
+	alice.awaitPose()
 
-	alice.moveTo(2, 2)
-	if got := alice.path(); got.Points[len(got.Points)-1] != mnet.Pt(2, 2) {
-		t.Fatalf("the unsequenced click produced a path to %v, want [2 2]", got.Points[len(got.Points)-1])
+	alice.walkTo(2, 2)
+	if math.Hypot(alice.x-2, alice.z-2) > tickStep*1.5 {
+		t.Fatalf("unsequenced walk ended at (%v,%v), want near [2 2]", alice.x, alice.z)
 	}
 
 	alice.destroy()
@@ -172,27 +174,26 @@ func TestAMalformedSequenceNumberIsRefusedAndTheConnectionSurvives(t *testing.T)
 	alice.welcome()
 
 	frames := []string{
-		`{"move_to":{"x":1,"z":1,"seq":0}}`,
-		`{"move_to":{"x":1,"z":1,"seq":-1}}`,
-		`{"move_to":{"x":1,"z":1,"seq":1.5}}`,
-		`{"move_to":{"x":1,"z":1,"seq":"7"}}`,
+		`{"move":{"dx":1,"dz":1,"seq":0}}`,
+		`{"move":{"dx":1,"dz":1,"seq":-1}}`,
+		`{"move":{"dx":1,"dz":1,"seq":1.5}}`,
+		`{"move":{"dx":1,"dz":1,"seq":"7"}}`,
 	}
 	for _, frame := range frames {
 		alice.sendRaw(frame)
-		if refusal := alice.awaitError(); refusal.Re != mnet.MsgMoveTo {
-			t.Fatalf("%s: the error is attributed to %q, want %q", frame, refusal.Re, mnet.MsgMoveTo)
+		if refusal := alice.awaitError(); refusal.Re != mnet.MsgMove {
+			t.Fatalf("%s: the error is attributed to %q, want %q", frame, refusal.Re, mnet.MsgMove)
 		}
 	}
 
-	alice.moveTo(4, 6)
-	if got := alice.path(); got.Points[len(got.Points)-1] != mnet.Pt(4, 6) {
-		t.Fatalf("after four bad sequence numbers the path ends at %v, want [4 6]: a broken frame is a "+
-			"broken frame, not a broken client", got.Points[len(got.Points)-1])
+	alice.walkTo(4, 6)
+	if math.Hypot(alice.x-4, alice.z-6) > tickStep*1.5 {
+		t.Fatalf("after four bad sequence numbers ended at (%v,%v), want near [4 6]", alice.x, alice.z)
 	}
 
-	rejected := h.awaitEvents(game.EvMoveToRejected, len(frames))
+	rejected := h.awaitEvents(game.EvMoveRejected, len(frames))
 	if len(rejected) != len(frames) {
-		t.Fatalf("%d %s events, want %d", len(rejected), game.EvMoveToRejected, len(frames))
+		t.Fatalf("%d %s events, want %d", len(rejected), game.EvMoveRejected, len(frames))
 	}
 	for i, ev := range rejected {
 		if got := ev["reason"]; got != string(mnet.ReasonMalformedJSON) {
@@ -212,8 +213,8 @@ func TestARefusedIntentStillConsumesItsSequenceNumber(t *testing.T) {
 		t.Fatalf("the error is attributed to %q, want %q", refusal.Re, mnet.MsgMoveTo)
 	}
 	rejected := h.awaitEvents(game.EvMoveToRejected, 1)
-	if got := rejected[0]["reason"]; got != string(mnet.ReasonOutOfBounds) {
-		t.Fatalf("x=999 was rejected with reason %v, want %q", got, mnet.ReasonOutOfBounds)
+	if got := rejected[0]["reason"]; got != string(mnet.ReasonIllegalSample) {
+		t.Fatalf("move_to was rejected with reason %v, want %q", got, mnet.ReasonIllegalSample)
 	}
 
 	alice.destroy()

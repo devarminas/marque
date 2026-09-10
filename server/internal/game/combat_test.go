@@ -113,7 +113,7 @@ func TestAttackPeriodPausesOffRange(t *testing.T) {
 	}
 }
 
-func TestMoveToCancelsPendingAttack(t *testing.T) {
+func TestMoveCancelsPendingAttackFromCombat(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	hostile := pw.seedHostile()
@@ -122,13 +122,13 @@ func TestMoveToCancelsPendingAttack(t *testing.T) {
 	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
 	pw.w.step()
 
-	pw.w.moveTo(alice, mnet.MoveTo{X: -2, Z: 0}, 0)
+	pw.w.move(alice, mnet.Move{DX: -1, DZ: 0}, 0)
 	if alice.attackTarget != 0 {
-		t.Fatalf("pending attack survived move_to: target=%d", alice.attackTarget)
+		t.Fatalf("pending attack survived move: target=%d", alice.attackTarget)
 	}
 	cancelled := pw.events(EvAttackCancelled)
-	if len(cancelled) != 1 || cancelled[0]["cause"] != CauseMoveTo {
-		t.Fatalf("cancel events=%v, want one cause=%s", cancelled, CauseMoveTo)
+	if len(cancelled) != 1 || cancelled[0]["cause"] != CauseMove {
+		t.Fatalf("cancel events=%v, want one cause=%s", cancelled, CauseMove)
 	}
 
 	before := hostile.hp
@@ -199,15 +199,15 @@ func TestDeadRefusesOrdinaryIntents(t *testing.T) {
 	pw.w.handleFrame(mnet.Event{
 		Kind: mnet.EventFrame,
 		Conn: bob.conn,
-		Msg:  mnet.MoveTo{X: 1, Z: 1},
+		Msg:  mnet.Move{DX: 1, DZ: 0},
 	})
-	if bob.walking() {
-		t.Fatal("dead player walked")
+	if bob.steering() {
+		t.Fatal("dead player steered")
 	}
-	if got := pw.events(EvMoveToRejected); len(got) != 1 {
-		t.Fatalf("logged %d move_to_rejected, want 1", len(got))
+	if got := pw.events(EvMoveRejected); len(got) != 1 {
+		t.Fatalf("logged %d move_rejected, want 1", len(got))
 	}
-	if got := pw.events(EvMoveToRejected)[0]["reason"]; got != string(mnet.ReasonDead) {
+	if got := pw.events(EvMoveRejected)[0]["reason"]; got != string(mnet.ReasonDead) {
 		t.Fatalf("reason=%v, want dead", got)
 	}
 

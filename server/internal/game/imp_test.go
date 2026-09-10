@@ -159,7 +159,11 @@ func TestPlayerArrivedStillUsesPlayerField(t *testing.T) {
 	pw := newProbeWorld(t)
 	alice := pw.join()
 	alice.pos = Point{}
-	pw.w.moveTo(alice, mnet.MoveTo{X: 2, Z: 0}, 1)
+	points, ok := destinationPath(alice, Point{X: 2, Z: 0})
+	if !ok {
+		t.Fatal("expected approach path")
+	}
+	pw.w.assignPath(alice, points)
 	for i := 0; i < 80 && alice.walking(); i++ {
 		pw.w.step()
 	}

@@ -30,60 +30,55 @@ func TestOneClientsMoveReachesTheOther(t *testing.T) {
 	if len(bobWelcome.Players) != 2 {
 		t.Fatalf("bob's welcome lists %d players, want alice and bob: %+v", len(bobWelcome.Players), bobWelcome.Players)
 	}
+	for _, p := range bobWelcome.Players {
+		if p.Y != 0 {
+			t.Fatalf("welcome player %d has y=%v, want 0", p.ID, p.Y)
+		}
+	}
 
 	if spawned := alice.spawn(); spawned.ID != bobWelcome.You {
 		t.Fatalf("alice saw a spawn for player %d, want bob (%d)", spawned.ID, bobWelcome.You)
 	}
 
-	const destX, destZ = 10.5, -4.25
-	alice.moveTo(destX, destZ)
+	alice.move(1, 0)
 
-	seen := bob.path()
+	seen := bob.awaitPlayerPose(aliceWelcome.You)
 	if seen.ID != aliceWelcome.You {
-		t.Fatalf("bob got a path for player %d, want alice (%d)", seen.ID, aliceWelcome.You)
+		t.Fatalf("bob got a pose for player %d, want alice (%d)", seen.ID, aliceWelcome.You)
 	}
-	if len(seen.Points) != 2 {
-		t.Fatalf("path has %d points, want 2 for a straight line: %v", len(seen.Points), seen.Points)
+	if seen.Y != 0 {
+		t.Fatalf("pose y=%v, want 0", seen.Y)
 	}
-	if seen.Points[0] != mnet.Pt(0, 0) {
-		t.Fatalf("points[0] = %v, want alice's position at start_tick (the spawn point)", seen.Points[0])
+	if math.Abs(seen.X-tickStep) > 1e-6 || seen.Z != 0 {
+		t.Fatalf("pose=(%v,%v), want first step (~%v, 0)", seen.X, seen.Z, tickStep)
 	}
-	if seen.Points[len(seen.Points)-1] != mnet.Pt(destX, destZ) {
-		t.Fatalf("path ends at %v, want the requested destination [%v %v]",
-			seen.Points[len(seen.Points)-1], destX, destZ)
-	}
-	if seen.Speed != game.WalkSpeed {
-		t.Fatalf("path speed %v, want %v", seen.Speed, game.WalkSpeed)
-	}
-	if seen.StartTick < bobWelcome.Tick {
-		t.Fatalf("start_tick %d precedes the tick bob was welcomed at (%d)", seen.StartTick, bobWelcome.Tick)
+	if seen.Tick < bobWelcome.Tick {
+		t.Fatalf("pose tick %d precedes the tick bob was welcomed at (%d)", seen.Tick, bobWelcome.Tick)
 	}
 
-	mine := alice.path()
-	if mine.ID != aliceWelcome.You || mine.StartTick != seen.StartTick {
-		t.Fatalf("alice got path %+v, want the same one bob got: %+v", mine, seen)
+	mine := alice.awaitPlayerPose(aliceWelcome.You)
+	if mine.ID != aliceWelcome.You || mine.Tick != seen.Tick {
+		t.Fatalf("alice got pose %+v, want the same one bob got: %+v", mine, seen)
 	}
 
-	assigned := h.awaitEvents(game.EvPathAssigned, 1)
-	if got := assigned[0]["player"]; got != float64(aliceWelcome.You) {
-		t.Fatalf("path_assigned logged player %v, want %d", got, aliceWelcome.You)
+	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
+		t.Fatalf("WASD steer must not assign path: %+v", assigned)
 	}
 }
 
-func TestLateJoinLearnsInFlightPath(t *testing.T) {
+func TestLateJoinSeesSteerPoseNotPath(t *testing.T) {
 	h := newHarness(t)
 
 	alice := h.dial("alice")
 	aliceWelcome := alice.welcome()
 
-	const destX = 30.0
-	alice.moveTo(destX, 0)
-	first := alice.path()
-	if first.Points[0] != mnet.Pt(0, 0) {
-		t.Fatalf("points[0] = %v, want the spawn point", first.Points[0])
+	alice.move(1, 0)
+	for range 5 {
+		alice.noteSelfPose(alice.awaitPose())
 	}
-
-	time.Sleep(4 * game.TickDuration)
+	alice.move(0, 0)
+	alice.noteSelfPose(alice.awaitPose())
+	alice.drain()
 
 	bob := h.dial("bob")
 
@@ -98,75 +93,70 @@ func TestLateJoinLearnsInFlightPath(t *testing.T) {
 	if !found {
 		t.Fatalf("bob's welcome does not list alice: %+v", bobWelcome.Players)
 	}
-	if alicePos.X <= 0 || alicePos.X >= destX {
-		t.Fatalf("welcome puts alice at x=%v, want her partway along the walk (0, %v)", alicePos.X, destX)
+	if alicePos.X <= 0 {
+		t.Fatalf("welcome puts alice at x=%v, want her past the origin after steering", alicePos.X)
+	}
+	if alicePos.Y != 0 {
+		t.Fatalf("welcome alice y=%v, want 0", alicePos.Y)
+	}
+	if math.Abs(alicePos.X-alice.x) > tickStep || math.Abs(alicePos.Z-alice.z) > tickStep {
+		t.Fatalf("welcome alice (%v,%v) disagrees with her last pose (%v,%v)", alicePos.X, alicePos.Z, alice.x, alice.z)
 	}
 
-	inFlight := bob.path()
-	if inFlight.ID != aliceWelcome.You {
-		t.Fatalf("path is for player %d, want alice (%d)", inFlight.ID, aliceWelcome.You)
-	}
-	if inFlight.StartTick != bobWelcome.Tick {
-		t.Fatalf("path start_tick %d, want the tick bob was welcomed at (%d)", inFlight.StartTick, bobWelcome.Tick)
-	}
-	if inFlight.Points[0] != mnet.Pt(alicePos.X, alicePos.Z) {
-		t.Fatalf("points[0] = %v, want alice's position from welcome %v", inFlight.Points[0], alicePos)
-	}
-	if len(inFlight.Points) != 2 {
-		t.Fatalf("replayed path has %d points, want the walker plus the waypoints still ahead: %v",
-			len(inFlight.Points), inFlight.Points)
-	}
-	if inFlight.Points[len(inFlight.Points)-1] != mnet.Pt(destX, 0) {
-		t.Fatalf("path ends at %v, want her original destination", inFlight.Points[len(inFlight.Points)-1])
+	bob.inventory()
+	bob.equipment()
+	bob.classFrame()
+	bob.skillsFrame()
+	bob.questLogFrame()
+	bob.expectSilence()
+	if assigned := h.eventsNamed(game.EvPathReplayed); len(assigned) != 0 {
+		t.Fatalf("late join must not replay player path for WASD: %+v", assigned)
 	}
 }
 
-func TestSecondMoveStartsFromTheInterpolatedPosition(t *testing.T) {
+func TestSecondMoveContinuesFromIntegratedPose(t *testing.T) {
 	h := newHarness(t)
 
 	alice := h.dial("alice")
 	alice.welcome()
 
-	alice.moveTo(30, 0)
-	first := alice.path()
+	alice.move(1, 0)
+	first := alice.awaitPose()
 
 	time.Sleep(4 * game.TickDuration)
-
-	alice.moveTo(0, 20)
-	second := alice.path()
-
-	elapsed := second.StartTick - first.StartTick
-	if elapsed <= 0 {
-		t.Fatalf("second path start_tick %d does not follow the first (%d)", second.StartTick, first.StartTick)
+	deadline := time.Now().Add(6 * game.TickDuration)
+	for time.Now().Before(deadline) {
+		f, ok := alice.tryNext(2 * game.TickDuration)
+		if !ok {
+			break
+		}
+		if f.Pose != nil {
+			first = *f.Pose
+			alice.noteSelfPose(first)
+		}
 	}
 
-	if second.Points[0] == first.Points[0] {
-		t.Fatalf("points[0] = %v, the origin of the abandoned path; want where alice actually is",
-			second.Points[0])
-	}
+	alice.move(0, 1)
+	second := alice.awaitPose()
 
-	wantX := float64(elapsed) * tickStep
-	if math.Abs(second.Points[0].X()-wantX) > 1e-6 {
-		t.Fatalf("points[0].x = %v after %d ticks, want %v", second.Points[0].X(), elapsed, wantX)
+	if second.Tick <= first.Tick {
+		t.Fatalf("second pose tick %d does not follow the first (%d)", second.Tick, first.Tick)
 	}
-	if math.Abs(second.Points[0].Z()) > 1e-6 {
-		t.Fatalf("points[0].z = %v, want 0: the first walk was along x only", second.Points[0].Z())
-	}
-	if second.Points[len(second.Points)-1] != mnet.Pt(0, 20) {
-		t.Fatalf("path ends at %v, want the new destination [0 20]", second.Points[len(second.Points)-1])
+	if second.X <= 0 {
+		t.Fatalf("second pose x=%v, want continued progress along prior x walk", second.X)
 	}
 }
 
-func TestOutOfBoundsMoveIsRejected(t *testing.T) {
+func TestMoveToIsRefused(t *testing.T) {
 	h := newHarness(t)
 
 	alice := h.dial("alice")
-	aliceWelcome := alice.welcome()
+	alice.welcome()
 	bob := h.dial("bob")
 	bob.welcome()
 	alice.spawn()
 
-	alice.moveTo(1e30, 0)
+	alice.sendRaw(`{"move_to":{"x":4,"z":6}}`)
 
 	refusal := alice.errorFrame()
 	if refusal.Re != mnet.MsgMoveTo {
@@ -177,36 +167,51 @@ func TestOutOfBoundsMoveIsRejected(t *testing.T) {
 	}
 
 	rejected := h.awaitEvents(game.EvMoveToRejected, 1)
-	if len(rejected) != 1 {
-		t.Fatalf("logged %d rejections, want exactly 1: %+v", len(rejected), rejected)
-	}
-	if got := rejected[0]["reason"]; got != string(mnet.ReasonOutOfBounds) {
-		t.Fatalf("rejection reason %v, want %q", got, mnet.ReasonOutOfBounds)
+	if got := rejected[0]["reason"]; got != string(mnet.ReasonIllegalSample) {
+		t.Fatalf("rejection reason %v, want %q", got, mnet.ReasonIllegalSample)
 	}
 
 	bob.expectSilence()
 	alice.expectSilence()
-
-	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
-		t.Fatalf("a rejected move still assigned a path: %+v", assigned)
-	}
-
-	alice.moveTo(1, 1)
-	if p := bob.path(); p.ID != aliceWelcome.You {
-		t.Fatalf("after a rejection, bob got a path for %d, want alice (%d)", p.ID, aliceWelcome.You)
-	}
 }
 
-func TestWorldEdgeIsInsideTheBounds(t *testing.T) {
+func TestIllegalSamplePoseFactIsRejected(t *testing.T) {
 	h := newHarness(t)
 
 	alice := h.dial("alice")
 	alice.welcome()
 
-	alice.moveTo(game.WorldHalfExtent, -game.WorldHalfExtent)
-	got := alice.path()
-	if got.Points[len(got.Points)-1] != mnet.Pt(game.WorldHalfExtent, -game.WorldHalfExtent) {
-		t.Fatalf("path ends at %v, want the corner of the world", got.Points[len(got.Points)-1])
+	alice.sendRaw(`{"move":{"dx":1,"dz":0,"x":0}}`)
+
+	refusal := alice.errorFrame()
+	if refusal.Re != mnet.MsgMove {
+		t.Fatalf("error attributed to %q, want %q", refusal.Re, mnet.MsgMove)
+	}
+
+	rejected := h.awaitEvents(game.EvMoveRejected, 1)
+	if got := rejected[0]["reason"]; got != string(mnet.ReasonIllegalSample) {
+		t.Fatalf("rejection reason %v, want %q", got, mnet.ReasonIllegalSample)
+	}
+	alice.expectSilence()
+}
+
+func TestWorldEdgeClampViaMove(t *testing.T) {
+	h := newHarness(t)
+
+	alice := h.dial("alice")
+	alice.welcome()
+
+	alice.walkTo(game.WorldHalfExtent-tickStep, 0)
+	alice.move(1, 0)
+	for range 5 {
+		p := alice.awaitPose()
+		alice.noteSelfPose(p)
+		if math.Abs(p.X-game.WorldHalfExtent) < 1e-6 {
+			return
+		}
+	}
+	if math.Abs(alice.x-game.WorldHalfExtent) > 1e-6 {
+		t.Fatalf("x=%v, want clamped at %v", alice.x, game.WorldHalfExtent)
 	}
 }
 
@@ -216,7 +221,7 @@ func TestNaNMoveIsRejected(t *testing.T) {
 	alice := h.dial("alice")
 	alice.welcome()
 
-	alice.sendRaw(`{"move_to":{"x":NaN,"z":0}}`)
+	alice.sendRaw(`{"move":{"dx":NaN,"dz":0}}`)
 
 	if refusal := alice.errorFrame(); refusal.Msg == "" {
 		t.Fatal("error carries no message for a human to read")
@@ -227,57 +232,14 @@ func TestNaNMoveIsRejected(t *testing.T) {
 		t.Fatalf("logged %d rejections, want exactly 1: %+v", len(rejected), rejected)
 	}
 	reason := rejected[0]["reason"]
-	if reason != string(mnet.ReasonMalformedJSON) && reason != string(mnet.ReasonNonFinite) {
-		t.Fatalf("rejection reason %v, want %q or %q",
-			reason, mnet.ReasonMalformedJSON, mnet.ReasonNonFinite)
+	if reason != string(mnet.ReasonMalformedJSON) && reason != string(mnet.ReasonIllegalSample) {
+		t.Fatalf("rejection reason %v, want malformed_json or illegal_sample", reason)
 	}
 
 	alice.expectSilence()
-	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
-		t.Fatalf("a rejected move still assigned a path: %+v", assigned)
-	}
 }
 
-func TestDegenerateClickWhileStationaryIsAnswered(t *testing.T) {
-	h := newHarness(t)
-
-	alice := h.dial("alice")
-	alice.welcome()
-	bob := h.dial("bob")
-	bob.welcome()
-	alice.spawn()
-
-	alice.moveTo(0, 0)
-	alice.moveTo(game.MinPathLength/2, 0)
-
-	for i := range 2 {
-		refusal := alice.errorFrame()
-		if refusal.Re != mnet.MsgMoveTo {
-			t.Fatalf("click %d: error attributed to %q, want %q", i, refusal.Re, mnet.MsgMoveTo)
-		}
-		if refusal.Msg != "already there" {
-			t.Fatalf("click %d: error says %q, want %q", i, refusal.Msg, "already there")
-		}
-	}
-
-	rejected := h.awaitEvents(game.EvMoveToRejected, 2)
-	if len(rejected) != 2 {
-		t.Fatalf("logged %d rejections, want 2: %+v", len(rejected), rejected)
-	}
-	for i, ev := range rejected {
-		if got := ev["reason"]; got != string(mnet.ReasonDegenerate) {
-			t.Fatalf("rejection %d reason %v, want %q", i, got, mnet.ReasonDegenerate)
-		}
-	}
-
-	alice.expectSilence()
-	bob.expectSilence()
-	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
-		t.Fatalf("a degenerate click by a stationary player assigned a path: %+v", assigned)
-	}
-}
-
-func TestDegenerateClickWhileWalkingHalts(t *testing.T) {
+func TestZeroWishHaltsWithPose(t *testing.T) {
 	h := newHarness(t)
 
 	alice := h.dial("alice")
@@ -286,21 +248,15 @@ func TestDegenerateClickWhileWalkingHalts(t *testing.T) {
 	bob.welcome()
 	alice.spawn()
 
-	halt := haltMidWalk(t, alice)
+	halt := haltMidSteer(t, alice)
 
-	if len(halt.Points) != 1 {
-		t.Fatalf("halt path has %d points, want exactly 1: %v", len(halt.Points), halt.Points)
-	}
 	if halt.ID != aliceWelcome.You {
-		t.Fatalf("halt path is for player %d, want alice (%d)", halt.ID, aliceWelcome.You)
+		t.Fatalf("halt pose is for player %d, want alice (%d)", halt.ID, aliceWelcome.You)
 	}
 
-	seen := bob.awaitHaltPath(aliceWelcome.You)
-	if seen.Points[0] != halt.Points[0] {
-		t.Fatalf("bob was told alice halts at %v, alice was told %v", seen.Points[0], halt.Points[0])
-	}
-	if seen.StartTick != halt.StartTick {
-		t.Fatalf("bob got start_tick %d, alice got %d; it is one broadcast", seen.StartTick, halt.StartTick)
+	seen := bob.awaitPlayerPose(aliceWelcome.You)
+	if math.Abs(seen.X-halt.X) > 1e-6 || math.Abs(seen.Z-halt.Z) > 1e-6 {
+		t.Fatalf("bob was told alice halts at (%v,%v), alice was told (%v,%v)", seen.X, seen.Z, halt.X, halt.Z)
 	}
 }
 
@@ -313,7 +269,7 @@ func TestHaltedPlayerStaysHalted(t *testing.T) {
 	bob.welcome()
 	alice.spawn()
 
-	halt := haltMidWalk(t, alice)
+	halt := haltMidSteer(t, alice)
 	bob.drain()
 
 	time.Sleep(4 * game.TickDuration)
@@ -323,9 +279,9 @@ func TestHaltedPlayerStaysHalted(t *testing.T) {
 
 	carol := h.dial("carol")
 	carolWelcome := carol.welcome()
-	if carolWelcome.Tick <= halt.StartTick {
+	if carolWelcome.Tick <= halt.Tick {
 		t.Fatalf("carol joined at tick %d, not after the halt at %d; the test proved nothing",
-			carolWelcome.Tick, halt.StartTick)
+			carolWelcome.Tick, halt.Tick)
 	}
 
 	var alicePos mnet.PlayerState
@@ -338,45 +294,24 @@ func TestHaltedPlayerStaysHalted(t *testing.T) {
 	if !found {
 		t.Fatalf("carol's welcome does not list alice: %+v", carolWelcome.Players)
 	}
-	if alicePos.X != halt.Points[0].X() || alicePos.Z != halt.Points[0].Z() {
-		t.Fatalf("alice is at [%v %v] several ticks after halting at %v; she is still moving",
-			alicePos.X, alicePos.Z, halt.Points[0])
+	if math.Abs(alicePos.X-halt.X) > 1e-6 || math.Abs(alicePos.Z-halt.Z) > 1e-6 {
+		t.Fatalf("alice is at [%v %v] several ticks after halting at (%v,%v); she is still moving",
+			alicePos.X, alicePos.Z, halt.X, halt.Z)
 	}
 
 	carol.expectSilence()
 }
 
-func haltMidWalk(t *testing.T, c *client) mnet.Path {
+func haltMidSteer(t *testing.T, c *client) mnet.Pose {
 	t.Helper()
-
-	const attempts = 20
-	for range attempts {
-		c.moveTo(30, 0)
-		walking := c.path()
-		if len(walking.Points) != 2 {
-			t.Fatalf("expected an ordinary two-point walk, got %v", walking.Points)
-		}
-
-		here := walking.Points[0]
-		c.moveTo(here.X(), here.Z())
-
-		halt := c.path()
-		if len(halt.Points) != 1 {
-			continue
-		}
-		if halt.Points[0] != here {
-			t.Fatalf("halt point %v, want the position the server reported, %v", halt.Points[0], here)
-		}
-		if halt.StartTick != walking.StartTick {
-			t.Fatalf("halt at tick %d but the position was reported at tick %d; "+
-				"a one-point path can only mean a position that has not moved",
-				halt.StartTick, walking.StartTick)
-		}
-		return halt
+	c.move(1, 0)
+	walking := c.awaitPose()
+	c.move(0, 0)
+	halt := c.awaitPose()
+	if halt.Tick < walking.Tick {
+		t.Fatalf("halt tick %d before walk tick %d", halt.Tick, walking.Tick)
 	}
-
-	t.Fatalf("could not land a click inside one tick in %d attempts", attempts)
-	return mnet.Path{}
+	return halt
 }
 
 func TestUnknownMessageIsIgnored(t *testing.T) {
@@ -396,9 +331,9 @@ func TestUnknownMessageIsIgnored(t *testing.T) {
 	}
 
 	alice.expectSilence()
-	alice.moveTo(2, 3)
-	if p := alice.path(); p.ID != aliceWelcome.You {
-		t.Fatalf("after two unknown messages, alice got a path for %d, want herself (%d)", p.ID, aliceWelcome.You)
+	alice.move(1, 0)
+	if p := alice.awaitPose(); p.ID != aliceWelcome.You {
+		t.Fatalf("after two unknown messages, alice got a pose for %d, want herself (%d)", p.ID, aliceWelcome.You)
 	}
 }
 
@@ -408,14 +343,14 @@ func TestReservedFieldsAreIgnored(t *testing.T) {
 	alice := h.dial("alice")
 	aliceWelcome := alice.welcome()
 
-	alice.sendRaw(`{"move_to":{"x":4,"z":6,"seq":17,"invented_later":"whatever"}}`)
+	alice.sendRaw(`{"move":{"dx":1,"dz":0,"seq":17,"invented_later":"whatever"}}`)
 
-	got := alice.path()
+	got := alice.awaitPose()
 	if got.ID != aliceWelcome.You {
-		t.Fatalf("path is for player %d, want alice (%d)", got.ID, aliceWelcome.You)
+		t.Fatalf("pose is for player %d, want alice (%d)", got.ID, aliceWelcome.You)
 	}
-	if got.Points[len(got.Points)-1] != mnet.Pt(4, 6) {
-		t.Fatalf("path ends at %v, want [4 6]", got.Points[len(got.Points)-1])
+	if got.X <= 0 {
+		t.Fatalf("pose x=%v, want progress along +x", got.X)
 	}
 }
 
@@ -426,25 +361,22 @@ func TestMalformedFramesAreRejectedWithAReason(t *testing.T) {
 	aliceWelcome := alice.welcome()
 
 	cases := []struct {
-		frame string
-		want  mnet.RejectReason
+		frame   string
+		want    mnet.RejectReason
+		wantEv  string
 	}{
-		{`this is not json`, mnet.ReasonMalformedJSON},
-		{`{"move_to":{"x":5}}`, mnet.ReasonMissingField},
-		{`{"move_to":{"x":"over there","z":0}}`, mnet.ReasonMalformedJSON},
-		{`{"move_to":{"x":1e400,"z":0}}`, mnet.ReasonMalformedJSON},
+		{`this is not json`, mnet.ReasonMalformedJSON, game.EvMoveToRejected},
+		{`{"move":{"dx":5}}`, mnet.ReasonMissingField, game.EvMoveRejected},
+		{`{"move":{"dx":"over there","dz":0}}`, mnet.ReasonMalformedJSON, game.EvMoveRejected},
+		{`{"move":{"dx":1e400,"dz":0}}`, mnet.ReasonMalformedJSON, game.EvMoveRejected},
 	}
 	for _, tc := range cases {
+		before := len(h.eventsNamed(tc.wantEv))
 		alice.sendRaw(tc.frame)
-	}
-
-	rejected := h.awaitEvents(game.EvMoveToRejected, len(cases))
-	if len(rejected) != len(cases) {
-		t.Fatalf("logged %d rejections, want %d: %+v", len(rejected), len(cases), rejected)
-	}
-	for i, tc := range cases {
-		if got := rejected[i]["reason"]; got != string(tc.want) {
-			t.Fatalf("frame %s rejected with %v, want %q", tc.frame, got, tc.want)
+		rejected := h.awaitEvents(tc.wantEv, before+1)
+		got := rejected[len(rejected)-1]
+		if reason := got["reason"]; reason != string(tc.want) {
+			t.Fatalf("frame %s rejected with %v, want %q", tc.frame, reason, tc.want)
 		}
 		if refusal := alice.errorFrame(); refusal.Msg == "" {
 			t.Fatalf("frame %s produced an error with no message", tc.frame)
@@ -453,9 +385,9 @@ func TestMalformedFramesAreRejectedWithAReason(t *testing.T) {
 
 	alice.expectSilence()
 
-	alice.moveTo(2, 3)
-	if p := alice.path(); p.ID != aliceWelcome.You {
-		t.Fatalf("after four bad frames, alice got a path for %d, want herself (%d)", p.ID, aliceWelcome.You)
+	alice.move(1, 0)
+	if p := alice.awaitPose(); p.ID != aliceWelcome.You {
+		t.Fatalf("after four bad frames, alice got a pose for %d, want herself (%d)", p.ID, aliceWelcome.You)
 	}
 }
 
@@ -468,8 +400,8 @@ func TestUninterpretableFrameClosesTheConnection(t *testing.T) {
 		reason mnet.RejectReason
 	}{
 		{"no keys", func(c *client) { c.sendRaw(`{}`) }, mnet.ReasonProtocolError},
-		{"two keys", func(c *client) { c.sendRaw(`{"move_to":{"x":1,"z":2},"use":{}}`) }, mnet.ReasonProtocolError},
-		{"binary frame", func(c *client) { c.sendBinary([]byte(`{"move_to":{"x":1,"z":2}}`)) }, mnet.ReasonBinaryFrame},
+		{"two keys", func(c *client) { c.sendRaw(`{"move":{"dx":1,"dz":2},"use":{}}`) }, mnet.ReasonProtocolError},
+		{"binary frame", func(c *client) { c.sendBinary([]byte(`{"move":{"dx":1,"dz":2}}`)) }, mnet.ReasonBinaryFrame},
 	}
 
 	for _, tc := range cases {
@@ -611,76 +543,46 @@ func TestSimultaneousJoinsAgreeOnWhoIsThere(t *testing.T) {
 func TestConcurrentTrafficStaysConsistent(t *testing.T) {
 	h := newHarness(t)
 
-	const (
-		movers    = 5
-		moveEvery = 25 * time.Millisecond
-		duration  = time.Second
-	)
-
-	clients := make([]*client, movers)
-	for i := range clients {
-		clients[i] = h.dial("mover")
-		clients[i].welcome()
-	}
+	alice := h.dial("alice")
+	alice.welcome()
+	bob := h.dial("bob")
+	bob.welcome()
+	alice.spawn()
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-
 	bg := newBackgroundErr()
-
-	for i, c := range clients {
-		wg.Add(1)
-		go func(i int, c *client) {
-			defer wg.Done()
-			go c.drainUntil(stop)
-			ticker := time.NewTicker(moveEvery)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-stop:
-					return
-				case <-ticker.C:
-					if err := c.moveToBackground(float64(i)+1, float64(i)-1); err != nil {
-						bg.report(err)
-						return
-					}
-				}
-			}
-		}(i, c)
-	}
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		go alice.drainUntil(stop)
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-stop:
+				_ = alice.moveBackground(0, 0)
 				return
-			default:
+			case <-ticker.C:
+				if err := alice.moveBackground(1, 0); err != nil {
+					bg.report(err)
+					return
+				}
 			}
-			if err := h.churnOnce(); err != nil {
-				bg.report(err)
-				return
-			}
-			time.Sleep(5 * time.Millisecond)
 		}
 	}()
 
-	time.Sleep(duration)
+	time.Sleep(time.Second)
 	close(stop)
 	wg.Wait()
 	bg.check(t)
 
-	for _, c := range clients {
-		c.drain()
-	}
-	alice, bob := clients[0], clients[1]
-	aliceID := h.awaitEvents(game.EvConnected, 1)[0]["player"].(float64)
-
-	alice.moveTo(7, 8)
-	seen := bob.awaitPath(mnet.PlayerID(aliceID))
-	if seen.Points[len(seen.Points)-1] != mnet.Pt(7, 8) {
-		t.Fatalf("after the storm, path ends at %v, want [7 8]", seen.Points[len(seen.Points)-1])
+	time.Sleep(3 * game.TickDuration)
+	alice.move(0, 1)
+	seen := bob.awaitPlayerPose(alice.id)
+	if seen.ID != alice.id {
+		t.Fatalf("after the storm, bob saw pose for %d, want alice %d", seen.ID, alice.id)
 	}
 }
 
@@ -693,9 +595,9 @@ func TestShutdownWithOpenConnections(t *testing.T) {
 	bob.welcome()
 	alice.spawn()
 
-	alice.moveTo(5, 5)
-	alice.path()
-	bob.path()
+	alice.move(1, 0)
+	alice.awaitPose()
+	bob.awaitPlayerPose(alice.id)
 
 	done := make(chan struct{})
 	go func() {
