@@ -40,6 +40,15 @@ included — was wrong and had no way to say so.
 both drew an empty patch of ground look identical whether the server gave the item to
 one player, to both, or to neither. Only the GAMELOG carries it.
 
+Minimum evidence:
+
+| Claim | GAMELOG | DEMO | Pixel |
+|---|---|---|---|
+| Exactly one winner (**core**) | one `pickup_resolved` + one `pickup_lost`, same item, different players | exactly one client carrying acorn | **cannot prove** |
+| Contest timing | same `start_tick` / equal spans on contested paths; `pickup_resolved.t` = `pickup_lost.t` | sync tick prints (tolerate 1) | n/a |
+| Client saw frames | (via resolved/lost) | item body present→absent→present; inv fill | optional |
+| Drop / seed coords | `item_spawned` x,z match `-item` / dropper `arrived` | `DEMO item` agreement within 0.05 | do not assert from silhouette |
+
 ## How to get to it (user POV)
 
 - Two people are in one world with a single item lying on the ground. Both click it at
@@ -48,6 +57,10 @@ one player, to both, or to neither. Only the GAMELOG carries it.
   somewhere else, walks there, and clicks the acorn in their inventory to drop it.
 
 ## Driving it with scripts/contested_pickup_demo.ps1
+
+Default driver rung: **live windowed demo** for client inventory/despawn agreement;
+the core contest claim is **GAMELOG-only** and would also falsify on Go if the store
+broke. Prefer the live harness when proving both layers together.
 
 Preconditions:
 
@@ -100,6 +113,8 @@ Preconditions:
 
 ## Gotchas
 
+- **Core claim is GAMELOG-only.** Pixels cannot prove exactly-one-winner. Assert
+  `pickup_resolved` / `pickup_lost` first.
 - **There is no `item_despawn` event in the server's event log.** The despawn is a wire
   message only (`server/internal/game/items.go`, `w.broadcast(mnet.ItemDespawn...)`);
   no `EvItemDespawned` exists. A recipe that greps the GAMELOG for it finds nothing and

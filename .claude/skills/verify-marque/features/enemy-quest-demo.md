@@ -6,6 +6,9 @@ from `imp_quest_giver`, kill the starter-town Imp camp until both logs read
 credit is asserted on the GAMELOG: both members receive `quest_kill_progress`
 on the same tick while `party_joined` already exists.
 
+**outcome-not-chase.** This recipe proves party, camp kills, and quest complete.
+It does not prove Imp chase pathing or walk-anim.
+
 ## Sub-features
 
 - `enemy-quest-party` — leader invites, member accepts; both report `DEMO party`
@@ -21,6 +24,18 @@ on the same tick while `party_joined` already exists.
 - `demo-pass` — harness exits 0 with `ENEMY QUEST DEMO OK` as its last line, and
   both clients print `DEMO done`.
 
+Minimum evidence for the load-bearing claims:
+
+| Claim | GAMELOG | DEMO | Pixel |
+|---|---|---|---|
+| Party formed | `party_joined` | `DEMO party` (2 members) | optional |
+| Quest accepted | `quest_accepted` ×2 | `DEMO accepted slay_imps active` | optional |
+| Camp kills | ≥5 `npc_despawned` kind `imp` camp `starter_town_imps` | kill/progress lines if present | optional |
+| Party kill credit | `quest_kill_progress` count 5 each; shared-credit tick | objective `(5/5)` on shot 2 | optional |
+| Turn-in | `quest_completed` ×1 each | `DEMO complete`; shot 3 knight kinds | PNGs >4KB |
+
+Chase / walk-anim is **not** in this table.
+
 ## How to get to it (user POV)
 
 - Join a server seeded with a knight bag kit. Form a party (invite / accept).
@@ -29,6 +44,11 @@ on the same tick while `party_joined` already exists.
   when the log shows `(5/5)`.
 
 ## Driving it with scripts/enemy_quest_demo.ps1
+
+Default driver rung: **live windowed demo** (party choreography + quest UI).
+Lower rungs cover store and intent pieces in Go; they do not replace this outcome
+pass. Do not mint a new demo for another kill-quest id. Parameterize Go / thin WS
+instead (see *Proof ladder* in `../SKILL.md`).
 
 Preconditions:
 
@@ -39,19 +59,16 @@ Preconditions:
 
 The script builds marqued, warms Godot once, starts the server on a free port
 with a repeated `-join-kit` knight set, launches two windowed clients with
-`--enemy-quest-shots` and `--enemy-quest-role leader|member`, and asserts:
-
-- Server layer: `party_joined`; five-plus camp `npc_despawned` imps; per-player
-  `quest_accepted`, five `quest_kill_progress`, one `quest_completed`; shared
-  credit tick; no party/talk/dialog rejects.
-- Client layer: accept / killsready / complete DEMO lines, party membership,
-  shot 2 objective `(5/5)`, shot 3 complete + knight kinds, three PNGs each
-  over 4KB, and `DEMO done`.
+`--enemy-quest-shots` and `--enemy-quest-role leader|member`, and asserts the
+minimum evidence table above plus no party/talk/dialog rejects and `DEMO done`.
 
 Evidence lands in `-OutDir`, default `$env:TEMP\marque-enemy-quest`.
 
 ## Gotchas
 
+- **outcome-not-chase.** `ENEMY QUEST DEMO OK` is party / kill / quest outcome
+  proof. Imp chase pathing and walk-anim are Go or GAMELOG-only unless a later
+  unit asserts them. Do not treat mid-chase pixels as required by this marker.
 - **Knight kit is a harness seed.** `DefaultJoinKit` stays empty; the demo
   passes five `-join-kit` flags. Clients equip into class `knight` before
   fighting.

@@ -29,8 +29,9 @@ Preconditions:
   (friendly refuse / hostile request_attack).
 - Live dummies: `powershell -ExecutionPolicy Bypass -File scripts/dummy_attack_demo.ps1`.
   Marker: `DUMMY ATTACK DEMO OK` on the last line; exit 0.
-- Live PvP parity: `scripts/combat_demo.ps1` still proves walk-in, period hits,
-  death, and respawn via a real right-click (`COMBAT DEMO OK`).
+- Live combat loop (attack among cast/WASD): `scripts/tab_combat_demo.ps1`
+  (`TAB COMBAT DEMO OK`). Do not drive `scripts/combat_demo.ps1` (ARM-203 stub).
+- Player death/respawn store rules: Go (`combat_test.go`), not a windowed PvP demo.
 
 Evidence for the dummy demo lands in `-OutDir` (default
 `$env:TEMP\marque-dummy-attack`): client stdout/stderr and `server.stdout.ndjson`.

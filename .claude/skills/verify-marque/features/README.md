@@ -1,95 +1,104 @@
 # Marque verification map
 
-This directory is the maintained source for verifying the user-facing behaviour of
-Project Marque. Read this index before driving the app, then use the matching feature
-file as the recipe. The harness itself — launch, doctor, drive, evidence, cleanup —
-is documented in [../SKILL.md](../SKILL.md).
+Behavior-level inventory of Project Marque. Agents use this map to pick a recipe and
+the lowest falsifying rung. Humans use it as the regression checklist. Launch,
+doctor, drive, evidence, and cleanup live in [../SKILL.md](../SKILL.md).
 
 ## Baseline preconditions
 
 - `doctor.ps1` reports `DOCTOR OK`.
-- On a fresh checkout, the Godot caches are warmed once:
-  `godot --headless --path client --editor --quit` (run.ps1 self-heals this).
-- Anything windowed runs in a real desktop session; headless runs render nothing.
-- Servers always bind `127.0.0.1:0` and announce the port in their `server_started`
-  GAMELOG line. Never assume a fixed port.
-- Every run owns its own processes and stops them by PID.
+- On a fresh checkout, warm Godot caches once:
+  `godot --headless --path client --editor --quit` (`run.ps1` self-heals this).
+- Windowed clients need a real desktop session; headless renders nothing.
+- Servers bind `127.0.0.1:0` and announce the port in `server_started`. Never assume
+  a fixed port.
+- Every run owns its processes and stops them by PID.
 
 ## Driving conventions
 
+- Default driver rung is the **lowest falsifying rung** that can kill the claim
+  (Go → headless → thin WS → live demo). See *Proof ladder* in `../SKILL.md`.
+  Feature `Driving` sections name the preferred rung when it is not obvious.
 - Screenshot prefixes are absolute host paths; two clients share one `user://`.
-- Resolve player ids from each client's `DEMO joined` line, never from launch order —
-  the clients race to connect.
+- Resolve player ids from each client's `DEMO joined` line, never from launch
+  order. The clients race to connect.
 - A run passed only if it exited 0 **and** its marker line printed
-  (`VERIFY HARNESS OK`, `TWO CLIENT DEMO OK`, `INTEROP OK`, `PASS:`). Neither alone
-  proves anything — a suite can print `PASS:` about itself, and one here did. Take
-  the marker from the last line of the output rather than from a grep.
+  (`VERIFY HARNESS OK`, `TWO CLIENT DEMO OK`, `INTEROP OK`, `PASS:`). Neither
+  alone proves anything. Take the marker from the last line, not from a grep.
 - Treat every command as literal; keep flags and quoting unchanged.
-- Do not remove proof artifacts during cleanup. The harness that wrote them empties
-  its own output directory at the start of its *next* run, so copy anything worth
-  keeping before rerunning.
+- Do not remove proof artifacts during cleanup. The harness that wrote them
+  empties its own output directory at the start of its *next* run.
 
 ## Proof and skip reporting
 
 - Capture the user action and the resulting state, not only the final screen.
-- Assert both evidence layers: what the client drew (`DEMO pos` lines, PNGs) and what
-  the server believes (GAMELOG events). The client interpolates paths by itself, so
-  the two can disagree, and a claim proven on one layer only is half-proven.
-- Every screenshot assertion names the specific pixel fact that would be missing if
-  the claim were false — a cast shadow, a second body, a displacement between two
-  named frames. "The screenshot looks right" is not an assertion.
+- Assert both evidence layers when the claim spans them: what the client drew
+  (`DEMO` lines, PNGs) and what the server believes (GAMELOG). Name the minimum
+  set inside Sub-features, Driving, or Gotchas. Do not invent a fifth H2.
+- Every screenshot assertion names the pixel fact that would be missing if the
+  claim were false.
 - Record the feature ID and the entry point used with every artifact.
-- Report an unreachable path with the attempted command and the unmet precondition.
-- Do not report a skipped entry point as verified through a different path.
+- Report an unreachable path with the attempted command and the unmet
+  precondition. Do not report a skipped entry point as verified through a
+  different path.
 
 ## Feature entry contract
 
 Each feature file starts with an H1 title and one paragraph on the user-visible
-behaviour, then exactly four H2 sections in order: `Sub-features`,
-`How to get to it (user POV)`, `Driving it with <harness>`, `Gotchas`.
+behaviour, then exactly four H2 sections in order:
 
-## Features
+1. `Sub-features`
+2. `How to get to it (user POV)`
+3. `Driving it with <harness>`
+4. `Gotchas`
+
+Sub-features stay `id: observable end state`. Encode rung choice and minimum
+evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
+
+## Join & leave
 
 - [Joining the world](./join-welcome.md) — connect, be welcomed, see every player.
-- [Move-to walk](./move-to-walk.md) — the `move_to` intent, the path, the walk, the
-  arrival, and the counterfactual that a left click on bare ground sends nothing.
-- [Two clients see each other walk](./two-clients-see-each-other.md) — the M0
-  milestone, both directions, with the still-camera pixel control and the server's
-  own `arrived` events.
-- [Rejected and malformed intents](./rejected-intents.md) — validation, `error`
-  frames, and what the log records.
 - [Leaving the world](./disconnect-despawn.md) — despawn on the survivor's screen
   and the latched disconnect reason.
-- [Two clients race for one item](./contested-pickup.md) — the M1 milestone: one item,
-  two clicks on the same server tick, exactly one winner; plus the drop and the
-  `item_spawned` coordinates nothing else in this repo asserts.
-- [Equip the join-kit weapon](./equip-weapon.md) — the M3 milestone: open equipment
-  on the right, equip the seeded sword, see it in the right-hand slot, unequip back
-  to the bag.
-- [Gather then craft](./gather-craft.md) — the M4 milestone: equip, race a tree
-  for one logs yield, craft logs→sticks; contested second gatherer gets nothing.
-- [Kill and respawn](./combat-kill-respawn.md) — the M5 milestone: out-of-range
-  click-attack, walk-in hits of 10 to death, death overlay, respawn to HP 100,
-  act again.
-- [Tab targeting](./tab-targeting.md) — M6c: left-click selects a living remote
-  player with ring chrome and no auto-attack; Escape clears; ground keeps
-  selection.
-- [Right-click basic attack](./right-click-basic-attack.md) — M6f: right-click
-  hostile engages pending melee and selects; friendly dummy refuses; left-click
-  stays select-only.
-- [WASD direction move](./wasd-move.md) — M6g: server-authoritative `move`
-  intents, sticky steer, short path segments. WASD is the only movement gesture;
-  ARM-145 removed click-to-move.
-- [Cast effect on target](./cast-effect-on-target.md) — M6h: placeholder flash on
-  the cast target after server mana success; refuse stays silent.
-- [Tab combat loop](./tab-combat-loop.md) — M6i milestone: fireball, heal,
-  right-click attack, WASD in one DEMO/GAMELOG pass.
-- [Server liveness](./heartbeat-liveness.md) — the M2c milestone: heartbeat ticks,
-  the three-interval liveness window, and the loud abandon of a silent server.
-- [Seed class kits on the ground](./seed-class-kits.md) — M7g: `-seed-class-kits`
-  places sets-derived wearable kinds on a grid near spawn; join kit stays empty.
-- [Quest demo: sticks for miner kit](./quest-demo.md) — M9: talk, accept, give `sticks`, miner bag rewards, quest log complete (`QUEST DEMO OK`).
-- [Enemy quest demo: party, imps, Imp Patrol](./enemy-quest-demo.md) — M11: party up, kill camp Imps, complete `slay_imps` (`ENEMY QUEST DEMO OK`).
-- [Right-click a tree, chop it or be told why not](./gather-refusal.md) — ARM-147:
-  right-click gathers, left-click on a node is inert, and the class gate's refusal
-  reads `usable tool not equipped` on screen for four seconds.
+- [Server liveness](./heartbeat-liveness.md) — heartbeat ticks, three-interval
+  liveness window, loud abandon of a silent server.
+
+## Movement
+
+- [Move-to walk](./move-to-walk.md) — `move_to` intent, path, walk, arrival; bare
+  ground left-click sends nothing.
+- [Two clients see each other walk](./two-clients-see-each-other.md) — M0 both
+  directions, still-camera pixel control, server `arrived`.
+- [WASD direction move](./wasd-move.md) — M6g server-authoritative `move`, sticky
+  steer. WASD is the only movement gesture (ARM-145).
+- [Rejected and malformed intents](./rejected-intents.md) — validation, `error`
+  frames, log records.
+
+## Items & gathering
+
+- [Two clients race for one item](./contested-pickup.md) — M1: one winner, drop,
+  `item_spawned` coordinates.
+- [Equip the join-kit weapon](./equip-weapon.md) — M3 equip / unequip.
+- [Gather then craft](./gather-craft.md) — M4 equip, contested tree, craft
+  logs→sticks.
+- [Right-click a tree, chop it or be told why not](./gather-refusal.md) — ARM-147
+  gather gate refusal.
+- [Seed class kits on the ground](./seed-class-kits.md) — M7g `-seed-class-kits`.
+
+## Combat
+
+- [Kill and respawn](./combat-kill-respawn.md) — M5 death/respawn (Go) plus live
+  NPC melee via `dummy_attack` / `tab_combat`. `combat_demo.ps1` is retired.
+- [Tab targeting](./tab-targeting.md) — M6c select with ring chrome; no auto-attack.
+- [Right-click basic attack](./right-click-basic-attack.md) — M6f hostile engage;
+  friendly refuse.
+- [Cast effect on target](./cast-effect-on-target.md) — M6h cast flash / refuse.
+- [Tab combat loop](./tab-combat-loop.md) — M6i fireball, heal, attack, WASD.
+
+## Quests
+
+- [Quest demo: sticks for miner kit](./quest-demo.md) — M9 deliver sticks
+  (`QUEST DEMO OK`).
+- [Enemy quest demo: party, imps, Imp Patrol](./enemy-quest-demo.md) — M11
+  party/kill/quest **outcome** (`ENEMY QUEST DEMO OK`); not Imp chase
+  (outcome-not-chase).

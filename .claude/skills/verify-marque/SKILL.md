@@ -30,11 +30,11 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/equip_demo.ps1` | `EQUIP DEMO OK` |
 | `scripts/gather_craft_demo.ps1` | `GATHER CRAFT DEMO OK` |
 | `scripts/gather_error_demo.ps1` | `GATHER ERROR DEMO OK` |
-| `scripts/combat_demo.ps1` | `COMBAT DEMO OK` |
 | `scripts/dummy_cast_demo.ps1` | `DUMMY CAST DEMO OK` |
 | `scripts/dummy_attack_demo.ps1` | `DUMMY ATTACK DEMO OK` |
 | `scripts/wasd_demo.ps1` | `WASD DEMO OK` |
 | `scripts/tab_combat_demo.ps1` | `TAB COMBAT DEMO OK` |
+| `scripts/combat_demo.ps1` | **retired** (ARM-203 stub). Exits 0 with no marker. Drive `dummy_attack_demo.ps1` / `tab_combat_demo.ps1` instead. |
 | `scripts/quest_demo.ps1` | `QUEST DEMO OK` |
 | `scripts/enemy_quest_demo.ps1` | `ENEMY QUEST DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
@@ -65,6 +65,31 @@ screenshot shows lighting" was passed in this repo by a build whose sun pointed 
 the sky, lit by ambient alone; "the avatar casts a shadow on the ground" would have
 failed it instantly. Assert the shadow, the second body, the displacement between two
 named frames — never the vibe.
+
+## Proof ladder
+
+Pick the **lowest falsifying rung** that can kill the claim. Do not climb for comfort.
+Stay in one skill: verify-marque owns client and server behaviour together. Do not
+split into a client skill and a server skill.
+
+| Rung | Falsifies | Drive |
+|---|---|---|
+| Go unit | Store, tick, intent rejection, GAMELOG shape | From `server/`: `CGO_ENABLED=1 go test -race ./...` (C toolchain on PATH) |
+| Headless Godot | Client frame handling, suites, signals (no pixels) | `godot --headless --path client --script res://tests/run_tests.gd`; full stack via `scripts/interop_test.ps1` |
+| Thin WS probe | Wire replies the flag path cannot reach | Throwaway WebSocket client outside the repo (see *Raw protocol probes*) |
+| Live windowed demo | DEMO lines, pixels, two-client choreography | Existing `scripts/*_demo.ps1` only |
+
+**No new windowed demo per quest id.** New quest coverage extends Go, headless, or
+thin WS. Do not add `*_demo.ps1`, `*_demo.gd`, or a new `--*-shots` flag for a
+quest string. Existing demos stay; they do not multiply with content.
+
+**Evidence kinds** fold into feature recipes (GAMELOG / DEMO / pixel), never a fifth
+H2. Feature files keep Atlas's four H2s only. Name the default driver rung in
+`Driving` when the recipe has one.
+
+**outcome-not-chase.** `ENEMY QUEST DEMO OK` proves party, camp kills, and quest
+complete. It does not prove Imp chase or walk-anim. Chase stays Go or GAMELOG
+unless a later unit asserts it (`features/enemy-quest-demo.md`).
 
 ## Launch
 
@@ -145,8 +170,13 @@ anything looks off.
 | `--equip-shots <abs-prefix>` | Enter the equip milestone demo mode (`equip_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M3d.** Single client; the demo starts marqued with `-join-kit sword`. Absolute host path required. |
 | `--gather-craft-shots <abs-prefix>` | Enter the gather-then-craft milestone demo mode (`gather_craft_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M4e.** Two clients; both equip then race the primary seeded tree at (5, 0). Absolute host path required. |
 | `--gather-error-shots <abs-prefix>` | Enter the refused-gather demo mode (`gather_error_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **ARM-147.** One client; right-clicks the tree unarmed, reads the refusal, wears a ground-seeded lumberjack set, chops. Absolute host path required. |
-| `--combat-shots <abs-prefix>` | Enter the combat milestone demo mode (`combat_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M5d.** Requires `--combat-role attacker\|victim`. Absolute host path required. |
-| `--combat-role attacker\|victim` | Which side of the combat demo this client plays. Required alongside `--combat-shots`. |
+| `--combat-shots <abs-prefix>` | Still wired in `main.gd` / `combat_demo.gd`, but **`scripts/combat_demo.ps1` is retired** (ARM-203 stub, exit 0, no marker). Do not drive the PS1 for proof. |
+| `--combat-role attacker\|victim` | Paired with `--combat-shots`. Same retired-PS1 rule. |
+| `--dummy-cast <abs-prefix>` | Dummy cast demo (`dummy_cast_demo.gd`). Absolute host path required. |
+| `--dummy-attack <abs-prefix>` | Hostile-dummy melee demo (`dummy_attack_demo.gd`). Absolute host path required. |
+| `--wasd-shots <abs-prefix>` | WASD move demo (`wasd_demo.gd`). Absolute host path required. |
+| `--tab-combat-shots <abs-prefix>` | Tab combat loop demo (`tab_combat_demo.gd`). Absolute host path required. |
+| `--quest-shots <abs-prefix>` | Quest demo (`quest_demo.gd`). Absolute host path required. |
 | `--enemy-quest-shots <abs-prefix>` | Enter the M11 enemy/party/kill-quest demo (`enemy_quest_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. Requires `--enemy-quest-role leader\|member`. Absolute host path required. |
 | `--enemy-quest-role leader\|member` | Which side of the enemy quest demo this client plays. Required alongside `--enemy-quest-shots`. |
 | `--screenshot` | No server needed: render `main.tscn`, save one frame to `user://shot.png`, print its absolute path, quit. The single-client visual baseline. |
