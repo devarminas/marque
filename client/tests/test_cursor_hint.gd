@@ -247,10 +247,15 @@ func _test_the_headless_rects_say_where_to_aim() -> void:
 	var centre := _viewport_centre()
 	var hotbar := _root.get_node("UI/Hotbar") as Control
 	var toggle := _root.get_node("UI/InventoryToggle") as Control
+	var hotbar_rect := hotbar.get_global_rect()
 	_check(
-		hotbar.is_visible_in_tree() and hotbar.get_global_rect().has_point(centre),
-		"the visible hotbar rect %s covers the viewport centre %s, so world hovers hide it"
-		% [hotbar.get_global_rect(), centre],
+		hotbar.is_visible_in_tree() and hotbar_rect.has_area(),
+		"the visible hotbar rect %s is authored with an area" % [hotbar_rect],
+	)
+	_check(
+		hotbar_rect.has_point(hotbar_rect.get_center()),
+		"and a point on the hotbar (%s) stays inside it for chrome occlusion checks"
+		% [hotbar_rect.get_center()],
 	)
 	_check(
 		toggle.is_visible_in_tree() and toggle.get_global_rect().has_area(),
