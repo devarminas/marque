@@ -2,6 +2,7 @@ package net_test
 
 
 import (
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -64,11 +65,11 @@ func TestProbeResumeDestroyResumeInsideOneGrace(t *testing.T) {
 	}
 	bob.expectSilence()
 
-	aliceThree.moveTo(5, 5)
-	if got := aliceThree.path().ID; got != first.You {
-		t.Fatalf("the twice-resumed connection drives player %d, want %d", got, first.You)
+	aliceThree.walkTo(5, 5)
+	if math.Hypot(aliceThree.x-5, aliceThree.z-5) > tickStep*1.5 {
+		t.Fatalf("twice-resumed ended at (%v,%v), want near [5 5]", aliceThree.x, aliceThree.z)
 	}
-	if got := bob.awaitPath(first.You).ID; got != first.You {
+	if got := bob.awaitPlayerPose(first.You).ID; got != first.You {
 		t.Fatalf("bob saw the walk for %d", got)
 	}
 }
@@ -165,9 +166,7 @@ func TestProbeSuspendedLoserOfAContestedPickupResumesEmptyHanded(t *testing.T) {
 	bob := h.dial("bob")
 	bw := bob.welcome()
 	item := bw.Items[0].ID
-	bob.moveTo(farItem, 0)
-	bob.path()
-	h.awaitEvents(game.EvArrived, 1)
+	bob.walkTo(farItem, 0)
 
 	alice := h.dial("alice")
 	aw := alice.welcome()
@@ -175,7 +174,7 @@ func TestProbeSuspendedLoserOfAContestedPickupResumesEmptyHanded(t *testing.T) {
 
 	alice.pickup(item)
 	alice.path()
-	bob.path()
+	bob.drain()
 	alice.destroy()
 	h.awaitEvents(game.EvPlayerSuspended, 1)
 
@@ -189,8 +188,8 @@ func TestProbeSuspendedLoserOfAContestedPickupResumesEmptyHanded(t *testing.T) {
 		t.Fatalf("pickup_lost for %v, want suspended alice (%d)", lost[0]["player"], aw.You)
 	}
 	bob.awaitItemDespawn(item)
-	if halt := bob.awaitHaltPath(aw.You); len(halt.Points) != 1 {
-		t.Fatalf("halt for the suspended loser has %d points", len(halt.Points))
+	if halt := bob.awaitPlayerPose(aw.You); halt.ID != aw.You {
+		t.Fatalf("halt pose for suspended loser id=%d, want alice (%d)", halt.ID, aw.You)
 	}
 
 	step := readJoinStep(h.dialResume("alice-again", aw.Session))

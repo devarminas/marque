@@ -19,8 +19,11 @@ func TestMoveSteersAtWalkSpeed(t *testing.T) {
 	if math.Abs(alice.pos.X-want) > 1e-9 || alice.pos.Z != 0 {
 		t.Fatalf("pos=%v, want x≈%v z=0", alice.pos, want)
 	}
-	if got := pw.events(EvPathAssigned); len(got) < 1 {
-		t.Fatal("expected a short path broadcast for the steer step")
+	if got := pw.events(EvPathAssigned); len(got) != 0 {
+		t.Fatalf("steer must not assign path, got %v", got)
+	}
+	if alice.lastPoseTick != pw.w.tick {
+		t.Fatalf("lastPoseTick=%d, want %d after steer step", alice.lastPoseTick, pw.w.tick)
 	}
 }
 
@@ -38,6 +41,10 @@ func TestMoveZeroClearsSteer(t *testing.T) {
 	if alice.pos != before {
 		t.Fatalf("moved after halt: %v → %v", before, alice.pos)
 	}
+}
+
+func TestMoveIdlePoseKeepalive(t *testing.T) {
+	t.Skip("idle pose reanchor deferred until client applies pose (silence harness); PoseIdleEveryTicks kept")
 }
 
 func TestMoveCancelsPendingAttack(t *testing.T) {
@@ -66,25 +73,30 @@ func TestMoveCancelsPendingAttack(t *testing.T) {
 	}
 }
 
-func TestLastIntentWinsMoveAndMoveTo(t *testing.T) {
+func TestLastIntentWinsMoveOverApproach(t *testing.T) {
 	pw := newProbeWorld(t)
 	alice := pw.join()
 
 	pw.w.move(alice, mnet.Move{DX: 1, DZ: 0}, 0)
-	pw.w.moveTo(alice, mnet.MoveTo{X: 0, Z: 5}, 0)
+	points, ok := destinationPath(alice, Point{X: 0, Z: 5})
+	if !ok {
+		t.Fatal("expected approach path")
+	}
+	alice.clearSteer()
+	pw.w.assignPath(alice, points)
 	if alice.steering() {
-		t.Fatal("move_to left sticky steer")
+		t.Fatal("approach left sticky steer")
 	}
 	if len(alice.remaining) == 0 {
-		t.Fatal("move_to assigned no click path")
+		t.Fatal("approach assigned no remaining")
 	}
 
 	pw.w.move(alice, mnet.Move{DX: 0, DZ: 1}, 0)
 	if !alice.steering() {
-		t.Fatal("move did not take ownership after move_to")
+		t.Fatal("move did not take ownership after approach")
 	}
 	if len(alice.remaining) != 0 {
-		t.Fatalf("move left click path remaining=%v", alice.remaining)
+		t.Fatalf("move left approach remaining=%v", alice.remaining)
 	}
 }
 
@@ -125,5 +137,14 @@ func TestDeadRefusesMove(t *testing.T) {
 	}
 	if got := pw.events(EvMoveRejected); len(got) != 1 {
 		t.Fatalf("rejection events=%v", got)
+	}
+}
+
+func TestWireStateIncludesY(t *testing.T) {
+	pw := newProbeWorld(t)
+	alice := pw.join()
+	state := alice.wireState()
+	if state.Y != 0 {
+		t.Fatalf("Y=%v, want 0", state.Y)
 	}
 }

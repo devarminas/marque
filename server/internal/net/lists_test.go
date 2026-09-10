@@ -56,7 +56,7 @@ func TestNoFrameOfASessionCarriesANull(t *testing.T) {
 	bob.welcome()
 	alice.spawn()
 
-	alice.moveTo(2, 2)
+	alice.walkTo(2, 2)
 	alice.pickup(item)
 	bob.pickup(item)
 	h.awaitEvents(game.EvPickupLost, 1)

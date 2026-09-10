@@ -260,22 +260,6 @@ func TestDeathClearsPendingTalkAndDialog(t *testing.T) {
 	}
 }
 
-func TestMoveToClosesOpenDialog(t *testing.T) {
-	pw, giver := newDialogProbe(t)
-	alice := pw.join()
-	alice.pos = giver.pos
-	pw.w.talk(alice, mnet.Talk{NPC: giver.id}, 1)
-	pw.w.step()
-	if alice.dialogNPC != giver.id {
-		t.Fatalf("dialogNPC=%d", alice.dialogNPC)
-	}
-
-	pw.w.moveTo(alice, mnet.MoveTo{X: -20, Z: -20}, 2)
-	if alice.dialogNPC != 0 {
-		t.Fatalf("dialogNPC=%d after move_to", alice.dialogNPC)
-	}
-}
-
 func TestMoveClosesOpenDialog(t *testing.T) {
 	pw, giver := newDialogProbe(t)
 	alice := pw.join()

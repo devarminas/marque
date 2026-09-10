@@ -241,12 +241,10 @@ func TestAPickupWhileWalkingAwayFromANearItemStillTakesIt(t *testing.T) {
 	welcome := alice.welcome()
 	item := welcome.Items[0].ID
 
-	alice.moveTo(staging, 0)
-	alice.path()
-	h.awaitEvents(game.EvArrived, 1)
+	alice.walkTo(staging, 0)
 
-	alice.moveTo(staging, 20)
-	alice.path()
+	alice.move(0, 1)
+	alice.awaitPose()
 
 	alice.pickup(item)
 
@@ -268,7 +266,7 @@ func TestAPickupWhileWalkingAwayFromANearItemStillTakesIt(t *testing.T) {
 	alice.expectSilence()
 }
 
-func TestMoveToCancelsAPendingPickup(t *testing.T) {
+func TestMoveCancelsAPendingPickup(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0))
 
 	alice := h.dial("alice")
@@ -278,10 +276,11 @@ func TestMoveToCancelsAPendingPickup(t *testing.T) {
 	alice.pickup(item)
 	alice.path()
 
-	alice.moveTo(farItem+1, 0)
-	alice.path()
+	alice.move(1, 0)
+	alice.awaitPose()
+	alice.move(0, 0)
+	alice.awaitPose()
 
-	h.awaitEvents(game.EvArrived, 1)
 	alice.expectSilence()
 
 	bob := h.dial("bob")
@@ -348,15 +347,12 @@ func TestTheLoserIsHaltedAndToldWhy(t *testing.T) {
 	alice.pickup(item)
 	bob.pickup(item)
 
-	halt := alice.awaitHaltPath(bobWelcome.You)
-	if len(halt.Points) != 1 {
-		t.Fatalf("halt path has %d points, want 1: %+v", len(halt.Points), halt.Points)
-	}
+	halt := alice.awaitPlayerPose(bobWelcome.You)
 	carol := h.dial("carol")
 	bobNow := positionOf(t, carol.welcomeFrame(), bobWelcome.You)
-	if halt.Points[0].X() != bobNow.X || halt.Points[0].Z() != bobNow.Z {
-		t.Fatalf("bob was halted at %v, but the server puts bob at (%v, %v): a halt anywhere other "+
-			"than the player's own position teleports them", halt.Points[0], bobNow.X, bobNow.Z)
+	if math.Abs(halt.X-bobNow.X) > 1e-6 || math.Abs(halt.Z-bobNow.Z) > 1e-6 {
+		t.Fatalf("bob was halted at (%v,%v), but the server puts bob at (%v, %v): a halt anywhere other "+
+			"than the player's own position teleports them", halt.X, halt.Z, bobNow.X, bobNow.Z)
 	}
 	if bobNow.X == farItem && bobNow.Z == 0 {
 		t.Fatalf("bob halted on the item's own square (%v, %v), so the assertion above could not "+
@@ -384,17 +380,16 @@ func TestBothRacersArriveOnTheSameTick(t *testing.T) {
 	alice.spawn()
 
 	const staging = 1.0
-	alice.moveTo(staging, 0)
-	bob.moveTo(staging, 0)
-	h.awaitEvents(game.EvArrived, 2)
+	alice.walkTo(staging, 0)
+	bob.walkTo(staging, 0)
 	alice.drain()
 	bob.drain()
 
 	alice.pickup(item)
 	bob.pickup(item)
 
-	paths := h.awaitEvents(game.EvPathAssigned, 4)
-	aliceStart, bobStart := paths[2]["start_tick"], paths[3]["start_tick"]
+	paths := h.awaitEvents(game.EvPathAssigned, 2)
+	aliceStart, bobStart := paths[0]["start_tick"], paths[1]["start_tick"]
 	if aliceStart != bobStart {
 		t.Fatalf("the two pickups were assigned paths at ticks %v and %v, so a tick boundary fell between "+
 			"them and the walks cannot end together; the race is a sequence", aliceStart, bobStart)

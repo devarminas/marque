@@ -274,7 +274,7 @@ func TestDepletedNodeRespawnsAfterNodeRespawnTicks(t *testing.T) {
 	}
 }
 
-func TestMoveToCancelsPendingGather(t *testing.T) {
+func TestMoveCancelsPendingGather(t *testing.T) {
 	pw := newGatherProbe(t)
 	alice := pw.joinWithLumberjack()
 	node := pw.seedTree()
@@ -285,10 +285,10 @@ func TestMoveToCancelsPendingGather(t *testing.T) {
 		t.Fatalf("gatherProgress=%d after one tick, want 1", alice.gatherProgress)
 	}
 
-	pw.w.moveTo(alice, mnet.MoveTo{X: 1, Z: 1}, 0)
+	pw.w.move(alice, mnet.Move{DX: 1, DZ: 0}, 0)
 
 	if alice.gatherNode != 0 || alice.gatherProgress != 0 {
-		t.Fatalf("pending gather survived move_to: node=%d progress=%d", alice.gatherNode, alice.gatherProgress)
+		t.Fatalf("pending gather survived move: node=%d progress=%d", alice.gatherNode, alice.gatherProgress)
 	}
 	if got := pw.events(EvGatherCancelled); len(got) != 1 {
 		t.Fatalf("logged %d %s, want 1", len(got), EvGatherCancelled)

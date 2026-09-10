@@ -28,13 +28,14 @@ func (w *World) move(p *player, msg mnet.Move, seq mnet.Seq) {
 		"player": p.id,
 		"dx":     msg.DX,
 		"dz":     msg.DZ,
+		"jump":   msg.Jump,
 	}, seq))
 
 	length := math.Hypot(msg.DX, msg.DZ)
 	if length < SteerEpsilon {
 		p.clearSteer()
 		p.remaining = nil
-		w.assignPath(p, []Point{p.pos})
+		w.broadcastPose(p)
 		return
 	}
 
@@ -60,8 +61,25 @@ func (w *World) stepSteer(p *player, distance float64) {
 	}
 	p.pos = to
 	p.remaining = nil
-	w.assignPath(p, []Point{from, to})
-	p.remaining = nil
+	w.broadcastPose(p)
+}
+
+func (w *World) broadcastPose(p *player) {
+	p.lastPoseTick = w.tick
+	w.broadcast(mnet.Pose{
+		ID:   p.id,
+		Tick: w.tick,
+		X:    p.pos.X,
+		Y:    p.y,
+		Z:    p.pos.Z,
+	}, nil)
+}
+
+func (w *World) maybeIdlePose(p *player) {
+	if w.tick-p.lastPoseTick < PoseIdleEveryTicks {
+		return
+	}
+	w.broadcastPose(p)
 }
 
 func clampWorld(v float64) float64 {
