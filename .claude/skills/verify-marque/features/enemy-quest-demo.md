@@ -1,13 +1,16 @@
 # Enemy quest demo: party, imps, Imp Patrol
 
 M11 live path: two clients join with a knight kit, party up, accept `slay_imps`
-from `imp_quest_giver`, kill the starter-town Imp camp until both logs read
-`Slay 5 imps (5/5)`, turn in, and land the knight reward kinds. Party kill
-credit is asserted on the GAMELOG: both members receive `quest_kill_progress`
-on the same tick while `party_joined` already exists.
+from `imp_quest_giver`, capture a mid-chase NPC dump, kill the starter-town Imp
+camp until both logs read `Slay 5 imps (5/5)`, turn in, and land the knight
+reward kinds. Party kill credit is asserted on the GAMELOG: both members receive
+`quest_kill_progress` on the same tick while `party_joined` already exists.
 
-**outcome-not-chase.** This recipe proves party, camp kills, and quest complete.
-It does not prove Imp chase pathing or walk-anim.
+**chase-visibility.** Mid-chase shot 2 prints `DEMO midchase` plus shared
+`DEMO npc` / `DEMO anim` lines. The client waits until an imp reports
+`walking=1` or `has_path=1`. The harness requires that, or ≥0.5u imp
+displacement between shots 1 and 2 if the path ends before the dump. That proves
+client-side chase polyline state, not walk-clip playback.
 
 ## Sub-features
 
@@ -15,12 +18,15 @@ It does not prove Imp chase pathing or walk-anim.
   with two members; GAMELOG has `party_joined` before kill credit.
 - `enemy-quest-accept` — both clients print `DEMO accepted slay_imps active` and
   the server logs `quest_accepted` for each.
+- `enemy-quest-mid-chase` — both print `DEMO midchase` and prove chase visibility
+  via `walking=1`, `has_path=1`, or ≥0.5u imp displacement between shots 1 and 2
+  (shared `demo_npc_capture.gd` dump).
 - `enemy-quest-camp-kills` — at least five `npc_despawned` events for kind `imp`
   naming camp `starter_town_imps`.
 - `enemy-quest-party-credit` — both players reach `quest_kill_progress` count 5,
   and at least one tick credits both members.
 - `enemy-quest-turn-in` — both print `DEMO complete slay_imps`; GAMELOG has one
-  `quest_completed` each; shot 3 bags hold knight reward kinds.
+  `quest_completed` each; shot 4 bags hold knight reward kinds.
 - `demo-pass` — harness exits 0 with `ENEMY QUEST DEMO OK` as its last line, and
   both clients print `DEMO done`.
 
@@ -30,11 +36,12 @@ Minimum evidence for the load-bearing claims:
 |---|---|---|---|
 | Party formed | `party_joined` | `DEMO party` (2 members) | optional |
 | Quest accepted | `quest_accepted` ×2 | `DEMO accepted slay_imps active` | optional |
+| Mid-chase NPC state | optional | `DEMO midchase`; `DEMO npc`/`DEMO anim`; walking, has_path, or ≥0.5u imp displacement | shot 2 PNG >4KB |
 | Camp kills | ≥5 `npc_despawned` kind `imp` camp `starter_town_imps` | kill/progress lines if present | optional |
-| Party kill credit | `quest_kill_progress` count 5 each; shared-credit tick | objective `(5/5)` on shot 2 | optional |
-| Turn-in | `quest_completed` ×1 each | `DEMO complete`; shot 3 knight kinds | PNGs >4KB |
+| Party kill credit | `quest_kill_progress` count 5 each; shared-credit tick | objective `(5/5)` on shot 3 | optional |
+| Turn-in | `quest_completed` ×1 each | `DEMO complete`; shot 4 knight kinds | PNGs >4KB |
 
-Chase / walk-anim is **not** in this table.
+Shot map: 1 accept, 2 mid-chase, 3 killsready `(5/5)`, 4 complete.
 
 ## How to get to it (user POV)
 
@@ -66,9 +73,9 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-enemy-quest`.
 
 ## Gotchas
 
-- **outcome-not-chase.** `ENEMY QUEST DEMO OK` is party / kill / quest outcome
-  proof. Imp chase pathing and walk-anim are Go or GAMELOG-only unless a later
-  unit asserts them. Do not treat mid-chase pixels as required by this marker.
+- **chase-visibility is polyline, not clip.** `walking=1` / `has_path=1` prove
+  unfinished path state on the client. `DEMO anim` may still print `none` until
+  Imp-compatible walk/idle clips land.
 - **Knight kit is a harness seed.** `DefaultJoinKit` stays empty; the demo
   passes five `-join-kit` flags. Clients equip into class `knight` before
   fighting.
@@ -77,9 +84,8 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-enemy-quest`.
   tank survives Imp multi-pull.
 - **Turn-in is talk `turn_in_quest`.** Deliver give is not used. The dialog
   Accept button relabels to Turn in when that option is present.
-- **Imp walk animation is unverified.** `npc_imp.tscn` authors an
-  `AnimationPlayer` so a missing player no longer silent-no-ops (ARM-228), but
-  Imp-compatible walk/idle clips are not wired yet. `has_animation` soft-skips,
-  so chase motion is still a root transform only until clips land.
+- **Imp AnimationPlayer is present.** `npc_imp.tscn` authors one so a missing
+  player no longer silent-no-ops (ARM-228), but Imp-compatible clips may still
+  soft-skip via `has_animation`.
 - **Cite.** Pattern matches `scripts/quest_demo.ps1` / `gather_craft_demo.ps1`
   and verify-marque two-client evidence layout.

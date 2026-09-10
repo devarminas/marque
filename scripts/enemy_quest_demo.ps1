@@ -69,8 +69,16 @@ function Read-ClientReport([string] $path) {
         Shots = @{}
         QuestLogs = @{}
         Slots = @{}
+        Midchase = $false
+        MidchaseNpcLines = New-Object System.Collections.Generic.List[string]
+        MidchaseAnimLines = New-Object System.Collections.Generic.List[string]
+        MidchaseWalking = 0
+        MidchaseHasPath = 0
+        NpcByShot = @{}
     }
     if (-not (Test-Path $path)) { return $report }
+    $inMidchase = $false
+    $currentShot = -1
     foreach ($line in Get-Content -Path $path) {
         switch -Regex ($line) {
             '^DEMO joined (\d+)\s*$' { $report.Joined = [int]$Matches[1] }
@@ -86,11 +94,44 @@ function Read-ClientReport([string] $path) {
             '^DEMO killsready (\S+)\s*$' {
                 if ($Matches[1] -eq $QuestId) { $report.KillsReady = $true }
             }
+            '^DEMO midchase\s*$' {
+                $report.Midchase = $true
+                $inMidchase = $true
+            }
             '^DEMO party (\d+) members=(\d+)\s*$' {
                 $report.PartyId = [int]$Matches[1]
                 $report.PartyMembers = [int]$Matches[2]
             }
-            '^DEMO shot (\d+) (.+)$' { $report.Shots[[int]$Matches[1]] = $Matches[2].Trim() }
+            '^DEMO shot (\d+) (.+)$' {
+                $shot = [int]$Matches[1]
+                $report.Shots[$shot] = $Matches[2].Trim()
+                $currentShot = $shot
+                if ($shot -ne 2) { $inMidchase = $false }
+            }
+            '^DEMO npc (\d+) (\S+) ([-\d.]+) ([-\d.]+) walking=([01]) has_path=([01])\s*$' {
+                $npcId = [int]$Matches[1]
+                $kind = $Matches[2]
+                $x = [double]$Matches[3]
+                $z = [double]$Matches[4]
+                $walking = [int]$Matches[5]
+                $hasPath = [int]$Matches[6]
+                if ($currentShot -ge 1) {
+                    if (-not $report.NpcByShot.ContainsKey($currentShot)) {
+                        $report.NpcByShot[$currentShot] = @{}
+                    }
+                    $report.NpcByShot[$currentShot][$npcId] = @{
+                        Kind = $kind; X = $x; Z = $z; Walking = $walking; HasPath = $hasPath
+                    }
+                }
+                if ($inMidchase) {
+                    $report.MidchaseNpcLines.Add($line)
+                    if ($walking -eq 1) { $report.MidchaseWalking++ }
+                    if ($hasPath -eq 1) { $report.MidchaseHasPath++ }
+                }
+            }
+            '^DEMO anim (\d+) (\S+)\s*$' {
+                if ($inMidchase) { $report.MidchaseAnimLines.Add($line) }
+            }
             '^DEMO invslot (\d+) (\d+) (\S+)\s*$' {
                 $shot = [int]$Matches[1]
                 if (-not $report.Slots.ContainsKey($shot)) { $report.Slots[$shot] = @{} }
@@ -135,6 +176,27 @@ function Test-HasKind($slots, [string] $kind) {
     if ($null -eq $slots) { return $false }
     foreach ($key in $slots.Keys) {
         if ($slots[$key] -eq $kind) { return $true }
+    }
+    return $false
+}
+
+function Test-MidchaseMotion($report) {
+    if ($report.MidchaseWalking -ge 1 -or $report.MidchaseHasPath -ge 1) {
+        return $true
+    }
+    if (-not $report.NpcByShot.ContainsKey(1) -or -not $report.NpcByShot.ContainsKey(2)) {
+        return $false
+    }
+    $before = $report.NpcByShot[1]
+    $after = $report.NpcByShot[2]
+    foreach ($id in $after.Keys) {
+        if (-not $before.ContainsKey($id)) { continue }
+        if ($after[$id].Kind -ne "imp") { continue }
+        $dx = $after[$id].X - $before[$id].X
+        $dz = $after[$id].Z - $before[$id].Z
+        if ([math]::Sqrt(($dx * $dx) + ($dz * $dz)) -ge 0.5) {
+            return $true
+        }
     }
     return $false
 }
@@ -300,7 +362,7 @@ try {
         if ($report.PartyId -lt 1 -or $report.PartyMembers -lt 2) {
             Add-Failure "client-$($client.Name) party id=$($report.PartyId) members=$($report.PartyMembers), want party with 2"
         }
-        foreach ($index in 1, 2, 3) {
+        foreach ($index in 1, 2, 3, 4) {
             $shot = "$($client.Prefix)_$index.png"
             if (-not (Test-Path $shot)) {
                 Add-Failure "client-$($client.Name) never wrote $shot"
@@ -310,21 +372,39 @@ try {
             Write-Host "==> $shot ($size bytes)"
             if ($size -lt 4096) { Add-Failure "$shot is only $size bytes; that is not a frame" }
         }
+        if (-not $report.Midchase) {
+            Add-Failure "client-$($client.Name) never reported DEMO midchase"
+        }
+        if ($report.MidchaseNpcLines.Count -lt 1) {
+            Add-Failure "client-$($client.Name) mid-chase wrote 0 DEMO npc lines"
+        } else {
+            Write-Host ("==> client-{0} mid-chase DEMO npc lines={1} walking={2} has_path={3}" -f `
+                $client.Name, $report.MidchaseNpcLines.Count, $report.MidchaseWalking, $report.MidchaseHasPath)
+        }
+        if ($report.MidchaseAnimLines.Count -lt 1) {
+            Add-Failure "client-$($client.Name) mid-chase wrote 0 DEMO anim lines"
+        }
+        if (-not (Test-MidchaseMotion $report)) {
+            Add-Failure ("client-{0} mid-chase lacked walking=1, has_path=1, or >=0.5u imp displacement" -f $client.Name)
+        } else {
+            Write-Host ("==> client-{0} mid-chase motion ok (walking={1} has_path={2})" -f `
+                $client.Name, $report.MidchaseWalking, $report.MidchaseHasPath)
+        }
         if (-not $report.QuestLogs.ContainsKey(1) -or -not (@($report.QuestLogs[1]) -match "^$QuestId active")) {
             Add-Failure "client-$($client.Name) shot 1 questlog missing $QuestId active"
         }
-        if (-not $report.QuestLogs.ContainsKey(2) -or -not (@($report.QuestLogs[2]) -match "\(5/5\)")) {
-            Add-Failure "client-$($client.Name) shot 2 questlog missing $QuestId (5/5)"
+        if (-not $report.QuestLogs.ContainsKey(3) -or -not (@($report.QuestLogs[3]) -match "\(5/5\)")) {
+            Add-Failure "client-$($client.Name) shot 3 questlog missing $QuestId (5/5)"
         }
-        if (-not $report.QuestLogs.ContainsKey(3) -or -not (@($report.QuestLogs[3]) -match "^$QuestId complete")) {
-            Add-Failure "client-$($client.Name) shot 3 questlog missing $QuestId complete"
+        if (-not $report.QuestLogs.ContainsKey(4) -or -not (@($report.QuestLogs[4]) -match "^$QuestId complete")) {
+            Add-Failure "client-$($client.Name) shot 4 questlog missing $QuestId complete"
         }
-        if (-not $report.Slots.ContainsKey(3)) {
-            Add-Failure "client-$($client.Name) reported no inventory slots for shot 3"
+        if (-not $report.Slots.ContainsKey(4)) {
+            Add-Failure "client-$($client.Name) reported no inventory slots for shot 4"
         } else {
             foreach ($kind in $RewardKinds) {
-                if (-not (Test-HasKind $report.Slots[3] $kind)) {
-                    Add-Failure "client-$($client.Name) shot 3 bag missing reward kind $kind"
+                if (-not (Test-HasKind $report.Slots[4] $kind)) {
+                    Add-Failure "client-$($client.Name) shot 4 bag missing reward kind $kind"
                 }
             }
         }

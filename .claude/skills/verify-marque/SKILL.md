@@ -354,11 +354,19 @@ a read error provoked by a client that was already dropped for being slow is sti
     DEMO walkto <px> <py> <x> <z>
     DEMO shot <n> <abs-path>
     DEMO pos <shot-n> <player-id> <x> <z>
+    DEMO npc <id> <kind> <x> <z> walking=<0|1> has_path=<0|1>
+    DEMO anim <id> <clip|none>
+    DEMO midchase
     DEMO done
 
-`DEMO pos` reports every body the client drew in that frame, read from the same
-avatars the renderer just drew. Client labels do not map to fixed player ids — the
-two clients race to connect — so always resolve ids via `DEMO joined`.
+`DEMO pos` reports every **avatar** the client drew in that frame, read from the
+same avatars the renderer just drew. NPCs use `DEMO npc` / `DEMO anim` instead —
+never overload `DEMO pos` with NPC bodies. `walking=1` means the NPC still has an
+unfinished polyline (root motion), not that a walk clip is playing. `DEMO anim`
+prints the AnimationPlayer's current clip, or `none` when missing/empty. Client
+labels do not map to fixed player ids — the two clients race to connect — so
+always resolve ids via `DEMO joined`. Shared dump helper:
+`client/scripts/demo_npc_capture.gd`.
 
 **Proof standards.**
 

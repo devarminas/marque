@@ -8,6 +8,7 @@ const PartyPanelScript := preload("res://scripts/party_panel.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
+const DemoNpcCapture := preload("res://scripts/demo_npc_capture.gd")
 
 const QUEST_ID := "slay_imps"
 const QUEST_TITLE := "Imp Patrol"
@@ -107,13 +108,16 @@ func run(
 	_print_quest_log(1)
 	_print_party(1)
 
+	if not await _mid_chase_capture():
+		return 1
+
 	if not await _kill_until_ready():
 		return 1
 	print("DEMO killsready %s" % QUEST_ID)
 
-	if not await _capture(2):
+	if not await _capture(3):
 		return 1
-	_print_quest_log(2)
+	_print_quest_log(3)
 
 	_session.request_talk(giver_id)
 	print("DEMO talkturnin %d" % giver_id)
@@ -128,10 +132,10 @@ func run(
 		return _fail("bag never held the knight reward kinds after turn-in")
 	print("DEMO complete %s" % QUEST_ID)
 
-	if not await _capture(3):
+	if not await _capture(4):
 		return 1
-	_print_quest_log(3)
-	_print_inventory(3)
+	_print_quest_log(4)
+	_print_inventory(4)
 
 	await _wait_msec(HOLD_MSEC)
 	print("DEMO done")
@@ -205,6 +209,37 @@ func _party_as_member() -> bool:
 	return _fail_bool("member never joined the party")
 
 
+func _mid_chase_capture() -> bool:
+	var deadline := Time.get_ticks_msec() + STEP_TIMEOUT_MSEC
+	var attacked := false
+	while Time.get_ticks_msec() < deadline:
+		if await _maybe_respawn():
+			pass
+		if not attacked:
+			var imp_id := _nearest_living_imp()
+			if imp_id > 0 and _session.select_player(imp_id):
+				if not await _right_click_npc(imp_id):
+					_session.request_attack(imp_id)
+				print("DEMO attack %d" % imp_id)
+				attacked = true
+		if _any_imp_chasing():
+			print("DEMO midchase")
+			return await _capture(2)
+		await _tree.process_frame
+	return _fail_bool("no mid-chase NPC walking or has_path before timeout")
+
+
+func _any_imp_chasing() -> bool:
+	var npcs: Dictionary = _session.get("_npcs")
+	for id: int in npcs.keys():
+		var body: NpcDummyScript = npcs[id]
+		if body.kind != NpcDummyScript.KindImp:
+			continue
+		if body.is_walking() or body.has_path():
+			return true
+	return false
+
+
 func _kill_until_ready() -> bool:
 	var deadline := Time.get_ticks_msec() + KILL_TIMEOUT_MSEC
 	var kills_seen := 0
@@ -220,7 +255,6 @@ func _kill_until_ready() -> bool:
 		if not _session.select_player(imp_id):
 			await _tree.process_frame
 			continue
-		# Prefer the live right-click path; fall back to the Session attack intent.
 		if not await _right_click_npc(imp_id):
 			_session.request_attack(imp_id)
 		print("DEMO attack %d" % imp_id)
@@ -461,6 +495,7 @@ func _capture(index: int) -> bool:
 		push_error("screenshot failed to save to %s: %d" % [path, error])
 		return false
 	print("DEMO shot %d %s" % [index, path])
+	DemoNpcCapture.dump(_session)
 	return true
 
 
