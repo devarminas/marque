@@ -25,6 +25,7 @@ const ClassDebugScript := preload("res://scripts/class_debug.gd")
 const ErrorHudScript := preload("res://scripts/error_hud.gd")
 const ClassDefs := preload("res://scripts/class_defs.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
+const EscMenuScript := preload("res://scripts/esc_menu.gd")
 const HotbarScript := preload("res://scripts/hotbar.gd")
 const AbilityDefs := preload("res://scripts/ability_defs.gd")
 const CastHitFx := preload("res://scripts/cast_hit_fx.gd")
@@ -117,6 +118,7 @@ signal respawn_requested()
 @export var class_debug: Node
 @export var error_hud: Node
 @export var death_overlay: Node
+@export var esc_menu: Node
 @export var hotbar: Node
 @export var camera_rig: Node
 
@@ -136,6 +138,7 @@ var _classes: Dictionary = {}
 var _skill_levels := {}
 var _active_class_id := ""
 var _death_overlay: DeathOverlayScript = null
+var _esc_menu: EscMenuScript = null
 var _hotbar: HotbarScript = null
 var _hp := {}
 var _mana := {}
@@ -293,6 +296,12 @@ func _ready() -> void:
 		push_error("Session.death_overlay must point at a node running death_overlay.gd")
 	else:
 		_death_overlay.respawn_requested.connect(_on_respawn_requested)
+	_esc_menu = esc_menu as EscMenuScript
+	if _esc_menu == null:
+		push_error("Session.esc_menu must point at a node running esc_menu.gd")
+	else:
+		_esc_menu.resume_requested.connect(_on_esc_resume_requested)
+		_esc_menu.exit_requested.connect(_on_esc_exit_requested)
 	_hotbar = hotbar as HotbarScript
 	if _hotbar == null:
 		push_error("Session.hotbar must point at a node running hotbar.gd")
@@ -694,11 +703,48 @@ func clear_selection() -> bool:
 func _input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
+	if _esc_menu != null and _esc_menu.is_options_open():
+		_esc_menu.close_options()
+		get_viewport().set_input_as_handled()
+		return
+	if _esc_menu != null and _esc_menu.is_open():
+		_close_esc_menu()
+		get_viewport().set_input_as_handled()
+		return
 	if clear_use_selection():
 		get_viewport().set_input_as_handled()
 		return
 	if clear_selection():
 		get_viewport().set_input_as_handled()
+		return
+	_open_esc_menu()
+	get_viewport().set_input_as_handled()
+
+
+func is_esc_menu_open() -> bool:
+	return _esc_menu != null and _esc_menu.is_open()
+
+
+func _open_esc_menu() -> void:
+	if _esc_menu == null:
+		return
+	if _move_held:
+		_send_move_chord(0.0, 0.0)
+	_esc_menu.open_menu()
+
+
+func _close_esc_menu() -> void:
+	if _esc_menu == null:
+		return
+	_esc_menu.close_menu()
+
+
+func _on_esc_resume_requested() -> void:
+	_close_esc_menu()
+
+
+func _on_esc_exit_requested() -> void:
+	get_tree().quit()
 
 
 func _on_welcomed(
@@ -901,6 +947,8 @@ func _process(_delta: float) -> void:
 
 func _poll_move_intent() -> void:
 	if _net == null or not _net.is_open() or not _clock.is_anchored():
+		return
+	if is_esc_menu_open():
 		return
 
 	var local_x := 0.0

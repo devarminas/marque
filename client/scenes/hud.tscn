@@ -1,4 +1,4 @@
-[gd_scene load_steps=38 format=3]
+[gd_scene load_steps=39 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
@@ -14,6 +14,7 @@
 [ext_resource type="Script" path="res://scripts/give_panel.gd" id="39_give_panel"]
 [ext_resource type="Script" path="res://scripts/quest_log_panel.gd" id="38_quest_log_panel"]
 [ext_resource type="Script" path="res://scripts/party_panel.gd" id="40_party_panel"]
+[ext_resource type="Script" path="res://scripts/esc_menu.gd" id="41_esc_menu"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/basic_bar2.png" id="19_tray"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_line.png" id="20_hp_line"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/mana_line.png" id="21_mana_line"]
@@ -954,6 +955,117 @@ mouse_filter = 2
 texture = ExtResource("37_pattern")
 expand_mode = 1
 stretch_mode = 6
+
+[node name="EscMenu" type="Control" parent="." unique_id=2180000001 node_paths=PackedStringArray("resume_button", "options_button", "exit_button", "options_panel", "options_back_button")]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("41_esc_menu")
+resume_button = NodePath("Center/Column/Resume")
+options_button = NodePath("Center/Column/Options")
+exit_button = NodePath("Center/Column/Exit")
+options_panel = NodePath("OptionsPanel")
+options_back_button = NodePath("OptionsPanel/Center/Column/Back")
+
+[node name="Dim" type="ColorRect" parent="EscMenu" unique_id=2180000002]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.02, 0.02, 0.04, 0.72)
+
+[node name="Center" type="CenterContainer" parent="EscMenu" unique_id=2180000003]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Column" type="VBoxContainer" parent="EscMenu/Center" unique_id=2180000004]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="EscMenu/Center/Column" unique_id=2180000005]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 28
+text = "Menu"
+horizontal_alignment = 1
+
+[node name="Resume" type="Button" parent="EscMenu/Center/Column" unique_id=2180000006]
+custom_minimum_size = Vector2(200, 36)
+layout_mode = 2
+text = "Resume"
+
+[node name="Options" type="Button" parent="EscMenu/Center/Column" unique_id=2180000007]
+custom_minimum_size = Vector2(200, 36)
+layout_mode = 2
+text = "Options"
+
+[node name="Exit" type="Button" parent="EscMenu/Center/Column" unique_id=2180000008]
+custom_minimum_size = Vector2(200, 36)
+layout_mode = 2
+text = "Exit"
+
+[node name="OptionsPanel" type="Control" parent="EscMenu" unique_id=2180000009]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="EscMenu/OptionsPanel" unique_id=2180000010]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.02, 0.02, 0.04, 0.85)
+
+[node name="Center" type="CenterContainer" parent="EscMenu/OptionsPanel" unique_id=2180000011]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Column" type="VBoxContainer" parent="EscMenu/OptionsPanel/Center" unique_id=2180000012]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="EscMenu/OptionsPanel/Center/Column" unique_id=2180000013]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 24
+text = "Options"
+horizontal_alignment = 1
+
+[node name="Stub" type="Label" parent="EscMenu/OptionsPanel/Center/Column" unique_id=2180000014]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.82, 0.86, 1)
+theme_override_font_sizes/font_size = 16
+text = "Keybinds arrive in ARM-219."
+horizontal_alignment = 1
+
+[node name="Back" type="Button" parent="EscMenu/OptionsPanel/Center/Column" unique_id=2180000015]
+custom_minimum_size = Vector2(200, 36)
+layout_mode = 2
+text = "Back"
 
 [connection signal="pressed" from="InventoryToggle" to="RightDock" method="toggle"]
 [connection signal="pressed" from="QuestLogToggle" to="QuestLogPanel" method="toggle"]
