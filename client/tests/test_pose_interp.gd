@@ -12,6 +12,7 @@ func run(assertions: Assertions) -> void:
 	_test_mid_segment_lerps(assertions)
 	_test_past_newest_holds(assertions)
 	_test_no_extrapolate_before_oldest(assertions)
+	_test_height_lerps(assertions)
 	assertions.finish()
 
 
@@ -50,3 +51,11 @@ func _test_no_extrapolate_before_oldest(assertions: Assertions) -> void:
 	var sample := buf.sample_xz(0.0 + PoseInterp.INTERP_DELAY_TICKS)
 	assertions.check_near(sample.x, 5.0, POSITION_EPSILON, "before oldest clamps to oldest x")
 	assertions.check_near(sample.y, 7.0, POSITION_EPSILON, "before oldest clamps to oldest z")
+
+
+func _test_height_lerps(assertions: Assertions) -> void:
+	var buf := PoseInterp.new()
+	buf.reset_at(10, 0.0, 0.0, 0.0)
+	buf.push_pose(12, 0.0, 0.0, 1.0)
+	var sample := buf.sample_xyz(11.0 + PoseInterp.INTERP_DELAY_TICKS)
+	assertions.check_near(sample.y, 0.5, POSITION_EPSILON, "mid tick lerps height")

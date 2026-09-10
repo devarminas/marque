@@ -183,8 +183,8 @@ func send_move_to(x: float, z: float, seq: int = 0) -> Error:
 	return _send(move_to_frame(x, z, _intent_seq(seq)))
 
 
-func send_move(dx: float, dz: float, seq: int = 0) -> Error:
-	return _send(move_frame(dx, dz, _intent_seq(seq)))
+func send_move(dx: float, dz: float, seq: int = 0, jump: bool = false) -> Error:
+	return _send(move_frame(dx, dz, _intent_seq(seq), jump))
 
 
 func send_pickup(item_id: int, seq: int = 0) -> Error:
@@ -265,8 +265,11 @@ static func move_to_frame(x: float, z: float, seq: int = 0) -> Dictionary:
 	return {"move_to": _intent_body({"x": x, "z": z}, seq)}
 
 
-static func move_frame(dx: float, dz: float, seq: int = 0) -> Dictionary:
-	return {"move": _intent_body({"dx": dx, "dz": dz}, seq)}
+static func move_frame(dx: float, dz: float, seq: int = 0, jump: bool = false) -> Dictionary:
+	var body := {"dx": dx, "dz": dz}
+	if jump:
+		body["jump"] = true
+	return {"move": _intent_body(body, seq)}
 
 
 static func pickup_frame(item_id: int, seq: int = 0) -> Dictionary:

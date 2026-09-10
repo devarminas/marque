@@ -13,6 +13,9 @@ func run(assertions: Assertions) -> void:
 	_test_halt_clears_sticky_immediately(assertions)
 	_test_reconcile_hard_snaps_large_error(assertions)
 	_test_reconcile_keeps_sim_on_server_pose(assertions)
+	_test_jump_predicts_height(assertions)
+	_test_mid_air_jump_ignored_locally(assertions)
+	_test_jump_while_walking(assertions)
 	assertions.finish()
 
 
@@ -60,7 +63,44 @@ func _test_reconcile_keeps_sim_on_server_pose(assertions: Assertions) -> void:
 	var mover := LocalMover.new()
 	mover.reset_at(5, 1.0, 2.0)
 	mover.apply_wish(0.0, 0.0)
-	mover.reconcile_server_pose(5, 4.0, 6.0)
+	mover.reconcile_server_pose(5, 4.0, 6.0, 0.25)
 	var sim := mover.sim_xz()
 	assertions.check_near(sim.x, 4.0, POSITION_EPSILON, "server pose wins sim x")
 	assertions.check_near(sim.y, 6.0, POSITION_EPSILON, "server pose wins sim z")
+	assertions.check_near(mover.sim_height(), 0.25, POSITION_EPSILON, "server pose wins sim height")
+
+
+func _test_jump_predicts_height(assertions: Assertions) -> void:
+	var mover := LocalMover.new()
+	mover.reset_at(0, 0.0, 0.0)
+	mover.apply_jump(true)
+	assertions.check(mover.airborne(), "jump leaves grounded")
+	mover.advance_to_tick(1)
+	var want_vy := SteerIntegrate.JUMP_SPEED - SteerIntegrate.GRAVITY * SteerIntegrate.TICK_DURATION_SEC
+	var want_h := want_vy * SteerIntegrate.TICK_DURATION_SEC
+	assertions.check_near(mover.sim_height(), want_h, POSITION_EPSILON, "first tick rises")
+	var landed := false
+	mover.advance_to_tick(200)
+	if not mover.airborne() and is_equal_approx(mover.sim_height(), 0.0):
+		landed = true
+	assertions.check(landed, "jump lands back on ground")
+
+
+func _test_mid_air_jump_ignored_locally(assertions: Assertions) -> void:
+	var mover := LocalMover.new()
+	mover.reset_at(0, 0.0, 0.0)
+	mover.apply_jump(true)
+	mover.advance_to_tick(1)
+	var before := mover.sim_vy
+	mover.apply_jump(true)
+	assertions.check_near(mover.sim_vy, before, POSITION_EPSILON, "mid-air jump does not refresh vy")
+
+
+func _test_jump_while_walking(assertions: Assertions) -> void:
+	var mover := LocalMover.new()
+	mover.reset_at(0, 0.0, 0.0)
+	mover.apply_wish(1.0, 0.0)
+	mover.apply_jump(true)
+	mover.advance_to_tick(1)
+	assertions.check_near(mover.sim_xz().x, SteerIntegrate.STEP_DISTANCE, POSITION_EPSILON, "walk+jump steps x")
+	assertions.check(mover.sim_height() > 0.0, "walk+jump is airborne")

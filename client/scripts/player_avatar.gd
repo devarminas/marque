@@ -148,9 +148,9 @@ func teleport_to(x: float, z: float) -> void:
 	present_at(x, z, false)
 
 
-func present_at(x: float, z: float, walking: bool) -> void:
+func present_at(x: float, z: float, walking: bool, height: float = 0.0) -> void:
 	var prior := Vector2(position.x, position.z)
-	position = Vector3(x, ground_y, z)
+	position = Vector3(x, ground_y + height, z)
 	_set_walking(walking)
 	if not face_travel_direction or not walking:
 		return

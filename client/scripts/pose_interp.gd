@@ -9,33 +9,38 @@ const INTERP_DELAY_TICKS := 2.0
 var _poses: Array = []
 
 
-func reset_at(tick: int, x: float, z: float) -> void:
-	_poses = [{"tick": tick, "x": x, "z": z}]
+func reset_at(tick: int, x: float, z: float, height: float = 0.0) -> void:
+	_poses = [{"tick": tick, "x": x, "y": height, "z": z}]
 
 
-func push_pose(tick: int, x: float, z: float) -> void:
+func push_pose(tick: int, x: float, z: float, height: float = 0.0) -> void:
 	var kept: Array = []
 	for entry in _poses:
 		if int(entry["tick"]) < tick:
 			kept.append(entry)
-	kept.append({"tick": tick, "x": x, "z": z})
+	kept.append({"tick": tick, "x": x, "y": height, "z": z})
 	while kept.size() > BUFFER_POSES:
 		kept.pop_front()
 	_poses = kept
 
 
 func sample_xz(render_tick: float) -> Vector2:
+	var p := sample_xyz(render_tick)
+	return Vector2(p.x, p.z)
+
+
+func sample_xyz(render_tick: float) -> Vector3:
 	if _poses.is_empty():
-		return Vector2.ZERO
+		return Vector3.ZERO
 	var target := render_tick - INTERP_DELAY_TICKS
 	if _poses.size() == 1:
-		return Vector2(float(_poses[0]["x"]), float(_poses[0]["z"]))
+		return _entry_xyz(_poses[0])
 	var oldest: Dictionary = _poses[0]
 	var newest: Dictionary = _poses[_poses.size() - 1]
 	if target <= float(oldest["tick"]):
-		return Vector2(float(oldest["x"]), float(oldest["z"]))
+		return _entry_xyz(oldest)
 	if target >= float(newest["tick"]):
-		return Vector2(float(newest["x"]), float(newest["z"]))
+		return _entry_xyz(newest)
 	for i in range(1, _poses.size()):
 		var a: Dictionary = _poses[i - 1]
 		var b: Dictionary = _poses[i]
@@ -44,13 +49,14 @@ func sample_xz(render_tick: float) -> Vector2:
 		if target > tb:
 			continue
 		if is_equal_approx(ta, tb):
-			return Vector2(float(b["x"]), float(b["z"]))
+			return _entry_xyz(b)
 		var u := (target - ta) / (tb - ta)
-		return Vector2(
+		return Vector3(
 			lerpf(float(a["x"]), float(b["x"]), u),
+			lerpf(float(a["y"]), float(b["y"]), u),
 			lerpf(float(a["z"]), float(b["z"]), u),
 		)
-	return Vector2(float(newest["x"]), float(newest["z"]))
+	return _entry_xyz(newest)
 
 
 func moving() -> bool:
@@ -62,3 +68,7 @@ func moving() -> bool:
 		Vector2(float(b["x"]) - float(a["x"]), float(b["z"]) - float(a["z"])).length()
 		>= SteerIntegrate.MIN_PATH_LENGTH
 	)
+
+
+func _entry_xyz(entry: Dictionary) -> Vector3:
+	return Vector3(float(entry["x"]), float(entry["y"]), float(entry["z"]))
