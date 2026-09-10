@@ -197,6 +197,30 @@ func (w *World) SetNPCHitPointsByFaction(faction string, hp int) error {
 	return fmt.Errorf("set npc hp: no %s dummy seeded", faction)
 }
 
+// SetHostileKindHitPoints sets live hostile NPCs of kind to hp.
+// Thin WS quest probes use this so a solo kill credit stays inside the ladder budget.
+func (w *World) SetHostileKindHitPoints(kind string, hp int) error {
+	if kind == "" {
+		return fmt.Errorf("set hostile kind hp: kind must not be empty")
+	}
+	if hp < 1 || hp > DummyMaxHP {
+		return fmt.Errorf("set hostile kind hp: hp %d out of range [1,%d]", hp, DummyMaxHP)
+	}
+	n := 0
+	for _, id := range w.npcOrder {
+		npc, ok := w.npcs[id]
+		if !ok || npc.faction != FactionHostile || npc.kind != kind {
+			continue
+		}
+		npc.hp = hp
+		n++
+	}
+	if n == 0 {
+		return fmt.Errorf("set hostile kind hp: no %q hostile seeded", kind)
+	}
+	return nil
+}
+
 func (w *World) despawnNPC(n *npc) {
 	delete(w.npcs, n.id)
 	order := w.npcOrder[:0]
