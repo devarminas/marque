@@ -13,6 +13,7 @@ scripts/enemy_quest_demo.ps1
 scripts/equip_demo.ps1
 scripts/gather_craft_demo.ps1
 scripts/gather_error_demo.ps1
+scripts/craft_cast_demo.ps1
 scripts/quest_demo.ps1
 scripts/seed_class_kits_demo.ps1
 scripts/tab_combat_demo.ps1
@@ -27,6 +28,7 @@ client/scripts/enemy_quest_demo.gd
 client/scripts/equip_demo.gd
 client/scripts/gather_craft_demo.gd
 client/scripts/gather_error_demo.gd
+client/scripts/craft_cast_demo.gd
 client/scripts/pickup_demo.gd
 client/scripts/quest_demo.gd
 client/scripts/tab_combat_demo.gd
@@ -39,6 +41,7 @@ client/scripts/wasd_demo.gd
 --equip-shots
 --gather-craft-shots
 --gather-error-shots
+--craft-cast-shots
 --combat-shots
 --wasd-shots
 --tab-combat-shots

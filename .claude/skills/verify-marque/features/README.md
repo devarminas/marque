@@ -81,6 +81,8 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
 - [Equip the join-kit weapon](./equip-weapon.md) — M3 equip / unequip.
 - [Gather then craft](./gather-craft.md) — M4 equip, contested tree, craft
   logs→sticks.
+- [Mine, smelt, craft sword, cast bar](./craft-cast-demo.md) — M12 mine→smelt→sword
+  plus fireball cast-bar resolve/interrupt (`CRAFT CAST DEMO OK`).
 - [Right-click a tree, chop it or be told why not](./gather-refusal.md) — ARM-147
   gather gate refusal.
 - [Seed class kits on the ground](./seed-class-kits.md) — M7g `-seed-class-kits`.
