@@ -16,12 +16,28 @@ func TestCastFireballDamagesHostileInRange(t *testing.T) {
 	bob.hp = MaxHP
 
 	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
+	if bob.hp != MaxHP {
+		t.Fatalf("bob hp=%d before cast finished, want %d", bob.hp, MaxHP)
+	}
+	if alice.mana != MaxMana {
+		t.Fatalf("mana charged early: %d", alice.mana)
+	}
+	if !alice.casting() {
+		t.Fatal("expected pending fireball cast")
+	}
+	pw.w.stepNForTest(alice.castTotal)
 
 	if bob.hp != MaxHP-40 {
 		t.Fatalf("bob hp=%d, want %d", bob.hp, MaxHP-40)
 	}
 	if alice.mana != MaxMana-35 {
 		t.Fatalf("alice mana=%d, want %d", alice.mana, MaxMana-35)
+	}
+	if alice.casting() {
+		t.Fatal("pending cast survived resolve")
+	}
+	if len(pw.events(EvCastBegin)) != 1 {
+		t.Fatalf("cast_begin events=%d, want 1", len(pw.events(EvCastBegin)))
 	}
 	if len(pw.events(EvCast)) != 1 {
 		t.Fatalf("cast events=%d, want 1", len(pw.events(EvCast)))
@@ -213,6 +229,7 @@ func TestCastIgnoresClientAuthoredDamage(t *testing.T) {
 		t.Fatalf("cast=%+v", cast)
 	}
 	pw.w.cast(alice, cast, 1)
+	pw.w.stepNForTest(alice.castTotal)
 	if bob.hp != MaxHP-40 {
 		t.Fatalf("client damage leaked: hp=%d", bob.hp)
 	}
@@ -276,6 +293,7 @@ const sharedAbilitiesJSON = `{
       "name": "Fireball",
       "mana_cost": 35,
       "cooldown_ticks": 8,
+      "cast_ticks": 8,
       "range": 8,
       "target": "hostile",
       "effect": {"kind": "damage", "amount": 40},
@@ -310,6 +328,7 @@ const suicideAbilityJSON = `{
       "name": "Fireball",
       "mana_cost": 35,
       "cooldown_ticks": 8,
+      "cast_ticks": 8,
       "range": 8,
       "target": "hostile",
       "effect": {"kind": "damage", "amount": 40},
@@ -383,6 +402,88 @@ func TestAbilityCatalogRejectsDamageOnSelf(t *testing.T) {
 }`
 	if _, err := abilitydef.Parse([]byte(custom)); err == nil {
 		t.Fatal("catalog accepted a damage ability targeting self")
+	}
+}
+
+func TestFireballWalkInterruptsOutsideGrace(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
+	bob.pos = Point{X: 3, Z: 0}
+	beforeMana := alice.mana
+	beforeHP := bob.hp
+
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
+	pw.w.stepNForTest(1)
+	if alice.castProgress != 1 {
+		t.Fatalf("progress=%d, want 1", alice.castProgress)
+	}
+	pw.w.move(alice, mnet.Move{DX: 1, DZ: 0}, 2)
+	if alice.casting() {
+		t.Fatal("walk outside grace left pending cast")
+	}
+	pw.w.stepNForTest(8)
+	if bob.hp != beforeHP {
+		t.Fatalf("interrupted cast still damaged: hp=%d", bob.hp)
+	}
+	if alice.mana != beforeMana {
+		t.Fatalf("interrupt charged mana: %d -> %d", beforeMana, alice.mana)
+	}
+	got := pw.events(EvCastCancelled)
+	if len(got) != 1 || got[0]["cause"] != CauseMove {
+		t.Fatalf("cast_cancelled=%v, want cause=%s", got, CauseMove)
+	}
+}
+
+func TestFireballGraceSurvivesWalk(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
+	bob.pos = Point{X: 3, Z: 0}
+
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
+	interruptible := alice.castTotal - CastGraceTicks
+	pw.w.stepNForTest(interruptible)
+	if alice.castProgress != interruptible {
+		t.Fatalf("progress=%d, want %d", alice.castProgress, interruptible)
+	}
+	pw.w.move(alice, mnet.Move{DX: 1, DZ: 0}, 2)
+	if !alice.casting() {
+		t.Fatal("grace walk cancelled cast")
+	}
+	remaining := alice.castTotal - alice.castProgress
+	pw.w.stepNForTest(remaining)
+	if bob.hp != MaxHP-40 {
+		t.Fatalf("grace cast hp=%d, want %d", bob.hp, MaxHP-40)
+	}
+	if alice.mana != MaxMana-35 {
+		t.Fatalf("grace cast mana=%d, want %d", alice.mana, MaxMana-35)
+	}
+	if alice.casting() {
+		t.Fatal("pending cast after grace resolve")
+	}
+}
+
+func TestMageGateHoldsForPendingFireball(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	alice := pw.joinWithClass("knight")
+	bob := pw.joinBare()
+	bob.pos = Point{X: 2, Z: 0}
+	before := alice.mana
+
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
+	if alice.casting() {
+		t.Fatal("non-mage started pending cast")
+	}
+	if alice.mana != before {
+		t.Fatalf("mana changed: %d", alice.mana)
+	}
+	got := pw.events(EvCastRejected)
+	if len(got) != 1 || got[0]["reason"] != string(mnet.ReasonNeedsClass) {
+		t.Fatalf("cast_rejected=%v, want needs_class", got)
 	}
 }
 

@@ -43,6 +43,7 @@ func (w *World) move(p *player, msg mnet.Move, seq mnet.Seq) {
 	w.closeDialog(p)
 	w.cancelGather(p)
 	w.cancelAttack(p, CauseMove)
+	w.interruptCastOnMove(p, CauseMove)
 	p.remaining = nil
 	p.steerDX = msg.DX / length
 	p.steerDZ = msg.DZ / length

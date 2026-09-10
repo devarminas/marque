@@ -95,6 +95,7 @@ func TestCastFireballDamagesEnemyDummyOnly(t *testing.T) {
 	hostile.hp = DummyMaxHP
 
 	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: hostile.id}, 1)
+	pw.w.stepNForTest(alice.castTotal)
 	if hostile.hp != DummyMaxHP-40 {
 		t.Fatalf("hostile hp=%d, want %d", hostile.hp, DummyMaxHP-40)
 	}
@@ -226,6 +227,7 @@ const sharedAbilitiesJSONWithHealRange = `{
       "name": "Fireball",
       "mana_cost": 35,
       "cooldown_ticks": 8,
+      "cast_ticks": 8,
       "range": 8,
       "target": "hostile",
       "effect": {"kind": "damage", "amount": 40},
@@ -248,6 +250,7 @@ func TestDummyFireballNeverKills(t *testing.T) {
 	for range 5 {
 		alice.mana = MaxMana
 		pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: hostile.id}, 1)
+		pw.w.stepNForTest(alice.castTotal)
 	}
 	if hostile.dead() || hostile.hp < DummyMinHP {
 		t.Fatalf("dummy died from fireballs: hp=%d", hostile.hp)

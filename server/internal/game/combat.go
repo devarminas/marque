@@ -7,16 +7,16 @@ import (
 )
 
 const (
-	MaxHP              = 100
-	AttackDamage       = 10
-	AttackPeriodTicks  = 4
-	AttackRange        = 1.5
-	CauseMoveTo        = "move_to"
-	CauseMove          = "move"
-	CausePickup        = "pickup"
-	CauseGather        = "gather"
-	CauseReplaced      = "replaced"
-	CauseAttackerDied  = "attacker_died"
+	MaxHP             = 100
+	AttackDamage      = 10
+	AttackPeriodTicks = 4
+	AttackRange       = 1.5
+	CauseMoveTo       = "move_to"
+	CauseMove         = "move"
+	CausePickup       = "pickup"
+	CauseGather       = "gather"
+	CauseReplaced     = "replaced"
+	CauseAttackerDied = "attacker_died"
 )
 
 func (p *player) dead() bool { return p.hp == 0 }
@@ -113,6 +113,8 @@ func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, 
 	p.pending = 0
 	w.clearPendingTalk(p)
 	w.cancelGather(p)
+	w.cancelAttack(p, CauseReplaced)
+	w.cancelCast(p, CauseReplaced)
 	p.clearSteer()
 	p.attackTarget = targetID
 	p.attackProgress = 0
@@ -250,6 +252,7 @@ func (w *World) kill(victim *player, killer mnet.PlayerID) {
 	w.closeDialog(victim)
 	w.cancelGather(victim)
 	w.cancelAttack(victim, CauseAttackerDied)
+	w.cancelCast(victim, CauseAttackerDied)
 	w.clearAttacksOn(victim.id)
 }
 

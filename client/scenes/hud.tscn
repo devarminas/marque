@@ -1,4 +1,4 @@
-[gd_scene load_steps=38 format=3]
+[gd_scene load_steps=39 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/death_overlay.gd" id="12_death_overlay"]
 [ext_resource type="Script" path="res://scripts/hotbar.gd" id="13_hotbar"]
 [ext_resource type="PackedScene" path="res://scenes/hotbar_slot.tscn" id="14_hotbar_slot"]
+[ext_resource type="PackedScene" path="res://scenes/cast_bar.tscn" id="14_cast_bar"]
 [ext_resource type="Script" path="res://scripts/class_hud.gd" id="15_class_hud"]
 [ext_resource type="Script" path="res://scripts/class_debug.gd" id="16_class_debug"]
 [ext_resource type="Script" path="res://scripts/error_hud.gd" id="17_error_hud"]
@@ -878,6 +879,8 @@ slot_5 = NodePath("Bar/Slots/Slot5")
 slot_6 = NodePath("Bar/Slots/Slot6")
 slot_7 = NodePath("Bar/Slots/Slot7")
 slot_8 = NodePath("Bar/Slots/Slot8")
+
+[node name="CastBar" parent="." instance=ExtResource("14_cast_bar")]
 
 [node name="Bar" type="PanelContainer" parent="Hotbar" unique_id=8017818]
 layout_mode = 1

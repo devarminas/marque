@@ -1,4 +1,4 @@
-﻿package net
+package net
 
 import (
 	"encoding/json"
@@ -53,7 +53,7 @@ const (
 	MsgPartyKick    = "party_kick"
 
 	OptionAcceptQuest = "accept_quest"
-	OptionTurnInQuest  = "turn_in_quest"
+	OptionTurnInQuest = "turn_in_quest"
 	OptionStopTalking = "stop_talking"
 )
 
@@ -205,6 +205,12 @@ type Mana struct {
 	MaxMana int      `json:"max_mana"`
 }
 
+type Casting struct {
+	Ability  string `json:"ability"`
+	Progress int    `json:"progress"`
+	Total    int    `json:"total"`
+}
+
 type DialogOption struct {
 	ID string `json:"id"`
 }
@@ -256,6 +262,7 @@ func (Skills) isServerMessage()            {}
 func (Tick) isServerMessage()              {}
 func (HP) isServerMessage()                {}
 func (Mana) isServerMessage()              {}
+func (Casting) isServerMessage()           {}
 func (Dialog) isServerMessage()            {}
 func (QuestLog) isServerMessage()          {}
 func (Party) isServerMessage()             {}
@@ -399,6 +406,7 @@ type serverEnvelope struct {
 	Tick              *Tick              `json:"tick,omitempty"`
 	HP                *HP                `json:"hp,omitempty"`
 	Mana              *Mana              `json:"mana,omitempty"`
+	Casting           *Casting           `json:"casting,omitempty"`
 	Dialog            *Dialog            `json:"dialog,omitempty"`
 	QuestLog          *QuestLog          `json:"quest_log,omitempty"`
 	Party             *Party             `json:"party,omitempty"`
@@ -444,6 +452,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.HP = &v
 	case Mana:
 		env.Mana = &v
+	case Casting:
+		env.Casting = &v
 	case Dialog:
 		env.Dialog = &v
 	case QuestLog:
@@ -500,7 +510,7 @@ const (
 	ReasonQuestActive      RejectReason = "quest_active"
 	ReasonQuestComplete    RejectReason = "quest_complete"
 	ReasonQuestInactive    RejectReason = "quest_inactive"
-	ReasonQuestIncomplete RejectReason = "quest_incomplete"
+	ReasonQuestIncomplete  RejectReason = "quest_incomplete"
 	ReasonWrongItem        RejectReason = "wrong_item"
 	ReasonNotLeader        RejectReason = "not_leader"
 	ReasonPartyFull        RejectReason = "party_full"

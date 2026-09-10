@@ -9,6 +9,13 @@ import (
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
+const (
+	CastGraceTicks = 2
+
+	EvCastBegin     = "cast_begin"
+	EvCastCancelled = "cast_cancelled"
+)
+
 type castTarget struct {
 	id   mnet.PlayerID
 	pos  Point
@@ -38,6 +45,8 @@ func (t *castTarget) applyDamage(amount int) {
 		*t.hp = 0
 	}
 }
+
+func (p *player) casting() bool { return p.castAbility != "" }
 
 func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
 	if w.refuseIfDead(p, mnet.MsgCast) {
@@ -91,6 +100,100 @@ func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
 	}
 
 	cost := int(math.Round(ability.ManaCost))
+	if p.mana < cost {
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonInsufficientMana,
+			Detail:      "not enough mana",
+			Re:          mnet.MsgCast,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	}
+
+	if ability.CastTicks > 0 {
+		w.beginCast(p, ability, target.id, cost, seq)
+		return
+	}
+
+	w.applyCast(p, ability, target, cost, seq)
+}
+
+func (w *World) beginCast(p *player, ability abilitydef.Ability, targetID mnet.PlayerID, cost int, seq mnet.Seq) {
+	w.cancelCast(p, CauseReplaced)
+	p.pending = 0
+	w.clearPendingTalk(p)
+	w.closeDialog(p)
+	w.cancelGather(p)
+	w.cancelAttack(p, CauseReplaced)
+	p.clearSteer()
+	p.remaining = nil
+
+	p.castAbility = ability.ID
+	p.castTarget = targetID
+	p.castProgress = 0
+	p.castTotal = ability.CastTicks
+	p.castCost = cost
+
+	w.log.Event(w.tick, EvCastBegin, withSeq(gamelog.Fields{
+		"player":    p.id,
+		"ability":   ability.ID,
+		"target":    targetID,
+		"total":     ability.CastTicks,
+		"grace":     CastGraceTicks,
+		"mana_cost": cost,
+	}, seq))
+	w.sendCasting(p)
+}
+
+func (w *World) advanceCast(p *player) {
+	if !p.casting() {
+		return
+	}
+	p.castProgress++
+	w.sendCasting(p)
+	if p.castProgress < p.castTotal {
+		return
+	}
+	w.finishCast(p)
+}
+
+func (w *World) finishCast(p *player) {
+	abilityID := p.castAbility
+	targetID := p.castTarget
+	cost := p.castCost
+	w.clearCastState(p)
+
+	ability, ok := w.abilities.Get(abilityID)
+	if !ok {
+		w.sendCastingClear(p)
+		return
+	}
+	target, rejection := w.resolveCastTarget(p, ability, targetID)
+	if rejection != nil {
+		w.sendCastingClear(p)
+		w.log.Event(w.tick, EvCastCancelled, gamelog.Fields{
+			"player":  p.id,
+			"ability": abilityID,
+			"target":  targetID,
+			"cause":   "target_lost",
+		})
+		return
+	}
+	if target.id != p.id && distanceBetween(p.pos, target.pos) > ability.Range {
+		w.sendCastingClear(p)
+		w.log.Event(w.tick, EvCastCancelled, gamelog.Fields{
+			"player":  p.id,
+			"ability": abilityID,
+			"target":  targetID,
+			"cause":   "out_of_range",
+		})
+		return
+	}
+	w.applyCast(p, ability, target, cost, 0)
+	w.sendCastingClear(p)
+}
+
+func (w *World) applyCast(p *player, ability abilitydef.Ability, target *castTarget, cost int, seq mnet.Seq) {
 	if !w.spendMana(p, cost) {
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonInsufficientMana,
@@ -149,6 +252,52 @@ func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
 	if ability.Effect.Kind == abilitydef.EffectDamage && target.plyr.dead() {
 		w.kill(target.plyr, p.id)
 	}
+}
+
+func (w *World) interruptCastOnMove(p *player, cause string) {
+	if !p.casting() {
+		return
+	}
+	if p.castTotal-p.castProgress <= CastGraceTicks {
+		return
+	}
+	w.cancelCast(p, cause)
+}
+
+func (w *World) cancelCast(p *player, cause string) {
+	if !p.casting() {
+		return
+	}
+	w.log.Event(w.tick, EvCastCancelled, gamelog.Fields{
+		"player":   p.id,
+		"ability":  p.castAbility,
+		"target":   p.castTarget,
+		"progress": p.castProgress,
+		"total":    p.castTotal,
+		"cause":    cause,
+	})
+	w.clearCastState(p)
+	w.sendCastingClear(p)
+}
+
+func (w *World) clearCastState(p *player) {
+	p.castAbility = ""
+	p.castTarget = 0
+	p.castProgress = 0
+	p.castTotal = 0
+	p.castCost = 0
+}
+
+func (w *World) sendCasting(p *player) {
+	w.send(p, mnet.Casting{
+		Ability:  p.castAbility,
+		Progress: p.castProgress,
+		Total:    p.castTotal,
+	})
+}
+
+func (w *World) sendCastingClear(p *player) {
+	w.send(p, mnet.Casting{})
 }
 
 func (w *World) resolveCastTarget(caster *player, ability abilitydef.Ability, named mnet.PlayerID) (*castTarget, *mnet.RejectError) {

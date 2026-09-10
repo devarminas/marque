@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	MaxMana = 100
+	MaxMana          = 100
+	ManaRegenPerTick = 1
 )
 
 func (w *World) broadcastMana(p *player) {
@@ -41,4 +42,21 @@ func (w *World) refundMana(p *player, amount int) {
 		"amount": amount,
 		"mana":   p.mana,
 	})
+}
+
+func (w *World) regenMana() {
+	for _, p := range w.order {
+		if p.dead() || p.mana >= MaxMana {
+			continue
+		}
+		before := p.mana
+		p.mana += ManaRegenPerTick
+		if p.mana > MaxMana {
+			p.mana = MaxMana
+		}
+		if p.mana == before {
+			continue
+		}
+		w.broadcastMana(p)
+	}
 }
