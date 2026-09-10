@@ -5,11 +5,14 @@ signal resume_requested()
 signal options_requested()
 signal exit_requested()
 
+const KeybindsPanelScript := preload("res://scripts/keybinds_panel.gd")
+
 @export var resume_button: Button
 @export var options_button: Button
 @export var exit_button: Button
 @export var options_panel: Control
 @export var options_back_button: Button
+@export var keybinds_panel: KeybindsPanelScript
 
 
 func _ready() -> void:
@@ -40,13 +43,24 @@ func is_options_open() -> bool:
 	return visible and options_panel != null and options_panel.visible
 
 
+func cancel_keybind_capture() -> bool:
+	if keybinds_panel == null or not keybinds_panel.is_capturing():
+		return false
+	keybinds_panel.cancel_capture()
+	return true
+
+
 func open_menu() -> void:
 	visible = true
 	if options_panel != null:
 		options_panel.visible = false
+	if keybinds_panel != null:
+		keybinds_panel.cancel_capture()
 
 
 func close_menu() -> void:
+	if keybinds_panel != null:
+		keybinds_panel.cancel_capture()
 	if options_panel != null:
 		options_panel.visible = false
 	visible = false
@@ -57,10 +71,14 @@ func open_options() -> void:
 		visible = true
 	if options_panel != null:
 		options_panel.visible = true
+	if keybinds_panel != null:
+		keybinds_panel.refresh()
 	options_requested.emit()
 
 
 func close_options() -> void:
+	if keybinds_panel != null:
+		keybinds_panel.cancel_capture()
 	if options_panel != null:
 		options_panel.visible = false
 

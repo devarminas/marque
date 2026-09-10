@@ -27,6 +27,7 @@ const ClassDefs := preload("res://scripts/class_defs.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const EscMenuScript := preload("res://scripts/esc_menu.gd")
 const HotbarScript := preload("res://scripts/hotbar.gd")
+const Keybinds := preload("res://scripts/keybinds.gd")
 const AbilityDefs := preload("res://scripts/ability_defs.gd")
 const CastHitFx := preload("res://scripts/cast_hit_fx.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
@@ -196,6 +197,8 @@ func _ready() -> void:
 	if npcs == null:
 		push_error("Session.npcs must point at a container node")
 		return
+
+	Keybinds.apply_saved()
 
 	_net.welcomed.connect(_on_welcomed)
 	_net.welcome_items.connect(_on_welcome_items)
@@ -704,6 +707,9 @@ func _input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	if _esc_menu != null and _esc_menu.is_options_open():
+		if _esc_menu.cancel_keybind_capture():
+			get_viewport().set_input_as_handled()
+			return
 		_esc_menu.close_options()
 		get_viewport().set_input_as_handled()
 		return

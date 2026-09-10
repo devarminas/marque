@@ -139,10 +139,14 @@ func _test_options_stub_and_back() -> void:
 	_check(_session.is_esc_menu_open(), "precondition: menu open")
 	_menu.options_button.pressed.emit()
 	await get_tree().process_frame
-	_check(_menu.is_options_open(), "Options opens the stub panel")
+	_check(_menu.is_options_open(), "Options opens the keybinds panel")
 	_check(
-		(_menu.options_panel.get_node("Center/Column/Stub") as Label).text.contains("ARM-219"),
-		"the stub names the keybinds unit",
+		_menu.options_panel.get_node_or_null("Center/Column/Keybinds") != null,
+		"Options authors the Keybinds rows",
+	)
+	_check(
+		_menu.keybinds_panel != null,
+		"EscMenu wires keybinds_panel",
 	)
 	await _press_escape()
 	_check(
@@ -155,7 +159,7 @@ func _test_options_stub_and_back() -> void:
 	await get_tree().process_frame
 	_check(
 		_session.is_esc_menu_open() and not _menu.is_options_open(),
-		"Back closes the stub and keeps the menu",
+		"Back closes Options and keeps the menu",
 	)
 	_close_via_resume()
 
