@@ -103,7 +103,17 @@ func newHarnessWithKit(t *testing.T, kit []string, seeds ...seed) *harness {
 	return newHarnessWith(t, game.ResumeGraceTicks, kit, seeds...)
 }
 
+func newHarnessWithSetup(t *testing.T, kit []string, setup func(*game.World), seeds ...seed) *harness {
+	t.Helper()
+	return newHarnessConfigured(t, game.ResumeGraceTicks, kit, setup, seeds...)
+}
+
 func newHarnessWith(t *testing.T, grace int64, kit []string, seeds ...seed) *harness {
+	t.Helper()
+	return newHarnessConfigured(t, grace, kit, nil, seeds...)
+}
+
+func newHarnessConfigured(t *testing.T, grace int64, kit []string, setup func(*game.World), seeds ...seed) *harness {
 	t.Helper()
 
 	logs := &syncBuffer{}
@@ -126,6 +136,9 @@ func newHarnessWith(t *testing.T, grace int64, kit []string, seeds ...seed) *har
 	world.SetQuests(quests)
 	if err := world.SeedQuestGiver(); err != nil {
 		t.Fatalf("seed quest giver: %v", err)
+	}
+	if setup != nil {
+		setup(world)
 	}
 
 	for _, s := range seeds {
@@ -310,8 +323,13 @@ func (h *harness) eventsNamed(name string) []map[string]any {
 
 func (h *harness) awaitEvents(name string, count int) []map[string]any {
 	h.t.Helper()
+	return h.awaitEventsWithin(name, count, readTimeout)
+}
 
-	deadline := time.Now().Add(readTimeout)
+func (h *harness) awaitEventsWithin(name string, count int, within time.Duration) []map[string]any {
+	h.t.Helper()
+
+	deadline := time.Now().Add(within)
 	for {
 		matched := h.eventsNamed(name)
 		if len(matched) >= count {
@@ -319,7 +337,7 @@ func (h *harness) awaitEvents(name string, count int) []map[string]any {
 		}
 		if time.Now().After(deadline) {
 			h.t.Fatalf("waited %v for %d %q events, saw %d\nlog:\n%s",
-				readTimeout, count, name, len(matched), h.logs.String())
+				within, count, name, len(matched), h.logs.String())
 		}
 		time.Sleep(awaitPoll)
 	}
@@ -350,6 +368,8 @@ type frame struct {
 	Skills      *mnet.Skills      `json:"skills"`
 	Dialog      *mnet.Dialog      `json:"dialog"`
 	QuestLog    *mnet.QuestLog    `json:"quest_log"`
+	HP          *mnet.HP          `json:"hp"`
+	Mana        *mnet.Mana        `json:"mana"`
 	Tick        *mnet.Tick        `json:"tick"`
 
 	raw string
@@ -392,6 +412,10 @@ func (f frame) kind() string {
 		return "dialog"
 	case f.QuestLog != nil:
 		return "quest_log"
+	case f.HP != nil:
+		return "hp"
+	case f.Mana != nil:
+		return "mana"
 	case f.Tick != nil:
 		return "tick"
 	default:
@@ -507,6 +531,16 @@ func (c *client) talk(npc mnet.PlayerID) {
 func (c *client) dialogOption(npc mnet.PlayerID, option string) {
 	c.t.Helper()
 	c.sendRaw(fmt.Sprintf(`{"dialog_option":{"npc":%d,"option":%q}}`, npc, option))
+}
+
+func (c *client) give(npc mnet.PlayerID, slot int) {
+	c.t.Helper()
+	c.sendRaw(fmt.Sprintf(`{"give":{"npc":%d,"slot":%d}}`, npc, slot))
+}
+
+func (c *client) attack(target mnet.PlayerID) {
+	c.t.Helper()
+	c.sendRaw(fmt.Sprintf(`{"attack":{"player":%d}}`, target))
 }
 
 func (c *client) awaitDialog() mnet.Dialog {
