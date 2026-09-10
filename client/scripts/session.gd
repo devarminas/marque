@@ -40,7 +40,7 @@ const LIVENESS_HEARTBEATS := 3
 const RECONNECT_BACKOFF_START_MSEC := 500
 const RECONNECT_BACKOFF_CAP_MSEC := 5000
 
-const MOVE_INTENT_PERIOD_MSEC := 100
+const MOVE_INTENT_PERIOD_MSEC := 40
 
 const REFUSAL_TEXT := {
 	"gather": {
@@ -211,6 +211,7 @@ func _ready() -> void:
 	_net.spawned.connect(_on_spawned)
 	_net.despawned.connect(_on_despawned)
 	_net.path_assigned.connect(_on_path_assigned)
+	_net.pose_received.connect(_on_pose_received)
 	_net.item_spawned.connect(_on_item_spawned)
 	_net.item_despawned.connect(_on_item_despawned)
 	_net.node_spawned.connect(_on_node_spawned)
@@ -1137,6 +1138,14 @@ func _on_path_assigned(
 		dummy.follow_path(points, start_tick, speed)
 		return
 	push_warning("session: path for unknown id %d; ignoring" % id)
+
+
+func _on_pose_received(id: int, _tick: int, x: float, _y: float, z: float) -> void:
+	var avatar: PlayerAvatarScript = _avatars.get(id)
+	if avatar != null:
+		avatar.teleport_to(x, z)
+		return
+	push_warning("session: pose for unknown player %d; ignoring" % id)
 
 
 func _on_server_error(re: String, message: String) -> void:
