@@ -75,13 +75,6 @@ func (w *World) broadcastPose(p *player) {
 	}, nil)
 }
 
-func (w *World) maybeIdlePose(p *player) {
-	if w.tick-p.lastPoseTick < PoseIdleEveryTicks {
-		return
-	}
-	w.broadcastPose(p)
-}
-
 func clampWorld(v float64) float64 {
 	if v > WorldHalfExtent {
 		return WorldHalfExtent

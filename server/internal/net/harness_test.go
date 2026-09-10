@@ -509,7 +509,6 @@ func (c *client) moveBackground(dx, dz float64) error {
 	return nil
 }
 
-// walkTo steers with sticky move samples until within one tick-step of (x,z), then halts.
 func (c *client) walkTo(x, z float64) {
 	c.t.Helper()
 	step := game.WalkSpeed * game.TickDuration.Seconds()

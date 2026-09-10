@@ -1,0 +1,874 @@
+package game
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"math"
+	mrand "math/rand/v2"
+	"time"
+
+	"github.com/devarminas/marque/server/internal/abilitydef"
+	"github.com/devarminas/marque/server/internal/classdef"
+	"github.com/devarminas/marque/server/internal/gamelog"
+	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/questdef"
+)
+
+const TickDuration = 40 * time.Millisecond
+
+const MaxCatchUpTicks = 5
+
+const PoseIdleEveryTicks int64 = 25
+
+// Tuning: ARM-13.
+const WalkSpeed = 3.0
+
+const WorldHalfExtent = 128.0
+
+const MinPathLength = 1e-3
+
+// Tuning: ARM-58.
+const ResumeGraceTicks = int64(60 * time.Second / TickDuration)
+
+const HeartbeatEveryTicks = 10
+
+const (
+	spawnX = 0.0
+	spawnZ = 0.0
+)
+
+const (
+	EvServerStarted   = "server_started"
+	EvServerStopping  = "server_stopping"
+	EvConnected       = "client_connected"
+	EvDisconnected    = "client_disconnected"
+	EvMoveTo          = "move_to"
+	EvMoveToRejected  = "move_to_rejected"
+	EvIntentIgnored   = "intent_ignored"
+	EvIntentDuplicate = "intent_duplicate"
+	EvPathAssigned    = "path_assigned"
+	EvArrived         = "arrived"
+	EvTicksDropped    = "ticks_dropped"
+
+	EvPlayerSuspended = "player_suspended"
+
+	EvPlayerResumed = "player_resumed"
+
+	EvPlayerExpired = "player_expired"
+
+	EvJoinRefused = "join_refused"
+
+	EvResumeRefused = "resume_refused"
+
+	EvResumeUnknown = "resume_unknown"
+
+	EvPathReplayed = "path_replayed"
+
+	EvFrameDropped = "frame_dropped"
+
+	EvItemSpawned = "item_spawned"
+
+	EvPickup = "pickup"
+
+	EvPickupRejected = "pickup_rejected"
+
+	EvPickupResolved = "pickup_resolved"
+
+	EvPickupLost = "pickup_lost"
+
+	EvPickupNoRoom = "pickup_no_room"
+
+	EvDrop = "drop"
+
+	EvDropRejected = "drop_rejected"
+
+	EvJoinSeeded = "join_seeded"
+
+	EvEquip = "equip"
+
+	EvEquipRejected = "equip_rejected"
+
+	EvUnequip = "unequip"
+
+	EvUnequipRejected = "unequip_rejected"
+
+	EvNodeSpawned = "node_spawned"
+
+	EvGather = "gather"
+
+	EvGatherRejected = "gather_rejected"
+
+	EvGatherResolved = "gather_resolved"
+
+	EvGatherLost = "gather_lost"
+
+	EvGatherCancelled = "gather_cancelled"
+
+	EvGatherNoRoom = "gather_no_room"
+
+	EvNodeDepleted = "node_depleted"
+
+	EvNodeRespawned = "node_respawned"
+
+	EvSkillXP = "skill_xp"
+
+	EvUse = "use"
+
+	EvUseRejected = "use_rejected"
+
+	EvAttack = "attack"
+
+	EvAttackRejected = "attack_rejected"
+
+	EvAttackHit = "attack_hit"
+
+	EvAttackCancelled = "attack_cancelled"
+
+	EvAttackLost = "attack_lost"
+
+	EvDeath = "death"
+
+	EvRespawn = "respawn"
+
+	EvRespawnRejected = "respawn_rejected"
+
+	EvManaSpend = "mana_spend"
+
+	EvManaRefund = "mana_refund"
+
+	EvCast = "cast"
+
+	EvCastRejected = "cast_rejected"
+
+	EvCastEffect = "cast_effect"
+
+	EvClass = "class"
+)
+
+type Transport interface {
+	Events() <-chan mnet.Event
+}
+
+const sessionTokenBytes = 16
+
+func newSessionToken() string {
+	var raw [sessionTokenBytes]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		panic(fmt.Sprintf("game: reading %d bytes for a session token: %v", sessionTokenBytes, err))
+	}
+	return hex.EncodeToString(raw[:])
+}
+
+type player struct {
+	id mnet.PlayerID
+
+	session string
+
+	conn *mnet.Conn
+
+	pos Point
+
+	y float64
+
+	remaining []Point
+
+	steerDX float64
+	steerDZ float64
+
+	lastPoseTick int64
+
+	pending mnet.ItemID
+
+	gatherNode     mnet.NodeID
+	gatherProgress int
+
+	pendingTalk       mnet.PlayerID
+	dialogNPC         mnet.PlayerID
+	quests            map[string]questStatus
+	questKillProgress map[string]int
+
+	partyID           mnet.PartyID
+	pendingInviteFrom mnet.PlayerID
+
+	attackTarget   mnet.PlayerID
+	attackProgress int
+
+	castAbility  string
+	castTarget   mnet.PlayerID
+	castProgress int
+	castTotal    int
+	castCost     int
+
+	hp   int
+	mana int
+
+	skillXP map[string]int64
+
+	lastSeq mnet.Seq
+
+	expiresTick int64
+}
+
+func (p *player) walking() bool { return len(p.remaining) > 0 }
+
+func (p *player) suspended() bool { return p.conn == nil }
+
+type World struct {
+	transport Transport
+	log       *gamelog.Logger
+
+	items Store
+
+	nodes      map[mnet.NodeID]*resourceNode
+	nodeOrder  []mnet.NodeID
+	nextNodeID mnet.NodeID
+
+	tick   int64
+	nextID mnet.PlayerID
+
+	resumeGrace int64
+
+	joinKit []string
+
+	abilities *abilitydef.Catalog
+
+	classes *classdef.Catalog
+
+	quests *questdef.Catalog
+
+	players map[mnet.PlayerID]*player
+
+	parties     map[mnet.PartyID]*party
+	nextPartyID mnet.PartyID
+
+	npcs      map[mnet.PlayerID]*npc
+	npcOrder  []mnet.PlayerID
+	nextNpcID mnet.PlayerID
+
+	camps []*camp
+	rng   *mrand.Rand
+
+	byConn map[*mnet.Conn]*player
+
+	bySession map[string]*player
+
+	order []*player
+}
+
+func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace int64, joinKit []string) *World {
+	if transport == nil {
+		panic("game: nil transport")
+	}
+	if store == nil {
+		panic("game: nil store")
+	}
+	if resumeGrace < 1 {
+		panic(fmt.Sprintf("game: resume grace of %d ticks; it must be at least 1", resumeGrace))
+	}
+	return &World{
+		transport:   transport,
+		log:         log,
+		items:       store,
+		nodes:       make(map[mnet.NodeID]*resourceNode),
+		npcs:        make(map[mnet.PlayerID]*npc),
+		resumeGrace: resumeGrace,
+		joinKit:     joinKit,
+		players:     make(map[mnet.PlayerID]*player),
+		parties:     make(map[mnet.PartyID]*party),
+		byConn:      make(map[*mnet.Conn]*player),
+		bySession:   make(map[string]*player),
+	}
+}
+
+func (w *World) SetAbilities(c *abilitydef.Catalog) {
+	w.abilities = c
+}
+
+func (w *World) SetClasses(c *classdef.Catalog) {
+	w.classes = c
+}
+
+func (w *World) SetQuests(c *questdef.Catalog) {
+	w.quests = c
+}
+
+func (w *World) Run(ctx context.Context) {
+	ticker := time.NewTicker(TickDuration)
+	defer ticker.Stop()
+
+	last := time.Now()
+	var owed time.Duration
+
+	events := w.transport.Events()
+	for {
+		select {
+		case <-ctx.Done():
+			w.log.Event(w.tick, EvServerStopping, gamelog.Fields{"players": len(w.order)})
+			return
+		case ev := <-events:
+			w.handle(ev)
+		case now := <-ticker.C:
+			owed += now.Sub(last)
+			last = now
+			w.stepAll(&owed)
+		}
+	}
+}
+
+func (w *World) stepAll(owed *time.Duration) {
+	due := int(*owed / TickDuration)
+	if due <= 0 {
+		return
+	}
+	*owed -= time.Duration(due) * TickDuration
+
+	if due > MaxCatchUpTicks {
+		w.log.Event(w.tick, EvTicksDropped, gamelog.Fields{
+			"due":     due,
+			"ran":     MaxCatchUpTicks,
+			"dropped": due - MaxCatchUpTicks,
+		})
+		due = MaxCatchUpTicks
+	}
+	for range due {
+		w.step()
+	}
+}
+
+func (w *World) step() {
+	w.tick++
+	if w.tick%HeartbeatEveryTicks == 0 {
+		w.broadcast(mnet.Tick{T: w.tick}, nil)
+	}
+	w.regenMana()
+	distance := WalkSpeed * TickDuration.Seconds()
+
+	for _, p := range w.order {
+		if p.steering() {
+			w.stepSteer(p, distance)
+			continue
+		}
+		if p.walking() {
+			p.pos, p.remaining = Advance(p.pos, p.remaining, distance)
+			if !p.walking() {
+				w.log.Event(w.tick, EvArrived, gamelog.Fields{
+					"player": p.id,
+					"x":      p.pos.X,
+					"z":      p.pos.Z,
+				})
+			}
+			continue
+		}
+	}
+
+	w.stepNPCs(distance)
+
+	for _, p := range w.order {
+		if p.pending != 0 {
+			w.resolvePickup(p)
+		}
+		if p.gatherNode != 0 {
+			w.resolveGather(p)
+		}
+		if p.pendingTalk != 0 {
+			w.resolveTalk(p)
+		}
+		if p.attackTarget != 0 {
+			w.resolveAttack(p)
+		}
+		if p.casting() {
+			w.advanceCast(p)
+		}
+	}
+
+	w.respawnNodes()
+	w.respawnCamps()
+	w.expireSuspended()
+}
+
+func (w *World) handle(ev mnet.Event) {
+	switch ev.Kind {
+	case mnet.EventConnected:
+		w.admit(ev.Conn)
+	case mnet.EventFrame:
+		w.handleFrame(ev)
+	case mnet.EventDisconnected:
+		w.removePlayer(ev.Conn, ev.Reason, ev.Detail)
+	default:
+		panic(fmt.Sprintf("game: unhandled event kind %v", ev.Kind))
+	}
+}
+
+func (w *World) admit(conn *mnet.Conn) {
+	if _, dup := w.byConn[conn]; dup {
+		panic("game: connection announced twice")
+	}
+
+	token := conn.Session()
+	if token == "" {
+		w.addPlayer(conn)
+		return
+	}
+
+	claimed, known := w.bySession[token]
+	switch {
+	case !known:
+		w.log.Event(w.tick, EvResumeUnknown, gamelog.Fields{"remote": conn.Remote()})
+		w.addPlayer(conn)
+	case !claimed.suspended():
+		w.refuseResume(conn)
+	default:
+		w.resumePlayer(claimed, conn)
+	}
+}
+
+func (w *World) refuseResume(conn *mnet.Conn) {
+	w.log.Event(w.tick, EvResumeRefused, gamelog.Fields{"remote": conn.Remote()})
+	conn.Send(mustEncode(mnet.Error{Msg: "session is still connected"}))
+	conn.CloseAfterFlush(mnet.DisconnectRefused)
+}
+
+func (w *World) resumePlayer(p *player, conn *mnet.Conn) {
+	p.conn = conn
+	p.expiresTick = 0
+	w.byConn[conn] = p
+
+	w.log.Event(w.tick, EvPlayerResumed, gamelog.Fields{
+		"player": p.id,
+		"remote": conn.Remote(),
+	})
+
+	w.sendJoinStep(p)
+}
+
+func (w *World) addPlayer(conn *mnet.Conn) {
+	if w.nextID+1 >= practiceNpcIDBand {
+		w.log.Event(w.tick, EvJoinRefused, gamelog.Fields{
+			"remote": conn.Remote(),
+			"reason": "player id space exhausted",
+		})
+		conn.CloseAfterFlush(mnet.DisconnectRefused)
+		return
+	}
+	w.nextID++
+	p := &player{
+		id:                w.nextID,
+		session:           newSessionToken(),
+		conn:              conn,
+		pos:               Point{X: spawnX, Z: spawnZ},
+		hp:                MaxHP,
+		mana:              MaxMana,
+		lastPoseTick:      w.tick,
+		quests:            make(map[string]questStatus),
+		questKillProgress: make(map[string]int),
+	}
+	w.players[p.id] = p
+	w.byConn[conn] = p
+	w.bySession[p.session] = p
+	w.order = append(w.order, p)
+	w.items.AddPlayer(p.id)
+
+	w.log.Event(w.tick, EvConnected, gamelog.Fields{
+		"player": p.id,
+		"remote": conn.Remote(),
+	})
+
+	w.seedJoinKit(p)
+	w.sendJoinStep(p)
+	w.broadcast(mnet.Spawn(p.wireState()), p)
+}
+
+func (w *World) sendJoinStep(p *player) {
+	states := make([]mnet.PlayerState, 0, len(w.order))
+	for _, other := range w.order {
+		states = append(states, other.wireState())
+	}
+	w.send(p, mnet.Welcome{
+		You:            p.id,
+		Session:        p.session,
+		LastSeq:        p.lastSeq,
+		TickMS:         int(TickDuration.Milliseconds()),
+		Tick:           w.tick,
+		HeartbeatTicks: HeartbeatEveryTicks,
+		Players:        states,
+		Items:          w.groundItemStates(),
+		Nodes:          w.nodeStates(),
+		Npcs:           w.npcStates(),
+	})
+
+	for _, other := range w.order {
+		if !other.walking() {
+			continue
+		}
+		replay := w.pathMessage(other)
+		fields := pathLogFields(replay)
+		fields["to"] = p.id
+		w.log.Event(w.tick, EvPathReplayed, fields)
+		w.send(p, replay)
+	}
+
+	w.sendInventory(p)
+	w.sendEquipment(p)
+	w.sendClass(p)
+	w.sendSkills(p)
+	w.sendQuestLog(p)
+	w.sendPartyCatchUp(p)
+}
+
+func suspends(reason string) bool {
+	return reason == mnet.DisconnectPeerGone || reason == mnet.DisconnectSlow
+}
+
+func (w *World) removePlayer(conn *mnet.Conn, reason, detail string) {
+	p, ok := w.byConn[conn]
+	if !ok {
+		return
+	}
+
+	fields := gamelog.Fields{
+		"player": p.id,
+		"reason": reason,
+	}
+	if detail != "" {
+		fields["detail"] = detail
+	}
+	w.log.Event(w.tick, EvDisconnected, fields)
+
+	if suspends(reason) {
+		w.suspend(p)
+		return
+	}
+	w.retire(p)
+}
+
+func (w *World) suspend(p *player) {
+	delete(w.byConn, p.conn)
+	p.conn = nil
+	p.expiresTick = w.tick + w.resumeGrace
+
+	w.log.Event(w.tick, EvPlayerSuspended, gamelog.Fields{
+		"player":       p.id,
+		"expires_tick": p.expiresTick,
+	})
+}
+
+func (w *World) expireSuspended() {
+	var expired []*player
+	for _, p := range w.order {
+		if p.suspended() && w.tick >= p.expiresTick {
+			expired = append(expired, p)
+		}
+	}
+	for _, p := range expired {
+		w.log.Event(w.tick, EvPlayerExpired, gamelog.Fields{"player": p.id})
+		w.retire(p)
+	}
+}
+
+func (w *World) retire(p *player) {
+	if p.partyID != 0 {
+		w.removeFromParty(p, EvPartyLeft)
+	}
+	w.clearInvitesFrom(p.id)
+	if p.pendingInviteFrom != 0 {
+		w.clearPendingInvite(p)
+	}
+
+	delete(w.players, p.id)
+	delete(w.bySession, p.session)
+	if p.conn != nil {
+		delete(w.byConn, p.conn)
+	}
+	for i, other := range w.order {
+		if other == p {
+			w.order = append(w.order[:i], w.order[i+1:]...)
+			break
+		}
+	}
+	w.items.RemovePlayer(p.id)
+
+	w.clearAttacksOn(p.id)
+	w.clearAttack(p)
+
+	w.broadcast(mnet.Despawn{ID: p.id}, p)
+}
+
+func (w *World) handleFrame(ev mnet.Event) {
+	p, ok := w.byConn[ev.Conn]
+	if !ok {
+		w.log.Event(w.tick, EvFrameDropped, gamelog.Fields{
+			"reason": string(mnet.ReasonUnknownSender),
+			"remote": ev.Conn.Remote(),
+		})
+		return
+	}
+
+	if ev.Seq != 0 {
+		if ev.Seq <= p.lastSeq {
+			w.log.Event(w.tick, EvIntentDuplicate, gamelog.Fields{
+				"player":   p.id,
+				"re":       ev.Name(),
+				"seq":      ev.Seq,
+				"last_seq": p.lastSeq,
+			})
+			return
+		}
+		p.lastSeq = ev.Seq
+	}
+
+	if ev.Err != nil {
+		rejection, ok := mnet.Rejection(ev.Err)
+		if !ok {
+			panic(fmt.Sprintf("game: frame error without a rejection: %v", ev.Err))
+		}
+		w.refuse(p, rejection)
+		return
+	}
+
+	switch msg := ev.Msg.(type) {
+	case mnet.MoveTo:
+		panic("game: move_to must not reach the game loop")
+	case mnet.Move:
+		if w.refuseIfDead(p, mnet.MsgMove) {
+			return
+		}
+		w.move(p, msg, ev.Seq)
+	case mnet.Pickup:
+		if w.refuseIfDead(p, mnet.MsgPickup) {
+			return
+		}
+		w.pickup(p, msg, ev.Seq)
+	case mnet.Drop:
+		if w.refuseIfDead(p, mnet.MsgDrop) {
+			return
+		}
+		w.drop(p, msg, ev.Seq)
+	case mnet.Equip:
+		if w.refuseIfDead(p, mnet.MsgEquip) {
+			return
+		}
+		w.equip(p, msg, ev.Seq)
+	case mnet.Unequip:
+		if w.refuseIfDead(p, mnet.MsgUnequip) {
+			return
+		}
+		w.unequip(p, msg, ev.Seq)
+	case mnet.Gather:
+		if w.refuseIfDead(p, mnet.MsgGather) {
+			return
+		}
+		w.gather(p, msg, ev.Seq)
+	case mnet.Use:
+		if w.refuseIfDead(p, mnet.MsgUse) {
+			return
+		}
+		w.use(p, msg, ev.Seq)
+	case mnet.Attack:
+		w.attack(p, msg, ev.Seq)
+	case mnet.Respawn:
+		w.respawnPlayer(p, ev.Seq)
+	case mnet.Cast:
+		w.cast(p, msg, ev.Seq)
+	case mnet.Talk:
+		if w.refuseIfDead(p, mnet.MsgTalk) {
+			return
+		}
+		w.talk(p, msg, ev.Seq)
+	case mnet.DialogOptionPick:
+		if w.refuseIfDead(p, mnet.MsgDialogOption) {
+			return
+		}
+		w.dialogOption(p, msg, ev.Seq)
+	case mnet.Give:
+		if w.refuseIfDead(p, mnet.MsgGive) {
+			return
+		}
+		w.give(p, msg, ev.Seq)
+	case mnet.PartyInvite:
+		w.partyInvite(p, msg, ev.Seq)
+	case mnet.PartyAccept:
+		w.partyAccept(p, msg, ev.Seq)
+	case mnet.PartyDecline:
+		w.partyDecline(p, msg, ev.Seq)
+	case mnet.PartyLeave:
+		w.partyLeave(p, msg, ev.Seq)
+	case mnet.PartyKick:
+		w.partyKick(p, msg, ev.Seq)
+	default:
+		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
+	}
+}
+
+func (w *World) refuse(p *player, rejection *mnet.RejectError) {
+	fields := gamelog.Fields{
+		"player": p.id,
+		"reason": string(rejection.Reason),
+		"detail": rejection.Detail,
+	}
+	if rejection.Re != "" {
+		fields["re"] = rejection.Re
+	}
+
+	if rejection.Disposition == mnet.Ignore {
+		w.log.Event(w.tick, EvIntentIgnored, fields)
+		return
+	}
+
+	w.log.Event(w.tick, rejectionEvent(rejection.Re), fields)
+	w.send(p, mnet.Error{Re: rejection.Re, Msg: rejection.Detail})
+	if rejection.Disposition == mnet.ReplyErrorAndClose {
+		p.conn.CloseAfterFlush(mnet.DisconnectProtocol)
+	}
+}
+
+func rejectionEvent(re string) string {
+	switch re {
+	case mnet.MsgMoveTo, "":
+		return EvMoveToRejected
+	case mnet.MsgMove:
+		return EvMoveRejected
+	case mnet.MsgPickup:
+		return EvPickupRejected
+	case mnet.MsgDrop:
+		return EvDropRejected
+	case mnet.MsgEquip:
+		return EvEquipRejected
+	case mnet.MsgUnequip:
+		return EvUnequipRejected
+	case mnet.MsgGather:
+		return EvGatherRejected
+	case mnet.MsgUse:
+		return EvUseRejected
+	case mnet.MsgAttack:
+		return EvAttackRejected
+	case mnet.MsgRespawn:
+		return EvRespawnRejected
+	case mnet.MsgCast:
+		return EvCastRejected
+	case mnet.MsgTalk:
+		return EvTalkRejected
+	case mnet.MsgDialogOption:
+		return EvDialogOptionRejected
+	case mnet.MsgGive:
+		return EvGiveRejected
+	case mnet.MsgPartyInvite:
+		return EvPartyInviteRejected
+	case mnet.MsgPartyAccept:
+		return EvPartyAcceptRejected
+	case mnet.MsgPartyDecline:
+		return EvPartyDeclineRejected
+	case mnet.MsgPartyLeave:
+		return EvPartyLeaveRejected
+	case mnet.MsgPartyKick:
+		return EvPartyKickRejected
+	default:
+		panic(fmt.Sprintf("game: no rejection event for %q", re))
+	}
+}
+
+func withSeq(f gamelog.Fields, seq mnet.Seq) gamelog.Fields {
+	if seq != 0 {
+		f["seq"] = seq
+	}
+	return f
+}
+
+func destinationPath(p *player, dest Point) (points []Point, assign bool) {
+	line := StraightLine(p.pos, dest)
+	if length(line) >= MinPathLength {
+		return line, true
+	}
+	if p.walking() {
+		return []Point{p.pos}, true
+	}
+	return nil, false
+}
+
+func (w *World) assignPath(p *player, points []Point) {
+	p.remaining = points[1:]
+
+	out := mnet.Path{
+		ID:        p.id,
+		StartTick: w.tick,
+		Points:    wirePoints(points),
+		Speed:     WalkSpeed,
+	}
+	w.log.Event(w.tick, EvPathAssigned, pathLogFields(out))
+	w.broadcast(out, nil)
+}
+
+func pathLogFields(msg mnet.Path) gamelog.Fields {
+	return gamelog.Fields{
+		"player":     msg.ID,
+		"start_tick": msg.StartTick,
+		"points":     msg.Points,
+		"speed":      msg.Speed,
+	}
+}
+
+func checkCoordinates(x, z float64) (mnet.RejectReason, string) {
+	if !finite(x) || !finite(z) {
+		return mnet.ReasonNonFinite, "coordinates must be finite"
+	}
+	if math.Abs(x) > WorldHalfExtent || math.Abs(z) > WorldHalfExtent {
+		return mnet.ReasonOutOfBounds, fmt.Sprintf("out of bounds: x and z must be within +/-%v", WorldHalfExtent)
+	}
+	return "", ""
+}
+
+func (w *World) pathMessage(p *player) mnet.Path {
+	points := make([]Point, 0, len(p.remaining)+1)
+	points = append(points, p.pos)
+	points = append(points, p.remaining...)
+	return mnet.Path{
+		ID:        p.id,
+		StartTick: w.tick,
+		Points:    wirePoints(points),
+		Speed:     WalkSpeed,
+	}
+}
+
+func (w *World) send(p *player, msg mnet.ServerMessage) {
+	if p.conn == nil {
+		return
+	}
+	p.conn.Send(mustEncode(msg))
+}
+
+func (w *World) broadcast(msg mnet.ServerMessage, skip *player) {
+	payload := mustEncode(msg)
+	for _, p := range w.order {
+		if p == skip || p.conn == nil {
+			continue
+		}
+		p.conn.Send(payload)
+	}
+}
+
+func mustEncode(msg mnet.ServerMessage) []byte {
+	payload, err := mnet.Encode(msg)
+	if err != nil {
+		panic(fmt.Sprintf("game: encoding %T: %v", msg, err))
+	}
+	return payload
+}
+
+func length(points []Point) float64 {
+	var total float64
+	for i := 1; i < len(points); i++ {
+		total += math.Hypot(points[i].X-points[i-1].X, points[i].Z-points[i-1].Z)
+	}
+	return total
+}
+
+func wirePoints(points []Point) []mnet.Point {
+	out := make([]mnet.Point, len(points))
+	for i, p := range points {
+		out[i] = mnet.Pt(p.X, p.Z)
+	}
+	return out
+}
+
+func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
