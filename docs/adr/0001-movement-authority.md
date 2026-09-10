@@ -67,7 +67,7 @@ M13 locks these hooks and the melee-movable / cast-cancel-or-root defaults. Map 
 - M13f hooks abilities into the locomotion policy table above.
 - M13g deletes player polyline walking. NPC polyline may stay.
 - M13h demos prove WASD, jump, and no player polyline on the wire.
-- Wire details land in code and tests. New mechanic polish lands in new ADRs. Do not revive a monolithic protocol or notes file.
+- Exact movement JSON names are settled in `docs/adr/0003-movement-wire.md`. Wire details land in code and tests. New mechanic polish lands in new ADRs. Do not revive a monolithic protocol or notes file.
 
 ## Non-goals
 
