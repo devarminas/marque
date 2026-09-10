@@ -14,13 +14,17 @@ const (
 	GatherDurationTicks = 3
 	NodeRespawnTicks    = 20
 
-	SeedTreeX = 5.0
-	SeedTreeZ = 0.0
+	SeedTreeX  = 5.0
+	SeedTreeZ  = 0.0
 	SeedTree2X = -5.0
 	SeedTree2Z = 2.0
+	SeedRockX  = 2.0
+	SeedRockZ  = 3.0
 
-	KindTree = "tree"
-	KindLogs = "logs"
+	KindTree      = "tree"
+	KindLogs      = "logs"
+	KindRock      = "rock"
+	KindCopperOre = "copper_ore"
 )
 
 // StarterTownTrees are the choppable trees near the hub on the Northmere road.
@@ -28,6 +32,12 @@ const (
 var StarterTownTrees = []Point{
 	{X: SeedTreeX, Z: SeedTreeZ},
 	{X: SeedTree2X, Z: SeedTree2Z},
+}
+
+// StarterTownRocks are the mineable rocks near the hub on the Northmere road.
+// Decorative rocks in world_map.tscn are not resource nodes.
+var StarterTownRocks = []Point{
+	{X: SeedRockX, Z: SeedRockZ},
 }
 
 // Tuning: ARM-122.
@@ -46,6 +56,18 @@ func nodeSkill(kind string) string {
 	switch kind {
 	case KindTree:
 		return "woodcutting"
+	case KindRock:
+		return "mining"
+	}
+	return ""
+}
+
+func nodeYield(kind string) string {
+	switch kind {
+	case KindTree:
+		return KindLogs
+	case KindRock:
+		return KindCopperOre
 	}
 	return ""
 }
@@ -193,7 +215,11 @@ func (w *World) resolveGather(p *player) {
 		return
 	}
 
-	slot, err := w.items.SpawnInventoryItem(p.id, KindLogs)
+	yield := nodeYield(n.kind)
+	if yield == "" {
+		panic(fmt.Sprintf("game: node %d kind %q has no yield", n.id, n.kind))
+	}
+	slot, err := w.items.SpawnInventoryItem(p.id, yield)
 	switch {
 	case errors.Is(err, ErrInventoryFull):
 		w.log.Event(w.tick, EvGatherNoRoom, playerNodeFields(p.id, n.id))
@@ -201,12 +227,12 @@ func (w *World) resolveGather(p *player) {
 		w.send(p, mnet.Error{Re: mnet.MsgGather, Msg: "inventory is full"})
 		return
 	case err != nil:
-		panic(fmt.Sprintf("game: granting logs to player %d: %v", p.id, err))
+		panic(fmt.Sprintf("game: granting %s to player %d: %v", yield, p.id, err))
 	}
 
 	w.clearGather(p)
 	fields := playerNodeFields(p.id, n.id)
-	fields["kind"] = KindLogs
+	fields["kind"] = yield
 	fields["slot"] = slot.Index
 	w.log.Event(w.tick, EvGatherResolved, fields)
 

@@ -1268,17 +1268,19 @@ through the refusal path, because a pickup fails on arrival rather than on recei
 no intent left to reject. An `unequip` fails on receipt like any other refused intent, so it
 takes the ordinary path and gets a reason rather than an event of its own.
 
-## Gathering. **M4a**
+## Gathering. **M4a** / **ARM-214**
 
-Resource nodes are the third entity family. M4a ships one kind, `tree`. M10 seeds two starter
-trees on the Northmere road (`SeedTreeX/Z` = 5, 0 and `SeedTree2X/Z` = -5, 2) via
-`StarterTownTrees`. The client draws each with the same `resource_node.tscn` prop from server
-positions. Decorative trees in `world_map.tscn` are not nodes. A live full tree yields one
-`logs` into the lowest free bag slot when a gather resolves.
+Resource nodes are the third entity family. M4a shipped `tree`. **ARM-214** adds `rock`.
+M10 seeds two starter trees on the Northmere road (`SeedTreeX/Z` = 5, 0 and `SeedTree2X/Z` =
+-5, 2) via `StarterTownTrees`. ARM-214 seeds one starter rock (`SeedRockX/Z` = 2, 3) via
+`StarterTownRocks`. The client draws each with `resource_node.tscn` from server positions
+(tree or rock art by `kind`). Decorative trees and rocks in `world_map.tscn` are not nodes.
+A live full tree yields one `logs`; a live full rock yields one `copper_ore` into the lowest
+free bag slot when a gather resolves.
 
 ### Tunables
 
-Named constants, revisitable:
+Named constants, revisitable. Rock reuses the same gather and respawn timers as tree:
 
 - `GatherRange = 0.5` (resolution only, never path assignment; same doctrine as `PickupRange`)
 - `GatherDurationTicks = 3` (consecutive in-range ticks with an active matching class before yield)
@@ -1292,13 +1294,15 @@ Named constants, revisitable:
   later ticks.
 - **Gather requires an active class whose skill matches the node's skill at receipt.** The
   server derives the active class from worn equipment (`ClassOf`); the class's single `skill`
-  must equal the node's `skill`. Otherwise the server refuses with `error` naming `gather`, the
-  node is unchanged, and GAMELOG records `gather_rejected` with reason `needs_class`.
+  must equal the node's `skill` (`tree` → `woodcutting`, `rock` → `mining`). Otherwise the
+  server refuses with `error` naming `gather`, the node is unchanged, and GAMELOG records
+  `gather_rejected` with reason `needs_class`.
 - **After arrival in range**, the pending gather stays pending for `GatherDurationTicks` ticks
   of continuous presence in range with the matching class still active, then resolves: grant one
-  `logs`, grant `SkillXPGather` XP to the node's skill, deplete the node, broadcast
-  `node_state`, send `inventory` and `skills`, GAMELOG success. Yield must not happen on the
-  first in-range tick when the duration is greater than zero.
+  yield item (`logs` for tree, `copper_ore` for rock), grant `SkillXPGather` XP to the node's
+  skill, deplete the node, broadcast `node_state`, send `inventory` and `skills`, GAMELOG
+  success. Yield must not happen on the first in-range tick when the duration is greater than
+  zero.
 - **Leaving range, losing the active class, or `move_to` cancels** the pending gather (clear
   pending; no yield). A second `gather` replaces the first. A player has at most one pending
   gather. **A player has at most one pending action among pickup, gather, attack, and talk.** Starting
@@ -1326,7 +1330,7 @@ text the player sees.
 Two players may pending-gather the same full node. **First completer who reaches resolution on
 a full node wins that depletion.** Resolution iterates players in join order inside `step`,
 after movement, matching contested pickup. The winner depletes the node in that same iteration;
-any other pending gather for that node then refuses/empties with no second `logs`.
+any other pending gather for that node then refuses/empties with no second yield.
 
 ### Log vocabulary. **M4a**
 
@@ -1335,7 +1339,7 @@ any other pending gather for that node then refuses/empties with no second `logs
 | `node_spawned` | `node`, `kind`, `x`, `z`, `state` | a node entered the world by seed |
 | `gather` | `player`, `node`, `seq` | a `gather` intent was accepted (pending set) |
 | `gather_rejected` | `player`, `reason`, `detail`, `re` | a `gather` refused on receipt |
-| `gather_resolved` | `player`, `node`, `kind`, `slot` | one completed gather (yielded `logs`) |
+| `gather_resolved` | `player`, `node`, `kind`, `slot` | one completed gather (yielded `logs` or `copper_ore`) |
 | `gather_lost` | `player`, `node` | pending gather ended because the node was no longer gatherable |
 | `gather_cancelled` | `player`, `node` | pending gather cleared (left range, lost active class, or replaced) |
 | `gather_no_room` | `player`, `node` | gather reached resolution with a full bag |

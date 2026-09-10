@@ -14,6 +14,8 @@ var state := ""
 @export var ground_y := 0.0
 @export var tree_visual: Node3D
 @export var stump_visual: MeshInstance3D
+@export var rock_visual: Node3D
+@export var rock_depleted_visual: Node3D
 @export var missing_visual: MeshInstance3D
 @export var trunk_shape: CollisionShape3D
 @export var canopy_shape: CollisionShape3D
@@ -44,6 +46,10 @@ func is_kind_known() -> bool:
 
 func is_depleted() -> bool:
 	return state == "depleted"
+
+
+func is_rock() -> bool:
+	return kind == NodeKinds.KIND_ROCK
 
 
 func showing() -> Look:
@@ -80,6 +86,10 @@ func _show(next: Look) -> void:
 		unassigned.append("tree_visual")
 	if stump_visual == null:
 		unassigned.append("stump_visual")
+	if rock_visual == null:
+		unassigned.append("rock_visual")
+	if rock_depleted_visual == null:
+		unassigned.append("rock_depleted_visual")
 	if missing_visual == null:
 		unassigned.append("missing_visual")
 	if trunk_shape == null:
@@ -89,8 +99,17 @@ func _show(next: Look) -> void:
 	if not unassigned.is_empty():
 		push_error("ResourceNode: the scene did not assign %s" % ", ".join(unassigned))
 		return
-	tree_visual.visible = next == Look.TREE
-	stump_visual.visible = next == Look.STUMP
-	missing_visual.visible = next == Look.MISSING
-	canopy_shape.disabled = next != Look.TREE
+
+	var rock := is_rock()
+	var full := next == Look.TREE
+	var depleted := next == Look.STUMP
+	var missing := next == Look.MISSING
+
+	tree_visual.visible = full and not rock
+	stump_visual.visible = depleted and not rock
+	rock_visual.visible = full and rock
+	rock_depleted_visual.visible = depleted and rock
+	missing_visual.visible = missing
+
+	canopy_shape.disabled = not full or rock
 	_look = next

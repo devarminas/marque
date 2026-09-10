@@ -58,6 +58,7 @@ func _ready() -> void:
 	_test_depleted_is_visually_distinct()
 	_test_an_unknown_kind_is_magenta()
 	_test_the_tree_art_resolved()
+	_test_the_rock_art_and_state()
 	_test_the_click_target_covers_the_art()
 	await _test_a_click_ray_reaches_the_body()
 	_test_a_second_welcome_frees_nodes()
@@ -266,6 +267,45 @@ func _test_the_tree_art_resolved() -> void:
 	)
 
 
+func _test_the_rock_art_and_state() -> void:
+	_feed(_welcome_empty())
+	_feed('{"node_spawn":{"id":15,"kind":"rock","x":2.0,"z":3.0,"state":"full"}}')
+	var body: ResourceNodeScript = _session.node_for(15)
+	_check(body != null, "rock node builds a body")
+	if body == null:
+		return
+	_check(body.is_kind_known(), "rock is a known kind")
+	_check(body.is_rock(), "kind is rock")
+	_check(
+		body.showing() == ResourceNodeScript.Look.TREE,
+		"full rock uses the full look, got %s" % _look_name(body.showing()),
+	)
+	_check(body.rock_visual != null and body.rock_visual.visible, "rock visual on while full")
+	_check(
+		body.rock_depleted_visual != null and not body.rock_depleted_visual.visible,
+		"pebble off while full",
+	)
+	_check(body.tree_visual != null and not body.tree_visual.visible, "tree art stays off")
+	_check(body.stump_visual != null and not body.stump_visual.visible, "stump stays off")
+	_check(body.canopy_shape != null and body.canopy_shape.disabled, "rock has no canopy hitbox")
+	_check(_visible_visuals(body) == 1, "exactly one rock visual visible while full")
+	var meshes := body.rock_visual.find_children("*", "MeshInstance3D", true, false)
+	_check(meshes.size() >= 1, "rock holds vendor mesh art, found %d" % meshes.size())
+	_feed('{"node_state":{"id":15,"kind":"rock","x":2.0,"z":3.0,"state":"depleted"}}')
+	_check(body.is_depleted(), "rock tracks depleted")
+	_check(
+		body.showing() == ResourceNodeScript.Look.STUMP,
+		"depleted rock uses the depleted look, got %s" % _look_name(body.showing()),
+	)
+	_check(not body.rock_visual.visible, "full rock art went off")
+	_check(body.rock_depleted_visual.visible, "pebble came on")
+	_check(_visible_visuals(body) == 1, "exactly one visual visible while depleted")
+	_feed('{"node_state":{"id":15,"kind":"rock","x":2.0,"z":3.0,"state":"full"}}')
+	_check(not body.is_depleted(), "rock respawns to full")
+	_check(body.rock_visual.visible, "rock art returns")
+	_check(not body.rock_depleted_visual.visible, "pebble leaves")
+
+
 func _test_the_click_target_covers_the_art() -> void:
 	_feed(_welcome_empty())
 	_feed('{"node_spawn":{"id":14,"kind":"tree","x":0.0,"z":0.0,"state":"full"}}')
@@ -378,7 +418,13 @@ func _cast(from: Vector3, to: Vector3) -> Object:
 
 func _visible_visuals(body: ResourceNodeScript) -> int:
 	var count := 0
-	for visual in [body.tree_visual, body.stump_visual, body.missing_visual]:
+	for visual in [
+		body.tree_visual,
+		body.stump_visual,
+		body.rock_visual,
+		body.rock_depleted_visual,
+		body.missing_visual,
+	]:
 		if visual != null and visual.visible:
 			count += 1
 	return count
