@@ -115,7 +115,9 @@ if (-not (Test-Path $allowlistPath)) {
     foreach ($dirRel in @("scripts", "client\scripts")) {
         $dir = Join-Path $repo $dirRel
         if (-not (Test-Path -LiteralPath $dir)) { continue }
-        $filter = if ($dirRel -eq "scripts") { "*demo*.ps1" } else { "*demo*.gd" }
+        # Match *_demo.ps1 / *_demo.gd only — not helpers like marque-demo-lib.ps1
+        # or demo_npc_capture.gd (those are not windowed demos).
+        $filter = if ($dirRel -eq "scripts") { "*_demo.ps1" } else { "*_demo.gd" }
         Get-ChildItem -LiteralPath $dir -File -Filter $filter | ForEach-Object {
             $rel = Get-RepoRelativeForwardSlash $_.FullName
             if (-not $allowed.Contains($rel)) {
