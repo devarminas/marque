@@ -114,6 +114,8 @@ type Store interface {
 
 	CraftInventorySlot(player mnet.PlayerID, slot int, consumeKind, produceKind string) (Crafted, error)
 
+	CraftInventoryRecipe(player mnet.PlayerID, slot int, consumeKinds []string, produceKind string) (Crafted, error)
+
 	DeliverInventorySlot(player mnet.PlayerID, slot int, consumeKind string, rewards []string) (Delivered, error)
 
 	GrantInventoryKinds(player mnet.PlayerID, kinds []string) error
@@ -323,8 +325,17 @@ func (s *memStore) UnequipWornSlot(player mnet.PlayerID, slot mnet.EquipSlot) (U
 }
 
 func (s *memStore) CraftInventorySlot(player mnet.PlayerID, slot int, consumeKind, produceKind string) (Crafted, error) {
-	if consumeKind == "" || produceKind == "" {
-		panic(fmt.Sprintf("game: craft with empty kind for player %d", player))
+	return s.CraftInventoryRecipe(player, slot, []string{consumeKind}, produceKind)
+}
+
+func (s *memStore) CraftInventoryRecipe(player mnet.PlayerID, slot int, consumeKinds []string, produceKind string) (Crafted, error) {
+	if len(consumeKinds) == 0 || produceKind == "" {
+		panic(fmt.Sprintf("game: craft with empty recipe for player %d", player))
+	}
+	for _, kind := range consumeKinds {
+		if kind == "" {
+			panic(fmt.Sprintf("game: craft with empty consume kind for player %d", player))
+		}
 	}
 	held, known := s.held[player]
 	if !known {
@@ -337,21 +348,63 @@ func (s *memStore) CraftInventorySlot(player mnet.PlayerID, slot int, consumeKin
 	if kind == "" {
 		return Crafted{}, fmt.Errorf("craft slot %d for player %d: %w", slot, player, ErrEmptySlot)
 	}
-	if kind != consumeKind {
+	primaryOK := false
+	for _, need := range consumeKinds {
+		if need == kind {
+			primaryOK = true
+			break
+		}
+	}
+	if !primaryOK {
 		return Crafted{}, fmt.Errorf("craft %q from slot %d for player %d: %w", kind, slot, player, ErrNoRecipe)
 	}
-	if _, room := held.free(); !room {
+
+	taken := map[int]bool{slot: true}
+	remaining := make([]string, 0, len(consumeKinds)-1)
+	matched := false
+	for _, need := range consumeKinds {
+		if !matched && need == kind {
+			matched = true
+			continue
+		}
+		remaining = append(remaining, need)
+	}
+	for _, need := range remaining {
+		found := -1
+		for i, bagKind := range held.bag {
+			if taken[i] || bagKind != need {
+				continue
+			}
+			found = i
+			break
+		}
+		if found < 0 {
+			return Crafted{}, fmt.Errorf("craft missing %q for player %d: %w", need, player, ErrNoRecipe)
+		}
+		taken[found] = true
+	}
+
+	empty := 0
+	for _, bagKind := range held.bag {
+		if bagKind == "" {
+			empty++
+		}
+	}
+	// Refuse full-bag one-for-one (no in-place rewrite); allow full-bag two-for-one.
+	if empty+len(taken) < 2 {
 		return Crafted{}, fmt.Errorf("craft slot %d for player %d: %w", slot, player, ErrInventoryFull)
 	}
 
-	held.bag[slot] = ""
+	for i := range taken {
+		held.bag[i] = ""
+	}
 	index, room := held.free()
 	if !room {
-		panic(fmt.Sprintf("game: craft freed slot %d for player %d and still found no room", slot, player))
+		panic(fmt.Sprintf("game: craft freed slots for player %d and still found no room", player))
 	}
 	held.bag[index] = produceKind
 
-	return Crafted{From: slot, Into: index, Consume: consumeKind, Produce: produceKind}, nil
+	return Crafted{From: slot, Into: index, Consume: kind, Produce: produceKind}, nil
 }
 
 func (s *memStore) DeliverInventorySlot(player mnet.PlayerID, slot int, consumeKind string, rewards []string) (Delivered, error) {
