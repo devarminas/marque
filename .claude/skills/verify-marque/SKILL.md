@@ -151,9 +151,19 @@ One read-only check that answers "is this checkout worth driving?":
     powershell -ExecutionPolicy Bypass -File .claude/skills/verify-marque/doctor.ps1
 
 `DOCTOR OK` means Go and Godot 4.7 answer on PATH and the repo has the server, the
-client, and both canonical scripts where this skill expects them. It warns — with the
-exact warm-up command — when `client/.godot/` is missing. Run it first whenever
-anything looks off.
+client, and both canonical scripts where this skill expects them. It also fails closed
+on windowed demos: every `scripts/*demo*.ps1`, every `client/scripts/*demo*.gd`, and
+every `--*-shots` string literal in `client/scripts/main.gd` must appear in
+`.claude/skills/verify-marque/demo-allowlist.txt`. An unlisted file or flag fails
+doctor. There is no `.github/` workflow tree in this repo; **doctor is the gate**.
+It warns — with the exact warm-up command — when `client/.godot/` is missing. Run it
+first whenever anything looks off.
+
+**Hard rule: do not mint a new windowed demo for quest (or other) content.** New
+quest coverage extends the Go server and thin WebSocket / headless proof paths; it
+does not add `*_demo.ps1`, `*_demo.gd`, or a new `--*-shots` flag. If an existing
+allowed demo must change, update `demo-allowlist.txt` in the same change. Doctor
+enforces the allowlist; the skill text alone is not enough.
 
 ## Drive
 

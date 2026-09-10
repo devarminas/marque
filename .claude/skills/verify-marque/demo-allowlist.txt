@@ -1,0 +1,45 @@
+# Fail-closed allowlist of windowed demos. doctor.ps1 fails when a matching
+# scripts/*demo*.ps1, client/scripts/*demo*.gd, or main.gd --*-shots flag is
+# absent from this file. Paths are repo-relative with forward slashes.
+# Lines starting with # are comments. Trailing # comments on entry lines are ok.
+
+# scripts/*demo*.ps1
+scripts/combat_demo.ps1  # retired ARM-203 stub; keep listed so doctor stays green
+scripts/contested_pickup_demo.ps1
+scripts/dummy_attack_demo.ps1
+scripts/dummy_cast_demo.ps1
+scripts/enemy_quest_demo.ps1
+scripts/equip_demo.ps1
+scripts/gather_craft_demo.ps1
+scripts/gather_error_demo.ps1
+scripts/quest_demo.ps1
+scripts/seed_class_kits_demo.ps1
+scripts/tab_combat_demo.ps1
+scripts/two_client_demo.ps1
+scripts/wasd_demo.ps1
+
+# client/scripts/*demo*.gd
+client/scripts/combat_demo.gd
+client/scripts/dummy_attack_demo.gd
+client/scripts/dummy_cast_demo.gd
+client/scripts/enemy_quest_demo.gd
+client/scripts/equip_demo.gd
+client/scripts/gather_craft_demo.gd
+client/scripts/gather_error_demo.gd
+client/scripts/pickup_demo.gd
+client/scripts/quest_demo.gd
+client/scripts/tab_combat_demo.gd
+client/scripts/walk_demo.gd
+client/scripts/wasd_demo.gd
+
+# --*-shots flags in client/scripts/main.gd
+--shots
+--pickup-shots
+--equip-shots
+--gather-craft-shots
+--gather-error-shots
+--combat-shots
+--wasd-shots
+--tab-combat-shots
+--quest-shots
+--enemy-quest-shots
