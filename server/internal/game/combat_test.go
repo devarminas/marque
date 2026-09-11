@@ -18,7 +18,7 @@ func TestFreshPlayerHasMaxHP(t *testing.T) {
 	}
 }
 
-func TestAttackOutOfRangePathsInThenHitsOnPeriod(t *testing.T) {
+func TestAttackOutOfRangeSteersInThenHitsOnPeriod(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	hostile := pw.seedHostile()
@@ -29,8 +29,11 @@ func TestAttackOutOfRangePathsInThenHitsOnPeriod(t *testing.T) {
 	if alice.attackTarget != hostile.id {
 		t.Fatalf("attackTarget=%d, want %d", alice.attackTarget, hostile.id)
 	}
-	if !alice.walking() {
-		t.Fatal("out-of-range attack assigned no path")
+	if !alice.steering() {
+		t.Fatal("out-of-range attack assigned no approach steer")
+	}
+	if got := pw.events(EvPathAssigned); len(got) != 0 {
+		t.Fatalf("attack approach must not assign player path, got %v", got)
 	}
 	if hostile.hp != DummyMaxHP {
 		t.Fatal("hit landed before arrival")
@@ -104,7 +107,7 @@ func TestAttackPeriodPausesOffRange(t *testing.T) {
 	}
 
 	hostile.pos = Point{X: 1, Z: 0}
-	alice.remaining = nil
+	alice.clearSteer()
 	alice.pos = Point{X: 0, Z: 0}
 	pw.w.step()
 	pw.w.step()
@@ -225,7 +228,7 @@ func TestRespawnRestoresAtJoinSpawn(t *testing.T) {
 	alice := pw.join()
 	alice.hp = 0
 	alice.pos = Point{X: 7, Z: 9}
-	alice.remaining = []Point{{X: 8, Z: 9}}
+	pw.w.steerToward(alice, Point{X: 8, Z: 9})
 
 	pw.w.respawnPlayer(alice, 3)
 	if alice.dead() || alice.hp != MaxHP {
@@ -234,8 +237,8 @@ func TestRespawnRestoresAtJoinSpawn(t *testing.T) {
 	if alice.pos.X != spawnX || alice.pos.Z != spawnZ {
 		t.Fatalf("pos=%v, want join spawn", alice.pos)
 	}
-	if alice.walking() {
-		t.Fatal("respawn left a walk in progress")
+	if alice.steering() {
+		t.Fatal("respawn left approach steer")
 	}
 	if got := pw.events(EvRespawn); len(got) != 1 || got[0]["seq"] != float64(3) {
 		t.Fatalf("respawn events=%v", got)

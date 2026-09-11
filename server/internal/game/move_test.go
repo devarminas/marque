@@ -78,42 +78,33 @@ func TestLastIntentWinsMoveOverApproach(t *testing.T) {
 	alice := pw.join()
 
 	pw.w.move(alice, mnet.Move{DX: 1, DZ: 0}, 0)
-	points, ok := destinationPath(alice, Point{X: 0, Z: 5})
-	if !ok {
-		t.Fatal("expected approach path")
-	}
 	alice.clearSteer()
-	pw.w.assignPath(alice, points)
-	if alice.steering() {
-		t.Fatal("approach left sticky steer")
+	if !pw.w.steerToward(alice, Point{X: 0, Z: 5}) {
+		t.Fatal("expected approach steer")
 	}
-	if len(alice.remaining) == 0 {
-		t.Fatal("approach assigned no remaining")
+	if !alice.steering() {
+		t.Fatal("approach left no sticky steer")
 	}
 
 	pw.w.move(alice, mnet.Move{DX: 0, DZ: 1}, 0)
 	if !alice.steering() {
 		t.Fatal("move did not take ownership after approach")
 	}
-	if len(alice.remaining) != 0 {
-		t.Fatalf("move left approach remaining=%v", alice.remaining)
+	if alice.steerDX != 0 || alice.steerDZ <= 0 {
+		t.Fatalf("move left steer=(%v,%v), want +Z wish", alice.steerDX, alice.steerDZ)
 	}
 }
 
-func TestApproachPathBroadcastsPoseEachStep(t *testing.T) {
+func TestApproachSteerBroadcastsPoseEachStep(t *testing.T) {
 	pw := newProbeWorld(t)
 	alice := pw.join()
 	alice.pos = Point{X: 0, Z: 0}
-	points, ok := destinationPath(alice, Point{X: 0, Z: 3})
-	if !ok {
-		t.Fatal("expected approach path")
-	}
-	pw.w.assignPath(alice, points)
-	if alice.lastPoseTick != pw.w.tick {
-		t.Fatalf("assignPath lastPoseTick=%d, want %d", alice.lastPoseTick, pw.w.tick)
+	dest := Point{X: 0, Z: 3}
+	if !pw.w.steerToward(alice, dest) {
+		t.Fatal("expected approach steer")
 	}
 	moved := 0
-	for i := 0; i < 100 && alice.walking(); i++ {
+	for i := 0; i < 100 && distanceBetween(alice.pos, dest) > MinPathLength; i++ {
 		before := alice.pos
 		pw.w.step()
 		if alice.pos == before {
@@ -124,11 +115,14 @@ func TestApproachPathBroadcastsPoseEachStep(t *testing.T) {
 			t.Fatalf("step %d lastPoseTick=%d, want %d while approaching", i, alice.lastPoseTick, pw.w.tick)
 		}
 	}
-	if alice.walking() {
-		t.Fatalf("still walking after steps: remaining=%v pos=%v", alice.remaining, alice.pos)
+	if distanceBetween(alice.pos, dest) > WalkSpeed*TickDuration.Seconds() {
+		t.Fatalf("still far after steps: pos=%v dest=%v", alice.pos, dest)
 	}
 	if moved == 0 {
 		t.Fatal("approach never moved")
+	}
+	if got := pw.events(EvPathAssigned); len(got) != 0 {
+		t.Fatalf("approach must not assign player path, got %v", got)
 	}
 }
 

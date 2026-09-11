@@ -13,7 +13,7 @@ func TestGatherRangeCoversTheSpotUnderfoot(t *testing.T) {
 	}
 }
 
-func TestGatherFromOutOfRangeAssignsPathAndPending(t *testing.T) {
+func TestGatherFromOutOfRangeSteersAndPending(t *testing.T) {
 	pw := newGatherProbe(t)
 	alice := pw.joinWithLumberjack()
 	node := pw.seedTree()
@@ -26,11 +26,11 @@ func TestGatherFromOutOfRangeAssignsPathAndPending(t *testing.T) {
 	if alice.gatherProgress != 0 {
 		t.Fatalf("gatherProgress=%d before any step, want 0", alice.gatherProgress)
 	}
-	if !alice.walking() {
-		t.Fatal("gather from spawn assigned no path")
+	if !alice.steering() {
+		t.Fatal("gather from spawn assigned no approach steer")
 	}
-	if len(alice.remaining) != 1 || alice.remaining[0].X != SeedTreeX || alice.remaining[0].Z != SeedTreeZ {
-		t.Fatalf("remaining=%v, want a walk ending at the tree", alice.remaining)
+	if got := pw.events(EvPathAssigned); len(got) != 0 {
+		t.Fatalf("gather approach must not assign player path, got %v", got)
 	}
 	if got := pw.events(EvGather); len(got) != 1 {
 		t.Fatalf("logged %d %s, want 1", len(got), EvGather)
@@ -46,11 +46,11 @@ func TestGatherWalkThenYieldsAfterDuration(t *testing.T) {
 	node := pw.seedTree()
 
 	pw.gather(alice, node.id)
-	for i := 0; i < 200 && (alice.gatherNode != 0 || alice.walking()); i++ {
+	for i := 0; i < 200 && alice.gatherNode != 0; i++ {
 		pw.w.step()
 	}
-	if alice.walking() {
-		t.Fatal("walker never finished the path to the tree")
+	if alice.steering() {
+		t.Fatal("approach steer still set after gather finished")
 	}
 	if alice.gatherNode != 0 {
 		t.Fatalf("gatherNode=%d after walk+duration, want 0", alice.gatherNode)
@@ -97,8 +97,8 @@ func TestGatherYieldsAfterDurationWithLumberjack(t *testing.T) {
 	alice.pos = Point{X: SeedTreeX, Z: SeedTreeZ}
 
 	pw.gather(alice, node.id)
-	if alice.walking() {
-		t.Fatal("underfoot gather assigned a path")
+	if alice.steering() {
+		t.Fatal("underfoot gather assigned approach steer")
 	}
 
 	for i := 1; i < GatherDurationTicks; i++ {

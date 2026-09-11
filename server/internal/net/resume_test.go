@@ -404,7 +404,7 @@ func TestASuspendedPlayerFinishesWhatItStarted(t *testing.T) {
 	alice.spawn()
 
 	alice.pickup(item)
-	alice.path()
+	_ = alice.awaitPlayerPose(first.You)
 	alice.destroy()
 	h.awaitEvents(game.EvPlayerSuspended, 1)
 

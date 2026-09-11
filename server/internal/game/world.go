@@ -176,8 +176,6 @@ type player struct {
 	y  float64
 	vy float64
 
-	remaining []Point
-
 	steerDX float64
 	steerDZ float64
 
@@ -215,8 +213,6 @@ type player struct {
 
 	expiresTick int64
 }
-
-func (p *player) walking() bool { return len(p.remaining) > 0 }
 
 func (p *player) suspended() bool { return p.conn == nil }
 
@@ -360,25 +356,6 @@ func (w *World) step() {
 			}
 			continue
 		}
-		if p.walking() {
-			from := p.pos
-			p.pos, p.remaining = Advance(p.pos, p.remaining, distance)
-			if !p.walking() {
-				w.log.Event(w.tick, EvArrived, gamelog.Fields{
-					"player": p.id,
-					"x":      p.pos.X,
-					"z":      p.pos.Z,
-				})
-			}
-			yMoved := w.stepVertical(p, dt)
-			// Approach still uses server polylines until ARM-239. Pose is the
-			// client locomotion channel after M13c — broadcast every XZ step
-			// so prediction/remotes do not freeze on right-click interact.
-			if yMoved || p.pos != from {
-				w.broadcastPose(p)
-			}
-			continue
-		}
 		if w.stepVertical(p, dt) {
 			w.broadcastPose(p)
 		}
@@ -518,17 +495,6 @@ func (w *World) sendJoinStep(p *player) {
 		Nodes:          w.nodeStates(),
 		Npcs:           w.npcStates(),
 	})
-
-	for _, other := range w.order {
-		if !other.walking() {
-			continue
-		}
-		replay := w.pathMessage(other)
-		fields := pathLogFields(replay)
-		fields["to"] = p.id
-		w.log.Event(w.tick, EvPathReplayed, fields)
-		w.send(p, replay)
-	}
 
 	w.sendInventory(p)
 	w.sendEquipment(p)
@@ -796,31 +762,6 @@ func withSeq(f gamelog.Fields, seq mnet.Seq) gamelog.Fields {
 	return f
 }
 
-func destinationPath(p *player, dest Point) (points []Point, assign bool) {
-	line := StraightLine(p.pos, dest)
-	if length(line) >= MinPathLength {
-		return line, true
-	}
-	if p.walking() {
-		return []Point{p.pos}, true
-	}
-	return nil, false
-}
-
-func (w *World) assignPath(p *player, points []Point) {
-	p.remaining = points[1:]
-
-	out := mnet.Path{
-		ID:        p.id,
-		StartTick: w.tick,
-		Points:    wirePoints(points),
-		Speed:     WalkSpeed,
-	}
-	w.log.Event(w.tick, EvPathAssigned, pathLogFields(out))
-	w.broadcast(out, nil)
-	w.broadcastPose(p)
-}
-
 func pathLogFields(msg mnet.Path) gamelog.Fields {
 	return gamelog.Fields{
 		"player":     msg.ID,
@@ -838,18 +779,6 @@ func checkCoordinates(x, z float64) (mnet.RejectReason, string) {
 		return mnet.ReasonOutOfBounds, fmt.Sprintf("out of bounds: x and z must be within +/-%v", WorldHalfExtent)
 	}
 	return "", ""
-}
-
-func (w *World) pathMessage(p *player) mnet.Path {
-	points := make([]Point, 0, len(p.remaining)+1)
-	points = append(points, p.pos)
-	points = append(points, p.remaining...)
-	return mnet.Path{
-		ID:        p.id,
-		StartTick: w.tick,
-		Points:    wirePoints(points),
-		Speed:     WalkSpeed,
-	}
 }
 
 func (w *World) send(p *player, msg mnet.ServerMessage) {

@@ -77,7 +77,7 @@ func TestNoFrameOfASessionCarriesANull(t *testing.T) {
 		}
 	}
 
-	for _, want := range []string{"path", "item_spawn", "item_despawn", "inventory", "error"} {
+	for _, want := range []string{"pose", "item_spawn", "item_despawn", "inventory", "error"} {
 		if kinds[want] == 0 {
 			t.Fatalf("the session produced no %s frame, so nothing checked one: saw %v", want, kinds)
 		}

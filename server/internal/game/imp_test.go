@@ -155,31 +155,23 @@ func TestImpChasePathLogsArrived(t *testing.T) {
 	}
 }
 
-func TestPlayerArrivedStillUsesPlayerField(t *testing.T) {
+func TestPlayerApproachDoesNotLogArrived(t *testing.T) {
 	pw := newProbeWorld(t)
 	alice := pw.join()
 	alice.pos = Point{}
-	points, ok := destinationPath(alice, Point{X: 2, Z: 0})
-	if !ok {
-		t.Fatal("expected approach path")
+	dest := Point{X: 2, Z: 0}
+	if !pw.w.steerToward(alice, dest) {
+		t.Fatal("expected approach steer")
 	}
-	pw.w.assignPath(alice, points)
-	for i := 0; i < 80 && alice.walking(); i++ {
+	for i := 0; i < 80 && distanceBetween(alice.pos, dest) > MinPathLength; i++ {
 		pw.w.step()
 	}
-	if alice.walking() {
-		t.Fatal("player never arrived")
+	alice.clearSteer()
+	if got := pw.events(EvArrived); len(got) != 0 {
+		t.Fatalf("player approach must not log path arrived, got %v", got)
 	}
-	got := pw.events(EvArrived)
-	if len(got) == 0 {
-		t.Fatal("expected player arrived")
-	}
-	last := got[len(got)-1]
-	if last["player"] != float64(alice.id) {
-		t.Fatalf("player arrived fields=%v", last)
-	}
-	if last["npc"] != nil {
-		t.Fatalf("player arrived must not set npc: %v", last)
+	if got := pw.events(EvPathAssigned); len(got) != 0 {
+		t.Fatalf("player approach must not assign path, got %v", got)
 	}
 }
 

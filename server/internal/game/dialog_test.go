@@ -126,8 +126,11 @@ func TestTalkFromOutOfRangeWalksThenOpens(t *testing.T) {
 	if alice.dialogNPC != 0 {
 		t.Fatal("dialog opened before arrival")
 	}
-	if !alice.walking() {
-		t.Fatal("talk assigned no path")
+	if !alice.steering() {
+		t.Fatal("talk assigned no approach steer")
+	}
+	if got := pw.events(EvPathAssigned); len(got) != 0 {
+		t.Fatalf("talk approach must not assign player path, got %v", got)
 	}
 	for i := 0; i < 80 && alice.dialogNPC == 0; i++ {
 		pw.w.step()

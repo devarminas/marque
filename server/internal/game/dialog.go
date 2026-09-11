@@ -65,11 +65,9 @@ func (w *World) talk(p *player, msg mnet.Talk, seq mnet.Seq) {
 	w.cancelAttack(p, CauseTalk)
 	p.clearSteer()
 
-	points, assign := destinationPath(p, n.pos)
-	if !assign {
-		return
+	if distanceBetween(p.pos, n.pos) > TalkRange {
+		w.steerToward(p, n.pos)
 	}
-	w.assignPath(p, points)
 }
 
 func (w *World) resolveTalk(p *player) {
@@ -87,6 +85,7 @@ func (w *World) resolveTalk(p *player) {
 		return
 	}
 	p.pendingTalk = 0
+	p.clearSteer()
 	w.openDialog(p, n, q)
 	w.log.Event(w.tick, EvTalkResolved, playerNPCFields(p.id, n.id))
 }

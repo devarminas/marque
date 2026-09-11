@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (M13a / ARM-233). Binding for M13b–h implementation. Until those units land, code may still ship the old polyline walker.
+Accepted (M13a / ARM-233). Binding for M13. M13g (ARM-239) retired player polyline locomotion; NPC path exception remains.
 
 ## Context
 
@@ -65,7 +65,7 @@ M13 locks these hooks and the melee-movable / cast-cancel-or-root defaults. Map 
 - M13c–d replace player `move`+`path` with input samples and pose restatements, and teach the client to predict and reconcile.
 - M13e adds jump against server pose including `y`.
 - M13f hooks abilities into the locomotion policy table above.
-- M13g deletes player polyline walking. NPC polyline may stay.
+- M13g (ARM-239) retires player polyline locomotion end-to-end: the server does not assign or broadcast player `path` for WASD, halt, or approach (gather/talk/attack/pickup). Out-of-range interact uses sticky steer toward the target via the pose integrator; in-range is a range check only. NPC `path` / polyline walking remains (Imp chase/patrol). Player `arrived` from path completion is gone; NPC `arrived` stays.
 - M13h demos prove WASD, jump, and no player polyline on the wire.
 - Exact movement JSON names are settled in `docs/adr/0003-movement-wire.md`. Wire details land in code and tests. New mechanic polish lands in new ADRs. Do not revive a monolithic protocol or notes file.
 

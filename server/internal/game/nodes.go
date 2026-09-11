@@ -163,11 +163,10 @@ func (w *World) gather(p *player, msg mnet.Gather, seq mnet.Seq) {
 	p.gatherProgress = 0
 	w.log.Event(w.tick, EvGather, withSeq(playerNodeFields(p.id, n.id), seq))
 
-	points, assign := destinationPath(p, Point{X: n.x, Z: n.z})
-	if !assign {
-		return
+	dest := Point{X: n.x, Z: n.z}
+	if distanceBetween(p.pos, dest) > GatherRange {
+		w.steerToward(p, dest)
 	}
-	w.assignPath(p, points)
 }
 
 func (w *World) classGatherGate(p *player, n *resourceNode) bool {
@@ -205,6 +204,9 @@ func (w *World) resolveGather(p *player) {
 			w.cancelGather(p)
 		}
 		return
+	}
+	if p.steering() {
+		p.clearSteer()
 	}
 	if !w.classGatherGate(p, n) {
 		w.cancelGather(p)

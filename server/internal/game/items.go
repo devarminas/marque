@@ -47,11 +47,10 @@ func (w *World) pickup(p *player, msg mnet.Pickup, seq mnet.Seq) {
 	w.cancelAttack(p, CausePickup)
 	p.clearSteer()
 
-	points, assign := destinationPath(p, Point{X: item.X, Z: item.Z})
-	if !assign {
-		return
+	dest := Point{X: item.X, Z: item.Z}
+	if distanceBetween(p.pos, dest) > PickupRange {
+		w.steerToward(p, dest)
 	}
-	w.assignPath(p, points)
 }
 
 func (w *World) drop(p *player, msg mnet.Drop, seq mnet.Seq) {
@@ -102,6 +101,7 @@ func (w *World) resolvePickup(p *player) {
 	case errors.Is(err, ErrInventoryFull):
 		w.log.Event(w.tick, EvPickupNoRoom, playerItemFields(p.id, item.ID))
 		p.pending = 0
+		p.clearSteer()
 		w.send(p, mnet.Error{Re: mnet.MsgPickup, Msg: "inventory is full"})
 		return
 	case errors.Is(err, ErrNoSuchItem):
@@ -112,6 +112,7 @@ func (w *World) resolvePickup(p *player) {
 	}
 
 	p.pending = 0
+	p.clearSteer()
 	fields := playerItemFields(p.id, item.ID)
 	fields["kind"] = item.Kind
 	fields["slot"] = slot.Index
@@ -129,7 +130,7 @@ func (w *World) losePickup(p *player) {
 }
 
 func (w *World) assignHalt(p *player) {
-	p.remaining = nil
+	p.clearSteer()
 	w.broadcastPose(p)
 }
 

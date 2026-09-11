@@ -172,13 +172,13 @@ func TestProbeSuspendedLoserOfAContestedPickupResumesEmptyHanded(t *testing.T) {
 	aw := alice.welcome()
 	bob.spawn()
 
+	// Alice starts approach from spawn; Bob claims underfoot immediately so the
+	// contest resolves before sticky steer can walk Alice into range.
 	alice.pickup(item)
-	alice.path()
-	bob.drain()
+	bob.pickup(item)
 	alice.destroy()
 	h.awaitEvents(game.EvPlayerSuspended, 1)
 
-	bob.pickup(item)
 	resolved := h.awaitEvents(game.EvPickupResolved, 1)
 	if resolved[0]["player"] != float64(bw.You) {
 		t.Fatalf("pickup resolved for %v, want bob (%d)", resolved[0]["player"], bw.You)
