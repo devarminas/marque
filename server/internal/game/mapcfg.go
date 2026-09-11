@@ -15,7 +15,8 @@ const WorldHalfExtent = 128.0
 const ArenaHalfExtent = 84.0
 
 // ArenaFloorY is the authored center-floor height of arena_ring_of_trials
-// (navmesh / GLB). Flat until M14d/e wire per-triangle HeightAt.
+// (navmesh / GLB). Used as MapConfig.GroundY when nav is unset; SetNav replaces
+// flat ground with per-triangle HeightAt (ADR 0006).
 const ArenaFloorY = 0.4
 
 type MapConfig struct {

@@ -12,6 +12,7 @@ import (
 	"github.com/devarminas/marque/server/internal/abilitydef"
 	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
+	"github.com/devarminas/marque/server/internal/navmesh"
 	mnet "github.com/devarminas/marque/server/internal/net"
 	"github.com/devarminas/marque/server/internal/questdef"
 )
@@ -251,6 +252,8 @@ type World struct {
 	order []*player
 
 	mapCfg MapConfig
+
+	nav *navmesh.Mesh
 }
 
 func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace int64, joinKit []string) *World {
@@ -308,6 +311,10 @@ func (w *World) SetClasses(c *classdef.Catalog) {
 
 func (w *World) SetQuests(c *questdef.Catalog) {
 	w.quests = c
+}
+
+func (w *World) SetNav(m *navmesh.Mesh) {
+	w.nav = m
 }
 
 func (w *World) Run(ctx context.Context) {

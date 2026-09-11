@@ -12,6 +12,8 @@ const SteerEpsilon = 1e-6
 
 const GroundEpsilon = 1e-4
 
+const MaxNavStepHeight = 0.75
+
 const (
 	EvMove         = "move"
 	EvMoveRejected = "move_rejected"
@@ -21,12 +23,17 @@ func (p *player) steering() bool {
 	return p.steerDX != 0 || p.steerDZ != 0
 }
 
-func (w *World) flatGroundY() float64 {
+func (w *World) groundYAt(x, z, nearY float64) float64 {
+	if w.nav != nil {
+		if y, ok := w.nav.HeightAt(x, z, nearY); ok {
+			return y
+		}
+	}
 	return w.mapCfg.GroundY
 }
 
 func (w *World) grounded(p *player) bool {
-	return p.y <= w.flatGroundY()+GroundEpsilon && p.vy <= 0
+	return p.y <= w.groundYAt(p.pos.X, p.pos.Z, p.y)+GroundEpsilon && p.vy <= 0
 }
 
 func (p *player) clearSteer() {
@@ -102,23 +109,31 @@ func (w *World) steerToward(p *player, dest Point) bool {
 
 func (w *World) stepSteer(p *player, distance float64) bool {
 	from := p.pos
-	to := Point{
-		X: w.clampWorld(from.X + p.steerDX*distance),
-		Z: w.clampWorld(from.Z + p.steerDZ*distance),
+	toX := w.clampWorld(from.X + p.steerDX*distance)
+	toZ := w.clampWorld(from.Z + p.steerDZ*distance)
+	if w.nav != nil {
+		toX, toZ = w.nav.Move(from.X, from.Z, toX, toZ)
 	}
+	to := Point{X: toX, Z: toZ}
 	if math.Hypot(to.X-from.X, to.Z-from.Z) < MinPathLength {
 		return false
 	}
 	wasGrounded := w.grounded(p)
-	p.pos = to
 	if wasGrounded {
-		p.y = w.flatGroundY()
+		newY := w.groundYAt(to.X, to.Z, p.y)
+		if w.nav != nil && math.Abs(newY-p.y) > MaxNavStepHeight {
+			return false
+		}
+		p.pos = to
+		p.y = newY
+		return true
 	}
+	p.pos = to
 	return true
 }
 
 func (w *World) stepVertical(p *player, dt float64) bool {
-	gy := w.flatGroundY()
+	gy := w.groundYAt(p.pos.X, p.pos.Z, p.y)
 	if w.grounded(p) {
 		p.y = gy
 		p.vy = 0

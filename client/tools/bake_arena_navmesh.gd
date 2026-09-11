@@ -1,7 +1,6 @@
 extends SceneTree
 
 const GLB_PATH := "res://assets/maps/arena_ring_of_trials.glb"
-const SCENE_PATH := "res://scenes/arena_ring_of_trials.tscn"
 const NAVMESH_PATH := "res://scenes/arena_ring_of_trials_navmesh.tres"
 
 const AGENT_HEIGHT := 1.8
@@ -42,9 +41,8 @@ func _initialize() -> void:
 
 	NavigationServer3D.bake_from_source_geometry_data(navmesh, source)
 
-	var poly_count := navmesh.get_polygon_count()
-	if poly_count <= 0:
-		push_error("bake_arena_navmesh: bake produced 0 polygons (meshes=%d)" % mesh_count)
+	if navmesh.get_polygon_count() <= 0:
+		push_error("bake_arena_navmesh: bake produced an empty mesh (meshes=%d)" % mesh_count)
 		quit(1)
 		return
 
@@ -54,34 +52,7 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	var scene: PackedScene = load(SCENE_PATH)
-	if scene == null:
-		push_error("bake_arena_navmesh: missing authored scene %s" % SCENE_PATH)
-		quit(1)
-		return
-	var root: Node = scene.instantiate()
-	var region := root.get_node_or_null("NavigationRegion3D") as NavigationRegion3D
-	if region == null:
-		push_error("bake_arena_navmesh: scene has no NavigationRegion3D")
-		quit(1)
-		return
-	region.navigation_mesh = load(NAVMESH_PATH)
-	if region.navigation_mesh == null or region.navigation_mesh.get_polygon_count() <= 0:
-		push_error("bake_arena_navmesh: scene region failed to load baked mesh")
-		quit(1)
-		return
-
-	var verts: PackedVector3Array = navmesh.get_vertices()
-	var aabb := AABB()
-	if verts.size() > 0:
-		aabb.position = verts[0]
-		for v in verts:
-			aabb = aabb.expand(v)
-
-	print(
-		"ARENA NAVMESH OK meshes=%d polygons=%d vertices=%d aabb=%s scene=%s navmesh=%s"
-		% [mesh_count, poly_count, verts.size(), aabb, SCENE_PATH, NAVMESH_PATH]
-	)
+	print("ARENA NAVMESH OK meshes=%d path=%s" % [mesh_count, NAVMESH_PATH])
 	quit(0)
 
 
