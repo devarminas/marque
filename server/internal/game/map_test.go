@@ -37,8 +37,8 @@ func TestArenaBoundsMatchPlayableExtent(t *testing.T) {
 	if got := pw.w.HalfExtent(); got != ArenaHalfExtent {
 		t.Fatalf("HalfExtent=%v, want %v", got, ArenaHalfExtent)
 	}
-	if ArenaHalfExtent >= VillageHalfExtent {
-		t.Fatalf("arena half extent %v should be tighter than village %v", ArenaHalfExtent, VillageHalfExtent)
+	if ArenaHalfExtent >= WorldHalfExtent {
+		t.Fatalf("arena half extent %v should be tighter than village %v", ArenaHalfExtent, WorldHalfExtent)
 	}
 
 	alice := pw.join()
@@ -54,7 +54,7 @@ func TestArenaBoundsMatchPlayableExtent(t *testing.T) {
 	if reason != mnet.ReasonOutOfBounds {
 		t.Fatalf("drop past arena bounds reason=%v, want out of bounds", reason)
 	}
-	reason, _ = pw.w.checkCoordinates(VillageHalfExtent-1, 0)
+	reason, _ = pw.w.checkCoordinates(WorldHalfExtent-1, 0)
 	if reason != mnet.ReasonOutOfBounds {
 		t.Fatalf("village-legal but arena-illegal point accepted: reason=%v", reason)
 	}
@@ -81,8 +81,8 @@ func TestVillageMapRemainsDefault(t *testing.T) {
 	if pw.w.MapID() != MapVillage {
 		t.Fatalf("default map=%q, want %q", pw.w.MapID(), MapVillage)
 	}
-	if pw.w.HalfExtent() != VillageHalfExtent {
-		t.Fatalf("default half=%v, want %v", pw.w.HalfExtent(), VillageHalfExtent)
+	if pw.w.HalfExtent() != WorldHalfExtent {
+		t.Fatalf("default half=%v, want %v", pw.w.HalfExtent(), WorldHalfExtent)
 	}
 	alice := pw.join()
 	if alice.y != 0 {

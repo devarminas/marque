@@ -21,13 +21,12 @@ func (p *player) steering() bool {
 	return p.steerDX != 0 || p.steerDZ != 0
 }
 
-// groundYAt returns flat map ground height. M14d/e may replace this with navmesh HeightAt.
-func (w *World) groundYAt(_, _ float64) float64 {
+func (w *World) flatGroundY() float64 {
 	return w.mapCfg.GroundY
 }
 
 func (w *World) grounded(p *player) bool {
-	return p.y <= w.groundYAt(p.pos.X, p.pos.Z)+GroundEpsilon && p.vy <= 0
+	return p.y <= w.flatGroundY()+GroundEpsilon && p.vy <= 0
 }
 
 func (p *player) clearSteer() {
@@ -113,13 +112,13 @@ func (w *World) stepSteer(p *player, distance float64) bool {
 	wasGrounded := w.grounded(p)
 	p.pos = to
 	if wasGrounded {
-		p.y = w.groundYAt(to.X, to.Z)
+		p.y = w.flatGroundY()
 	}
 	return true
 }
 
 func (w *World) stepVertical(p *player, dt float64) bool {
-	gy := w.groundYAt(p.pos.X, p.pos.Z)
+	gy := w.flatGroundY()
 	if w.grounded(p) {
 		p.y = gy
 		p.vy = 0

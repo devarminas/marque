@@ -279,7 +279,15 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 	}
 }
 
-// SetMap selects the active map (spawn, bounds, flat ground). Default is village.
+func (w *World) HalfExtent() float64 {
+	if w.mapCfg.HalfExtent > 0 {
+		return w.mapCfg.HalfExtent
+	}
+	return WorldHalfExtent
+}
+
+func (w *World) MapID() string { return w.mapCfg.ID }
+
 func (w *World) SetMap(cfg MapConfig) {
 	if cfg.ID == "" {
 		panic("game: SetMap with empty map id")
@@ -288,15 +296,6 @@ func (w *World) SetMap(cfg MapConfig) {
 		panic(fmt.Sprintf("game: SetMap %q half extent %v; must be > 0", cfg.ID, cfg.HalfExtent))
 	}
 	w.mapCfg = cfg
-}
-
-func (w *World) MapID() string { return w.mapCfg.ID }
-
-func (w *World) HalfExtent() float64 {
-	if w.mapCfg.HalfExtent > 0 {
-		return w.mapCfg.HalfExtent
-	}
-	return VillageHalfExtent
 }
 
 func (w *World) SetAbilities(c *abilitydef.Catalog) {
