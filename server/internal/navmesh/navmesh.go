@@ -58,11 +58,18 @@ func LoadJSON(path string) (*Mesh, error) {
 	return m, nil
 }
 
-// HeightAt returns interpolated mesh Y at (x,z) for the first containing triangle.
-func (m *Mesh) HeightAt(x, z float64) (y float64, ok bool) {
+func (m *Mesh) ContainsXZ(x, z float64) bool {
+	_, ok := m.HeightAt(x, z, 0)
+	return ok
+}
+
+func (m *Mesh) HeightAt(x, z, nearY float64) (y float64, ok bool) {
 	if m == nil {
 		return 0, false
 	}
+	best := 0.0
+	bestDist := math.Inf(1)
+	found := false
 	for _, p := range m.Polys {
 		a := m.Vertices[p[0]]
 		b := m.Vertices[p[1]]
@@ -71,35 +78,61 @@ func (m *Mesh) HeightAt(x, z float64) (y float64, ok bool) {
 		if !inside {
 			continue
 		}
-		return u*a.Y + v*b.Y + w*c.Y, true
+		hy := u*a.Y + v*b.Y + w*c.Y
+		d := math.Abs(hy - nearY)
+		if !found || d < bestDist {
+			best = hy
+			bestDist = d
+			found = true
+		}
 	}
-	return 0, false
+	return best, found
 }
 
-// Move clamps the XZ segment to the last on-mesh point.
-// If to is on mesh, returns to. If from is off mesh, returns from.
 func (m *Mesh) Move(fromX, fromZ, toX, toZ float64) (x, z float64) {
 	if m == nil {
 		return toX, toZ
 	}
-	if _, ok := m.HeightAt(toX, toZ); ok {
-		return toX, toZ
-	}
-	if _, ok := m.HeightAt(fromX, fromZ); !ok {
+	if !m.ContainsXZ(fromX, fromZ) {
+		if m.ContainsXZ(toX, toZ) {
+			return toX, toZ
+		}
 		return fromX, fromZ
 	}
-	lo, hi := 0.0, 1.0
-	for range moveSearchIters {
-		mid := (lo + hi) * 0.5
-		mx := fromX + (toX-fromX)*mid
-		mz := fromZ + (toZ-fromZ)*mid
-		if _, ok := m.HeightAt(mx, mz); ok {
-			lo = mid
-		} else {
-			hi = mid
-		}
+	dx := toX - fromX
+	dz := toZ - fromZ
+	dist := math.Hypot(dx, dz)
+	if dist < 1e-12 {
+		return fromX, fromZ
 	}
-	return fromX + (toX-fromX)*lo, fromZ + (toZ-fromZ)*lo
+	steps := int(dist * 8)
+	if steps < moveSearchIters {
+		steps = moveSearchIters
+	}
+	if steps > 512 {
+		steps = 512
+	}
+	lastOn := 0.0
+	for i := 1; i <= steps; i++ {
+		t := float64(i) / float64(steps)
+		mx := fromX + dx*t
+		mz := fromZ + dz*t
+		if m.ContainsXZ(mx, mz) {
+			lastOn = t
+			continue
+		}
+		lo, hi := lastOn, t
+		for range moveSearchIters {
+			mid := (lo + hi) * 0.5
+			if m.ContainsXZ(fromX+dx*mid, fromZ+dz*mid) {
+				lo = mid
+			} else {
+				hi = mid
+			}
+		}
+		return fromX + dx*lo, fromZ + dz*lo
+	}
+	return toX, toZ
 }
 
 func barycentricXZ(px, pz float64, a, b, c Vec3) (u, v, w float64, ok bool) {
