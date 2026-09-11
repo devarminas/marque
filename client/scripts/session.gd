@@ -998,7 +998,7 @@ func _advance_locomotion(delta: float) -> void:
 		if buf == null:
 			continue
 		var sample := buf.sample_xyz(render_tick)
-		avatar.present_at(sample.x, sample.z, buf.moving(), sample.y)
+		avatar.present_at(sample.x, sample.z, buf.moving(render_tick), sample.y)
 
 
 func _render_tick_fraction() -> float:
@@ -1222,8 +1222,9 @@ func _on_pose_received(id: int, tick: int, x: float, y: float, z: float) -> void
 		_remote_poses[id] = buf
 	else:
 		buf.push_pose(tick, x, z, y)
-	var sample := buf.sample_xyz(_render_tick_fraction())
-	avatar.present_at(sample.x, sample.z, buf.moving(), sample.y)
+	var render_tick := _render_tick_fraction()
+	var sample := buf.sample_xyz(render_tick)
+	avatar.present_at(sample.x, sample.z, buf.moving(render_tick), sample.y)
 
 
 func _on_server_error(re: String, message: String) -> void:

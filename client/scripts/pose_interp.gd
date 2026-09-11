@@ -59,15 +59,45 @@ func sample_xyz(render_tick: float) -> Vector3:
 	return _entry_xyz(newest)
 
 
-func moving() -> bool:
+func moving(render_tick: float = -1.0) -> bool:
 	if _poses.size() < 2:
 		return false
-	var a: Dictionary = _poses[_poses.size() - 2]
-	var b: Dictionary = _poses[_poses.size() - 1]
+	# Once the delayed sample sits on/after the newest pose, the remote has
+	# settled (stop pose) — do not keep walking just because the prior step moved.
+	if render_tick >= 0.0:
+		var target := render_tick - INTERP_DELAY_TICKS
+		var newest: Dictionary = _poses[_poses.size() - 1]
+		if target >= float(newest["tick"]):
+			return false
+		var segment := _segment_containing(target)
+		if segment.is_empty():
+			return false
+		var a: Dictionary = segment["a"]
+		var b: Dictionary = segment["b"]
+		return (
+			Vector2(float(b["x"]) - float(a["x"]), float(b["z"]) - float(a["z"])).length()
+			>= SteerIntegrate.MIN_PATH_LENGTH
+		)
+	var prev: Dictionary = _poses[_poses.size() - 2]
+	var last: Dictionary = _poses[_poses.size() - 1]
 	return (
-		Vector2(float(b["x"]) - float(a["x"]), float(b["z"]) - float(a["z"])).length()
+		Vector2(float(last["x"]) - float(prev["x"]), float(last["z"]) - float(prev["z"])).length()
 		>= SteerIntegrate.MIN_PATH_LENGTH
 	)
+
+
+func _segment_containing(target: float) -> Dictionary:
+	if _poses.size() < 2:
+		return {}
+	if target <= float(_poses[0]["tick"]):
+		return {}
+	for i in range(1, _poses.size()):
+		var a: Dictionary = _poses[i - 1]
+		var b: Dictionary = _poses[i]
+		if target > float(b["tick"]):
+			continue
+		return {"a": a, "b": b}
+	return {}
 
 
 func _entry_xyz(entry: Dictionary) -> Vector3:

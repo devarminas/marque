@@ -13,6 +13,7 @@ func run(assertions: Assertions) -> void:
 	_test_past_newest_holds(assertions)
 	_test_no_extrapolate_before_oldest(assertions)
 	_test_height_lerps(assertions)
+	_test_settled_after_stop_is_idle(assertions)
 	assertions.finish()
 
 
@@ -22,17 +23,18 @@ func _test_single_pose_holds(assertions: Assertions) -> void:
 	var sample := buf.sample_xz(10.0 + PoseInterp.INTERP_DELAY_TICKS)
 	assertions.check_near(sample.x, 1.0, POSITION_EPSILON, "single pose holds x")
 	assertions.check_near(sample.y, 2.0, POSITION_EPSILON, "single pose holds z")
-	assertions.check(not buf.moving(), "single pose is idle")
+	assertions.check(not buf.moving(10.0 + PoseInterp.INTERP_DELAY_TICKS), "single pose is idle")
 
 
 func _test_mid_segment_lerps(assertions: Assertions) -> void:
 	var buf := PoseInterp.new()
 	buf.reset_at(10, 0.0, 0.0)
 	buf.push_pose(12, 2.0, 0.0)
-	var sample := buf.sample_xz(11.0 + PoseInterp.INTERP_DELAY_TICKS)
+	var render := 11.0 + PoseInterp.INTERP_DELAY_TICKS
+	var sample := buf.sample_xz(render)
 	assertions.check_near(sample.x, 1.0, POSITION_EPSILON, "mid tick lerps halfway")
 	assertions.check_near(sample.y, 0.0, POSITION_EPSILON, "mid tick keeps z")
-	assertions.check(buf.moving(), "distinct poses report moving")
+	assertions.check(buf.moving(render), "mid-segment reports moving")
 
 
 func _test_past_newest_holds(assertions: Assertions) -> void:
@@ -59,3 +61,14 @@ func _test_height_lerps(assertions: Assertions) -> void:
 	buf.push_pose(12, 0.0, 0.0, 1.0)
 	var sample := buf.sample_xyz(11.0 + PoseInterp.INTERP_DELAY_TICKS)
 	assertions.check_near(sample.y, 0.5, POSITION_EPSILON, "mid tick lerps height")
+
+
+func _test_settled_after_stop_is_idle(assertions: Assertions) -> void:
+	var buf := PoseInterp.new()
+	buf.reset_at(10, 0.0, 0.0)
+	buf.push_pose(11, 0.12, 0.0)
+	buf.push_pose(12, 0.24, 0.0)
+	var settled := 12.0 + PoseInterp.INTERP_DELAY_TICKS
+	assertions.check(not buf.moving(settled), "held on newest pose after stop is idle")
+	var still_catching_up := 11.5 + PoseInterp.INTERP_DELAY_TICKS
+	assertions.check(buf.moving(still_catching_up), "before reaching newest pose still moving")
