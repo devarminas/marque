@@ -6,6 +6,8 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "polyline walker", "script": preload("res://tests/test_polyline_walker.gd")},
 	{"name": "steer integrate", "script": preload("res://tests/test_steer_integrate.gd")},
 	{"name": "local mover", "script": preload("res://tests/test_local_mover.gd")},
+	{"name": "nav mesh", "script": preload("res://tests/test_nav_mesh.gd")},
+	{"name": "local mover nav", "script": preload("res://tests/test_local_mover_nav.gd")},
 	{"name": "pose interp", "script": preload("res://tests/test_pose_interp.gd")},
 	{"name": "item protocol", "script": preload("res://tests/test_item_protocol.gd")},
 	{"name": "tick protocol", "script": preload("res://tests/test_tick_protocol.gd")},
