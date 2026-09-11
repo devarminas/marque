@@ -16,6 +16,8 @@ var steer := Vector2.ZERO
 var disp_x := 0.0
 var disp_z := 0.0
 var disp_h := 0.0
+# True while server poses are translating us (approach walks clear steer).
+var _pose_ground_moving := false
 
 
 func reset_at(tick: int, x: float, z: float, height: float = 0.0) -> void:
@@ -28,6 +30,7 @@ func reset_at(tick: int, x: float, z: float, height: float = 0.0) -> void:
 	disp_x = x
 	disp_z = z
 	disp_h = height
+	_pose_ground_moving = false
 
 
 func apply_wish(dx: float, dz: float) -> void:
@@ -67,6 +70,8 @@ func reconcile_server_pose(server_tick: int, x: float, z: float, height: float =
 	var target_tick := sim_tick
 	if server_tick > target_tick:
 		target_tick = server_tick
+	var ground_delta := Vector2(x - sim_x, z - sim_z).length()
+	_pose_ground_moving = ground_delta >= SteerIntegrate.MIN_PATH_LENGTH
 	sim_x = x
 	sim_z = z
 	sim_h = height
@@ -100,7 +105,7 @@ func sim_height() -> float:
 
 
 func moving() -> bool:
-	return steer != Vector2.ZERO
+	return steer != Vector2.ZERO or _pose_ground_moving
 
 
 func airborne() -> bool:
