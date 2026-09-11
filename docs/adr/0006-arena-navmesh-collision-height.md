@@ -21,7 +21,7 @@ M14b (client play path / `main.tscn`) and M14f (client prediction against mesh h
 
 ## Consequences
 
-- ADR 0004 flat-ground landing applies only when `World.nav` is nil. Loaded arena nav amends ground height and walkability for that world.
+- ADR 0004 flat-ground landing and ADR 0007 map `GroundY` apply when `World.nav` is nil. Loaded arena nav amends ground height and walkability for that world.
 - Predicting clients (M14f) must share the same mesh sampling rules or reconcile harder to server `y`.
 - Re-export the JSON when the Godot NavigationMesh changes.
 
