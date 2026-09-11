@@ -84,7 +84,7 @@ func validateCampContent(c CampContent) error {
 	if c.JitterTicks < 0 {
 		return fmt.Errorf("seed camp %q: jitter %d must be >= 0", c.ID, c.JitterTicks)
 	}
-	if reason, detail := checkCoordinates(c.Center.X, c.Center.Z); reason != "" {
+	if reason, detail := (&World{mapCfg: VillageMap}).checkCoordinates(c.Center.X, c.Center.Z); reason != "" {
 		return fmt.Errorf("seed camp %q at (%v, %v): %s", c.ID, c.Center.X, c.Center.Z, detail)
 	}
 	return nil

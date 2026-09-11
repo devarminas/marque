@@ -94,7 +94,7 @@ func (w *World) SeedResourceNode(kind string, x, z float64) error {
 	if kind == "" {
 		return errors.New("seed node: kind must not be empty")
 	}
-	if reason, detail := checkCoordinates(x, z); reason != "" {
+	if reason, detail := w.checkCoordinates(x, z); reason != "" {
 		return fmt.Errorf("seed node %q at (%v, %v): %s", kind, x, z, detail)
 	}
 	w.nextNodeID++

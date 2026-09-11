@@ -10,6 +10,8 @@ import (
 
 const SteerEpsilon = 1e-6
 
+const GroundEpsilon = 1e-4
+
 const (
 	EvMove         = "move"
 	EvMoveRejected = "move_rejected"
@@ -19,8 +21,13 @@ func (p *player) steering() bool {
 	return p.steerDX != 0 || p.steerDZ != 0
 }
 
-func (p *player) grounded() bool {
-	return p.y <= 0 && p.vy <= 0
+// groundYAt returns flat map ground height. M14d/e may replace this with navmesh HeightAt.
+func (w *World) groundYAt(_, _ float64) float64 {
+	return w.mapCfg.GroundY
+}
+
+func (w *World) grounded(p *player) bool {
+	return p.y <= w.groundYAt(p.pos.X, p.pos.Z)+GroundEpsilon && p.vy <= 0
 }
 
 func (p *player) clearSteer() {
@@ -44,7 +51,7 @@ func (w *World) applyJumpEdge(p *player, jump bool) {
 	if !jump {
 		return
 	}
-	if !p.grounded() {
+	if !w.grounded(p) {
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonIllegalSample,
 			Detail:      "illegal_sample: jump while airborne",
@@ -97,26 +104,31 @@ func (w *World) steerToward(p *player, dest Point) bool {
 func (w *World) stepSteer(p *player, distance float64) bool {
 	from := p.pos
 	to := Point{
-		X: clampWorld(from.X + p.steerDX*distance),
-		Z: clampWorld(from.Z + p.steerDZ*distance),
+		X: w.clampWorld(from.X + p.steerDX*distance),
+		Z: w.clampWorld(from.Z + p.steerDZ*distance),
 	}
 	if math.Hypot(to.X-from.X, to.Z-from.Z) < MinPathLength {
 		return false
 	}
+	wasGrounded := w.grounded(p)
 	p.pos = to
+	if wasGrounded {
+		p.y = w.groundYAt(to.X, to.Z)
+	}
 	return true
 }
 
 func (w *World) stepVertical(p *player, dt float64) bool {
-	if p.grounded() {
-		p.y = 0
+	gy := w.groundYAt(p.pos.X, p.pos.Z)
+	if w.grounded(p) {
+		p.y = gy
 		p.vy = 0
 		return false
 	}
 	p.vy -= Gravity * dt
 	p.y += p.vy * dt
-	if p.y <= 0 {
-		p.y = 0
+	if p.y <= gy {
+		p.y = gy
 		p.vy = 0
 	}
 	return true
@@ -133,12 +145,13 @@ func (w *World) broadcastPose(p *player) {
 	}, nil)
 }
 
-func clampWorld(v float64) float64 {
-	if v > WorldHalfExtent {
-		return WorldHalfExtent
+func (w *World) clampWorld(v float64) float64 {
+	he := w.HalfExtent()
+	if v > he {
+		return he
 	}
-	if v < -WorldHalfExtent {
-		return -WorldHalfExtent
+	if v < -he {
+		return -he
 	}
 	return v
 }

@@ -16,7 +16,7 @@ func (w *World) SeedGroundItem(kind string, x, z float64) error {
 	if kind == "" {
 		return errors.New("seed item: kind must not be empty")
 	}
-	if reason, detail := checkCoordinates(x, z); reason != "" {
+	if reason, detail := w.checkCoordinates(x, z); reason != "" {
 		return fmt.Errorf("seed item %q at (%v, %v): %s", kind, x, z, detail)
 	}
 	w.noteItemEntered(w.items.SpawnGroundItem(kind, x, z))
