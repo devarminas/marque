@@ -13,7 +13,7 @@ const MAX_FPS := 30
 
 const POSITION_EPSILON := 0.0005
 
-const EXPECTED_TICK_MS := 150
+const EXPECTED_TICK_MS := 40
 const EXPECTED_SPEED := 3.0
 const WORLD_HALF_EXTENT := 128.0
 
@@ -43,6 +43,7 @@ class Peer:
 	var welcome := {}
 	var welcomes: Array[Dictionary] = []
 	var paths: Array[Dictionary] = []
+	var poses: Array[Dictionary] = []
 	var errors: Array[Dictionary] = []
 	var spawns: Array[Dictionary] = []
 	var despawns: Array[int] = []
@@ -62,6 +63,7 @@ class Peer:
 		net.spawned.connect(_on_spawned)
 		net.despawned.connect(_on_despawned)
 		net.path_assigned.connect(_on_path_assigned)
+		net.pose_received.connect(_on_pose_received)
 		net.inventory_changed.connect(_on_inventory_changed)
 		net.server_error.connect(_on_server_error)
 		net.unknown_message.connect(_on_unknown_message)
@@ -143,6 +145,17 @@ class Peer:
 			if int(path["id"]) == id:
 				out.append(path)
 		return out
+
+
+	func _on_pose_received(id: int, tick: int, x: float, y: float, z: float) -> void:
+		poses.append({"id": id, "tick": tick, "xz": Vector2(x, z)})
+
+	func latest_xz(id: int) -> Variant:
+		var found: Variant = null
+		for pose in poses:
+			if int(pose["id"]) == id:
+				found = pose["xz"]
+		return found
 
 
 const Assertions := preload("res://tests/assertions.gd")
@@ -356,18 +369,15 @@ func _run(url: String) -> void:
 
 	_test_unknown_and_malformed_frames_do_not_kill_the_client(a)
 
-	if not await _test_move_to_inside_bounds_returns_a_path(a):
-		return
-	if not await _test_duplicate_seq_yields_one_path(a):
-		return
-	if not await _test_move_to_outside_bounds_returns_an_error(a):
+	if not await _test_move_to_is_refused(a):
 		return
 	if not await _test_pickup_and_drop_are_sequenced(a):
 		return
 	if not await _test_a_no_tool_gather_reads_as_no_usable_tool(a):
 		return
 
-	await _wait_msec(ARRIVAL_WAIT_MSEC)
+	if not await _test_wish_walk_reaches_first_destination(a):
+		return
 
 	var b := await _join(url, "B")
 	if b == null:
@@ -381,7 +391,7 @@ func _run(url: String) -> void:
 	var c := await _join(url, "C")
 	if c == null:
 		return
-	_test_late_joiner_gets_a_re_anchored_path(a, c)
+	_test_late_joiner_sees_pose_not_path(a, c)
 
 	await _test_leaving_client_produces_a_despawn(a, b, c)
 
@@ -479,75 +489,64 @@ func _test_unknown_and_malformed_frames_do_not_kill_the_client(a: Peer) -> void:
 	_check(a.welcome.has("you"), "the earlier welcome survived the malformed frames")
 
 
-func _test_move_to_inside_bounds_returns_a_path(a: Peer) -> bool:
-	print("== move_to inside bounds ==")
-	var you := int(a.welcome["you"])
-	var sent_at_tick := a.estimated_tick()
-	_check(a.net.send_move_to(FIRST_DESTINATION.x, FIRST_DESTINATION.y) == OK, "move_to sent")
-	if not await _wait_until(func() -> bool: return not a.paths.is_empty(), "A's own path"):
+func _test_move_to_is_refused(a: Peer) -> bool:
+	print("== move_to is refused ==")
+	var paths_before := a.paths.size()
+	var errors_before := a.errors.size()
+	_check(a.net.send_move_to(FIRST_DESTINATION.x, FIRST_DESTINATION.y) == OK, "in-bounds move_to sent")
+	if not await _wait_until(
+		func() -> bool: return a.errors.size() > errors_before, "a move_to refusal"
+	):
 		return false
+	var failure: Dictionary = a.errors[a.errors.size() - 1]
+	_check(
+		String(failure["re"]) == "move_to",
+		'error.re names move_to, got "%s"' % String(failure["re"]),
+	)
+	_check(not String(failure["msg"]).is_empty(), "error.msg is non-empty")
+	_check(
+		a.paths.size() == paths_before,
+		"a refused move_to broadcasts no path (%d before, %d after)"
+		% [paths_before, a.paths.size()],
+	)
+	_check(a.net.is_open(), "a refused move_to does not close the connection")
 
-	_check(a.paths.size() == 1, "one move_to produces one path, got %d" % a.paths.size())
-	var path: Dictionary = a.paths[0]
-	_check(int(path["id"]) == you, "the path is addressed to the mover (%d)" % int(path["id"]))
-
-	var start_tick := int(path["start_tick"])
+	var errors_mid := a.errors.size()
+	_check(a.net.send_move_to(OUT_OF_BOUNDS.x, OUT_OF_BOUNDS.y) == OK, "out-of-bounds move_to sent")
+	if not await _wait_until(
+		func() -> bool: return a.errors.size() > errors_mid, "a second move_to refusal"
+	):
+		return false
 	_check(
-		start_tick >= int(a.welcome["tick"]),
-		"path.start_tick (%d) is at or after welcome.tick (%d)"
-		% [start_tick, int(a.welcome["tick"])],
+		String(a.errors[a.errors.size() - 1]["re"]) == "move_to",
+		"out-of-bounds move_to is also refused as move_to",
 	)
-	_check(
-		start_tick <= a.estimated_tick() + 1,
-		"path.start_tick (%d) is not in the client's future beyond a tick of lag (estimate %d)"
-		% [start_tick, a.estimated_tick()],
-	)
-	_check(
-		start_tick >= sent_at_tick,
-		"path.start_tick (%d) is at or after the tick the intent was sent (%d)"
-		% [start_tick, sent_at_tick],
-	)
-
-	var points: PackedVector2Array = path["points"]
-	_check(points.size() >= 2, "path.points has at least two points, got %d" % points.size())
-	if points.size() >= 2:
-		_check(
-			points[0].is_equal_approx(SPAWN_POSITION),
-			"path.points[0] is the mover's position at start_tick %v, got %v"
-			% [SPAWN_POSITION, points[0]],
-		)
-		_check(
-			_near(points[points.size() - 1], FIRST_DESTINATION),
-			"the path ends at the clicked point %v, got %v"
-			% [FIRST_DESTINATION, points[points.size() - 1]],
-		)
-	_check(
-		is_equal_approx(float(path["speed"]), EXPECTED_SPEED),
-		"path.speed is %f, got %f" % [EXPECTED_SPEED, float(path["speed"])],
-	)
+	_check(a.paths.is_empty(), "no player path frames after retired move_to attempts")
 	return true
 
 
-func _test_duplicate_seq_yields_one_path(a: Peer) -> bool:
-	print("== duplicate seq is ignored ==")
+func _test_wish_walk_reaches_first_destination(a: Peer) -> bool:
+	print("== wish walk reaches the first destination ==")
 	var you := int(a.welcome["you"])
-	var paths_before := a.paths.size()
-	var errors_before := a.errors.size()
+	var wish := (FIRST_DESTINATION - SPAWN_POSITION).normalized()
+	a.poses.clear()
+	_check(a.net.send_move(wish.x, wish.y) == OK, "move wish sent toward first destination")
+	if not await _wait_until(
+		func() -> bool:
+			var here: Variant = a.latest_xz(you)
+			return here != null and Vector2(here).distance_to(FIRST_DESTINATION) < 0.75,
+		"A's pose near the first destination",
+	):
+		a.net.send_move(0.0, 0.0)
+		return false
+	a.net.send_move(0.0, 0.0)
+	_check(a.paths_for(you).is_empty(), "wish walk does not produce a player path")
+	var landed: Vector2 = a.latest_xz(you)
 	_check(
-		a.net.send_move_to(FIRST_DESTINATION.x, FIRST_DESTINATION.y, 1) == OK,
-		"the first walk's seq is sent again",
+		landed.distance_to(FIRST_DESTINATION) < 0.75,
+		"A's last pose is near %v, got %v" % [FIRST_DESTINATION, landed],
 	)
-	print("INTEROP DUPLICATE: player %d seq 1" % you)
-	await _wait_msec(ABANDON_SETTLE_MSEC)
-	_check(
-		a.paths.size() == paths_before,
-		"the same seq yields exactly one path, got %d (was %d)" % [a.paths.size(), paths_before],
-	)
-	_check(
-		a.errors.size() == errors_before,
-		"a duplicate is unanswered, not an error (%d before, %d after)"
-		% [errors_before, a.errors.size()],
-	)
+	await _wait_msec(ARRIVAL_WAIT_MSEC)
 	return true
 
 
@@ -612,32 +611,6 @@ func _test_a_no_tool_gather_reads_as_no_usable_tool(a: Peer) -> bool:
 	return true
 
 
-func _test_move_to_outside_bounds_returns_an_error(a: Peer) -> bool:
-	print("== move_to outside bounds ==")
-	_check(
-		absf(OUT_OF_BOUNDS.x) > WORLD_HALF_EXTENT,
-		"the test destination is genuinely outside the world",
-	)
-	var paths_before := a.paths.size()
-	_check(a.net.send_move_to(OUT_OF_BOUNDS.x, OUT_OF_BOUNDS.y) == OK, "out-of-bounds move_to sent")
-	if not await _wait_until(func() -> bool: return not a.errors.is_empty(), "an error reply"):
-		return false
-
-	_check(a.errors.size() == 1, "one rejected intent produces one error, got %d" % a.errors.size())
-	var failure: Dictionary = a.errors[0]
-	_check(
-		String(failure["re"]) == "move_to",
-		'error.re names the rejected message, got "%s"' % String(failure["re"]),
-	)
-	_check(not String(failure["msg"]).is_empty(), "error.msg is non-empty")
-	_check(a.net.is_open(), "a rejected intent does not close the connection")
-	_check(
-		a.paths.size() == paths_before,
-		"a rejected intent broadcasts no path (%d before, %d after)"
-		% [paths_before, a.paths.size()],
-	)
-	return true
-
 
 func _test_second_client_sees_the_world(a: Peer, b: Peer) -> bool:
 	print("== second client joins ==")
@@ -683,81 +656,47 @@ func _test_second_client_sees_the_world(a: Peer, b: Peer) -> bool:
 func _test_second_client_sees_the_first_walk(a: Peer, b: Peer) -> bool:
 	print("== the other client sees the walk ==")
 	var a_id := int(a.welcome["you"])
-	_check(a.net.send_move_to(SECOND_DESTINATION.x, SECOND_DESTINATION.y) == OK, "A's move_to sent")
-	if not await _wait_until(func() -> bool: return not b.paths.is_empty(), "B's copy of A's path"):
+	b.poses.clear()
+	a.poses.clear()
+	var wish := (SECOND_DESTINATION - FIRST_DESTINATION).normalized()
+	_check(a.net.send_move(wish.x, wish.y) == OK, "A's move wish sent")
+	if not await _wait_until(
+		func() -> bool:
+			var here: Variant = b.latest_xz(a_id)
+			return here != null and Vector2(here).distance_to(FIRST_DESTINATION) > 0.35,
+		"B observes A's pose leave the first destination",
+	):
+		a.net.send_move(0.0, 0.0)
 		return false
-
-	_check(b.paths.size() == 1, "one walk produces one path on B, got %d" % b.paths.size())
-	var path: Dictionary = b.paths[0]
-	_check(int(path["id"]) == a_id, "B's path is A's (%d), got %d" % [a_id, int(path["id"])])
-	var points: PackedVector2Array = path["points"]
-	_check(points.size() >= 2, "B's path has at least two points, got %d" % points.size())
-	if points.size() >= 2:
-		_check(
-			_near(points[0], FIRST_DESTINATION),
-			"B's path starts where A actually stands %v, got %v"
-			% [FIRST_DESTINATION, points[0]],
-		)
-		_check(
-			_near(points[points.size() - 1], SECOND_DESTINATION),
-			"B's path ends where A clicked %v, got %v"
-			% [SECOND_DESTINATION, points[points.size() - 1]],
-		)
+	_check(b.paths_for(a_id).is_empty(), "B does not receive a player path for A's walk")
+	_check(a.paths_for(a_id).is_empty(), "A does not receive a player path for its own walk")
+	var seen: Vector2 = b.latest_xz(a_id)
 	_check(
-		is_equal_approx(float(path["speed"]), EXPECTED_SPEED),
-		"B's path carries the same speed %f, got %f" % [EXPECTED_SPEED, float(path["speed"])],
-	)
-	_check(
-		a.paths_for(a_id).size() == 2, "the mover gets its own path too, got %d" % a.paths.size()
+		_progress_along(FIRST_DESTINATION, SECOND_DESTINATION, seen) > 0.0,
+		"B's pose for A has advanced toward the second destination (%v)" % seen,
 	)
 	return true
 
 
-func _test_late_joiner_gets_a_re_anchored_path(a: Peer, c: Peer) -> void:
-	print("== late joiner gets a re-anchored path ==")
+func _test_late_joiner_sees_pose_not_path(a: Peer, c: Peer) -> void:
+	print("== late joiner sees pose, not a player path ==")
 	var a_id := int(a.welcome["you"])
-	var replays := c.paths_for(a_id)
-	_check(replays.size() == 1, "C is told about A's walk exactly once, got %d" % replays.size())
-	if replays.is_empty():
-		return
-
-	var path: Dictionary = replays[0]
-	_check(
-		int(path["start_tick"]) == int(c.welcome["tick"]),
-		"the replay is anchored to the welcome's tick %d, got %d"
-		% [int(c.welcome["tick"]), int(path["start_tick"])],
-	)
-
-	var points: PackedVector2Array = path["points"]
-	_check(points.size() >= 2, "the replayed path still has an endpoint, got %d" % points.size())
-	if points.size() < 2:
-		return
-	_check(
-		_near(points[points.size() - 1], SECOND_DESTINATION),
-		"the replay keeps A's destination %v, got %v"
-		% [SECOND_DESTINATION, points[points.size() - 1]],
-	)
-
-	var travelled := _progress_along(FIRST_DESTINATION, SECOND_DESTINATION, points[0])
-	_check(
-		travelled > 0.0 and travelled < 1.0,
-		"the replay starts partway along A's walk, not at its origin (t = %f)" % travelled,
-	)
-	_check(
-		_distance_to_segment(FIRST_DESTINATION, SECOND_DESTINATION, points[0]) < POSITION_EPSILON,
-		"the replay starts on A's polyline, got %v" % points[0],
-	)
-
+	_check(c.paths_for(a_id).is_empty(), "C gets no replayed player path for A")
 	var ids: PackedInt64Array = c.welcome["ids"]
 	var index := Array(ids).find(a_id)
 	_check(index != -1, "C's welcome lists A")
-	if index != -1:
-		var listed: Vector2 = (c.welcome["positions"] as PackedVector2Array)[index]
-		_check(
-			_near(listed, points[0]),
-			"welcome.players and the replayed path agree about A (%v vs %v)"
-			% [listed, points[0]],
-		)
+	if index == -1:
+		return
+	var listed: Vector2 = (c.welcome["positions"] as PackedVector2Array)[index]
+	var travelled := _progress_along(FIRST_DESTINATION, SECOND_DESTINATION, listed)
+	_check(
+		travelled > 0.0 and travelled < 1.0,
+		"C's welcome puts A partway along the walk, not at either end (t = %f)" % travelled,
+	)
+	_check(
+		_distance_to_segment(FIRST_DESTINATION, SECOND_DESTINATION, listed) < 1.0,
+		"C's welcome puts A near the walk corridor, got %v" % listed,
+	)
 
 
 func _test_leaving_client_produces_a_despawn(a: Peer, b: Peer, c: Peer) -> void:

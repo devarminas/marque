@@ -6,13 +6,7 @@ const PlayerAvatar := preload("res://scripts/player_avatar.gd")
 
 const SHOT_PATH := "user://walk_demo.png"
 
-const TICK_MS := 150
-const START_TICK := 1000
-const SAMPLE_TICK := START_TICK + 10
-const SPEED := 3.0
-const PATH_START := Vector2(-5.0, 3.0)
-const PATH_END := Vector2(5.0, 3.0)
-const EXPECTED_AT_SAMPLE := Vector2(-0.5, 3.0)
+const SAMPLE_AT := Vector2(-0.5, 3.0)
 
 const WARMUP_FRAMES := 30
 
@@ -21,25 +15,26 @@ const SHADOW_DARKENING := 0.2
 const AVATAR_SEARCH_RADIUS := 70
 const SAMPLE_HEIGHT := 1.2
 
+
 static func is_armour_pixel(colour: Color) -> bool:
 	if colour.b - colour.r > 0.10 and colour.b > colour.g:
 		return true
 	return colour.b > 0.25 and colour.r < 0.5 and colour.b - colour.g > 0.05
 
+
 var _failures: Array[String] = []
 
 
 func _ready() -> void:
+	# Pose-driven placement (ARM-239). Player polyline walk is retired.
 	var world: Node3D = $World
 	var avatar := PlayerAvatarScene.instantiate() as PlayerAvatar
-	avatar.configure(1, TICK_MS)
+	avatar.configure(1)
 	world.get_node("RemotePlayers").add_child(avatar)
-	avatar.teleport_to(PATH_START.x, PATH_START.y)
-	avatar.follow_path(PackedVector2Array([PATH_START, PATH_END]), START_TICK, SPEED)
-	avatar.update_to_tick(SAMPLE_TICK)
+	avatar.present_at(SAMPLE_AT.x, SAMPLE_AT.y, true)
 
 	for _frame in WARMUP_FRAMES:
-		avatar.update_to_tick(SAMPLE_TICK)
+		avatar.present_at(SAMPLE_AT.x, SAMPLE_AT.y, true)
 		await RenderingServer.frame_post_draw
 
 	var image := get_viewport().get_texture().get_image()
@@ -50,12 +45,12 @@ func _ready() -> void:
 		print("screenshot: ", ProjectSettings.globalize_path(SHOT_PATH))
 
 	var camera: Camera3D = world.get_node("CameraRig/Camera3D")
-	_check_the_avatar_left_its_origin(avatar)
-	_check_the_avatar_is_on_screen_where_the_walker_says(image, camera, avatar)
+	_check_the_avatar_is_where_present_at_put_it(avatar)
+	_check_the_avatar_is_on_screen(image, camera, avatar)
 	_check_the_avatar_casts_a_shadow(image, camera, avatar)
 
 	if _failures.is_empty():
-		print("PASS: the avatar walked and it casts a shadow")
+		print("PASS: the avatar is posed and it casts a shadow")
 		get_tree().quit(0)
 		return
 	printerr("FAIL: %d visual check(s) failed" % _failures.size())
@@ -64,25 +59,15 @@ func _ready() -> void:
 	get_tree().quit(1)
 
 
-func _check_the_avatar_left_its_origin(avatar: PlayerAvatar) -> void:
+func _check_the_avatar_is_where_present_at_put_it(avatar: PlayerAvatar) -> void:
 	var here := Vector2(avatar.position.x, avatar.position.z)
 	_check(
-		here.distance_to(EXPECTED_AT_SAMPLE) < 0.001,
-		"the avatar is where the walker says at tick %d: expected %v, got %v"
-		% [SAMPLE_TICK, EXPECTED_AT_SAMPLE, here],
-	)
-	_check(
-		here.distance_to(PATH_START) > 1.0,
-		"it left points[0] (moved %.2f units)" % here.distance_to(PATH_START),
-	)
-	_check(
-		here.distance_to(PATH_END) > 1.0,
-		"it has not reached the final point either (%.2f units short)"
-		% here.distance_to(PATH_END),
+		here.distance_to(SAMPLE_AT) < 0.001,
+		"the avatar stands where present_at placed it: expected %v, got %v" % [SAMPLE_AT, here],
 	)
 
 
-func _check_the_avatar_is_on_screen_where_the_walker_says(
+func _check_the_avatar_is_on_screen(
 	image: Image, camera: Camera3D, avatar: PlayerAvatar
 ) -> void:
 	var head := avatar.global_position + Vector3(0.0, SAMPLE_HEIGHT, 0.0)
@@ -107,7 +92,10 @@ func _check_the_avatar_is_on_screen_where_the_walker_says(
 func _check_the_avatar_casts_a_shadow(
 	image: Image, camera: Camera3D, avatar: PlayerAvatar
 ) -> void:
-	var sun: DirectionalLight3D = $World/Sun
+	var sun := _find_sun($World)
+	if sun == null:
+		_fail("no DirectionalLight3D under World to cast a shadow")
+		return
 	var travel := -sun.global_transform.basis.z
 	var shadow_axis := Vector2(travel.x, travel.z).normalized()
 	_check(
@@ -129,6 +117,16 @@ func _check_the_avatar_casts_a_shadow(
 			% [SHADOW_DARKENING * 100.0, shadowed, lit, darkening * 100.0]
 		),
 	)
+
+
+func _find_sun(root: Node) -> DirectionalLight3D:
+	if root is DirectionalLight3D:
+		return root as DirectionalLight3D
+	for child in root.get_children():
+		var found := _find_sun(child)
+		if found != null:
+			return found
+	return null
 
 
 func _mean_luminance(

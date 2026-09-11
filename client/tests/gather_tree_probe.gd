@@ -21,7 +21,7 @@ const DEFAULT_PREFIX := "user://gather_tree"
 
 
 func _ready() -> void:
-	_avatar.update_to_tick(0)
+	_avatar.present_at(0.0, 0.0, false)
 	_node.configure(1, "tree", "full")
 	for _frame in SETTLE_FRAMES:
 		await get_tree().process_frame

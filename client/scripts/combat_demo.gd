@@ -137,7 +137,10 @@ func run(
 			RESTATE_TIMEOUT_MSEC,
 		):
 			return _fail("respawn never restored HP %d with overlay hidden" % MAX_HP)
-		_session.request_move_to(POST_MOVE_XZ.x, POST_MOVE_XZ.y)
+		var _avatar := _session.avatar_for(_session.own_id())
+		var _here := Vector2.ZERO if _avatar == null else Vector2(_avatar.position.x, _avatar.position.z)
+		var _wish := (POST_MOVE_XZ - _here).normalized()
+		_session.request_move(_wish.x, _wish.y)
 		print("DEMO postmove %f %f" % [POST_MOVE_XZ.x, POST_MOVE_XZ.y])
 		var post_deadline := Time.get_ticks_msec() + 1200
 		while Time.get_ticks_msec() < post_deadline:
@@ -184,7 +187,10 @@ func _wait_for_scenario() -> int:
 
 
 func _relocate_out_of_range() -> bool:
-	_session.request_move_to(RELOCATE_XZ.x, RELOCATE_XZ.y)
+	var _avatar := _session.avatar_for(_session.own_id())
+	var _here := Vector2.ZERO if _avatar == null else Vector2(_avatar.position.x, _avatar.position.z)
+	var _wish := (RELOCATE_XZ - _here).normalized()
+	_session.request_move(_wish.x, _wish.y)
 	print("DEMO relocate %f %f" % [RELOCATE_XZ.x, RELOCATE_XZ.y])
 	if not await _wait_until(
 		func() -> bool:

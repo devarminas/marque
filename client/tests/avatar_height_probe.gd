@@ -13,7 +13,7 @@ const DEFAULT_OUTPUT := "user://avatar_height.png"
 
 
 func _ready() -> void:
-	_avatar.update_to_tick(0)
+	_avatar.present_at(0.0, 0.0, false)
 	for _frame in SETTLE_FRAMES:
 		await get_tree().process_frame
 	await RenderingServer.frame_post_draw

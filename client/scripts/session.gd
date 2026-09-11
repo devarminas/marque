@@ -411,11 +411,12 @@ func known_node_ids() -> Array:
 
 
 func request_move_to(x: float, z: float) -> void:
+	# Player move_to is retired (ARM-239 / ADR 0001). Keep the signal so leftover
+	# callers stay observable in tests; never put destination facts on the wire.
 	move_to_requested.emit(x, z)
-	if _net == null or not _net.is_open():
-		push_warning("session: move_to (%f, %f) dropped, the socket is not open" % [x, z])
-		return
-	_net.send_move_to(x, z)
+	push_warning(
+		"session: move_to (%f, %f) is retired; send move wish samples instead" % [x, z]
+	)
 
 
 func request_move(dx: float, dz: float, jump: bool = false) -> void:
@@ -992,8 +993,6 @@ func _advance_locomotion(delta: float) -> void:
 		var avatar: PlayerAvatarScript = _avatars.get(id)
 		if avatar == null:
 			continue
-		if avatar.has_follow_path() and not avatar.is_idle_at_tick(est):
-			continue
 		var buf: PoseInterp = _remote_poses[id]
 		if buf == null:
 			continue
@@ -1186,12 +1185,8 @@ func _on_despawned(id: int) -> void:
 func _on_path_assigned(
 	id: int, start_tick: int, points: PackedVector2Array, speed: float
 ) -> void:
-	# Player locomotion is pose-driven (ADR 0001). Server may still assign
-	# approach polylines until ARM-239; applying them here fights LocalMover
-	# and freezes the camera (ARM-250). NPCs keep polyline walk.
+	# Player locomotion is pose-only (ARM-239). Path frames drive NPCs only.
 	if _avatars.has(id):
-		if id == _you and _local_mover != null:
-			_local_mover.apply_wish(0.0, 0.0)
 		return
 	var dummy: NpcDummyScript = _npcs.get(id)
 	if dummy != null:

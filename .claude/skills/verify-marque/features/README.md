@@ -65,12 +65,12 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
 
 ## Movement
 
-- [Move-to walk](./move-to-walk.md) — `move_to` intent, path, walk, arrival; bare
-  ground left-click sends nothing.
+- [Move-to walk](./move-to-walk.md) — **retired** (ARM-239). Player polyline walk
+  is gone; see polish (ARM-241) for graduated action-movement e2e.
 - [Two clients see each other walk](./two-clients-see-each-other.md) — M0 both
-  directions, still-camera pixel control, server `arrived`.
-- [WASD direction move](./wasd-move.md) — M6g server-authoritative `move`, sticky
-  steer. WASD is the only movement gesture (ARM-145).
+  directions, still-camera pixel control, server pose.
+- [WASD direction move](./wasd-move.md) — wish samples + server pose. WASD is the
+  only movement gesture (ARM-145 / ARM-239).
 - [Rejected and malformed intents](./rejected-intents.md) — validation, `error`
   frames, log records.
 
