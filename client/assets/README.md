@@ -10,6 +10,8 @@ World scale: Godot 1 unit ≈ 1 meter; player height is about 1.7u. This file ho
 godot --headless --path client --script res://tools/bake_arena_navmesh.gd
 ```
 
+Play path (default remains `world_map`): set `MARQUE_MAP=arena` or pass `--map arena` so `main.tscn` swaps the `WorldMap` child to Ring of Trials. See `scripts/play_map.gd`.
+
 ## Authored heights
 
 Heights are the Y extent of the mesh as the vendor shipped it, in Godot units, before any root scale. glTF and GLB heights come from the `POSITION` accessor min and max with node transforms applied. OBJ heights come from the raw `v` lines.
