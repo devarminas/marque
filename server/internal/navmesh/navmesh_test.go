@@ -29,14 +29,9 @@ func loadArena(t *testing.T) *Mesh {
 	return m
 }
 
-func TestLoadArenaJSON(t *testing.T) {
-	_ = loadArena(t)
-}
-
 func TestHeightAtOrigin(t *testing.T) {
 	m := loadArena(t)
-	y, ok := m.HeightAt(0, 0)
-	t.Logf("HeightAt(0,0) y=%v ok=%v", y, ok)
+	y, ok := m.HeightAt(0, 0, 0)
 	if !ok {
 		t.Fatal("expected (0,0) on arena mesh")
 	}
@@ -47,9 +42,8 @@ func TestHeightAtOrigin(t *testing.T) {
 
 func TestHeightAtFloorSample(t *testing.T) {
 	m := loadArena(t)
-	// Low vertex on the exported mesh; should be on a containing triangle.
 	v := m.Vertices[0]
-	y, ok := m.HeightAt(v.X, v.Z)
+	y, ok := m.HeightAt(v.X, v.Z, v.Y)
 	if !ok {
 		t.Fatalf("vertex 0 xz=(%v,%v) not on mesh", v.X, v.Z)
 	}
@@ -60,8 +54,23 @@ func TestHeightAtFloorSample(t *testing.T) {
 
 func TestHeightAtOffMesh(t *testing.T) {
 	m := loadArena(t)
-	if _, ok := m.HeightAt(1000, 1000); ok {
+	if _, ok := m.HeightAt(1000, 1000, 0); ok {
 		t.Fatal("far point should be off mesh")
+	}
+}
+
+func TestHeightAtPrefersNearY(t *testing.T) {
+	m := loadArena(t)
+	low, okLow := m.HeightAt(-9, -8, 0.4)
+	high, okHigh := m.HeightAt(-9, -8, 10.4)
+	if !okLow || !okHigh {
+		t.Fatalf("stacked sample missing low=%v high=%v", okLow, okHigh)
+	}
+	if math.Abs(low-0.4) > 1e-3 {
+		t.Fatalf("near floor got %v, want ~0.4", low)
+	}
+	if math.Abs(high-10.4) > 1e-3 {
+		t.Fatalf("near deck got %v, want ~10.4", high)
 	}
 }
 
@@ -76,15 +85,15 @@ func TestMoveAllowsOnMesh(t *testing.T) {
 func TestMoveStopsAtBoundary(t *testing.T) {
 	m := loadArena(t)
 	fromX, fromZ := 0.0, 0.0
-	if _, ok := m.HeightAt(fromX, fromZ); !ok {
+	if !m.ContainsXZ(fromX, fromZ) {
 		t.Fatal("from must be on mesh")
 	}
 	toX, toZ := 200.0, 0.0
 	x, z := m.Move(fromX, fromZ, toX, toZ)
-	if _, ok := m.HeightAt(x, z); !ok {
+	if !m.ContainsXZ(x, z) {
 		t.Fatalf("result (%v,%v) off mesh", x, z)
 	}
-	if _, ok := m.HeightAt(toX, toZ); ok {
+	if m.ContainsXZ(toX, toZ) {
 		t.Fatal("destination unexpectedly on mesh")
 	}
 	if math.Hypot(x-fromX, z-fromZ) < 1 {
@@ -92,6 +101,28 @@ func TestMoveStopsAtBoundary(t *testing.T) {
 	}
 	if math.Hypot(x-toX, z-toZ) < 1 {
 		t.Fatalf("reached far off-mesh to: (%v,%v)", x, z)
+	}
+}
+
+func TestMoveDoesNotTunnelAcrossHole(t *testing.T) {
+	m := loadArena(t)
+	fromX, fromZ := -22.0, 5.0
+	toX, toZ := -21.0, 6.0
+	if !m.ContainsXZ(fromX, fromZ) || !m.ContainsXZ(toX, toZ) {
+		t.Fatal("hole endpoints must be on mesh")
+	}
+	if m.ContainsXZ((fromX+toX)/2, (fromZ+toZ)/2) {
+		t.Fatal("midpoint must be off mesh")
+	}
+	x, z := m.Move(fromX, fromZ, toX, toZ)
+	if !m.ContainsXZ(x, z) {
+		t.Fatalf("result off mesh (%v,%v)", x, z)
+	}
+	if math.Hypot(x-toX, z-toZ) < 1e-3 {
+		t.Fatalf("tunneled to far side (%v,%v)", x, z)
+	}
+	if math.Hypot(x-fromX, z-fromZ) > 0.75 {
+		t.Fatalf("stopped too far from from: (%v,%v)", x, z)
 	}
 }
 
