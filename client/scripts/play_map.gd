@@ -1,9 +1,6 @@
 extends RefCounted
 
 
-## Named client play-map switch. Production default is world_map.
-## Set MARQUE_MAP=arena (or pass --map arena) to load Ring of Trials.
-
 const ENV_NAME := "MARQUE_MAP"
 const FLAG := "--map"
 

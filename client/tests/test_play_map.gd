@@ -71,18 +71,28 @@ func _test_apply_swaps_worldmap_node(assertions: Assertions) -> void:
 
 
 func _test_avatar_stands_on_arena_floor(assertions: Assertions) -> void:
-	var packed := load(PlayMap.ARENA_PATH) as PackedScene
-	assertions.check(packed != null, "arena scene loads")
-	if packed == null:
-		return
-	var arena := packed.instantiate() as Node3D
-	assertions.check(arena != null, "arena root is Node3D")
+	OS.set_environment(PlayMap.ENV_NAME, "arena")
+	var host := Node3D.new()
+	var stub := Node3D.new()
+	stub.name = "WorldMap"
+	host.add_child(stub)
+	PlayMap.apply_to(host)
+	var map := host.get_node_or_null("WorldMap") as Node3D
+	assertions.check(
+		map != null and map.scene_file_path == PlayMap.ARENA_PATH,
+		"play host WorldMap is the Ring of Trials scene",
+	)
 	var avatar := PlayerAvatarScript.new()
+	host.add_child(avatar)
 	avatar.ground_y = 0.0
 	avatar.present_at(0.0, 0.0, false, 0.0)
+	assertions.check(
+		avatar.get_parent() == host and map != null and map.get_parent() == host,
+		"avatar and arena share the play host",
+	)
 	assertions.check(
 		avatar.position.is_equal_approx(Vector3(0.0, 0.0, 0.0)),
 		"local avatar stands at arena floor origin under wish→pose Y=0",
 	)
-	arena.free()
-	avatar.free()
+	host.free()
+	OS.set_environment(PlayMap.ENV_NAME, "")
