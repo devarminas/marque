@@ -1,8 +1,5 @@
 extends SceneTree
 
-## Export client NavigationMesh to shared JSON for the Go sim.
-## godot --headless --path client --script res://tools/export_arena_nav_json.gd
-
 const NAVMESH_PATH := "res://scenes/arena_ring_of_trials_navmesh.tres"
 const OUT_PATH := "res://../shared/maps/arena_ring_of_trials_nav.json"
 const AGENT_RADIUS := 0.4
