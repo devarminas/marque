@@ -1186,17 +1186,12 @@ func _on_despawned(id: int) -> void:
 func _on_path_assigned(
 	id: int, start_tick: int, points: PackedVector2Array, speed: float
 ) -> void:
-	var avatar: PlayerAvatarScript = _avatars.get(id)
-	if avatar != null:
-		avatar.clock = _clock
-		avatar.follow_path(points, start_tick, speed)
-		if id != _you and points.size() > 0:
-			var end: Vector2 = points[points.size() - 1]
-			var buf: PoseInterp = _remote_poses.get(id)
-			if buf == null:
-				buf = PoseInterp.new()
-				_remote_poses[id] = buf
-			buf.reset_at(start_tick, end.x, end.y)
+	# Player locomotion is pose-driven (ADR 0001). Server may still assign
+	# approach polylines until ARM-239; applying them here fights LocalMover
+	# and freezes the camera (ARM-250). NPCs keep polyline walk.
+	if _avatars.has(id):
+		if id == _you and _local_mover != null:
+			_local_mover.apply_wish(0.0, 0.0)
 		return
 	var dummy: NpcDummyScript = _npcs.get(id)
 	if dummy != null:
