@@ -7,6 +7,7 @@
       "cooldown_ticks": 38,
       "range": 8,
       "target": "friendly",
+      "locomotion": "movable",
       "effect": {
         "kind": "heal",
         "amount": 25
@@ -24,6 +25,7 @@
       "cast_ticks": 30,
       "range": 8,
       "target": "hostile",
+      "locomotion": "interrupt_on_move",
       "effect": {
         "kind": "damage",
         "amount": 40

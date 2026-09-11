@@ -187,11 +187,11 @@ func TestCastJSONOnlyDamageAndMana(t *testing.T) {
 	custom := `{
   "abilities":[{
     "id":"fireball","name":"Fireball","mana_cost":10,"cooldown_ticks":1,"range":8,
-    "target":"hostile","effect":{"kind":"damage","amount":7},
+    "target":"hostile","locomotion":"movable","effect":{"kind":"damage","amount":7},
     "ui":{"hotbar_slot":2,"color":"red"}
   },{
     "id":"heal","name":"Heal","mana_cost":5,"cooldown_ticks":1,"range":0,
-    "target":"friendly","effect":{"kind":"heal","amount":3},
+    "target":"friendly","locomotion":"movable","effect":{"kind":"heal","amount":3},
     "ui":{"hotbar_slot":1,"color":"green"}
   }]
 }`
@@ -285,6 +285,7 @@ const sharedAbilitiesJSON = `{
       "cooldown_ticks": 38,
       "range": 8,
       "target": "friendly",
+      "locomotion": "movable",
       "effect": {"kind": "heal", "amount": 25},
       "ui": {"hotbar_slot": 1, "color": "green"}
     },
@@ -296,6 +297,7 @@ const sharedAbilitiesJSON = `{
       "cast_ticks": 30,
       "range": 8,
       "target": "hostile",
+      "locomotion": "interrupt_on_move",
       "effect": {"kind": "damage", "amount": 40},
       "ui": {"hotbar_slot": 2, "color": "red"}
     }
@@ -320,6 +322,7 @@ const suicideAbilityJSON = `{
       "cooldown_ticks": 38,
       "range": 8,
       "target": "friendly",
+      "locomotion": "movable",
       "effect": {"kind": "heal", "amount": 25},
       "ui": {"hotbar_slot": 1, "color": "green"}
     },
@@ -331,6 +334,7 @@ const suicideAbilityJSON = `{
       "cast_ticks": 30,
       "range": 8,
       "target": "hostile",
+      "locomotion": "interrupt_on_move",
       "effect": {"kind": "damage", "amount": 40},
       "ui": {"hotbar_slot": 2, "color": "red"}
     },
@@ -341,6 +345,7 @@ const suicideAbilityJSON = `{
       "cooldown_ticks": 30,
       "range": 8,
       "target": "friendly",
+      "locomotion": "movable",
       "effect": {"kind": "damage", "amount": 10},
       "ui": {"hotbar_slot": 4, "color": "purple"}
     }
@@ -484,6 +489,117 @@ func TestMageGateHoldsForPendingFireball(t *testing.T) {
 	got := pw.events(EvCastRejected)
 	if len(got) != 1 || got[0]["reason"] != string(mnet.ReasonNeedsClass) {
 		t.Fatalf("cast_rejected=%v, want needs_class", got)
+	}
+}
+
+func TestMovableCastResolvesWhileWalking(t *testing.T) {
+	pw := newClassProbe(t)
+	catalog := `{
+  "abilities":[{
+    "id":"heal","name":"Heal","mana_cost":1,"cooldown_ticks":0,"range":0,
+    "target":"friendly","locomotion":"movable","effect":{"kind":"heal","amount":1},
+    "ui":{"hotbar_slot":1,"color":"green"}
+  },{
+    "id":"fireball","name":"Fireball","mana_cost":10,"cooldown_ticks":0,"cast_ticks":10,
+    "range":8,"target":"hostile","locomotion":"movable",
+    "effect":{"kind":"damage","amount":15},
+    "ui":{"hotbar_slot":2,"color":"red"}
+  }]
+}`
+	pw.w.SetAbilities(mustParseAbilities(t, catalog))
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
+	bob.pos = Point{X: 3, Z: 0}
+	start := alice.pos
+
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
+	if !alice.casting() {
+		t.Fatal("expected pending movable cast")
+	}
+	pw.w.move(alice, mnet.Move{DX: 1, DZ: 0}, 2)
+	if !alice.casting() {
+		t.Fatal("movable cast cancelled on walk")
+	}
+	if !alice.steering() {
+		t.Fatal("movable cast blocked wish integrate")
+	}
+	pw.w.stepNForTest(alice.castTotal)
+	if bob.hp != MaxHP-15 {
+		t.Fatalf("movable cast hp=%d, want %d", bob.hp, MaxHP-15)
+	}
+	if alice.pos.X <= start.X {
+		t.Fatalf("alice did not walk during movable cast: start=%v end=%v", start, alice.pos)
+	}
+	if alice.casting() {
+		t.Fatal("pending cast after movable resolve")
+	}
+	if len(pw.events(EvCastCancelled)) != 0 {
+		t.Fatalf("unexpected cancel: %v", pw.events(EvCastCancelled))
+	}
+}
+
+func TestRootedCastIgnoresWish(t *testing.T) {
+	pw := newClassProbe(t)
+	catalog := `{
+  "abilities":[{
+    "id":"heal","name":"Heal","mana_cost":1,"cooldown_ticks":0,"range":0,
+    "target":"friendly","locomotion":"movable","effect":{"kind":"heal","amount":1},
+    "ui":{"hotbar_slot":1,"color":"green"}
+  },{
+    "id":"fireball","name":"Fireball","mana_cost":10,"cooldown_ticks":0,"cast_ticks":10,
+    "range":8,"target":"hostile","locomotion":"rooted",
+    "effect":{"kind":"damage","amount":15},
+    "ui":{"hotbar_slot":2,"color":"red"}
+  }]
+}`
+	pw.w.SetAbilities(mustParseAbilities(t, catalog))
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
+	bob.pos = Point{X: 3, Z: 0}
+	start := alice.pos
+
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
+	pw.w.move(alice, mnet.Move{DX: 1, DZ: 0}, 2)
+	if !alice.casting() {
+		t.Fatal("rooted cast cancelled on wish")
+	}
+	if alice.steering() {
+		t.Fatal("rooted cast accepted wish")
+	}
+	pw.w.stepNForTest(alice.castTotal)
+	if bob.hp != MaxHP-15 {
+		t.Fatalf("rooted cast hp=%d, want %d", bob.hp, MaxHP-15)
+	}
+	if alice.pos != start {
+		t.Fatalf("rooted cast moved alice: start=%v end=%v", start, alice.pos)
+	}
+	if len(pw.events(EvCastCancelled)) != 0 {
+		t.Fatalf("unexpected cancel: %v", pw.events(EvCastCancelled))
+	}
+}
+
+func TestInstantCastIgnoresWalkInterrupt(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	alice := pw.joinWithClass("mage")
+	alice.hp = 40
+	alice.steerDX = 1
+	alice.steerDZ = 0
+
+	pw.w.move(alice, mnet.Move{DX: 1, DZ: 0}, 1)
+	pw.w.cast(alice, mnet.Cast{Ability: "heal", Player: alice.id}, 2)
+
+	if alice.hp != 65 {
+		t.Fatalf("instant heal while walking hp=%d, want 65", alice.hp)
+	}
+	if alice.casting() {
+		t.Fatal("instant heal left pending cast")
+	}
+	if len(pw.events(EvCastCancelled)) != 0 {
+		t.Fatalf("unexpected cancel: %v", pw.events(EvCastCancelled))
+	}
+	if len(pw.events(EvCast)) != 1 {
+		t.Fatalf("cast events=%d, want 1", len(pw.events(EvCast)))
 	}
 }
 

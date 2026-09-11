@@ -3,6 +3,7 @@ package game
 import (
 	"math"
 
+	"github.com/devarminas/marque/server/internal/abilitydef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
@@ -58,6 +59,13 @@ func (w *World) applyJumpEdge(p *player, jump bool) {
 func (w *World) applyWish(p *player, msg mnet.Move) {
 	length := math.Hypot(msg.DX, msg.DZ)
 	if length < SteerEpsilon {
+		p.clearSteer()
+		p.remaining = nil
+		w.broadcastPose(p)
+		return
+	}
+
+	if p.casting() && p.castLocomotion == abilitydef.LocomotionRooted {
 		p.clearSteer()
 		p.remaining = nil
 		w.broadcastPose(p)

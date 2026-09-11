@@ -199,11 +199,12 @@ type player struct {
 	attackTarget   mnet.PlayerID
 	attackProgress int
 
-	castAbility  string
-	castTarget   mnet.PlayerID
-	castProgress int
-	castTotal    int
-	castCost     int
+	castAbility    string
+	castLocomotion string
+	castTarget     mnet.PlayerID
+	castProgress   int
+	castTotal      int
+	castCost       int
 
 	hp   int
 	mana int
