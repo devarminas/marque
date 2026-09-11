@@ -89,6 +89,7 @@ func _test_wish_walk_plays_walk_anim_and_camera_follows() -> void:
 
 	mover.apply_wish(1.0, 0.0)
 	mover.advance_to_tick(8)
+	mover.soft_pull_display(1.0)
 	var ground := mover.display_xz()
 	avatar.present_at(ground.x, ground.y, mover.moving(), mover.display_height())
 
@@ -161,6 +162,7 @@ func _test_jump_height_presentation() -> void:
 	avatar.teleport_to(2.0, 2.0)
 	mover.apply_jump(true)
 	mover.advance_to_tick(1)
+	mover.soft_pull_display(1.0)
 	var ground := mover.display_xz()
 	var height := mover.display_height()
 	avatar.present_at(ground.x, ground.y, mover.moving(), height)
@@ -173,6 +175,7 @@ func _test_jump_height_presentation() -> void:
 	)
 
 	mover.advance_to_tick(200)
+	mover.soft_pull_display(1.0)
 	ground = mover.display_xz()
 	height = mover.display_height()
 	avatar.present_at(ground.x, ground.y, mover.moving(), height)
