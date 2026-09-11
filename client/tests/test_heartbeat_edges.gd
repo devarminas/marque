@@ -89,7 +89,7 @@ func _ready() -> void:
 
 	print("== heartbeat edges: corrections that cost something, and windows that must not ==")
 	_test_backward_then_forward(a)
-	_test_re_anchor_moves_a_walker(a)
+	_test_re_anchor_moves_a_pose(a)
 	_test_storm(a)
 	_test_odd_t_values(a)
 	_test_explicit_zero_and_second_welcome(c)
@@ -122,31 +122,30 @@ func _test_backward_then_forward(a: Client) -> void:
 	a.corrections.clear()
 
 
-func _test_re_anchor_moves_a_walker(a: Client) -> void:
+func _test_re_anchor_moves_a_pose(a: Client) -> void:
 	var avatar: PlayerAvatarScript = a.session.avatar_for(1)
 	if not _check(avatar != null, "the local avatar exists after welcome"):
 		return
 
-	a.feed('{"path":{"id":1,"start_tick":101,"points":[[0,0],[10,0]],"speed":1.0}}')
-	avatar.update_to_tick(a.estimate())
+	a.feed('{"pose":{"id":1,"tick":101,"x":0.0,"y":0.0,"z":0.0}}')
 	_check(
 		absf(avatar.position.x) < 0.01,
-		"at start_tick the body is at x=0, got %f" % avatar.position.x,
+		"after the first pose the body is at x=0, got %f" % avatar.position.x,
 	)
 
+	# Local soft-reconcile only hard-snaps at >= 2 m; use a clear snap for the unit test.
+	a.feed('{"pose":{"id":1,"tick":111,"x":5.0,"y":0.0,"z":0.0}}')
 	a.feed('{"tick":{"t":111}}')
-	avatar.update_to_tick(a.estimate())
 	_check(
-		absf(avatar.position.x - 1.5) < 0.01,
-		"a +10 tick re-anchor jumps the walk 1.5 units (10 x 150 ms x 1 u/s), got %f"
-		% avatar.position.x,
+		absf(avatar.position.x - 5.0) < 0.01,
+		"a later pose relocates the body to x=5.0, got %f" % avatar.position.x,
 	)
 
+	a.feed('{"pose":{"id":1,"tick":90,"x":0.0,"y":0.0,"z":0.0}}')
 	a.feed('{"tick":{"t":90}}')
-	avatar.update_to_tick(a.estimate())
 	_check(
 		absf(avatar.position.x) < 0.01,
-		"a re-anchor behind start_tick clamps elapsed at zero: body back at x=0, got %f"
+		"a pose behind the prior tick still applies its coordinates: body back at x=0, got %f"
 		% avatar.position.x,
 	)
 	a.feed('{"tick":{"t":101}}')

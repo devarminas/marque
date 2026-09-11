@@ -163,9 +163,15 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 	print("DEMO walkaway %d %f %f %f %f" % [
 		_session.tick_clock().estimated_tick(), pixel.x, pixel.y, destination.x, destination.y
 	])
-	_session.request_move_to(destination.x, destination.y)
+	var avatar := _session.avatar_for(_session.own_id())
+	if avatar == null:
+		_fail("no local avatar to walk away with")
+		return false
+	var here := Vector2(avatar.position.x, avatar.position.z)
+	var wish := (destination - here).normalized()
+	_session.request_move(wish.x, wish.y)
 
-	if not await _await_arrival(click_tick + WALK_AWAY_DEADLINE_TICKS):
+	if not await _await_arrival(click_tick + WALK_AWAY_DEADLINE_TICKS, destination):
 		_fail(
 			"this client's own body was still walking at tick %d; dropping now would land the "
 			% (click_tick + WALK_AWAY_DEADLINE_TICKS)
@@ -263,20 +269,18 @@ func _await_tick(target: int) -> bool:
 	return true
 
 
-func _await_arrival(deadline_tick: int) -> bool:
+func _await_arrival(deadline_tick: int, destination: Vector2) -> bool:
 	var clock := _session.tick_clock()
 	var avatar := _session.avatar_for(_session.own_id())
 	if avatar == null:
 		return false
-	while avatar.is_idle_at_tick(clock.estimated_tick()):
-		if clock.estimated_tick() >= deadline_tick:
-			return false
+	while clock.estimated_tick() < deadline_tick:
+		var here := Vector2(avatar.position.x, avatar.position.z)
+		if here.distance_to(destination) <= 0.75:
+			_session.request_move(0.0, 0.0)
+			return true
 		await _tree.process_frame
-	while not avatar.is_idle_at_tick(clock.estimated_tick()):
-		if clock.estimated_tick() >= deadline_tick:
-			return false
-		await _tree.process_frame
-	return true
+	return false
 
 
 func _capture(index: int) -> bool:

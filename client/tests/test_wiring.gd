@@ -16,6 +16,7 @@ const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
 const EXACT_EPSILON := 0.002
+const ARRIVAL_EPSILON := 0.75
 const SEGMENT_EPSILON := 0.01
 const RIG_SETTLED_EPSILON := 0.01
 
@@ -309,30 +310,18 @@ func _test_unknown_ids_are_ignored(client: Client) -> void:
 
 
 func _test_paths_reach_the_right_body(client: Client) -> void:
-	var start_tick := 200
+	# Player path frames are ignored (ARM-239). Pose places remotes.
+	var before := Vector2(5.0, -3.0)
+	_check_ground(client, 2, before, "remote starts where welcome put it")
 	client.feed(
-		'{"path":{"id":2,"start_tick":%d,"points":[[5.0,-3.0],[5.0,3.0]],"speed":%f}}'
-		% [start_tick, PATH_SPEED]
+		'{"path":{"id":2,"start_tick":200,"points":[[5.0,-3.0],[5.0,3.0]],"speed":%f}}'
+		% PATH_SPEED
 	)
-	var walker: PlayerAvatarScript = client.session.avatar_for(2)
-	_check(walker != null, "the named body exists")
-	if walker == null:
-		return
-	_check(
-		not walker.is_idle_at_tick(start_tick),
-		"the body has a path to walk at the tick it starts",
-	)
-	_check(
-		not walker.is_idle_at_tick(start_tick + 13),
-		"and is still walking one tick short of the end",
-	)
-	_check(walker.is_idle_at_tick(start_tick + 14), "and has arrived one tick past it")
-
-	var ours: PlayerAvatarScript = client.session.avatar_for(1)
-	_check(
-		ours != null and ours.is_idle_at_tick(start_tick + 14),
-		"the path did not leak onto our own body",
-	)
+	_check_ground(client, 2, before, "a player path frame does not move the remote avatar")
+	_check_ground(client, 1, Vector2(0.0, 0.0), "and does not move our own avatar")
+	# Same tick as welcome replaces the buffer entry so interp delay cannot sample the old pose.
+	client.feed('{"pose":{"id":2,"tick":142,"x":5.0,"y":0.0,"z":3.0}}')
+	_check_ground(client, 2, Vector2(5.0, 3.0), "a pose frame places the remote avatar")
 
 
 func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> void:
@@ -355,11 +344,6 @@ func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> voi
 	_check(halted != null, "the halted player has a body immediately, with no path to wait for")
 	if halted == null:
 		return
-	_check(
-		halted.is_idle_at_tick(300) and halted.is_idle_at_tick(9000),
-		"a body with no path is idle at every tick",
-	)
-
 	for _frame in 10:
 		await get_tree().process_frame
 	_check_ground(
@@ -369,7 +353,12 @@ func _test_a_halted_player_is_placed_and_never_waited_for(client: Client) -> voi
 
 	client.feed('{"path":{"id":5,"start_tick":301,"points":[[3.5,-1.25]],"speed":3.0}}')
 	await get_tree().process_frame
-	_check_ground(client, 5, Vector2(3.5, -1.25), "a one-element halt path holds at its point")
+	_check_ground(
+		client, 5, Vector2(-7.5, 11.25), "a player path frame does not relocate a halted avatar"
+	)
+	client.feed('{"pose":{"id":5,"tick":300,"x":3.5,"y":0.0,"z":-1.25}}')
+	await get_tree().process_frame
+	_check_ground(client, 5, Vector2(3.5, -1.25), "a pose frame relocates the avatar")
 
 
 func _test_the_scripted_click_misses_the_opaque_panel(client: Client) -> void:
@@ -686,8 +675,8 @@ func _run_live(url: String) -> void:
 		return
 	var origin: Vector2 = origin_variant
 
-	print("== A is sent to a ground point ==")
-	var destination_variant: Variant = await _send_to_the_scripted_point(a)
+	print("== A steers toward a ground point ==")
+	var destination_variant: Variant = await _aim_at_the_scripted_point(a)
 	if destination_variant == null:
 		return
 	var destination: Vector2 = destination_variant
@@ -696,13 +685,12 @@ func _run_live(url: String) -> void:
 		"the scripted destination is a real walk: %f units from %v to %v"
 		% [origin.distance_to(destination), origin, destination],
 	)
-
-	if not await _wait_until(
-		func() -> bool: return not b.paths_for(a_id).is_empty(), "B's copy of A's path"
-	):
-		return
-	_check(a.paths_for(a_id).size() == 1, "the mover is told its own path")
-	_check(b.paths_for(a_id).size() == 1, "and so is everyone else")
+	var wish := (destination - origin).normalized()
+	a.session.request_move(wish.x, wish.y)
+	_check(
+		a.paths_for(a_id).is_empty() and b.paths_for(a_id).is_empty(),
+		"player walk does not broadcast path frames",
+	)
 
 	print("== B watches A walk ==")
 	await _wait_msec(FIRST_SAMPLE_MSEC)
@@ -739,17 +727,14 @@ func _run_live(url: String) -> void:
 		var late_here: Vector2 = late
 		var live_here: Vector2 = live
 		_check(
-			c.paths_for(a_id).size() == 1,
-			"C learns the walk through one replayed path, got %d" % c.paths_for(a_id).size(),
+			c.paths_for(a_id).is_empty(),
+			"C does not learn the walk through a replayed player path, got %d"
+			% c.paths_for(a_id).size(),
 		)
 		var progress := _progress_along(origin, destination, late_here)
 		_check(
 			progress > 0.0 and progress < 1.0,
 			"C draws A partway along the walk, not at either end (t = %f)" % progress,
-		)
-		_check(
-			_distance_to_segment(origin, destination, late_here) < SEGMENT_EPSILON,
-			"C draws A on the polyline, at %v" % late_here,
 		)
 		_check(
 			late_here.distance_to(live_here) < CLOCK_SKEW_TOLERANCE,
@@ -759,9 +744,12 @@ func _run_live(url: String) -> void:
 
 	print("== A arrives where A was sent ==")
 	var arrived: bool = await _wait_until(
-		func() -> bool: return _is_idle(a, a_id) and _is_idle(b, a_id) and _is_idle(c, a_id),
-		"every client to see A finish walking",
+		func() -> bool:
+			var here: Variant = a.ground_of(a_id)
+			return here != null and Vector2(here).distance_to(destination) < ARRIVAL_EPSILON,
+		"A to reach the destination under sticky wish",
 	)
+	a.session.request_move(0.0, 0.0)
 	if not arrived:
 		return
 	await get_tree().process_frame
@@ -927,7 +915,7 @@ func _join(url: String, label: String) -> Client:
 	return client
 
 
-func _send_to_the_scripted_point(client: Client) -> Variant:
+func _aim_at_the_scripted_point(client: Client) -> Variant:
 	var viewport := client.camera.get_viewport()
 	var screen_position := viewport.get_visible_rect().size * CLICK_AT
 	var picked: Variant = client.picker.pick_ground(screen_position)
@@ -936,24 +924,8 @@ func _send_to_the_scripted_point(client: Client) -> Variant:
 		return null
 	var destination: Vector2 = picked
 
-	client.move_tos.clear()
-	client.session.request_move_to(destination.x, destination.y)
-	await get_tree().process_frame
-
-	_check(
-		client.move_tos.size() == 1,
-		"the request produced one move_to intent, got %d" % client.move_tos.size(),
-	)
-	if client.move_tos.size() != 1:
-		return null
-	return client.move_tos[0]
-
-
-func _is_idle(client: Client, id: int) -> bool:
-	var avatar: PlayerAvatarScript = client.session.avatar_for(id)
-	if avatar == null:
-		return false
-	return avatar.is_idle_at_tick(client.session.tick_clock().estimated_tick())
+	# Pose-driven walk aims at the ground point; the wish is issued by the caller.
+	return destination
 
 
 static func _push_left_click(viewport: Viewport, screen_position: Vector2) -> void:

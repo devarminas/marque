@@ -1,7 +1,6 @@
 extends Node3D
 
 
-const PolylineWalker := preload("res://scripts/polyline_walker.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 const OutfitDefs := preload("res://scripts/outfit_defs.gd")
 const GripDefs := preload("res://scripts/grip_defs.gd")
@@ -9,7 +8,6 @@ const GripSocket := preload("res://scripts/grip_socket.gd")
 
 const WALK_ANIM := "ual2/Walk_Carry"
 const IDLE_ANIM := "ual2/Idle_FoldArms"
-const WALK_CLIP_SPEED := 0.65
 
 const OUTFIT_MATERIAL_PREFIXES := ["MI_Peasant", "MI_Ranger"]
 
@@ -26,7 +24,6 @@ var clock: TickClock = null
 # Linear ARM-51.
 @export var turn_degrees_per_second := 540.0
 
-var _walker: PolylineWalker = null
 var _desired_yaw := 0.0
 var _worn_outfit := ""
 
@@ -132,16 +129,11 @@ func grip_transform(worn: String) -> Transform3D:
 	return Transform3D.IDENTITY if socket == null else socket.global_transform
 
 
-func configure(id: int, tick_ms: int) -> void:
+func configure(id: int, _tick_ms: int = 0) -> void:
 	if id <= 0:
 		push_error("PlayerAvatar.configure: player ids start at 1, got %d" % id)
 		return
 	player_id = id
-	_walker = PolylineWalker.new(tick_ms)
-
-
-func has_follow_path() -> bool:
-	return _walker != null and _walker.has_path()
 
 
 func teleport_to(x: float, z: float) -> void:
@@ -184,39 +176,7 @@ func is_selected() -> bool:
 	return _selection_ring != null and _selection_ring.visible
 
 
-func follow_path(points: PackedVector2Array, start_tick: int, speed: float) -> void:
-	if _walker == null:
-		push_error("PlayerAvatar.follow_path: configure() was never called")
-		return
-	_walker.set_path(points, start_tick, speed)
-
-
-func update_to_tick(tick: int) -> void:
-	if _walker == null or not _walker.has_path():
-		_set_walking(false)
-		return
-
-	var ground := _walker.position_at_tick(tick)
-	position = Vector3(ground.x, ground_y, ground.y)
-	_set_walking(not _walker.is_finished_at_tick(tick))
-
-	if not face_travel_direction:
-		return
-	var heading := _walker.direction_at_tick(tick)
-	if heading == Vector2.ZERO:
-		return
-	_desired_yaw = _yaw_facing(heading)
-
-
-func is_idle_at_tick(tick: int) -> bool:
-	if _walker == null:
-		return true
-	return _walker.is_finished_at_tick(tick)
-
-
 func _process(delta: float) -> void:
-	if clock != null and clock.is_anchored():
-		update_to_tick(clock.estimated_tick())
 	if face_travel_direction:
 		_turn_toward_desired_yaw(delta)
 
@@ -227,10 +187,7 @@ func _set_walking(walking: bool) -> void:
 	if walking:
 		if _animation.current_animation != WALK_ANIM:
 			_animation.play(WALK_ANIM)
-		if _walker != null and _walker.has_path() and _walker.speed() > 0.0:
-			_animation.speed_scale = _walker.speed() / WALK_CLIP_SPEED
-		else:
-			_animation.speed_scale = 1.0
+		_animation.speed_scale = 1.0
 		return
 	if _animation.current_animation != IDLE_ANIM:
 		_animation.play(IDLE_ANIM)

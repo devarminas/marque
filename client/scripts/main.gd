@@ -503,7 +503,10 @@ func _walk_to_fraction(
 		return false
 
 	var point: Vector2 = found
-	session.request_move_to(point.x, point.y)
+	var avatar := session.avatar_for(session.own_id())
+	var here := Vector2.ZERO if avatar == null else Vector2(avatar.position.x, avatar.position.z)
+	var wish := (point - here).normalized()
+	session.request_move(wish.x, wish.y)
 	print("DEMO walkto %f %f %f %f" % [pixel.x, pixel.y, point.x, point.y])
 	return true
 

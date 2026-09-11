@@ -228,15 +228,20 @@ func _mine_rock(rock_id: int) -> bool:
 
 
 func _walk_near(x: float, z: float) -> bool:
-	_session.request_move_to(x, z)
+	var avatar := _session.avatar_for(_session.own_id())
+	var here := Vector2.ZERO if avatar == null else Vector2(avatar.position.x, avatar.position.z)
+	var wish := (Vector2(x, z) - here).normalized()
+	_session.request_move(wish.x, wish.y)
 	print("DEMO walkto %f %f" % [x, z])
 	if not await _wait_until(
 		func() -> bool:
 			return _own_distance_to(x, z) <= NEAR_STATION,
 		WALK_TIMEOUT_MSEC,
 	):
+		_session.request_move(0.0, 0.0)
 		_fail("never reached station vicinity (%f,%f)" % [x, z])
 		return false
+	_session.request_move(0.0, 0.0)
 	return true
 
 
