@@ -71,6 +71,8 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
   directions, still-camera pixel control, server pose.
 - [WASD direction move](./wasd-move.md) — wish samples + server pose. WASD is the
   only movement gesture (ARM-145 / ARM-239).
+- [Arena collision and height](./arena-collision-height.md) — Ring of Trials
+  wall block, ramp height, jump/land (`ARENA COLLISION DEMO OK`, ARM-259).
 - [Rejected and malformed intents](./rejected-intents.md) — validation, `error`
   frames, log records.
 

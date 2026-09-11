@@ -19,6 +19,7 @@ scripts/seed_class_kits_demo.ps1
 scripts/tab_combat_demo.ps1
 scripts/two_client_demo.ps1
 scripts/wasd_demo.ps1
+scripts/arena_collision_demo.ps1
 
 # client/scripts/*_demo.gd
 client/scripts/combat_demo.gd
@@ -34,6 +35,7 @@ client/scripts/quest_demo.gd
 client/scripts/tab_combat_demo.gd
 client/scripts/walk_demo.gd
 client/scripts/wasd_demo.gd
+client/scripts/arena_collision_demo.gd
 
 # --*-shots flags in client/scripts/main.gd
 --shots
@@ -44,6 +46,7 @@ client/scripts/wasd_demo.gd
 --craft-cast-shots
 --combat-shots
 --wasd-shots
+--arena-collision-shots
 --tab-combat-shots
 --quest-shots
 --enemy-quest-shots

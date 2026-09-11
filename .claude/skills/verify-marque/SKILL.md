@@ -34,6 +34,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/dummy_cast_demo.ps1` | `DUMMY CAST DEMO OK` |
 | `scripts/dummy_attack_demo.ps1` | `DUMMY ATTACK DEMO OK` |
 | `scripts/wasd_demo.ps1` | `WASD DEMO OK` |
+| `scripts/arena_collision_demo.ps1` | `ARENA COLLISION DEMO OK` |
 | `scripts/tab_combat_demo.ps1` | `TAB COMBAT DEMO OK` |
 | `scripts/combat_demo.ps1` | **retired** (ARM-203 stub). Exits 0 with no marker. Drive `dummy_attack_demo.ps1` / `tab_combat_demo.ps1` instead. |
 | `scripts/quest_demo.ps1` | `QUEST DEMO OK` |
@@ -190,6 +191,7 @@ enforces the allowlist; the skill text alone is not enough.
 | `--dummy-cast <abs-prefix>` | Dummy cast demo (`dummy_cast_demo.gd`). Absolute host path required. |
 | `--dummy-attack <abs-prefix>` | Hostile-dummy melee demo (`dummy_attack_demo.gd`). Absolute host path required. |
 | `--wasd-shots <abs-prefix>` | WASD move demo (`wasd_demo.gd`). Absolute host path required. |
+| `--arena-collision-shots <abs-prefix>` | Ring of Trials wall/ramp/jump demo (`arena_collision_demo.gd`). Absolute host path required. **M14g / ARM-259.** |
 | `--tab-combat-shots <abs-prefix>` | Tab combat loop demo (`tab_combat_demo.gd`). Absolute host path required. |
 | `--quest-shots <abs-prefix>` | Quest demo (`quest_demo.gd`). Absolute host path required. |
 | `--enemy-quest-shots <abs-prefix>` | Enter the M11 enemy/party/kill-quest demo (`enemy_quest_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. Requires `--enemy-quest-role leader\|member`. Absolute host path required. |
