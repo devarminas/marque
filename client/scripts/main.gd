@@ -17,6 +17,7 @@ const CombatDemoScript := preload("res://scripts/combat_demo.gd")
 const DummyCastDemoScript := preload("res://scripts/dummy_cast_demo.gd")
 const DummyAttackDemoScript := preload("res://scripts/dummy_attack_demo.gd")
 const WasdDemoScript := preload("res://scripts/wasd_demo.gd")
+const ArenaCollisionDemoScript := preload("res://scripts/arena_collision_demo.gd")
 const TabCombatDemoScript := preload("res://scripts/tab_combat_demo.gd")
 const QuestDemoScript := preload("res://scripts/quest_demo.gd")
 const EnemyQuestDemoScript := preload("res://scripts/enemy_quest_demo.gd")
@@ -53,6 +54,7 @@ const DUMMY_CAST_FLAG := "--dummy-cast"
 const DUMMY_ATTACK_FLAG := "--dummy-attack"
 const COMBAT_ROLE_FLAG := "--combat-role"
 const WASD_SHOTS_FLAG := "--wasd-shots"
+const ARENA_COLLISION_SHOTS_FLAG := "--arena-collision-shots"
 const TAB_COMBAT_SHOTS_FLAG := "--tab-combat-shots"
 const QUEST_SHOTS_FLAG := "--quest-shots"
 const ENEMY_QUEST_SHOTS_FLAG := "--enemy-quest-shots"
@@ -116,6 +118,9 @@ func _ready() -> void:
 		return
 	if WASD_SHOTS_FLAG in args:
 		await _run_wasd_demo(args)
+		return
+	if ARENA_COLLISION_SHOTS_FLAG in args:
+		await _run_arena_collision_demo(args)
 		return
 	if QUEST_SHOTS_FLAG in args:
 		await _run_quest_demo(args)
@@ -321,6 +326,22 @@ func _run_wasd_demo(args: Array) -> void:
 		get_tree().quit(1)
 		return
 	var demo := WasdDemoScript.new()
+	var code: int = await demo.run(self, session, prefix)
+	get_tree().quit(code)
+
+
+func _run_arena_collision_demo(args: Array) -> void:
+	var prefix := _argument_after(args, ARENA_COLLISION_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % ARENA_COLLISION_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+	var session := get_node_or_null("Session") as SessionScript
+	if session == null:
+		push_error("main.tscn is missing Session")
+		get_tree().quit(1)
+		return
+	var demo := ArenaCollisionDemoScript.new()
 	var code: int = await demo.run(self, session, prefix)
 	get_tree().quit(code)
 
