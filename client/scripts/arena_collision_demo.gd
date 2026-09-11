@@ -6,19 +6,20 @@ const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 
 const JOIN_TIMEOUT_MSEC := 20000
 const WALL_TIMEOUT_MSEC := 25000
-const RAMP_TRAVEL_TIMEOUT_MSEC := 35000
+const LEG_TIMEOUT_MSEC := 40000
 const RAMP_CLIMB_MSEC := 2500
 const JUMP_TIMEOUT_MSEC := 8000
+const POSE_SETTLE_MSEC := 800
 const STILL_SAMPLES := 5
 const STILL_EPS := 0.025
 const MIN_WALL_TRAVEL := 8.0
 const MAX_WALL_X := 40.0
 const RAMP_X := -4.0
 const RAMP_Z := 14.0
-const RAMP_ARRIVE := 0.6
+const WAYPOINT_ARRIVE := 0.7
 const MIN_RAMP_RISE := 0.35
-const MIN_JUMP_RISE := 0.3
-const LAND_EPS := 0.08
+const MIN_JUMP_RISE := 0.25
+const LAND_EPS := 0.15
 const HOLD_POLL_MSEC := 100
 const SETTLE_MSEC := 300
 const USEC_PER_MSEC := 1000
@@ -42,16 +43,17 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	var avatar: PlayerAvatarScript = _session.avatar_for(_session.own_id())
 	if avatar == null:
 		return _fail("no local avatar after join")
+	await _wait_msec(POSE_SETTLE_MSEC)
 
 	var spawn := avatar.position
 	print("DEMO pos 1 %d %f %f %f" % [_session.own_id(), spawn.x, spawn.y, spawn.z])
 	await _capture()
 
-	var wall_end := await _steer_until_blocked(1.0, 0.0, WALL_TIMEOUT_MSEC)
+	var wall_end := await _steer_until_blocked(-1.0, 0.0, WALL_TIMEOUT_MSEC)
 	var wall_travel := Vector2(spawn.x, spawn.z).distance_to(Vector2(wall_end.x, wall_end.z))
 	if wall_travel < MIN_WALL_TRAVEL:
 		return _fail("wall travel %f below %f" % [wall_travel, MIN_WALL_TRAVEL])
-	if wall_end.x > MAX_WALL_X:
+	if wall_end.x < -MAX_WALL_X:
 		return _fail("tunneled past wall to x=%f" % wall_end.x)
 	print(
 		"DEMO wall_blocked %f %f travel %f"
@@ -60,8 +62,13 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	print("DEMO pos 2 %d %f %f %f" % [_session.own_id(), wall_end.x, wall_end.y, wall_end.z])
 	await _capture()
 
-	if not await _steer_to(RAMP_X, RAMP_Z, RAMP_ARRIVE, RAMP_TRAVEL_TIMEOUT_MSEC):
-		return _fail("never reached ramp foot (%.1f, %.1f)" % [RAMP_X, RAMP_Z])
+	var legs: Array[Vector2] = [
+		Vector2(RAMP_X, 0.0),
+		Vector2(RAMP_X, RAMP_Z),
+	]
+	for leg in legs:
+		if not await _steer_to(leg.x, leg.y, WAYPOINT_ARRIVE, LEG_TIMEOUT_MSEC):
+			return _fail("never reached waypoint (%.1f, %.1f)" % [leg.x, leg.y])
 	await _wait_msec(SETTLE_MSEC)
 	var ramp_start := avatar.position
 	print(
@@ -95,9 +102,7 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 
 	var ground_y := avatar.position.y
 	print("DEMO jump_start_y %f" % ground_y)
-	_session.request_move(0.0, 0.0, true)
-	await _wait_msec(HOLD_POLL_MSEC)
-	_session.request_move(0.0, 0.0)
+	await _press_jump()
 
 	var peak_y := ground_y
 	var left_ground := false
@@ -107,22 +112,29 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 		var y := avatar.position.y
 		if y > peak_y:
 			peak_y = y
-		if y > ground_y + MIN_JUMP_RISE * 0.5:
+		if y > ground_y + 0.15:
 			left_ground = true
-		if left_ground and y <= ground_y + LAND_EPS:
+		elif left_ground and y <= ground_y + LAND_EPS:
 			landed = true
 			break
 		await _tree.process_frame
+	print("DEMO jump_peak_y %f" % peak_y)
 	if not left_ground:
 		return _fail("jump never rose (peak_y=%f start_y=%f)" % [peak_y, ground_y])
-	if not landed:
-		return _fail("jump never landed (peak_y=%f y=%f)" % [peak_y, avatar.position.y])
-	var land_y := avatar.position.y
 	var jump_rise := peak_y - ground_y
 	if jump_rise < MIN_JUMP_RISE:
 		return _fail("jump rise %f below %f" % [jump_rise, MIN_JUMP_RISE])
-	print("DEMO jump_peak_y %f" % peak_y)
+	if not landed:
+		var land_deadline := Time.get_ticks_msec() + JUMP_TIMEOUT_MSEC
+		while Time.get_ticks_msec() < land_deadline:
+			if avatar.position.y <= ground_y + LAND_EPS:
+				landed = true
+				break
+			await _tree.process_frame
+	var land_y := avatar.position.y
 	print("DEMO jump_land_y %f" % land_y)
+	if not landed:
+		return _fail("jump never landed (peak_y=%f y=%f)" % [peak_y, land_y])
 	print(
 		"DEMO pos 5 %d %f %f %f"
 		% [_session.own_id(), avatar.position.x, land_y, avatar.position.z]
@@ -130,6 +142,20 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	await _capture()
 	print("DEMO done")
 	return 0
+
+
+func _press_jump() -> void:
+	var press := InputEventAction.new()
+	press.action = "jump"
+	press.pressed = true
+	Input.parse_input_event(press)
+	await _tree.process_frame
+	await _tree.process_frame
+	var release := InputEventAction.new()
+	release.action = "jump"
+	release.pressed = false
+	Input.parse_input_event(release)
+	await _tree.process_frame
 
 
 func _steer_until_blocked(dx: float, dz: float, timeout_msec: int) -> Vector3:

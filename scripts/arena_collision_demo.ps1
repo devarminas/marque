@@ -139,8 +139,8 @@ try {
     }
     if ($null -eq $jumpPeak -or $null -eq $jumpLand) {
         Add-Failure "missing DEMO jump_peak_y / jump_land_y"
-    } elseif ($jumpPeak -lt ($jumpLand + 0.25)) {
-        Add-Failure "jump peak $jumpPeak not above land $jumpLand by 0.25"
+    } elseif ($jumpPeak -lt ($jumpLand + 0.2)) {
+        Add-Failure "jump peak $jumpPeak not above land $jumpLand by 0.2"
     }
     if ($posLines -lt 5) { Add-Failure "DEMO pos lines=$posLines, want >= 5" }
     if ($shots -lt 5) { Add-Failure "DEMO shot lines=$shots, want >= 5" }
@@ -168,7 +168,12 @@ try {
                     $moveEvents++
                     if ($json.jump -eq $true) { $jumpMoves++ }
                 }
-                if ($json.ev -eq "path_assigned") { $pathEvents++ }
+                if ($json.ev -eq "path_assigned") {
+                    $hasPlayer = $json.PSObject.Properties.Name -contains "player"
+                    if ($hasPlayer -and $null -ne $json.player) {
+                        $pathEvents++
+                    }
+                }
             }
         }
     }

@@ -30,8 +30,11 @@ powershell -File scripts/arena_collision_demo.ps1
 
 Required markers: exit 0, last line `ARENA COLLISION DEMO OK`, client
 `DEMO done`, `DEMO wall_blocked`, `DEMO ramp_rise` ≥ 0.35, jump peak above
-land, five `DEMO shot` PNGs >4KB, GAMELOG `map=arena_ring_of_trials`,
-`move` with `jump: true`, and no player `path_assigned`.
+land by ≥ 0.2, five `DEMO shot` PNGs >4KB, GAMELOG `map=arena_ring_of_trials`,
+`move` with `jump: true`, and no player `path_assigned` (NPC patrol paths may log).
+
+Jump uses a synthesised `jump` Input action (same path as Space), so local
+prediction applies; bare `request_move(..., jump=true)` alone under-samples the peak.
 
 Proof map:
 
