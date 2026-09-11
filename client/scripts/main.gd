@@ -78,9 +78,14 @@ const DEMO_PHASE_GAP_MSEC := 1200
 
 const DEMO_HOLD_MSEC := 2000
 
+const PlayMap := preload("res://scripts/play_map.gd")
+
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
+	var play_map_path := PlayMap.apply_to(self, PackedStringArray(args))
+	if play_map_path != PlayMap.WORLD_PATH:
+		print("main: play map %s" % play_map_path)
 	_feed_scripted_frames(args)
 	if PICKUP_SHOTS_FLAG in args:
 		await _run_pickup_demo(args)
