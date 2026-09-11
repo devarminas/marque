@@ -72,9 +72,9 @@ class Client:
 		session = root.get_node("Session") as SessionScript
 		net = root.get_node("Session/Net") as NetClientScript
 		picker = root.get_node("GroundPicker") as GroundPickerScript
-		rig = root.get_node("CameraRig") as CameraRigScript
-		camera = root.get_node("CameraRig/Camera3D") as Camera3D
-		local_body = root.get_node("Player") as Node3D
+		rig = root.get_node("PlayerCharacter/CameraRig") as CameraRigScript
+		camera = root.get_node("PlayerCharacter/CameraRig/Camera3D") as Camera3D
+		local_body = root.get_node("PlayerCharacter/Player") as Node3D
 		remote_players = root.get_node("RemotePlayers") as Node3D
 		panel = root.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
 		equipment = root.get_node("UI/RightDock") as EquipmentPanelScript

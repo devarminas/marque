@@ -56,10 +56,10 @@ func _ready() -> void:
 	_net = _root.get_node("Session/Net") as NetClientScript
 	_inventory = _root.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
 	_equipment = _root.get_node("UI/RightDock") as EquipmentPanelScript
-	_camera = _root.get_node("CameraRig/Camera3D") as Camera3D
+	_camera = _root.get_node("PlayerCharacter/CameraRig/Camera3D") as Camera3D
 	_worn_slots = ClassDefs.worn_slots(ClassDefs.load_sets())
 
-	var rig := _root.get_node("CameraRig") as Node3D
+	var rig := _root.get_node("PlayerCharacter/CameraRig") as Node3D
 	if rig != null:
 		rig.set_process(false)
 

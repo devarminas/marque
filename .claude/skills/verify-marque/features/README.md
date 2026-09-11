@@ -66,7 +66,7 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
 ## Movement
 
 - [Move-to walk](./move-to-walk.md) — **retired** (ARM-239). Player polyline walk
-  is gone; see polish (ARM-241) for graduated action-movement e2e.
+  is gone; see [Polish](./polish/README.md) for graduated action-movement e2e.
 - [Two clients see each other walk](./two-clients-see-each-other.md) — M0 both
   directions, still-camera pixel control, server pose.
 - [WASD direction move](./wasd-move.md) — wish samples + server pose. WASD is the
@@ -104,3 +104,17 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
 - [Enemy quest demo: party, imps, Imp Patrol](./enemy-quest-demo.md) — M11
   party/kill/quest **outcome** (`ENEMY QUEST DEMO OK`); not Imp chase
   (outcome-not-chase).
+
+## Polish (M13 action movement)
+
+Graduated e2e home. Prop presentation is **mock-first** (no marqued). Wire and
+authority claims stay Go / existing live demos.
+
+- [Polish index](./polish/README.md) — layout, drivers, markers
+- [ADR 0001 movement authority](./polish/adr-0001-movement-authority.md)
+- [ADR 0002 sim tick / cast timing](./polish/adr-0002-sim-tick-and-cast-timing.md)
+- [ADR 0003 movement wire](./polish/adr-0003-movement-wire.md)
+- [ADR 0004 jump](./polish/adr-0004-jump.md)
+- [ADR 0005 ability locomotion](./polish/adr-0005-ability-locomotion.md)
+- [Prop: player character](./polish/props/player-character.md) — shared
+  `player_character.tscn` mock e2e (`PASS: player_character prop mock`)

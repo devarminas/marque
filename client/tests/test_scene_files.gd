@@ -2,7 +2,12 @@ extends RefCounted
 
 const Assertions := preload("res://tests/assertions.gd")
 
-const SCENE_DIRS := ["res://scenes", "res://scenes/fixtures", "res://tests"]
+const SCENE_DIRS := [
+	"res://scenes",
+	"res://scenes/fixtures",
+	"res://scenes/props",
+	"res://tests",
+]
 
 
 func run(assertions: Assertions) -> void:

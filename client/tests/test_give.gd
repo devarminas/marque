@@ -65,12 +65,12 @@ func _ready() -> void:
 	_session = _root.get_node("Session") as SessionScript
 	_net = _root.get_node("Session/Net") as NetClientScript
 	_picker = _root.get_node("GroundPicker") as GroundPickerScript
-	_camera = _root.get_node("CameraRig/Camera3D") as Camera3D
+	_camera = _root.get_node("PlayerCharacter/CameraRig/Camera3D") as Camera3D
 	_dialog = _root.get_node("UI/DialogPanel") as DialogPanelScript
 	_give = _root.get_node("UI/GivePanel") as GivePanelScript
 	_inventory = _root.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
 
-	var rig := _root.get_node("CameraRig") as Node3D
+	var rig := _root.get_node("PlayerCharacter/CameraRig") as Node3D
 	if rig != null:
 		rig.set_process(false)
 
