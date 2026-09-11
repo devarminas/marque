@@ -18,6 +18,10 @@ const (
 	TargetFriendly = "friendly"
 	TargetHostile  = "hostile"
 	TargetSelf     = "self"
+
+	LocomotionMovable         = "movable"
+	LocomotionRooted          = "rooted"
+	LocomotionInterruptOnMove = "interrupt_on_move"
 )
 
 type Effect struct {
@@ -38,6 +42,7 @@ type Ability struct {
 	CastTicks     int     `json:"cast_ticks"`
 	Range         float64 `json:"range"`
 	Target        string  `json:"target"`
+	Locomotion    string  `json:"locomotion"`
 	Effect        Effect  `json:"effect"`
 	UI            UI      `json:"ui"`
 }
@@ -111,6 +116,11 @@ func validate(a Ability) error {
 	case TargetFriendly, TargetHostile, TargetSelf:
 	default:
 		return fmt.Errorf("%q: unknown target %q", a.ID, a.Target)
+	}
+	switch a.Locomotion {
+	case LocomotionMovable, LocomotionRooted, LocomotionInterruptOnMove:
+	default:
+		return fmt.Errorf("%q: unknown locomotion %q", a.ID, a.Locomotion)
 	}
 	switch a.Effect.Kind {
 	case EffectHeal, EffectDamage:

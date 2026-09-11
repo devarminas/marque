@@ -219,6 +219,7 @@ const sharedAbilitiesJSONWithHealRange = `{
       "cooldown_ticks": 38,
       "range": 8,
       "target": "friendly",
+      "locomotion": "movable",
       "effect": {"kind": "heal", "amount": 25},
       "ui": {"hotbar_slot": 1, "color": "green"}
     },
@@ -230,6 +231,7 @@ const sharedAbilitiesJSONWithHealRange = `{
       "cast_ticks": 30,
       "range": 8,
       "target": "hostile",
+      "locomotion": "interrupt_on_move",
       "effect": {"kind": "damage", "amount": 40},
       "ui": {"hotbar_slot": 2, "color": "red"}
     }

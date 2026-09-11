@@ -125,10 +125,13 @@ func (w *World) beginCast(p *player, ability abilitydef.Ability, targetID mnet.P
 	w.closeDialog(p)
 	w.cancelGather(p)
 	w.cancelAttack(p, CauseReplaced)
-	p.clearSteer()
+	if ability.Locomotion != abilitydef.LocomotionMovable {
+		p.clearSteer()
+	}
 	p.remaining = nil
 
 	p.castAbility = ability.ID
+	p.castLocomotion = ability.Locomotion
 	p.castTarget = targetID
 	p.castProgress = 0
 	p.castTotal = ability.CastTicks
@@ -258,6 +261,9 @@ func (w *World) interruptCastOnMove(p *player, cause string) {
 	if !p.casting() {
 		return
 	}
+	if p.castLocomotion != abilitydef.LocomotionInterruptOnMove {
+		return
+	}
 	if p.castTotal-p.castProgress <= CastGraceTicks {
 		return
 	}
@@ -282,6 +288,7 @@ func (w *World) cancelCast(p *player, cause string) {
 
 func (w *World) clearCastState(p *player) {
 	p.castAbility = ""
+	p.castLocomotion = ""
 	p.castTarget = 0
 	p.castProgress = 0
 	p.castTotal = 0

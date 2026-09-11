@@ -33,6 +33,9 @@ func TestLoadSharedStarterAbilities(t *testing.T) {
 	if heal.Target != TargetFriendly || heal.Effect.Kind != EffectHeal || heal.UI.Color != "green" {
 		t.Fatalf("heal shape: %+v", heal)
 	}
+	if heal.Locomotion != LocomotionMovable {
+		t.Fatalf("heal locomotion=%q, want %q", heal.Locomotion, LocomotionMovable)
+	}
 	if heal.ManaCost <= 0 || heal.Range < 0 {
 		t.Fatalf("heal mana/range: %+v", heal)
 	}
@@ -42,6 +45,9 @@ func TestLoadSharedStarterAbilities(t *testing.T) {
 	}
 	if fb.Target != TargetHostile || fb.Effect.Kind != EffectDamage || fb.UI.Color != "red" {
 		t.Fatalf("fireball shape: %+v", fb)
+	}
+	if fb.Locomotion != LocomotionInterruptOnMove {
+		t.Fatalf("fireball locomotion=%q, want %q", fb.Locomotion, LocomotionInterruptOnMove)
 	}
 	if fb.ManaCost <= 0 || fb.Range <= 0 {
 		t.Fatalf("fireball mana/range: %+v", fb)
@@ -78,7 +84,7 @@ func TestZeroManaCostFailsClosed(t *testing.T) {
 	_, err := Parse([]byte(`{
 		"abilities":[{
 			"id":"x","name":"X","mana_cost":0,"cooldown_ticks":0,"range":0,
-			"target":"self","effect":{"kind":"heal","amount":1},
+			"target":"self","locomotion":"movable","effect":{"kind":"heal","amount":1},
 			"ui":{"hotbar_slot":1,"color":"green"}
 		}]
 	}`))
@@ -91,7 +97,7 @@ func TestSubHalfManaCostFailsClosed(t *testing.T) {
 	_, err := Parse([]byte(`{
 		"abilities":[{
 			"id":"x","name":"X","mana_cost":0.4,"cooldown_ticks":0,"range":0,
-			"target":"self","effect":{"kind":"heal","amount":1},
+			"target":"self","locomotion":"movable","effect":{"kind":"heal","amount":1},
 			"ui":{"hotbar_slot":1,"color":"green"}
 		}]
 	}`))
@@ -104,12 +110,38 @@ func TestUnknownEffectFailsClosed(t *testing.T) {
 	_, err := Parse([]byte(`{
 		"abilities":[{
 			"id":"x","name":"X","mana_cost":1,"cooldown_ticks":0,"range":0,
-			"target":"self","effect":{"kind":"explode","amount":1},
+			"target":"self","locomotion":"movable","effect":{"kind":"explode","amount":1},
 			"ui":{"hotbar_slot":1,"color":"blue"}
 		}]
 	}`))
 	if err == nil {
 		t.Fatal("expected unknown effect error")
+	}
+}
+
+func TestUnknownLocomotionFailsClosed(t *testing.T) {
+	_, err := Parse([]byte(`{
+		"abilities":[{
+			"id":"x","name":"X","mana_cost":1,"cooldown_ticks":0,"range":0,
+			"target":"self","locomotion":"dash","effect":{"kind":"heal","amount":1},
+			"ui":{"hotbar_slot":1,"color":"blue"}
+		}]
+	}`))
+	if err == nil {
+		t.Fatal("expected unknown locomotion error")
+	}
+}
+
+func TestMissingLocomotionFailsClosed(t *testing.T) {
+	_, err := Parse([]byte(`{
+		"abilities":[{
+			"id":"x","name":"X","mana_cost":1,"cooldown_ticks":0,"range":0,
+			"target":"self","effect":{"kind":"heal","amount":1},
+			"ui":{"hotbar_slot":1,"color":"blue"}
+		}]
+	}`))
+	if err == nil {
+		t.Fatal("expected missing locomotion error")
 	}
 }
 
