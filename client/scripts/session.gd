@@ -479,10 +479,7 @@ func request_talk(npc_id: int) -> void:
 			"session: talk for npc %d, which this client does not know; ignoring" % npc_id
 		)
 		return
-	if (
-		dummy.kind != NpcDummyScript.KindQuestGiver
-		and dummy.kind != NpcDummyScript.KindImpQuestGiver
-	):
+	if not dummy.is_talkable():
 		push_warning("session: talk refused for non-quest-giver npc %d" % npc_id)
 		return
 	talk_requested.emit(npc_id)
@@ -1363,11 +1360,6 @@ func _on_player_clicked(body: Node3D) -> void:
 		)
 		return
 	select_player(npc_id)
-	if (
-		dummy.kind == NpcDummyScript.KindQuestGiver
-		or dummy.kind == NpcDummyScript.KindImpQuestGiver
-	):
-		request_talk(npc_id)
 
 
 func _on_player_attack_clicked(body: Node3D) -> void:
@@ -1395,7 +1387,11 @@ func _on_player_attack_clicked(body: Node3D) -> void:
 		)
 		return
 	select_player(npc_id)
-	request_attack(npc_id)
+	if dummy.is_talkable():
+		request_talk(npc_id)
+		return
+	if dummy.faction == NpcDummyScript.FactionHostile:
+		request_attack(npc_id)
 
 
 func _on_slot_activated(slot: int) -> void:

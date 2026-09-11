@@ -30,10 +30,13 @@ const NODE_GROUND := Vector2(-4.0, 6.0)
 
 const REMOTE_GROUND := Vector2(6.0, -5.0)
 
+const QUEST_GIVER_GROUND := Vector2(-7.0, -4.0)
+
 const ITEM_ID := 3
 const PLAYER_ID := 3
 const NODE_ID := 3
 const REMOTE_PLAYER_ID := 7
+const QUEST_GIVER_ID := 1000003
 
 const CHROME_ITEM_ID := 11
 
@@ -63,6 +66,7 @@ var _move_to_intents := PackedVector2Array()
 var _pickup_intents := PackedInt32Array()
 var _gather_intents := PackedInt32Array()
 var _attack_intents := PackedInt32Array()
+var _talk_intents := PackedInt32Array()
 var _selection_events := PackedInt32Array()
 var _drop_intents := PackedInt32Array()
 var _use_intents: Array[Vector2i] = []
@@ -107,6 +111,7 @@ func _ready() -> void:
 	_session.pickup_requested.connect(func(id: int) -> void: _pickup_intents.append(id))
 	_session.gather_requested.connect(func(id: int) -> void: _gather_intents.append(id))
 	_session.attack_requested.connect(func(id: int) -> void: _attack_intents.append(id))
+	_session.talk_requested.connect(func(id: int) -> void: _talk_intents.append(id))
 	_session.selection_changed.connect(func(id: int) -> void: _selection_events.append(id))
 	_session.drop_requested.connect(func(slot: int) -> void: _drop_intents.append(slot))
 	_session.use_requested.connect(
@@ -150,6 +155,10 @@ func _ready() -> void:
 	await _test_a_ground_click_leaves_the_selection_alone()
 	await _test_escape_clears_player_selection()
 	await _test_a_right_click_on_a_remote_player_is_an_attack()
+
+	await _build_the_quest_giver_click_world()
+	await _test_a_left_click_on_a_quest_giver_selects_and_does_not_talk()
+	await _test_a_right_click_on_a_quest_giver_is_a_talk()
 
 	await _test_clicking_an_occupied_slot_uses_it()
 	await _test_cancel_clears_use_selection()
@@ -843,6 +852,79 @@ func _test_a_right_click_on_a_remote_player_is_an_attack() -> void:
 	)
 
 
+func _build_the_quest_giver_click_world() -> void:
+	_dock.visible = false
+	var toggle := _root.get_node_or_null("UI/InventoryToggle") as CanvasItem
+	if toggle != null:
+		toggle.visible = false
+	var quest_toggle := _root.get_node_or_null("UI/QuestLogToggle") as CanvasItem
+	if quest_toggle != null:
+		quest_toggle.visible = false
+	var party_toggle := _root.get_node_or_null("UI/PartyToggle") as CanvasItem
+	if party_toggle != null:
+		party_toggle.visible = false
+	await _feed(
+		(
+			'{"welcome":{"you":%d,"tick_ms":150,"tick":900,"players":['
+			+ '{"id":%d,"x":0.0,"z":0.0}'
+			+ '],"items":[],"npcs":['
+			+ '{"id":%d,"kind":"quest_giver","faction":"neutral","x":%f,"z":%f,"hp":100,"max_hp":100}'
+			+ "]}}"
+		)
+		% [
+			PLAYER_ID,
+			PLAYER_ID,
+			QUEST_GIVER_ID,
+			QUEST_GIVER_GROUND.x,
+			QUEST_GIVER_GROUND.y,
+		]
+	)
+	_check(
+		_session.npcs.get_node_or_null("Npc%d" % QUEST_GIVER_ID) != null,
+		"the world holds quest giver %d for the talk click tests" % QUEST_GIVER_ID,
+	)
+	_look_straight_down_at(QUEST_GIVER_GROUND)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+
+func _test_a_left_click_on_a_quest_giver_selects_and_does_not_talk() -> void:
+	_look_straight_down_at(QUEST_GIVER_GROUND)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_session.clear_selection()
+	_watch()
+	await _left_click(_viewport_centre())
+	_check(
+		_session.selected_player_id() == QUEST_GIVER_ID,
+		"a left click on a quest giver selects them, got %d" % _session.selected_player_id(),
+	)
+	_check(_talk_intents.is_empty(), "and sends no talk, got %s" % [_talk_intents])
+	_check(_attack_intents.is_empty(), "and no attack, got %s" % [_attack_intents])
+
+
+func _test_a_right_click_on_a_quest_giver_is_a_talk() -> void:
+	_look_straight_down_at(QUEST_GIVER_GROUND)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_session.clear_selection()
+	_watch()
+	await _right_click(_viewport_centre())
+	_check(
+		_talk_intents.size() == 1,
+		"a right click on a quest giver sends one talk, got %d" % _talk_intents.size(),
+	)
+	_check(
+		_talk_intents.size() == 1 and _talk_intents[0] == QUEST_GIVER_ID,
+		"naming npc %d, got %s" % [QUEST_GIVER_ID, _talk_intents],
+	)
+	_check(
+		_session.selected_player_id() == QUEST_GIVER_ID,
+		"and selects the clicked target, got %d" % _session.selected_player_id(),
+	)
+	_check(_attack_intents.is_empty(), "and sends no attack, got %s" % [_attack_intents])
+
+
 func _test_clicking_an_occupied_slot_uses_it() -> void:
 	var last := WIRE_SIZE - 1
 	_dock.visible = true
@@ -1145,6 +1227,7 @@ func _watch() -> void:
 	_pickup_intents.clear()
 	_gather_intents.clear()
 	_attack_intents.clear()
+	_talk_intents.clear()
 	_selection_events.clear()
 	_drop_intents.clear()
 	_use_intents.clear()
