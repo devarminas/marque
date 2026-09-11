@@ -416,8 +416,6 @@ func known_node_ids() -> Array:
 
 
 func request_move_to(x: float, z: float) -> void:
-	# Player move_to is retired (ARM-239 / ADR 0001). Keep the signal so leftover
-	# callers stay observable in tests; never put destination facts on the wire.
 	move_to_requested.emit(x, z)
 	push_warning(
 		"session: move_to (%f, %f) is retired; send move wish samples instead" % [x, z]
@@ -1187,7 +1185,6 @@ func _on_despawned(id: int) -> void:
 func _on_path_assigned(
 	id: int, start_tick: int, points: PackedVector2Array, speed: float
 ) -> void:
-	# Player locomotion is pose-only (ARM-239). Path frames drive NPCs only.
 	if _avatars.has(id):
 		return
 	var dummy: NpcDummyScript = _npcs.get(id)
