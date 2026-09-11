@@ -360,6 +360,7 @@ func (w *World) step() {
 			continue
 		}
 		if p.walking() {
+			from := p.pos
 			p.pos, p.remaining = Advance(p.pos, p.remaining, distance)
 			if !p.walking() {
 				w.log.Event(w.tick, EvArrived, gamelog.Fields{
@@ -368,7 +369,11 @@ func (w *World) step() {
 					"z":      p.pos.Z,
 				})
 			}
-			if w.stepVertical(p, dt) {
+			yMoved := w.stepVertical(p, dt)
+			// Approach still uses server polylines until ARM-239. Pose is the
+			// client locomotion channel after M13c — broadcast every XZ step
+			// so prediction/remotes do not freeze on right-click interact.
+			if yMoved || p.pos != from {
 				w.broadcastPose(p)
 			}
 			continue
@@ -812,6 +817,7 @@ func (w *World) assignPath(p *player, points []Point) {
 	}
 	w.log.Event(w.tick, EvPathAssigned, pathLogFields(out))
 	w.broadcast(out, nil)
+	w.broadcastPose(p)
 }
 
 func pathLogFields(msg mnet.Path) gamelog.Fields {

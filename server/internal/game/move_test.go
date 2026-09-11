@@ -100,6 +100,38 @@ func TestLastIntentWinsMoveOverApproach(t *testing.T) {
 	}
 }
 
+func TestApproachPathBroadcastsPoseEachStep(t *testing.T) {
+	pw := newProbeWorld(t)
+	alice := pw.join()
+	alice.pos = Point{X: 0, Z: 0}
+	points, ok := destinationPath(alice, Point{X: 0, Z: 3})
+	if !ok {
+		t.Fatal("expected approach path")
+	}
+	pw.w.assignPath(alice, points)
+	if alice.lastPoseTick != pw.w.tick {
+		t.Fatalf("assignPath lastPoseTick=%d, want %d", alice.lastPoseTick, pw.w.tick)
+	}
+	moved := 0
+	for i := 0; i < 100 && alice.walking(); i++ {
+		before := alice.pos
+		pw.w.step()
+		if alice.pos == before {
+			continue
+		}
+		moved++
+		if alice.lastPoseTick != pw.w.tick {
+			t.Fatalf("step %d lastPoseTick=%d, want %d while approaching", i, alice.lastPoseTick, pw.w.tick)
+		}
+	}
+	if alice.walking() {
+		t.Fatalf("still walking after steps: remaining=%v pos=%v", alice.remaining, alice.pos)
+	}
+	if moved == 0 {
+		t.Fatal("approach never moved")
+	}
+}
+
 func TestClientCannotAuthorPositionViaMove(t *testing.T) {
 	pw := newProbeWorld(t)
 	alice := pw.join()
