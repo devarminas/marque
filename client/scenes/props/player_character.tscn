@@ -1,0 +1,20 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/player_character.gd" id="1_prop"]
+[ext_resource type="PackedScene" path="res://scenes/player_avatar.tscn" id="2_avatar"]
+[ext_resource type="Script" path="res://scripts/camera_rig.gd" id="3_camera_rig"]
+
+[node name="PlayerCharacter" type="Node3D"]
+script = ExtResource("1_prop")
+
+[node name="Player" parent="." instance=ExtResource("2_avatar")]
+
+[node name="CameraRig" type="Node3D" parent="." node_paths=PackedStringArray("target", "camera")]
+transform = Transform3D(0.8660254, -0.28678823, 0.40957603, 0, 0.81915206, 0.57357645, -0.5, -0.49673176, 0.7094065, 0, 0, 0)
+script = ExtResource("3_camera_rig")
+target = NodePath("../Player")
+camera = NodePath("Camera3D")
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 14)
+fov = 60.0

@@ -1,9 +1,8 @@
 [gd_scene format=3 uid="uid://bbk0w4hee5gof"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="Script" path="res://scripts/camera_rig.gd" id="3_camera_rig"]
 [ext_resource type="Script" path="res://scripts/ground_picker.gd" id="4_ground_picker"]
-[ext_resource type="PackedScene" path="res://scenes/player_avatar.tscn" id="5_avatar"]
+[ext_resource type="PackedScene" path="res://scenes/props/player_character.tscn" id="5_character"]
 [ext_resource type="Script" path="res://scripts/session.gd" id="6_session"]
 [ext_resource type="Script" path="res://scripts/net_client.gd" id="7_net_client"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="8_hud"]
@@ -15,7 +14,7 @@ script = ExtResource("1_main")
 
 [node name="WorldMap" parent="." unique_id=1477568974 instance=ExtResource("10_world_map")]
 
-[node name="Player" parent="." unique_id=269123760 instance=ExtResource("5_avatar")]
+[node name="PlayerCharacter" parent="." unique_id=269123760 instance=ExtResource("5_character")]
 
 [node name="RemotePlayers" type="Node3D" parent="." unique_id=973316163]
 
@@ -25,25 +24,15 @@ script = ExtResource("1_main")
 
 [node name="ResourceNodes" type="Node3D" parent="." unique_id=1065422964]
 
-[node name="CameraRig" type="Node3D" parent="." unique_id=1366651004 node_paths=PackedStringArray("target", "camera")]
-transform = Transform3D(0.8660254, -0.28678823, 0.40957603, 0, 0.81915206, 0.57357645, -0.5, -0.49673176, 0.7094065, 0, 0, 0)
-script = ExtResource("3_camera_rig")
-target = NodePath("../Player")
-camera = NodePath("Camera3D")
-
-[node name="Camera3D" type="Camera3D" parent="CameraRig" unique_id=1177895069]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 14)
-fov = 60.0
-
 [node name="GroundPicker" type="Node" parent="." unique_id=765795977 node_paths=PackedStringArray("camera")]
 script = ExtResource("4_ground_picker")
-camera = NodePath("../CameraRig/Camera3D")
+camera = NodePath("../PlayerCharacter/CameraRig/Camera3D")
 
 [node name="CursorHint" type="Node" parent="." unique_id=298958687 node_paths=PackedStringArray("picker", "camera", "local_player", "chrome_layer")]
 script = ExtResource("9_cursor_hint")
 picker = NodePath("../GroundPicker")
-camera = NodePath("../CameraRig/Camera3D")
-local_player = NodePath("../Player")
+camera = NodePath("../PlayerCharacter/CameraRig/Camera3D")
+local_player = NodePath("../PlayerCharacter/Player")
 chrome_layer = NodePath("../UI")
 
 [node name="Recheck" type="Timer" parent="CursorHint" unique_id=805402287]
@@ -54,7 +43,7 @@ autostart = true
 [node name="Session" type="Node" parent="." unique_id=1289844251 node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "dialog_panel", "give_panel", "quest_log_panel", "party_panel", "equipment_panel", "hp_hud", "class_hud", "class_debug", "error_hud", "death_overlay", "esc_menu", "hotbar", "cast_bar", "camera_rig")]
 script = ExtResource("6_session")
 net = NodePath("Net")
-local_player = NodePath("../Player")
+local_player = NodePath("../PlayerCharacter/Player")
 remote_players = NodePath("../RemotePlayers")
 ground_items = NodePath("../GroundItems")
 resource_nodes = NodePath("../ResourceNodes")
@@ -74,7 +63,7 @@ death_overlay = NodePath("../UI/DeathOverlay")
 esc_menu = NodePath("../UI/EscMenu")
 hotbar = NodePath("../UI/Hotbar")
 cast_bar = NodePath("../UI/CastBar")
-camera_rig = NodePath("../CameraRig")
+camera_rig = NodePath("../PlayerCharacter/CameraRig")
 
 [node name="Net" type="Node" parent="Session" unique_id=1040748530]
 script = ExtResource("7_net_client")

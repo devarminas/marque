@@ -95,12 +95,12 @@ func _ready() -> void:
 	_session = _root.get_node("Session") as SessionScript
 	_net = _root.get_node("Session/Net") as NetClientScript
 	_picker = _root.get_node("GroundPicker") as GroundPickerScript
-	_camera = _root.get_node("CameraRig/Camera3D") as Camera3D
+	_camera = _root.get_node("PlayerCharacter/CameraRig/Camera3D") as Camera3D
 	_cursor = _root.get_node_or_null("CursorHint") as CursorHintScript
 	_recheck = _root.get_node_or_null("CursorHint/Recheck") as Timer
 	_ui = _root.get_node("UI") as CanvasLayer
 
-	var rig := _root.get_node("CameraRig") as Node3D
+	var rig := _root.get_node("PlayerCharacter/CameraRig") as Node3D
 	if rig != null:
 		rig.set_process(false)
 
@@ -299,7 +299,7 @@ func _test_the_mapping_table() -> void:
 	_check_hint(CursorHintScript.Hint.ATTACK, "another player's avatar draws the sword")
 
 	await _aim_at(LOCAL_GROUND)
-	_check_subject(_root.get_node("Player") as Node3D, "the local avatar")
+	_check_subject(_root.get_node("PlayerCharacter/Player") as Node3D, "the local avatar")
 	_check_chrome(false, "your own avatar is world, not chrome")
 	_check_hint(CursorHintScript.Hint.POINTER, "the local avatar is never an attack target")
 

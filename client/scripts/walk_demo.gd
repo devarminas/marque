@@ -44,7 +44,7 @@ func _ready() -> void:
 	else:
 		print("screenshot: ", ProjectSettings.globalize_path(SHOT_PATH))
 
-	var camera: Camera3D = world.get_node("CameraRig/Camera3D")
+	var camera: Camera3D = world.get_node("PlayerCharacter/CameraRig/Camera3D")
 	_check_the_avatar_is_where_present_at_put_it(avatar)
 	_check_the_avatar_is_on_screen(image, camera, avatar)
 	_check_the_avatar_casts_a_shadow(image, camera, avatar)

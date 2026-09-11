@@ -55,7 +55,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	_rig = main.get_node("CameraRig") as CameraRigScript
+	_rig = main.get_node("PlayerCharacter/CameraRig") as CameraRigScript
 	_stub = main.get_node("Session/Net") as StubNet
 	_stub.ingest_text_frame(WELCOME)
 	await get_tree().process_frame

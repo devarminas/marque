@@ -7,10 +7,10 @@ const FOLLOW_FRAMES := 30
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 
-@onready var _player: Node3D = $World/Player
+@onready var _player: Node3D = $World/PlayerCharacter/Player
 @onready var _remote_players: Node3D = $World/RemotePlayers
-@onready var _rig: CameraRigScript = $World/CameraRig
-@onready var _camera: Camera3D = $World/CameraRig/Camera3D
+@onready var _rig: CameraRigScript = $World/PlayerCharacter/CameraRig
+@onready var _camera: Camera3D = $World/PlayerCharacter/CameraRig/Camera3D
 @onready var _picker: GroundPickerScript = $World/GroundPicker
 
 var _failures: Array[String] = []
@@ -60,7 +60,7 @@ func _test_scene_contract() -> void:
 	)
 	_check(_rig != null and _rig.camera == _camera, "CameraRig owns the Camera3D")
 	_check(_picker != null and _picker.camera == _camera, "GroundPicker uses the same camera")
-	var world_map := _player.get_parent().get_node_or_null("WorldMap") as Node3D
+	var world_map := $World/WorldMap as Node3D
 	_check(world_map != null, "main instances WorldMap as the play ground")
 	var ground_mesh := null if world_map == null else world_map.get_node_or_null("Ground/Mesh") as MeshInstance3D
 	_check(

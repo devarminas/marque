@@ -55,6 +55,7 @@ const SCENE_SUITES: Array = [
 	{"name": "interop", "scene": "res://tests/test_interop.tscn"},
 	{"name": "wiring", "scene": "res://tests/test_wiring.tscn"},
 	{"name": "world map", "scene": "res://tests/test_world_map.tscn"},
+	{"name": "player character prop", "scene": "res://tests/test_player_character_prop.tscn"},
 ]
 
 const Assertions := preload("res://tests/assertions.gd")
