@@ -124,11 +124,7 @@ func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, 
 	if distanceBetween(p.pos, targetPos) <= AttackRange {
 		return
 	}
-	points, assign := destinationPath(p, targetPos)
-	if !assign {
-		return
-	}
-	w.assignPath(p, points)
+	w.steerToward(p, targetPos)
 }
 
 func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
@@ -147,7 +143,6 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 	p.pos = Point{X: spawnX, Z: spawnZ}
 	p.y = 0
 	p.vy = 0
-	p.remaining = nil
 	p.clearSteer()
 	w.broadcastPose(p)
 	w.broadcastHP(p)
@@ -172,13 +167,10 @@ func (w *World) resolveAttack(p *player) {
 
 	dist := distanceBetween(p.pos, target.pos)
 	if dist > AttackRange {
-		points, assign := destinationPath(p, target.pos)
-		if assign {
-			w.assignPath(p, points)
-		}
+		w.steerToward(p, target.pos)
 		return
 	}
-	if p.walking() {
+	if p.steering() {
 		w.assignHalt(p)
 	}
 
@@ -210,13 +202,10 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 
 	dist := distanceBetween(p.pos, target.pos)
 	if dist > AttackRange {
-		points, assign := destinationPath(p, target.pos)
-		if assign {
-			w.assignPath(p, points)
-		}
+		w.steerToward(p, target.pos)
 		return
 	}
-	if p.walking() {
+	if p.steering() {
 		w.assignHalt(p)
 	}
 

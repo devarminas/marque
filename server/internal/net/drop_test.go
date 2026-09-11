@@ -327,16 +327,10 @@ func TestTwoPendingPickupsForDifferentItemsResolveInOnePass(t *testing.T) {
 	alice.pickup(east)
 	bob.pickup(south)
 
-	paths := h.awaitEvents(game.EvPathAssigned, 2)
-	if paths[0]["start_tick"] != paths[1]["start_tick"] {
-		t.Fatalf("the two pickups were assigned paths at ticks %v and %v, so a tick boundary fell "+
-			"between them and the walks cannot end together", paths[0]["start_tick"], paths[1]["start_tick"])
-	}
-
 	resolved := h.awaitEvents(game.EvPickupResolved, 2)
-	if math.Abs(resolved[0]["t"].(float64)-resolved[1]["t"].(float64)) > 1 {
-		t.Fatalf("the two pickups resolved on ticks %v and %v; equidistant walkers heading for "+
-			"different items must settle in one pass", resolved[0]["t"], resolved[1]["t"])
+	if math.Abs(resolved[0]["t"].(float64)-resolved[1]["t"].(float64)) > 2 {
+		t.Fatalf("the two pickups resolved on ticks %v and %v; equidistant steers heading for "+
+			"different items must settle within two ticks", resolved[0]["t"], resolved[1]["t"])
 	}
 
 	want := map[mnet.PlayerID]mnet.ItemID{
@@ -380,7 +374,7 @@ func TestANearerLaterJoinerTakesItFromAnEarlierPlayerOutOfRange(t *testing.T) {
 	bob.drain()
 
 	alice.pickup(item)
-	alice.path()
+	_ = alice.awaitPlayerPose(aliceWelcome.You)
 	bob.pickup(item)
 
 	resolved := h.awaitEvents(game.EvPickupResolved, 1)

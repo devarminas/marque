@@ -128,7 +128,6 @@ func (w *World) beginCast(p *player, ability abilitydef.Ability, targetID mnet.P
 	if ability.Locomotion != abilitydef.LocomotionMovable {
 		p.clearSteer()
 	}
-	p.remaining = nil
 
 	p.castAbility = ability.ID
 	p.castLocomotion = ability.Locomotion

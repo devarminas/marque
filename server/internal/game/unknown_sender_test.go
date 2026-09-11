@@ -96,7 +96,7 @@ func TestAFrameFromASuspendedPlayersOldConnectionIsDropped(t *testing.T) {
 	if got := dropped[0]["reason"]; got != string(mnet.ReasonUnknownSender) {
 		t.Fatalf("%s logged reason %v, want %q", EvFrameDropped, got, mnet.ReasonUnknownSender)
 	}
-	if w.order[0].walking() {
-		t.Fatal("the suspended body took a walk from its own dead socket")
+	if w.order[0].steering() {
+		t.Fatal("the suspended body took a steer from its own dead socket")
 	}
 }

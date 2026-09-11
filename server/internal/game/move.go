@@ -60,14 +60,12 @@ func (w *World) applyWish(p *player, msg mnet.Move) {
 	length := math.Hypot(msg.DX, msg.DZ)
 	if length < SteerEpsilon {
 		p.clearSteer()
-		p.remaining = nil
 		w.broadcastPose(p)
 		return
 	}
 
 	if p.casting() && p.castLocomotion == abilitydef.LocomotionRooted {
 		p.clearSteer()
-		p.remaining = nil
 		w.broadcastPose(p)
 		return
 	}
@@ -78,9 +76,22 @@ func (w *World) applyWish(p *player, msg mnet.Move) {
 	w.cancelGather(p)
 	w.cancelAttack(p, CauseMove)
 	w.interruptCastOnMove(p, CauseMove)
-	p.remaining = nil
 	p.steerDX = msg.DX / length
 	p.steerDZ = msg.DZ / length
+}
+
+// steerToward sets sticky wish toward dest for out-of-range interact approach.
+func (w *World) steerToward(p *player, dest Point) bool {
+	dx := dest.X - p.pos.X
+	dz := dest.Z - p.pos.Z
+	length := math.Hypot(dx, dz)
+	if length < SteerEpsilon {
+		p.clearSteer()
+		return false
+	}
+	p.steerDX = dx / length
+	p.steerDZ = dz / length
+	return true
 }
 
 func (w *World) stepSteer(p *player, distance float64) bool {
@@ -93,7 +104,6 @@ func (w *World) stepSteer(p *player, distance float64) bool {
 		return false
 	}
 	p.pos = to
-	p.remaining = nil
 	return true
 }
 

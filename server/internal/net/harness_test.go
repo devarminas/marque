@@ -965,6 +965,10 @@ func (c *client) expectSilence() {
 		if f.Tick != nil {
 			continue
 		}
+		if f.Pose != nil {
+			c.noteSelfPose(*f.Pose)
+			continue
+		}
 		c.t.Fatalf("client %s: expected no frame, got %s", c.name, f.raw)
 	}
 }

@@ -74,7 +74,7 @@ func TestAnEmptyWorldStillCarriesTheKeys(t *testing.T) {
 	}
 }
 
-func TestPickupWalksThenTakes(t *testing.T) {
+func TestPickupSteersThenTakes(t *testing.T) {
 	h := newHarness(t, acornAt(farItem, 0))
 
 	alice := h.dial("alice")
@@ -83,18 +83,15 @@ func TestPickupWalksThenTakes(t *testing.T) {
 
 	alice.pickup(item)
 
-	assigned := alice.path()
-	if assigned.ID != welcome.You {
-		t.Fatalf("path is for player %d, want alice (%d)", assigned.ID, welcome.You)
+	pose := alice.awaitPlayerPose(welcome.You)
+	if pose.ID != welcome.You {
+		t.Fatalf("approach pose is for player %d, want alice (%d)", pose.ID, welcome.You)
 	}
-	if len(assigned.Points) != 2 {
-		t.Fatalf("path has %d points, want a start and the item: %+v", len(assigned.Points), assigned.Points)
+	if pose.X == 0 && pose.Z == 0 {
+		t.Fatal("first approach pose left alice at spawn")
 	}
-	if assigned.Points[0] != mnet.Pt(0, 0) {
-		t.Fatalf("path starts at %v, want alice's position (0, 0)", assigned.Points[0])
-	}
-	if assigned.Points[1] != mnet.Pt(farItem, 0) {
-		t.Fatalf("path ends at %v, want the item at (%v, 0)", assigned.Points[1], farItem)
+	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
+		t.Fatalf("pickup approach logged %d path_assigned, want 0: %+v", len(assigned), assigned)
 	}
 
 	gone := alice.awaitItemDespawn(item)
@@ -153,7 +150,7 @@ func TestPickupOfTheItemUnderfootAssignsNoPath(t *testing.T) {
 	}
 }
 
-func TestPickupWithinRangeStillWalksToTheItem(t *testing.T) {
+func TestPickupWithinRangeTakesWithoutSteer(t *testing.T) {
 	const near = game.PickupRange / 2
 	h := newHarness(t, acornAt(near, 0))
 
@@ -163,16 +160,13 @@ func TestPickupWithinRangeStillWalksToTheItem(t *testing.T) {
 
 	alice.pickup(item)
 
-	assigned := alice.path()
-	if len(assigned.Points) != 2 {
-		t.Fatalf("path has %d points, want a start and the item: %+v", len(assigned.Points), assigned.Points)
-	}
-	if assigned.Points[0] != mnet.Pt(0, 0) || assigned.Points[1] != mnet.Pt(near, 0) {
-		t.Fatalf("path is %v, want (0, 0) to the item at (%v, 0)", assigned.Points, near)
-	}
 	if inv := alice.awaitInventory(); len(inv.Slots) != 1 {
 		t.Fatalf("inventory holds %+v, want the acorn", inv.Slots)
 	}
+	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
+		t.Fatalf("in-range pickup logged %d path_assigned, want 0: %+v", len(assigned), assigned)
+	}
+	alice.expectSilence()
 }
 
 func TestPickupOfAnItemThatIsNotThereIsAnsweredOnce(t *testing.T) {
@@ -217,7 +211,7 @@ func TestASecondPickupReplacesTheFirst(t *testing.T) {
 	far, near := welcome.Items[0].ID, welcome.Items[1].ID
 
 	alice.pickup(far)
-	alice.path()
+	_ = alice.awaitPlayerPose(welcome.You)
 
 	alice.pickup(near)
 	if inv := alice.awaitInventory(); len(inv.Slots) != 1 {
@@ -248,16 +242,8 @@ func TestAPickupWhileWalkingAwayFromANearItemStillTakesIt(t *testing.T) {
 
 	alice.pickup(item)
 
-	back := alice.path()
-	if len(back.Points) != 2 {
-		t.Fatalf("the pickup assigned %+v, want a two-point walk back to the item", back.Points)
-	}
-	if back.Points[1] != mnet.Pt(near, 0) {
-		t.Fatalf("the walk ends at %v, want the item at (%v, 0)", back.Points[1], near)
-	}
-	if d := math.Hypot(back.Points[0].X()-near, back.Points[0].Z()); d > game.PickupRange {
-		t.Fatalf("she was %v from the item when she asked, want inside PickupRange (%v): a tick fell "+
-			"between the two intents, so this run proved nothing about the near case", d, game.PickupRange)
+	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
+		t.Fatalf("pickup approach logged %d path_assigned, want 0: %+v", len(assigned), assigned)
 	}
 
 	if inv := alice.awaitInventory(); len(inv.Slots) != 1 || inv.Slots[0].Kind != game.KindAcorn {
@@ -274,7 +260,7 @@ func TestMoveCancelsAPendingPickup(t *testing.T) {
 	item := welcome.Items[0].ID
 
 	alice.pickup(item)
-	alice.path()
+	_ = alice.awaitPlayerPose(welcome.You)
 
 	alice.move(1, 0)
 	alice.awaitPose()
@@ -302,7 +288,7 @@ func TestTwoClientsRacingForOneItemLeaveExactlyOneHolder(t *testing.T) {
 
 	alice.pickup(item)
 	bob.pickup(item)
-	h.awaitEvents(game.EvPathAssigned, 2)
+	h.awaitEvents(game.EvPickupResolved, 1)
 
 	resolved := h.awaitEvents(game.EvPickupResolved, 1)
 	if got := resolved[0]["player"]; got != float64(aliceWelcome.You) {
@@ -387,13 +373,6 @@ func TestBothRacersArriveOnTheSameTick(t *testing.T) {
 
 	alice.pickup(item)
 	bob.pickup(item)
-
-	paths := h.awaitEvents(game.EvPathAssigned, 2)
-	aliceStart, bobStart := paths[0]["start_tick"], paths[1]["start_tick"]
-	if aliceStart != bobStart {
-		t.Fatalf("the two pickups were assigned paths at ticks %v and %v, so a tick boundary fell between "+
-			"them and the walks cannot end together; the race is a sequence", aliceStart, bobStart)
-	}
 
 	won := h.awaitEvents(game.EvPickupResolved, 1)
 	lost := h.awaitEvents(game.EvPickupLost, 1)
@@ -558,7 +537,7 @@ func TestPickupSurvivesTheClientLeavingMidWalk(t *testing.T) {
 	alice := h.dial("alice")
 	item := alice.welcome().Items[0].ID
 	alice.pickup(item)
-	alice.path()
+	_ = alice.awaitPlayerPose(alice.id)
 	alice.close()
 	h.awaitEvents(game.EvDisconnected, 1)
 

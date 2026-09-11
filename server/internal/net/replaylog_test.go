@@ -5,12 +5,11 @@ import (
 	"time"
 
 	"github.com/devarminas/marque/server/internal/game"
-	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
 const approachDest = 10.0
 
-func TestJoinReplayLogsTheReAnchoredPath(t *testing.T) {
+func TestJoinDuringApproachSendsNoPlayerPathReplay(t *testing.T) {
 	h := newHarness(t, acornAt(approachDest, 0))
 
 	alice := h.dial("alice")
@@ -18,109 +17,56 @@ func TestJoinReplayLogsTheReAnchoredPath(t *testing.T) {
 	aliceID := aw.You
 
 	alice.pickup(aw.Items[0].ID)
-	assigned := h.awaitEvents(game.EvPathAssigned, 1)[0]
-	alice.path()
+	pose := alice.awaitPlayerPose(aliceID)
+	if pose.ID != aliceID {
+		t.Fatalf("approach pose id=%d, want alice %d", pose.ID, aliceID)
+	}
+	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
+		t.Fatalf("player approach logged %d path_assigned, want 0: %+v", len(assigned), assigned)
+	}
 
 	time.Sleep(4 * game.TickDuration)
 
 	bob := h.dial("bob")
-	bobWelcome := bob.welcomeFrame()
-	inFlight := bob.path()
-
-	replays := h.awaitEvents(game.EvPathReplayed, 1)
-	if len(replays) != 1 {
-		t.Fatalf("logged %d %s events for one joiner and one walker, want 1: %+v",
-			len(replays), game.EvPathReplayed, replays)
-	}
-	replay := replays[0]
-
-	if got := logNumber(t, replay, "player"); got != float64(aliceID) {
-		t.Errorf("%s names player %v, want the walker alice (%d)", game.EvPathReplayed, got, aliceID)
-	}
-	if got := logNumber(t, replay, "to"); got != float64(bobWelcome.You) {
-		t.Errorf("%s was sent to %v, want the joiner bob (%d)", game.EvPathReplayed, got, bobWelcome.You)
-	}
-	if got := logNumber(t, replay, "speed"); got != game.WalkSpeed {
-		t.Errorf("%s logs speed %v, want %v", game.EvPathReplayed, got, game.WalkSpeed)
+	bobWelcome := bob.welcome()
+	bobPos := positionOf(t, bobWelcome, aliceID)
+	if bobPos.X == 0 && bobPos.Z == 0 {
+		t.Fatal("late joiner welcome still has alice at spawn; want mid-approach pose")
 	}
 
-	if got := logNumber(t, replay, "t"); got != float64(bobWelcome.Tick) {
-		t.Errorf("%s logged at tick %v, want the tick bob was welcomed at (%d)",
-			game.EvPathReplayed, got, bobWelcome.Tick)
-	}
-
-	assignedStart := logNumber(t, assigned, "start_tick")
-	replayStart := logNumber(t, replay, "start_tick")
-	if replayStart != float64(inFlight.StartTick) {
-		t.Errorf("%s logs start_tick %v, want the %d bob was sent",
-			game.EvPathReplayed, replayStart, inFlight.StartTick)
-	}
-	if replayStart <= assignedStart {
-		t.Errorf("%s logs start_tick %v, not after the assignment's %v; that is a verbatim resend, not a re-anchor",
-			game.EvPathReplayed, replayStart, assignedStart)
-	}
-
-	assignedPoints := logPoints(t, assigned, "points")
-	replayPoints := logPoints(t, replay, "points")
-	if len(replayPoints) == 0 {
-		t.Fatalf("%s logs an empty polyline", game.EvPathReplayed)
-	}
-	if replayPoints[0] != inFlight.Points[0] {
-		t.Errorf("%s logs points[0] = %v, want the %v bob was sent",
-			game.EvPathReplayed, replayPoints[0], inFlight.Points[0])
-	}
-	if replayPoints[0] == assignedPoints[0] {
-		t.Errorf("%s logs points[0] = %v, the origin of the original walk; want alice's position at the join",
-			game.EvPathReplayed, replayPoints[0])
-	}
-	if last := replayPoints[len(replayPoints)-1]; last != mnet.Pt(approachDest, 0) {
-		t.Errorf("%s ends at %v, want alice's original destination [%v 0]",
-			game.EvPathReplayed, last, approachDest)
+	if replays := h.eventsNamed(game.EvPathReplayed); len(replays) != 0 {
+		t.Fatalf("logged %d path_replayed for player approach, want 0: %+v", len(replays), replays)
 	}
 }
 
-func TestJoinReplayLogsOncePerWalker(t *testing.T) {
+func TestJoinDuringTwoApproachesSendsNoPlayerPathReplay(t *testing.T) {
 	h := newHarness(t, acornAt(approachDest, 0), acornAt(0, approachDest))
 
 	alice := h.dial("alice")
 	aw := alice.welcome()
-	aliceID := aw.You
 	bob := h.dial("bob")
 	bw := bob.welcome()
-	bobID := bw.You
 	alice.spawn()
 
 	alice.pickup(aw.Items[0].ID)
 	bob.pickup(bw.Items[1].ID)
-	h.awaitEvents(game.EvPathAssigned, 2)
-	_ = alice.path()
-	_ = bob.path()
+	_ = alice.awaitPlayerPose(aw.You)
+	_ = bob.awaitPlayerPose(bw.You)
 
 	carol := h.dial("carol")
-	carolWelcome := carol.welcomeFrame()
-
-	replays := h.awaitEvents(game.EvPathReplayed, 2)
-	if len(replays) != 2 {
-		t.Fatalf("logged %d %s events for two walkers, want 2: %+v",
-			len(replays), game.EvPathReplayed, replays)
+	carolWelcome := carol.welcome()
+	if positionOf(t, carolWelcome, aw.You).X == 0 && positionOf(t, carolWelcome, aw.You).Z == 0 {
+		t.Fatal("carol welcome left alice at spawn during approach")
+	}
+	if positionOf(t, carolWelcome, bw.You).X == 0 && positionOf(t, carolWelcome, bw.You).Z == 0 {
+		t.Fatal("carol welcome left bob at spawn during approach")
 	}
 
-	walkers := make(map[float64]bool, 2)
-	for i, replay := range replays {
-		if got := logNumber(t, replay, "to"); got != float64(carolWelcome.You) {
-			t.Errorf("%s[%d] was sent to %v, want the joiner carol (%d)",
-				game.EvPathReplayed, i, got, carolWelcome.You)
-		}
-		if got := logNumber(t, replay, "t"); got != float64(carolWelcome.Tick) {
-			t.Errorf("%s[%d] logged at tick %v, want carol's join tick %d; the replays are one atomic step",
-				game.EvPathReplayed, i, got, carolWelcome.Tick)
-		}
-		walkers[logNumber(t, replay, "player")] = true
+	if replays := h.eventsNamed(game.EvPathReplayed); len(replays) != 0 {
+		t.Fatalf("logged %d path_replayed, want 0: %+v", len(replays), replays)
 	}
-
-	if !walkers[float64(aliceID)] || !walkers[float64(bobID)] {
-		t.Fatalf("%s events name players %v, want one each for alice (%d) and bob (%d)",
-			game.EvPathReplayed, walkers, aliceID, bobID)
+	if assigned := h.eventsNamed(game.EvPathAssigned); len(assigned) != 0 {
+		t.Fatalf("logged %d player path_assigned, want 0: %+v", len(assigned), assigned)
 	}
 }
 
@@ -149,32 +95,4 @@ func TestHaltedPlayerLogsNoReplay(t *testing.T) {
 		t.Fatalf("logged %d %s events for a join with nobody mid-walk, want none: %+v",
 			len(replays), game.EvPathReplayed, replays)
 	}
-}
-
-func logPoints(t *testing.T, obj map[string]any, key string) []mnet.Point {
-	t.Helper()
-
-	v, ok := obj[key]
-	if !ok {
-		t.Fatalf("log line has no %q field: %+v", key, obj)
-	}
-	raw, ok := v.([]any)
-	if !ok {
-		t.Fatalf("log field %q is %T (%v), want an array of points", key, v, v)
-	}
-
-	points := make([]mnet.Point, len(raw))
-	for i, element := range raw {
-		pair, ok := element.([]any)
-		if !ok || len(pair) != 2 {
-			t.Fatalf("log field %q[%d] is %v, want a two-element [x, z]", key, i, element)
-		}
-		x, xok := pair[0].(float64)
-		z, zok := pair[1].(float64)
-		if !xok || !zok {
-			t.Fatalf("log field %q[%d] is %v, want two numbers", key, i, element)
-		}
-		points[i] = mnet.Pt(x, z)
-	}
-	return points
 }

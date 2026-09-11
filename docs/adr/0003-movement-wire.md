@@ -10,7 +10,7 @@ Accepted (M13c / ARM-235). Settles the JSON names sketched in `docs/adr/0001-mov
 2. **Illegal samples.** Before applying a `move` body, refuse if any pose-fact key is present: `x`, `z`, `y`, `pos`, `position`, `pose`, `path`, `velocity`, `vx`, `vz`, `vy`. Non-finite `dx`/`dz` refuse the same way. RejectReason `illegal_sample`; `Error.Re` is `move`; connection kept; body not applied.
 3. **`move_to`.** Player `move_to` is refused at decode with `illegal_sample`. It never becomes a game intent. Connection kept.
 4. **Downlink.** Server→client player locomotion is `pose` `{id,tick,x,y,z}`. `y` is always present (always `0` until jump). Broadcast on integrate and halt. `welcome` / `spawn` / `PlayerState` carry the same `x,y,z`. Idle reanchor at least every `PoseIdleEveryTicks = 25` is required by ADR 0001 and lands with the client apply PR (silence-based net harness cannot absorb continuous idle poses yet).
-5. **Player `path`.** Not used for WASD/halt. Approach AI and NPCs may still use `path` until later units retire player approach polylines.
+5. **Player `path`.** Retired for player locomotion and approach (ARM-239 / M13g). Gather, talk, attack, and pickup out of range use sticky steer + `pose`; in range is a range check. NPC `path` / polyline walking may remain.
 
 ## Consequences
 
