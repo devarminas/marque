@@ -111,7 +111,7 @@ func move(from_x: float, from_z: float, to_x: float, to_z: float) -> Vector2:
 		return Vector2(from_x, from_z)
 	var dx := to_x - from_x
 	var dz := to_z - from_z
-	var dist := hypot(dx, dz)
+	var dist := sqrt(dx * dx + dz * dz)
 	if dist < 1e-12:
 		return Vector2(from_x, from_z)
 	var steps := int(dist * 8.0)
