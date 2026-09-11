@@ -2,6 +2,7 @@ package navmesh
 
 import (
 	"math"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -139,5 +140,22 @@ func TestMoveBothOffMeshStays(t *testing.T) {
 	x, z := m.Move(1000, 1000, 1100, 1100)
 	if x != 1000 || z != 1000 {
 		t.Fatalf("got (%v,%v), want from", x, z)
+	}
+}
+
+func TestResolvePathFindsSharedJSON(t *testing.T) {
+	path, err := ResolvePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("resolved path missing: %v", err)
+	}
+	m, err := LoadJSON(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Polys) == 0 {
+		t.Fatal("resolved arena nav empty")
 	}
 }
