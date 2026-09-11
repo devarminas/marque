@@ -2,6 +2,14 @@
 
 World scale: Godot 1 unit ≈ 1 meter; player height is about 1.7u. This file holds the per-asset numbers behind that.
 
+## maps/
+
+`maps/arena_ring_of_trials.glb` is a Blender arena for combat and NavigationMesh experiments (Ring of Trials). Authored scene: `scenes/arena_ring_of_trials.tscn`. Baked client navmesh: `scenes/arena_ring_of_trials_navmesh.tres` via `tools/bake_arena_navmesh.gd`. This bake is **client-only**. It is not server movement authority. Rebake after mesh edits:
+
+```bash
+godot --headless --path client --script res://tools/bake_arena_navmesh.gd
+```
+
 ## Authored heights
 
 Heights are the Y extent of the mesh as the vendor shipped it, in Godot units, before any root scale. glTF and GLB heights come from the `POSITION` accessor min and max with node transforms applied. OBJ heights come from the raw `v` lines.
