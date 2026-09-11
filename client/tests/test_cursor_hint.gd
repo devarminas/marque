@@ -47,9 +47,11 @@ const REMOTE_PLAYER_ID := 7
 const NODE_ID := 5
 const HOSTILE_ID := 1000001
 const FRIENDLY_ID := 1000002
+const QUEST_GIVER_ID := 1000003
 
 const HOSTILE_GROUND := Vector2(10.0, 0.0)
 const FRIENDLY_GROUND := Vector2(-10.0, 0.0)
+const QUEST_GIVER_GROUND := Vector2(0.0, 14.0)
 const REMOTE_GROUND := Vector2(0.0, 10.0)
 const NODE_GROUND := Vector2(0.0, -10.0)
 const LOCAL_GROUND := Vector2(0.0, 0.0)
@@ -195,6 +197,7 @@ func _test_the_hotspots_are_the_decided_pixels() -> void:
 	_check_hotspot(CursorHintScript.Hint.POINTER, Vector2(10, 8), "the arrow apex")
 	_check_hotspot(CursorHintScript.Hint.ATTACK, Vector2(4, 4), "the blade tip")
 	_check_hotspot(CursorHintScript.Hint.CHOP, Vector2(13, 3), "the top of the axe blade")
+	_check_hotspot(CursorHintScript.Hint.TALK, Vector2(3, 4), "the pointing fingertip")
 
 
 func _check_hotspot(hint: int, expected: Vector2, what: String) -> void:
@@ -239,6 +242,7 @@ func _build_the_world() -> void:
 	await get_tree().physics_frame
 	_check(_hostile() != null, "the world holds a hostile dummy")
 	_check(_friendly() != null, "and a friendly dummy")
+	_check(_quest_giver() != null, "and a quest giver")
 	_check(_session.avatar_for(REMOTE_PLAYER_ID) != null, "and a remote player avatar")
 	_check(_session.node_for(NODE_ID) != null, "and a tree")
 
@@ -293,6 +297,10 @@ func _test_the_mapping_table() -> void:
 	_check_subject(_friendly(), "the friendly dummy")
 	_check_chrome(false, "the friendly dummy is world, not chrome")
 	_check_hint(CursorHintScript.Hint.POINTER, "a friendly dummy keeps the pointer")
+
+	await _aim_at(QUEST_GIVER_GROUND)
+	_check_subject(_quest_giver(), "the quest giver")
+	_check_hint(CursorHintScript.Hint.TALK, "a quest giver draws the talk gauntlet")
 
 	await _aim_at(REMOTE_GROUND)
 	_check_subject(_session.avatar_for(REMOTE_PLAYER_ID), "the remote avatar")
@@ -527,6 +535,10 @@ func _friendly() -> NpcDummyScript:
 	return _npc(FRIENDLY_ID)
 
 
+func _quest_giver() -> NpcDummyScript:
+	return _npc(QUEST_GIVER_ID)
+
+
 func _npc(id: int) -> NpcDummyScript:
 	return _session.npcs.get_node_or_null("Npc%d" % id) as NpcDummyScript
 
@@ -587,7 +599,8 @@ static func _welcome_with_npcs() -> String:
 			+ '{"id":%d,"x":%f,"z":%f},{"id":%d,"x":%f,"z":%f}],'
 			+ '"items":[],"nodes":[],"npcs":['
 			+ '{"id":%d,"kind":"dummy","faction":"hostile","x":%f,"z":%f,"hp":100,"max_hp":100},'
-			+ '{"id":%d,"kind":"dummy","faction":"friendly","x":%f,"z":%f,"hp":100,"max_hp":100}'
+			+ '{"id":%d,"kind":"dummy","faction":"friendly","x":%f,"z":%f,"hp":100,"max_hp":100},'
+			+ '{"id":%d,"kind":"quest_giver","faction":"neutral","x":%f,"z":%f,"hp":100,"max_hp":100}'
 			+ "]}}"
 		)
 		% [
@@ -604,6 +617,9 @@ static func _welcome_with_npcs() -> String:
 			FRIENDLY_ID,
 			FRIENDLY_GROUND.x,
 			FRIENDLY_GROUND.y,
+			QUEST_GIVER_ID,
+			QUEST_GIVER_GROUND.x,
+			QUEST_GIVER_GROUND.y,
 		]
 	)
 

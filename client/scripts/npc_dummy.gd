@@ -89,6 +89,10 @@ func configure(id: int, npc_kind: String, npc_faction: String) -> void:
 		_configure_meter_label()
 
 
+func is_talkable() -> bool:
+	return kind == KindQuestGiver or kind == KindImpQuestGiver
+
+
 func configure_motion(tick_ms: int) -> void:
 	if tick_ms <= 0:
 		push_error("NpcDummy.configure_motion: tick_ms must be > 0, got %d" % tick_ms)

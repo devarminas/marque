@@ -8,6 +8,7 @@ enum Hint {
 	POINTER,
 	ATTACK,
 	CHOP,
+	TALK,
 }
 
 const SHAPES := {
@@ -22,6 +23,10 @@ const SHAPES := {
 	Hint.CHOP: {
 		"image": preload("res://assets/kenney_cursors/tool_axe.png"),
 		"hotspot": Vector2(13, 3),
+	},
+	Hint.TALK: {
+		"image": preload("res://assets/kenney_cursors/gauntlet_point.png"),
+		"hotspot": Vector2(3, 4),
 	},
 }
 
@@ -106,6 +111,8 @@ static func hint_for(picked: Dictionary, own_avatar: Node3D) -> Hint:
 		GroundPickerScript.Target.PLAYER:
 			var dummy := picked["player"] as NpcDummyScript
 			if dummy != null:
+				if dummy.is_talkable():
+					return Hint.TALK
 				if dummy.faction == NpcDummyScript.FactionHostile:
 					return Hint.ATTACK
 				return Hint.POINTER
