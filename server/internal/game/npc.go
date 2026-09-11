@@ -127,7 +127,7 @@ func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp st
 	if maxHP < 1 {
 		return fmt.Errorf("seed npc: maxHP %d must be >= 1", maxHP)
 	}
-	if reason, detail := checkCoordinates(x, z); reason != "" {
+	if reason, detail := w.checkCoordinates(x, z); reason != "" {
 		return fmt.Errorf("seed npc %q at (%v, %v): %s", kind, x, z, detail)
 	}
 	w.nextNpcID++

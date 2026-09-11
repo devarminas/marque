@@ -182,7 +182,7 @@ func TestJumpStartsVerticalMotion(t *testing.T) {
 	if alice.vy != JumpSpeed {
 		t.Fatalf("vy=%v, want JumpSpeed %v", alice.vy, JumpSpeed)
 	}
-	if alice.grounded() {
+	if pw.w.grounded(alice) {
 		t.Fatal("jump left player grounded")
 	}
 	pw.w.step()
@@ -227,7 +227,7 @@ func TestJumpLandsOnGround(t *testing.T) {
 	landed := false
 	for range 200 {
 		pw.w.step()
-		if alice.grounded() {
+		if pw.w.grounded(alice) {
 			landed = true
 			break
 		}
@@ -245,7 +245,7 @@ func TestMidAirJumpRefused(t *testing.T) {
 	alice := pw.join()
 	pw.w.move(alice, mnet.Move{DX: 1, DZ: 0, Jump: true}, 0)
 	pw.w.step()
-	if alice.grounded() {
+	if pw.w.grounded(alice) {
 		t.Fatal("expected airborne before second jump")
 	}
 	beforeVY := alice.vy

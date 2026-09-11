@@ -1,6 +1,10 @@
 package game
 
-import "testing"
+import (
+	"testing"
+
+	mnet "github.com/devarminas/marque/server/internal/net"
+)
 
 func TestStarterTownTreesAreDistinctAndOnRoad(t *testing.T) {
 	if len(StarterTownTrees) < 2 {
@@ -12,7 +16,7 @@ func TestStarterTownTreesAreDistinctAndOnRoad(t *testing.T) {
 			t.Fatalf("duplicate starter tree at %+v", p)
 		}
 		seen[p] = struct{}{}
-		if reason, detail := checkCoordinates(p.X, p.Z); reason != "" {
+		if reason, detail := villageCheckCoordinates(p.X, p.Z); reason != "" {
 			t.Fatalf("starter tree %+v: %s (%s)", p, reason, detail)
 		}
 	}
@@ -34,7 +38,7 @@ func TestStarterTownRocksAreOnRoad(t *testing.T) {
 			t.Fatalf("starter rock overlaps a tree at %+v", p)
 		}
 		seen[p] = struct{}{}
-		if reason, detail := checkCoordinates(p.X, p.Z); reason != "" {
+		if reason, detail := villageCheckCoordinates(p.X, p.Z); reason != "" {
 			t.Fatalf("starter rock %+v: %s (%s)", p, reason, detail)
 		}
 	}
@@ -59,11 +63,16 @@ func TestStarterTownSmeltersAreOnRoad(t *testing.T) {
 			t.Fatalf("starter smelter overlaps a node at %+v", p)
 		}
 		seen[p] = struct{}{}
-		if reason, detail := checkCoordinates(p.X, p.Z); reason != "" {
+		if reason, detail := villageCheckCoordinates(p.X, p.Z); reason != "" {
 			t.Fatalf("starter smelter %+v: %s (%s)", p, reason, detail)
 		}
 	}
 	if _, ok := seen[Point{X: SeedSmelterX, Z: SeedSmelterZ}]; !ok {
 		t.Fatalf("StarterTownSmelters missing primary smelter (%v,%v)", SeedSmelterX, SeedSmelterZ)
 	}
+}
+
+func villageCheckCoordinates(x, z float64) (mnet.RejectReason, string) {
+	w := &World{mapCfg: VillageMap}
+	return w.checkCoordinates(x, z)
 }

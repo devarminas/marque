@@ -234,7 +234,7 @@ func TestRespawnRestoresAtJoinSpawn(t *testing.T) {
 	if alice.dead() || alice.hp != MaxHP {
 		t.Fatalf("after respawn hp=%d", alice.hp)
 	}
-	if alice.pos.X != spawnX || alice.pos.Z != spawnZ {
+	if alice.pos.X != VillageMap.SpawnX || alice.pos.Z != VillageMap.SpawnZ {
 		t.Fatalf("pos=%v, want join spawn", alice.pos)
 	}
 	if alice.steering() {

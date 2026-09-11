@@ -114,6 +114,7 @@ type Welcome struct {
 	TickMS         int           `json:"tick_ms"`
 	Tick           int64         `json:"tick"`
 	HeartbeatTicks int           `json:"heartbeat_ticks,omitempty"`
+	Map            string        `json:"map"`
 	Players        []PlayerState `json:"players"`
 	Items          []ItemState   `json:"items"`
 	Nodes          []NodeState   `json:"nodes"`

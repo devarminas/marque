@@ -28,19 +28,12 @@ const WalkSpeed = 3.0
 const JumpSpeed = 5.0
 const Gravity = 20.0
 
-const WorldHalfExtent = 128.0
-
 const MinPathLength = 1e-3
 
 // Tuning: ARM-58.
 const ResumeGraceTicks = int64(60 * time.Second / TickDuration)
 
 const HeartbeatEveryTicks = 10
-
-const (
-	spawnX = 0.0
-	spawnZ = 0.0
-)
 
 const (
 	EvServerStarted   = "server_started"
@@ -256,6 +249,8 @@ type World struct {
 	bySession map[string]*player
 
 	order []*player
+
+	mapCfg MapConfig
 }
 
 func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace int64, joinKit []string) *World {
@@ -280,7 +275,27 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		parties:     make(map[mnet.PartyID]*party),
 		byConn:      make(map[*mnet.Conn]*player),
 		bySession:   make(map[string]*player),
+		mapCfg:      VillageMap,
 	}
+}
+
+func (w *World) HalfExtent() float64 {
+	if w.mapCfg.HalfExtent > 0 {
+		return w.mapCfg.HalfExtent
+	}
+	return WorldHalfExtent
+}
+
+func (w *World) MapID() string { return w.mapCfg.ID }
+
+func (w *World) SetMap(cfg MapConfig) {
+	if cfg.ID == "" {
+		panic("game: SetMap with empty map id")
+	}
+	if cfg.HalfExtent <= 0 {
+		panic(fmt.Sprintf("game: SetMap %q half extent %v; must be > 0", cfg.ID, cfg.HalfExtent))
+	}
+	w.mapCfg = cfg
 }
 
 func (w *World) SetAbilities(c *abilitydef.Catalog) {
@@ -455,7 +470,8 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		id:                w.nextID,
 		session:           newSessionToken(),
 		conn:              conn,
-		pos:               Point{X: spawnX, Z: spawnZ},
+		pos:               Point{X: w.mapCfg.SpawnX, Z: w.mapCfg.SpawnZ},
+		y:                 w.mapCfg.SpawnY,
 		hp:                MaxHP,
 		mana:              MaxMana,
 		lastPoseTick:      w.tick,
@@ -490,6 +506,7 @@ func (w *World) sendJoinStep(p *player) {
 		TickMS:         int(TickDuration.Milliseconds()),
 		Tick:           w.tick,
 		HeartbeatTicks: HeartbeatEveryTicks,
+		Map:            w.MapID(),
 		Players:        states,
 		Items:          w.groundItemStates(),
 		Nodes:          w.nodeStates(),
@@ -771,12 +788,13 @@ func pathLogFields(msg mnet.Path) gamelog.Fields {
 	}
 }
 
-func checkCoordinates(x, z float64) (mnet.RejectReason, string) {
+func (w *World) checkCoordinates(x, z float64) (mnet.RejectReason, string) {
 	if !finite(x) || !finite(z) {
 		return mnet.ReasonNonFinite, "coordinates must be finite"
 	}
-	if math.Abs(x) > WorldHalfExtent || math.Abs(z) > WorldHalfExtent {
-		return mnet.ReasonOutOfBounds, fmt.Sprintf("out of bounds: x and z must be within +/-%v", WorldHalfExtent)
+	he := w.HalfExtent()
+	if math.Abs(x) > he || math.Abs(z) > he {
+		return mnet.ReasonOutOfBounds, fmt.Sprintf("out of bounds: x and z must be within +/-%v", he)
 	}
 	return "", ""
 }

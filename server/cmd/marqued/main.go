@@ -91,6 +91,7 @@ func main() {
 func run() error {
 	addr := flag.String("addr", "127.0.0.1:8080", "host:port to listen on")
 	enableLog := flag.Bool("gamelog", true, "write the NDJSON event log to stdout")
+	mapID := flag.String("map", game.MapVillage, "active map id (village or arena_ring_of_trials); must match client play-path selection")
 	abilitiesPath := flag.String("abilities", "", "path to shared/abilities.json (default: search from cwd, or MARQUE_ABILITIES)")
 	questsPath := flag.String("quests", "", "path to shared/quests.json (default: search from cwd, or MARQUE_QUESTS)")
 	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
@@ -100,6 +101,11 @@ func run() error {
 	joinKit := append(kindList(nil), game.DefaultJoinKit...)
 	flag.Var(&joinKit, "join-kit", "seed this kind into the bag of every joining player (demo harness).\nRepeat the flag for more kinds. Omit it entirely to keep the shipped DefaultJoinKit.")
 	flag.Parse()
+
+	mapCfg, err := game.LookupMap(strings.TrimSpace(*mapID))
+	if err != nil {
+		return err
+	}
 
 	path := strings.TrimSpace(*abilitiesPath)
 	if path == "" {
@@ -139,6 +145,7 @@ func run() error {
 	log := gamelog.New(os.Stdout, *enableLog)
 	hub := mnet.NewHub()
 	world := game.NewWorld(hub, log, game.NewMemoryStore(wearables), game.ResumeGraceTicks, joinKit)
+	world.SetMap(mapCfg)
 	world.SetAbilities(abilities)
 	world.SetClasses(classes)
 	world.SetQuests(quests)
@@ -169,7 +176,8 @@ func run() error {
 		"path":              wsPath,
 		"tick_ms":           int(game.TickDuration.Milliseconds()),
 		"walk_speed":        game.WalkSpeed,
-		"world_half_extent": game.WorldHalfExtent,
+		"map":               world.MapID(),
+		"world_half_extent": world.HalfExtent(),
 		"inventory_size":    game.InventorySize,
 		"resume_grace":      game.ResumeGraceTicks,
 		"seeded_items":      len(groundSeeds),

@@ -140,8 +140,8 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 
 	p.hp = MaxHP
 	p.mana = MaxMana
-	p.pos = Point{X: spawnX, Z: spawnZ}
-	p.y = 0
+	p.pos = Point{X: w.mapCfg.SpawnX, Z: w.mapCfg.SpawnZ}
+	p.y = w.mapCfg.SpawnY
 	p.vy = 0
 	p.clearSteer()
 	w.broadcastPose(p)

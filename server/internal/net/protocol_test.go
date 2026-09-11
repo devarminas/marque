@@ -23,6 +23,7 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				LastSeq: 7,
 				TickMS:  40,
 				Tick:    142,
+				Map:     "village",
 				Players: []mnet.PlayerState{
 					{ID: 1, X: 0, Y: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100},
 					{ID: 2, X: 5, Y: 0, Z: 5, HP: 70, MaxHP: 100, Mana: 40, MaxMana: 100},
@@ -31,7 +32,7 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				Nodes: []mnet.NodeState{},
 				Npcs:  []mnet.NpcState{},
 			},
-			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":40,"tick":142,"players":[{"id":1,"x":0,"y":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},{"id":2,"x":5,"y":0,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[],"npcs":[]}}`,
+			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":40,"tick":142,"map":"village","players":[{"id":1,"x":0,"y":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},{"id":2,"x":5,"y":0,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[],"npcs":[]}}`,
 		},
 		{
 			name: "welcome with an empty world",
@@ -40,12 +41,13 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				Session: "0123456789abcdef0123456789abcdef",
 				TickMS:  40,
 				Tick:    0,
+				Map:     "village",
 				Players: []mnet.PlayerState{},
 				Items:   []mnet.ItemState{},
 				Nodes:   []mnet.NodeState{},
 				Npcs:    []mnet.NpcState{},
 			},
-			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":40,"tick":0,"players":[],"items":[],"nodes":[],"npcs":[]}}`,
+			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":40,"tick":0,"map":"village","players":[],"items":[],"nodes":[],"npcs":[]}}`,
 		},
 		{
 			name: "node_state",
@@ -207,12 +209,13 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				TickMS:         40,
 				Tick:           0,
 				HeartbeatTicks: 10,
+				Map:            "village",
 				Players:        []mnet.PlayerState{},
 				Items:          []mnet.ItemState{},
 				Nodes:          []mnet.NodeState{},
 				Npcs:           []mnet.NpcState{},
 			},
-			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":40,"tick":0,"heartbeat_ticks":10,"players":[],"items":[],"nodes":[],"npcs":[]}}`,
+			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":40,"tick":0,"heartbeat_ticks":10,"map":"village","players":[],"items":[],"nodes":[],"npcs":[]}}`,
 		},
 	}
 
