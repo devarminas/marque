@@ -1,11 +1,5 @@
 extends SceneTree
 
-## Headless bake for the Ring of Trials arena NavigationMesh.
-## godot --headless --path client --script res://tools/bake_arena_navmesh.gd
-##
-## Writes only `arena_ring_of_trials_navmesh.tres`. The authored scene
-## `scenes/arena_ring_of_trials.tscn` instances the GLB and points at that tres.
-
 const GLB_PATH := "res://assets/maps/arena_ring_of_trials.glb"
 const SCENE_PATH := "res://scenes/arena_ring_of_trials.tscn"
 const NAVMESH_PATH := "res://scenes/arena_ring_of_trials_navmesh.tres"
