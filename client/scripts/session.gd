@@ -34,6 +34,7 @@ const CastHitFx := preload("res://scripts/cast_hit_fx.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 const LocalMover := preload("res://scripts/local_mover.gd")
 const PoseInterp := preload("res://scripts/pose_interp.gd")
+const MapCfg := preload("res://scripts/map_cfg.gd")
 
 const SERVER_ARG := "--server"
 
@@ -181,9 +182,13 @@ var _last_move_sent_msec := 0
 var _move_held := false
 var _local_mover: LocalMover = null
 var _remote_poses := {}
+var _predict_map_id := MapCfg.MAP_VILLAGE
+var _predict_nav = null
+var _predict_nav_ready := false
 
 
 func _ready() -> void:
+	_predict_map_id = MapCfg.id_from_args(PackedStringArray(OS.get_cmdline_user_args()))
 	_net = net as NetClientScript
 	if _net == null:
 		push_error("Session.net must point at a node running net_client.gd")
@@ -411,8 +416,6 @@ func known_node_ids() -> Array:
 
 
 func request_move_to(x: float, z: float) -> void:
-	# Player move_to is retired (ARM-239 / ADR 0001). Keep the signal so leftover
-	# callers stay observable in tests; never put destination facts on the wire.
 	move_to_requested.emit(x, z)
 	push_warning(
 		"session: move_to (%f, %f) is retired; send move wish samples instead" % [x, z]
@@ -808,7 +811,7 @@ func _on_welcomed(
 		var ground := player_positions[index]
 		avatar.teleport_to(ground.x, ground.y)
 		if id == _you:
-			_local_mover = LocalMover.new()
+			_local_mover = _make_local_mover()
 			_local_mover.reset_at(tick, ground.x, ground.y)
 		else:
 			var buf := PoseInterp.new()
@@ -820,7 +823,7 @@ func _on_welcomed(
 		var self_avatar := _ensure_avatar(_you)
 		if self_avatar != null:
 			self_avatar.teleport_to(_local.position.x, _local.position.z)
-			_local_mover = LocalMover.new()
+			_local_mover = _make_local_mover()
 			_local_mover.reset_at(tick, _local.position.x, _local.position.z)
 
 	if previous_you != 0 and previous_you == _you:
@@ -1151,7 +1154,7 @@ func _on_spawned(id: int, spawn_position: Vector2) -> void:
 		push_error("session: spawn carried our own id %d; repositioning instead" % id)
 		_local.teleport_to(spawn_position.x, spawn_position.y)
 		if _local_mover == null:
-			_local_mover = LocalMover.new()
+			_local_mover = _make_local_mover()
 		_local_mover.reset_at(_clock.estimated_tick(), spawn_position.x, spawn_position.y)
 		return
 	if _avatars.has(id):
@@ -1182,7 +1185,6 @@ func _on_despawned(id: int) -> void:
 func _on_path_assigned(
 	id: int, start_tick: int, points: PackedVector2Array, speed: float
 ) -> void:
-	# Player locomotion is pose-only (ARM-239). Path frames drive NPCs only.
 	if _avatars.has(id):
 		return
 	var dummy: NpcDummyScript = _npcs.get(id)
@@ -1195,7 +1197,7 @@ func _on_path_assigned(
 func _on_pose_received(id: int, tick: int, x: float, y: float, z: float) -> void:
 	if id == _you:
 		if _local_mover == null:
-			_local_mover = LocalMover.new()
+			_local_mover = _make_local_mover()
 			_local_mover.reset_at(tick, x, z, y)
 		else:
 			_local_mover.reconcile_server_pose(tick, x, z, y)
@@ -1789,6 +1791,19 @@ func _forget_npc(id: int) -> void:
 	if parent != null:
 		parent.remove_child(body)
 	body.queue_free()
+
+
+func _make_local_mover() -> LocalMover:
+	if not _predict_nav_ready:
+		_predict_nav = MapCfg.load_nav(_predict_map_id)
+		_predict_nav_ready = true
+	var mover := LocalMover.new()
+	mover.configure_prediction(
+		MapCfg.half_extent(_predict_map_id),
+		MapCfg.ground_y(_predict_map_id),
+		_predict_nav,
+	)
+	return mover
 
 
 func _forget_everyone() -> void:

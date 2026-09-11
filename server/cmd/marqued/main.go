@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/game"
 	"github.com/devarminas/marque/server/internal/gamelog"
+	"github.com/devarminas/marque/server/internal/navmesh"
 	mnet "github.com/devarminas/marque/server/internal/net"
 	"github.com/devarminas/marque/server/internal/questdef"
 )
@@ -146,6 +147,17 @@ func run() error {
 	hub := mnet.NewHub()
 	world := game.NewWorld(hub, log, game.NewMemoryStore(wearables), game.ResumeGraceTicks, joinKit)
 	world.SetMap(mapCfg)
+	if mapCfg.ID == game.MapArenaRingOfTrials {
+		navPath, err := navmesh.ResolvePath()
+		if err != nil {
+			return err
+		}
+		mesh, err := navmesh.LoadJSON(navPath)
+		if err != nil {
+			return err
+		}
+		world.SetNav(mesh)
+	}
 	world.SetAbilities(abilities)
 	world.SetClasses(classes)
 	world.SetQuests(quests)

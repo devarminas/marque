@@ -5,11 +5,36 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 const RelPath = "shared/maps/arena_ring_of_trials_nav.json"
 
 const moveSearchIters = 24
+
+func ResolvePath() (string, error) {
+	if env := strings.TrimSpace(os.Getenv("MARQUE_ARENA_NAV")); env != "" {
+		return env, nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("navmesh: getwd: %w", err)
+	}
+	dir := cwd
+	for {
+		candidate := filepath.Join(dir, filepath.FromSlash(RelPath))
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", fmt.Errorf("navmesh: %s not found from %s (set MARQUE_ARENA_NAV)", RelPath, cwd)
+}
 
 type Vec3 struct {
 	X, Y, Z float64
