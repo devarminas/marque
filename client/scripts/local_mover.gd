@@ -20,7 +20,7 @@ var disp_h := 0.0
 var half_extent := MapCfg.WORLD_HALF_EXTENT
 var flat_ground_y := 0.0
 var nav = null
-var _pose_ground_moving := false
+var _server_xz_moving := false
 
 
 func configure_map(map_id: String) -> void:
@@ -35,20 +35,20 @@ func configure_prediction(p_half_extent: float, p_flat_ground_y: float, p_nav = 
 	nav = p_nav
 
 
-func reset_at(tick: int, x: float, z: float, height: float = NAN) -> void:
+func reset_at(tick: int, x: float, z: float, height = null) -> void:
 	sim_tick = tick
 	sim_x = x
 	sim_z = z
-	if is_nan(height):
+	if height == null:
 		sim_h = ground_y_at(x, z)
 	else:
-		sim_h = height
+		sim_h = float(height)
 	sim_vy = 0.0
 	steer = Vector2.ZERO
 	disp_x = x
 	disp_z = z
 	disp_h = sim_h
-	_pose_ground_moving = false
+	_server_xz_moving = false
 
 
 func apply_wish(dx: float, dz: float) -> void:
@@ -91,7 +91,7 @@ func reconcile_server_pose(server_tick: int, x: float, z: float, height: float =
 	if server_tick > target_tick:
 		target_tick = server_tick
 	var ground_delta := Vector2(x - sim_x, z - sim_z).length()
-	_pose_ground_moving = ground_delta >= SteerIntegrate.MIN_PATH_LENGTH
+	_server_xz_moving = ground_delta >= SteerIntegrate.MIN_PATH_LENGTH
 	sim_x = x
 	sim_z = z
 	sim_h = height
@@ -125,17 +125,15 @@ func sim_height() -> float:
 
 
 func moving() -> bool:
-	return steer != Vector2.ZERO or _pose_ground_moving
+	return steer != Vector2.ZERO or _server_xz_moving
 
 
 func airborne() -> bool:
 	return not SteerIntegrate.grounded(sim_h, sim_vy, ground_y_at(sim_x, sim_z))
 
 
-func ground_y_at(x: float, z: float, near_y: float = NAN) -> float:
-	var probe := near_y
-	if is_nan(probe):
-		probe = sim_h
+func ground_y_at(x: float, z: float, near_y = null) -> float:
+	var probe := sim_h if near_y == null else float(near_y)
 	if nav != null:
 		var sample: Dictionary = nav.height_at(x, z, probe)
 		if bool(sample["ok"]):
@@ -149,9 +147,13 @@ func _step_once() -> void:
 	var next := SteerIntegrate.step(sim_x, sim_z, steer, half_extent, nav)
 	if was_grounded:
 		var new_y := ground_y_at(next.x, next.y, sim_h)
-		if nav != null and absf(new_y - sim_h) > SteerIntegrate.MAX_NAV_STEP_HEIGHT:
-			pass
-		elif Vector2(next.x - sim_x, next.y - sim_z).length() >= SteerIntegrate.MIN_PATH_LENGTH:
+		var moved := (
+			Vector2(next.x - sim_x, next.y - sim_z).length() >= SteerIntegrate.MIN_PATH_LENGTH
+		)
+		var step_ok := (
+			nav == null or absf(new_y - sim_h) <= SteerIntegrate.MAX_NAV_STEP_HEIGHT
+		)
+		if moved and step_ok:
 			sim_x = next.x
 			sim_z = next.y
 			sim_h = new_y
