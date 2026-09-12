@@ -40,8 +40,7 @@ func (p *player) clearCombat() {
 	p.combatExpiresTick = 0
 }
 
-func (w *World) playerAttackPeriod(p *player) int {
-	_ = p
+func (w *World) playerAttackPeriod(_ *player) int {
 	return AttackPeriodTicks
 }
 
@@ -134,7 +133,6 @@ func (w *World) classCombatGate(p *player) bool {
 }
 
 func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, seq mnet.Seq) {
-	w.cancelAttack(p, CauseReplaced)
 	p.pending = 0
 	w.clearPendingTalk(p)
 	w.cancelGather(p)
