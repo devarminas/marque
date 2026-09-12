@@ -73,21 +73,24 @@ func TestImpChaseDoesNotTunnelHole(t *testing.T) {
 	navPath, _ := mesh.FindPath(imp.pos.X, imp.pos.Z, alice.pos.X, alice.pos.Z)
 	navReach := len(navPath) > 0 && math.Hypot(navPath[len(navPath)-1].X-alice.pos.X, navPath[len(navPath)-1].Z-alice.pos.Z) <= 1e-3
 
-	var recorded []Point
+	var poses []Point
 	for range 300 {
-		recorded = append(recorded, imp.pos)
-		recorded = append(recorded, imp.remaining...)
+		poses = append(poses, imp.pos)
 		if !mesh.ContainsXZ(imp.pos.X, imp.pos.Z) {
 			t.Fatalf("imp left mesh at %v", imp.pos)
 		}
 		if math.Hypot(imp.pos.X-holeMid.X, imp.pos.Z-holeMid.Z) < 1e-3 {
 			t.Fatalf("imp occupied hole mid %v", imp.pos)
 		}
+		assigned := append([]Point{imp.pos}, imp.remaining...)
+		assertGamePathOnMesh(t, mesh, assigned)
+		assertGameNoHoleTunnel(t, assigned, holeFrom, holeTo, holeMid)
 		pw.w.step()
 	}
 
 	for _, ev := range pw.events(EvPathAssigned) {
 		raw, _ := ev["points"].([]any)
+		var path []Point
 		for _, item := range raw {
 			arr, _ := item.([]any)
 			if len(arr) < 2 {
@@ -95,16 +98,16 @@ func TestImpChaseDoesNotTunnelHole(t *testing.T) {
 			}
 			x, _ := arr[0].(float64)
 			z, _ := arr[1].(float64)
-			recorded = append(recorded, Point{X: x, Z: z})
+			path = append(path, Point{X: x, Z: z})
 		}
-	}
-
-	assertGamePathOnMesh(t, mesh, recorded)
-	for i := 0; i+1 < len(recorded); i++ {
-		if tunnelsHoleChord(recorded[i], recorded[i+1], holeFrom, holeTo, holeMid) {
-			t.Fatalf("recorded segment tunneled hole %v→%v", recorded[i], recorded[i+1])
+		if len(path) == 0 {
+			continue
 		}
+		assertGamePathOnMesh(t, mesh, path)
+		assertGameNoHoleTunnel(t, path, holeFrom, holeTo, holeMid)
 	}
+	assertGamePathOnMesh(t, mesh, poses)
+	assertGameNoHoleTunnel(t, poses, holeFrom, holeTo, holeMid)
 	if !navReach && distanceBetween(imp.pos, alice.pos) <= 1e-3 {
 		t.Fatalf("imp ended at player %v though FindPath cannot reach", imp.pos)
 	}
