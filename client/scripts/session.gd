@@ -888,6 +888,7 @@ func _on_welcome_npcs(
 	npc_ids: PackedInt64Array,
 	npc_kinds: PackedStringArray,
 	npc_factions: PackedStringArray,
+	npc_names: PackedStringArray,
 	npc_positions: PackedVector2Array,
 	npc_hps: PackedInt32Array,
 	npc_max_hps: PackedInt32Array,
@@ -895,6 +896,7 @@ func _on_welcome_npcs(
 	if (
 		npc_ids.size() != npc_kinds.size()
 		or npc_ids.size() != npc_factions.size()
+		or npc_ids.size() != npc_names.size()
 		or npc_ids.size() != npc_positions.size()
 		or npc_ids.size() != npc_hps.size()
 		or npc_ids.size() != npc_max_hps.size()
@@ -904,7 +906,7 @@ func _on_welcome_npcs(
 
 	for index in npc_ids.size():
 		var id := int(npc_ids[index])
-		var body := _ensure_npc(id, npc_kinds[index], npc_factions[index])
+		var body := _ensure_npc(id, npc_kinds[index], npc_factions[index], npc_names[index])
 		if body == null:
 			continue
 		var ground := npc_positions[index]
@@ -1129,6 +1131,7 @@ func _on_npc_spawned(
 	id: int,
 	kind: String,
 	faction: String,
+	display_name: String,
 	spawn_position: Vector2,
 	hp: int,
 	max_hp: int,
@@ -1139,7 +1142,7 @@ func _on_npc_spawned(
 	if _npcs.has(id):
 		push_warning("session: npc_spawn for known npc %d replaces the existing body" % id)
 		_forget_npc(id)
-	var body := _ensure_npc(id, kind, faction)
+	var body := _ensure_npc(id, kind, faction, display_name)
 	if body == null:
 		return
 	body.place_at(spawn_position.x, spawn_position.y)
@@ -1704,7 +1707,7 @@ func _ensure_node(id: int, kind: String, state: String) -> ResourceNodeScript:
 	return body
 
 
-func _ensure_npc(id: int, kind: String, faction: String) -> NpcDummyScript:
+func _ensure_npc(id: int, kind: String, faction: String, display_name: String) -> NpcDummyScript:
 	var existing: NpcDummyScript = _npcs.get(id)
 	if existing != null:
 		return existing
@@ -1721,7 +1724,7 @@ func _ensure_npc(id: int, kind: String, faction: String) -> NpcDummyScript:
 	if body == null:
 		push_error("session: npc scene did not instantiate as an NpcDummy")
 		return null
-	body.configure(id, kind, faction)
+	body.configure(id, kind, faction, display_name)
 	if _tick_ms > 0:
 		body.configure_motion(_tick_ms)
 		body.clock = _clock

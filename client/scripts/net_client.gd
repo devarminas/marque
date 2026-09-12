@@ -33,6 +33,7 @@ signal welcome_npcs(
 	npc_ids: PackedInt64Array,
 	npc_kinds: PackedStringArray,
 	npc_factions: PackedStringArray,
+	npc_names: PackedStringArray,
 	npc_positions: PackedVector2Array,
 	npc_hps: PackedInt32Array,
 	npc_max_hps: PackedInt32Array,
@@ -60,6 +61,7 @@ signal npc_spawned(
 	id: int,
 	kind: String,
 	faction: String,
+	display_name: String,
 	position: Vector2,
 	hp: int,
 	max_hp: int,
@@ -567,6 +569,7 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 	var npc_ids := PackedInt64Array()
 	var npc_kinds := PackedStringArray()
 	var npc_factions := PackedStringArray()
+	var npc_names := PackedStringArray()
 	var npc_positions := PackedVector2Array()
 	var npc_hps := PackedInt32Array()
 	var npc_max_hps := PackedInt32Array()
@@ -584,6 +587,7 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 			npc_ids.append(npc["id"])
 			npc_kinds.append(npc["kind"])
 			npc_factions.append(npc["faction"])
+			npc_names.append(npc["name"])
 			npc_positions.append(npc["position"])
 			npc_hps.append(npc["hp"])
 			npc_max_hps.append(npc["max_hp"])
@@ -606,7 +610,9 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 		mana_changed.emit(int(mana_ids[index]), manas[index], max_manas[index])
 	welcome_items.emit(item_ids, item_kinds, item_positions)
 	welcome_nodes.emit(node_ids, node_kinds, node_positions, node_states)
-	welcome_npcs.emit(npc_ids, npc_kinds, npc_factions, npc_positions, npc_hps, npc_max_hps)
+	welcome_npcs.emit(
+		npc_ids, npc_kinds, npc_factions, npc_names, npc_positions, npc_hps, npc_max_hps
+	)
 
 
 static func _heartbeat_ticks_of(body: Dictionary, text: String) -> int:
@@ -761,6 +767,7 @@ func _on_npc_spawn(body: Dictionary, text: String) -> void:
 		npc["id"],
 		npc["kind"],
 		npc["faction"],
+		npc["name"],
 		npc["position"],
 		npc["hp"],
 		npc["max_hp"],
@@ -1054,10 +1061,17 @@ func _npc_state(entry: Variant, where: String, text: String) -> Dictionary:
 			% [where, faction, text]
 		)
 		return {}
+	var npc_name := ""
+	if state.has("name"):
+		if typeof(state["name"]) != TYPE_STRING:
+			push_error("net_client: %s name is not a string: %s" % [where, text])
+			return {}
+		npc_name = state["name"]
 	return {
 		"id": int(state["id"]),
 		"kind": state["kind"],
 		"faction": faction,
+		"name": npc_name,
 		"position": Vector2(state["x"], state["z"]),
 		"hp": int(state["hp"]),
 		"max_hp": int(state["max_hp"]),

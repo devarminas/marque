@@ -81,6 +81,7 @@ func _ready() -> void:
 	_test_attack_targets()
 	_test_despawn_forgets_npc()
 	_test_npc_spawn_after_despawn()
+	_test_npc_spawn_missing_name_is_empty()
 
 	_finished = true
 
@@ -228,7 +229,7 @@ func _feed_welcome_with_npcs() -> void:
 		+ '{"id":1000001,"kind":"dummy","faction":"friendly","x":-3.0,"z":0.0,"hp":100,"max_hp":100},'
 		+ '{"id":1000002,"kind":"dummy","faction":"hostile","x":3.0,"z":0.0,"hp":100,"max_hp":100},'
 		+ '{"id":1000003,"kind":"quest_giver","faction":"friendly","x":0.0,"z":-3.0,"hp":100,"max_hp":100},'
-		+ '{"id":1000004,"kind":"imp","faction":"hostile","x":12.0,"z":8.0,"hp":50,"max_hp":50}'
+		+ '{"id":1000004,"kind":"imp","faction":"hostile","name":"Imp","x":12.0,"z":8.0,"hp":50,"max_hp":50}'
 		+ "]}}"
 	)
 
@@ -243,6 +244,8 @@ func _test_bodies_and_select() -> void:
 		return
 	_check(friendly.faction == "friendly", "id 1000001 is friendly")
 	_check(hostile.faction == "hostile", "id 1000002 is hostile")
+	_check(friendly.display_name == "", "missing welcome name caches empty for friendly")
+	_check(hostile.display_name == "", "missing welcome name caches empty for hostile")
 	_check(_session.select_player(1000001), "select friendly dummy")
 	_check(_session.selected_player_id() == 1000001, "selection is friendly")
 	_check(friendly.is_selected(), "friendly chrome on")
@@ -275,6 +278,7 @@ func _test_imp_spawns_from_welcome() -> void:
 		return
 	_check(imp.kind == NpcDummyScript.KindImp, "id 1000004 kind is imp")
 	_check(imp.faction == NpcDummyScript.FactionHostile, "welcome imp is hostile")
+	_check(imp.display_name == "Imp", "welcome imp caches display name Imp")
 	_check(
 		imp.get_node_or_null("Body/Armature/Skeleton3D") != null,
 		"welcome imp uses the bestiary Imp scene",
@@ -306,7 +310,6 @@ func _test_imp_follows_path_frames() -> void:
 		is_equal_approx(imp.position.x, 12.0) and is_equal_approx(imp.position.z, 8.0),
 		"imp at path start on start_tick, got %s" % imp.position,
 	)
-	# 3 u/s * 150ms = 0.45u per tick; 10 ticks ≈ 4.5u toward origin from (12,8).
 	imp.update_to_tick(11)
 	_check(imp.is_walking(), "imp still walking mid-path at tick 11")
 	var moved := Vector2(imp.position.x, imp.position.z).distance_to(Vector2(12.0, 8.0))
@@ -406,7 +409,7 @@ func _test_npc_spawn_after_despawn() -> void:
 	var npcs: Dictionary = _session.get("_npcs")
 	_check(not npcs.has(1000006), "respawn id is absent before npc_spawn")
 	_net.ingest_text_frame(
-		'{"npc_spawn":{"id":1000006,"kind":"imp","faction":"hostile","x":13.0,"z":7.5,"hp":50,"max_hp":50}}'
+		'{"npc_spawn":{"id":1000006,"kind":"imp","faction":"hostile","name":"Imp","x":13.0,"z":7.5,"hp":50,"max_hp":50}}'
 	)
 	npcs = _session.get("_npcs")
 	var imp: NpcDummyScript = npcs.get(1000006)
@@ -415,6 +418,7 @@ func _test_npc_spawn_after_despawn() -> void:
 		return
 	_check(imp.kind == NpcDummyScript.KindImp, "npc_spawn kind is imp")
 	_check(imp.faction == NpcDummyScript.FactionHostile, "npc_spawn faction is hostile")
+	_check(imp.display_name == "Imp", "npc_spawn caches display name Imp")
 	_check(
 		imp.get_node_or_null("Body/Armature/Skeleton3D") != null,
 		"npc_spawn imp uses the bestiary Imp scene",
@@ -426,6 +430,18 @@ func _test_npc_spawn_after_despawn() -> void:
 	_check(hit is Vector2i and hit == Vector2i(50, 50), "npc_spawn applies hit points")
 	var label := imp.get_node_or_null("HpLabel") as Label3D
 	_check(label != null and label.visible and label.text == "50/50", "npc_spawn shows hp label")
+
+
+func _test_npc_spawn_missing_name_is_empty() -> void:
+	_net.ingest_text_frame(
+		'{"npc_spawn":{"id":1000007,"kind":"imp","faction":"hostile","x":14.0,"z":7.0,"hp":50,"max_hp":50}}'
+	)
+	var npcs: Dictionary = _session.get("_npcs")
+	var imp: NpcDummyScript = npcs.get(1000007)
+	_check(imp != null, "npc_spawn without name still builds a body")
+	if imp == null:
+		return
+	_check(imp.display_name == "", "missing npc_spawn name caches empty string")
 
 
 func _check(cond: bool, msg: String) -> void:

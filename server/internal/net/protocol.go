@@ -89,6 +89,7 @@ type NpcState struct {
 	ID      PlayerID `json:"id"`
 	Kind    string   `json:"kind"`
 	Faction string   `json:"faction"`
+	Name    string   `json:"name,omitempty"`
 	X       float64  `json:"x"`
 	Z       float64  `json:"z"`
 	HP      int      `json:"hp"`
@@ -583,7 +584,6 @@ type moveWire struct {
 	Jump *bool    `json:"jump"`
 }
 
-// Pose-fact keys on move bodies only; unrelated messages may still carry these names.
 var movePoseFactKeys = []string{
 	"x", "z", "y", "pos", "position", "pose", "path",
 	"velocity", "vx", "vz", "vy",

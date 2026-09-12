@@ -29,7 +29,6 @@ const (
 	ImpQuestGiverX = 4.0
 	ImpQuestGiverZ = -4.0
 
-	// Starter-town Imp camp center (ARM-207 pool).
 	ImpCampX = 12.0
 	ImpCampZ = 8.0
 
@@ -88,11 +87,27 @@ func (n *npc) floorPracticeHP() {
 
 func (n *npc) mobile() bool { return n.kind == KindImp }
 
+func npcDisplayName(kind string) string {
+	switch kind {
+	case KindDummy:
+		return "Training Dummy"
+	case KindQuestGiver:
+		return "Quest Giver"
+	case KindImpQuestGiver:
+		return "Imp Quest Giver"
+	case KindImp:
+		return "Imp"
+	default:
+		return ""
+	}
+}
+
 func (n *npc) wire() mnet.NpcState {
 	return mnet.NpcState{
 		ID:      n.id,
 		Kind:    n.kind,
 		Faction: n.faction,
+		Name:    npcDisplayName(n.kind),
 		X:       n.pos.X,
 		Z:       n.pos.Z,
 		HP:      n.hp,

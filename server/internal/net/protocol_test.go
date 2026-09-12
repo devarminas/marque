@@ -67,10 +67,10 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 		{
 			name: "npc_spawn",
 			msg: mnet.NpcSpawn{
-				ID: 1000005, Kind: "imp", Faction: "hostile",
+				ID: 1000005, Kind: "imp", Faction: "hostile", Name: "Imp",
 				X: 12, Z: 8, HP: 50, MaxHP: 50,
 			},
-			want: `{"npc_spawn":{"id":1000005,"kind":"imp","faction":"hostile","x":12,"z":8,"hp":50,"max_hp":50}}`,
+			want: `{"npc_spawn":{"id":1000005,"kind":"imp","faction":"hostile","name":"Imp","x":12,"z":8,"hp":50,"max_hp":50}}`,
 		},
 		{
 			name: "inventory",

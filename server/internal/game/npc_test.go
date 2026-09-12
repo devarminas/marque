@@ -42,6 +42,9 @@ func TestSeedPracticeDummiesWelcome(t *testing.T) {
 	if friendly.HP != DummyMaxHP || hostile.HP != DummyMaxHP || friendly.MaxHP != DummyMaxHP || hostile.MaxHP != DummyMaxHP {
 		t.Fatalf("hp friendly=%d/%d hostile=%d/%d", friendly.HP, friendly.MaxHP, hostile.HP, hostile.MaxHP)
 	}
+	if friendly.Name != "Training Dummy" || hostile.Name != "Training Dummy" {
+		t.Fatalf("names friendly=%q hostile=%q", friendly.Name, hostile.Name)
+	}
 	spawned := pw.events(EvNpcSpawned)
 	if len(spawned) != 2 {
 		t.Fatalf("npc_spawned=%d, want 2", len(spawned))
