@@ -29,7 +29,6 @@ const (
 	ImpQuestGiverX = 4.0
 	ImpQuestGiverZ = -4.0
 
-	// Starter-town Imp camp center (ARM-207 pool).
 	ImpCampX = 12.0
 	ImpCampZ = 8.0
 

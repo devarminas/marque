@@ -584,7 +584,6 @@ type moveWire struct {
 	Jump *bool    `json:"jump"`
 }
 
-// Pose-fact keys on move bodies only; unrelated messages may still carry these names.
 var movePoseFactKeys = []string{
 	"x", "z", "y", "pos", "position", "pose", "path",
 	"velocity", "vx", "vz", "vy",

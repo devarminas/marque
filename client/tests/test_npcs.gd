@@ -320,7 +320,6 @@ func _test_imp_follows_path_frames() -> void:
 		is_equal_approx(imp.position.x, 12.0) and is_equal_approx(imp.position.z, 8.0),
 		"imp at path start on start_tick, got %s" % imp.position,
 	)
-	# 3 u/s * 150ms = 0.45u per tick; 10 ticks ≈ 4.5u toward origin from (12,8).
 	imp.update_to_tick(11)
 	_check(imp.is_walking(), "imp still walking mid-path at tick 11")
 	var moved := Vector2(imp.position.x, imp.position.z).distance_to(Vector2(12.0, 8.0))
