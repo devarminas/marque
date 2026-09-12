@@ -36,7 +36,7 @@ func (w *World) stepImp(n *npc, distance float64) {
 			arrived = true
 		}
 	default:
-		if target := w.firstLivingPlayerInRange(n.pos, ImpThreatRange); target != nil {
+		if target := w.nearestLivingPlayerInRange(n.pos, ImpThreatRange); target != nil {
 			w.beginImpAggro(n, target)
 			if arrived {
 				w.logNPCArrived(n)
@@ -103,6 +103,7 @@ func (w *World) stepImpCombat(n *npc) {
 	if target.hp < 0 {
 		target.hp = 0
 	}
+	w.markCombat(target)
 	fields := gamelog.Fields{
 		"npc":       n.id,
 		"target":    target.id,
@@ -121,6 +122,7 @@ func (w *World) beginImpAggro(n *npc, target *player) {
 	n.phase = phaseCombat
 	n.attackTarget = target.id
 	n.attackProgress = 0
+	w.markCombat(target)
 	w.log.Event(w.tick, EvNpcAggro, gamelog.Fields{
 		"npc":    n.id,
 		"kind":   n.kind,
@@ -164,16 +166,23 @@ func (w *World) stepImpPatrol(n *npc) {
 	w.assignNPCPath(n, dest)
 }
 
-func (w *World) firstLivingPlayerInRange(origin Point, radius float64) *player {
+func (w *World) nearestLivingPlayerInRange(origin Point, radius float64) *player {
+	var best *player
+	bestDist := 0.0
 	for _, p := range w.order {
 		if p.dead() {
 			continue
 		}
-		if distanceBetween(origin, p.pos) <= radius {
-			return p
+		d := distanceBetween(origin, p.pos)
+		if d > radius {
+			continue
+		}
+		if best == nil || d < bestDist {
+			best = p
+			bestDist = d
 		}
 	}
-	return nil
+	return best
 }
 
 func (w *World) assignNPCPath(n *npc, dest Point) {

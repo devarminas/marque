@@ -1,6 +1,8 @@
 package game
 
 import (
+	"time"
+
 	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
@@ -8,18 +10,34 @@ import (
 )
 
 const (
-	MaxHP             = 100
-	AttackDamage      = 10
-	AttackRange       = 1.5
-	CauseMoveTo       = "move_to"
-	CauseMove         = "move"
-	CausePickup       = "pickup"
-	CauseGather       = "gather"
-	CauseReplaced     = "replaced"
-	CauseAttackerDied = "attacker_died"
+	MaxHP              = 100
+	AttackDamage       = 10
+	AttackRange        = 1.5
+	CombatTimeoutTicks = int64(6 * time.Second / TickDuration)
+	CauseMoveTo        = "move_to"
+	CauseMove          = "move"
+	CausePickup        = "pickup"
+	CauseGather        = "gather"
+	CauseReplaced      = "replaced"
+	CauseAttackerDied  = "attacker_died"
 )
 
 func (p *player) dead() bool { return p.hp == 0 }
+
+func (p *player) inCombat(tick int64) bool {
+	return p.combatExpiresTick > tick
+}
+
+func (w *World) markCombat(p *player) {
+	if p.dead() {
+		return
+	}
+	p.combatExpiresTick = w.tick + CombatTimeoutTicks
+}
+
+func (p *player) clearCombat() {
+	p.combatExpiresTick = 0
+}
 
 func (p *player) wireState() mnet.PlayerState {
 	return mnet.PlayerState{
@@ -187,6 +205,7 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 	p.y = w.mapCfg.SpawnY
 	p.vy = 0
 	p.clearSteer()
+	p.clearCombat()
 	w.broadcastPose(p)
 	w.broadcastHP(p)
 	w.broadcastMana(p)
@@ -228,6 +247,8 @@ func (w *World) resolveAttack(p *player) {
 	if target.hp < 0 {
 		target.hp = 0
 	}
+	w.markCombat(p)
+	w.markCombat(target)
 	fields := playerTargetFields(p.id, target.id)
 	fields["damage"] = AttackDamage
 	fields["target_hp"] = target.hp
@@ -266,6 +287,7 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 	} else if target.hp < 0 {
 		target.hp = 0
 	}
+	w.markCombat(p)
 	fields := playerTargetFields(p.id, target.id)
 	fields["damage"] = AttackDamage
 	fields["target_hp"] = target.hp
@@ -285,6 +307,7 @@ func (w *World) kill(victim *player, killer mnet.PlayerID) {
 		"killer": killer,
 	})
 	victim.pending = 0
+	victim.clearCombat()
 	w.clearPendingTalk(victim)
 	w.closeDialog(victim)
 	w.cancelGather(victim)
