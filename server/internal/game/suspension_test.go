@@ -1,6 +1,5 @@
 package game
 
-
 import (
 	"bytes"
 	"context"
@@ -13,6 +12,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/weapondef"
 )
 
 const probeGrace = 4
@@ -25,17 +25,50 @@ type probeWorld struct {
 	srv  *httptest.Server
 }
 
+func loadSharedWeapons(t *testing.T) *weapondef.Catalog {
+	t.Helper()
+	path, err := weapondef.ResolvePath()
+	if err != nil {
+		t.Fatalf("resolve weapons: %v", err)
+	}
+	cat, err := weapondef.Load(path)
+	if err != nil {
+		t.Fatalf("load weapons: %v", err)
+	}
+	return cat
+}
+
 func newProbeWorld(t *testing.T) *probeWorld {
 	t.Helper()
 	logs := &bytes.Buffer{}
 	hub := mnet.NewHub()
 	w := NewWorld(hub, gamelog.New(logs, true), NewMemoryStore(testWearables(t)), probeGrace, nil)
+	w.SetWeapons(loadSharedWeapons(t))
 	srv := httptest.NewServer(hub)
 	t.Cleanup(func() {
 		hub.Close()
 		srv.Close()
 	})
 	return &probeWorld{t: t, w: w, logs: logs, hub: hub, srv: srv}
+}
+
+func (pw *probeWorld) weaponPeriod(id string) int {
+	pw.t.Helper()
+	period, ok := pw.w.weapons.Period(id)
+	if !ok {
+		pw.t.Fatalf("missing weapon def %q", id)
+	}
+	return period
+}
+
+func (pw *probeWorld) playerPeriod(p *player) int {
+	pw.t.Helper()
+	return pw.w.playerAttackPeriod(p)
+}
+
+func (pw *probeWorld) npcPeriod(n *npc) int {
+	pw.t.Helper()
+	return pw.w.npcAttackPeriod(n)
 }
 
 func (pw *probeWorld) dial(token string) *mnet.Conn {

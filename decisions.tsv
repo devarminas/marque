@@ -1,0 +1,7 @@
+timestamp	decision	why
+2026-09-12T19:03Z	New shared/weapons.json + weapondef package (abilitydef pattern); not stuffed into sets.json	Sets own equippability/handedness; weapons own combat numbers. Linking by shared string id. Period only (ARM-89 owns damage).
+2026-09-12T19:03Z	Player period: right hand then left hand kind if present in weapons catalog; else unarmed	Knight sword+shield: only sword is a weapon def. Two-hand staff/bow appear in both hands.
+2026-09-12T19:03Z	NPC archetype table kind→weapon id at seed; imp→imp_claw; missing→unarmed	Product: archetype carries weapon id; no NPC-only period formula in v1.
+2026-09-12T19:03Z	Shipped periods stay 4 for unarmed/sword/staff/bow/imp_claw; tests that need distinct periods inject a catalog	Preserves existing combat timing; Done coverage uses shared def id with non-default period.
+2026-09-12T19:03Z	Remove AttackPeriodTicks from live combat/imp path; probes load shared weapons	Flat constant out of live path; tests read period from World catalog helpers.
+2026-09-12T19:03Z	Out of scope: sticky AA (ARM-269), combat FSM (ARM-261), weapon damage scaling (ARM-89)	Owner hard stops.

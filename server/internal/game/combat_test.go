@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/weapondef"
 )
 
 func TestFreshPlayerHasMaxHP(t *testing.T) {
@@ -64,11 +65,11 @@ func TestAttackOutOfRangeSteersInThenHitsOnPeriod(t *testing.T) {
 }
 
 func TestNoHitOnFirstInRangeTickWhenPeriodPositive(t *testing.T) {
-	if AttackPeriodTicks < 1 {
-		t.Fatal("test assumes AttackPeriodTicks > 0")
-	}
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
+	if pw.playerPeriod(alice) < 1 {
+		t.Fatal("test assumes player attack period > 0")
+	}
 	hostile := pw.seedHostile()
 	hostile.pos = Point{X: 1, Z: 0}
 	alice.pos = Point{X: 0, Z: 0}
@@ -135,7 +136,7 @@ func TestMoveCancelsPendingAttackFromCombat(t *testing.T) {
 	}
 
 	before := hostile.hp
-	for range AttackPeriodTicks + 2 {
+	for range pw.playerPeriod(alice) + 2 {
 		pw.w.step()
 	}
 	if hostile.hp != before {
@@ -182,7 +183,7 @@ func TestPracticeDummySurvivesLethalVolley(t *testing.T) {
 	alice.pos = Point{X: 0, Z: 0}
 	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
 
-	for range AttackPeriodTicks * 20 {
+	for range pw.playerPeriod(alice) * 20 {
 		pw.w.step()
 	}
 	if hostile.dead() || hostile.hp < DummyMinHP {
@@ -274,8 +275,8 @@ func TestSameTickMultiAttackerJoinOrder(t *testing.T) {
 
 	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
 	pw.w.attack(bob, mnet.Attack{Player: hostile.id}, 0)
-	alice.attackProgress = AttackPeriodTicks - 1
-	bob.attackProgress = AttackPeriodTicks - 1
+	alice.attackProgress = pw.playerPeriod(alice) - 1
+	bob.attackProgress = pw.playerPeriod(bob) - 1
 
 	pw.w.step()
 	if !hostile.dead() {
@@ -364,11 +365,107 @@ func TestAttackIgnoresWeapon(t *testing.T) {
 	hostile.pos = Point{X: 1, Z: 0}
 	alice.pos = Point{X: 0, Z: 0}
 	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
-	for range AttackPeriodTicks {
+	for range pw.playerPeriod(alice) {
 		pw.w.step()
 	}
 	if hostile.hp != DummyMaxHP-AttackDamage {
 		t.Fatalf("knight hit failed: hp=%d", hostile.hp)
+	}
+}
+
+func TestPlayerAttackPeriodFromEquippedWeapon(t *testing.T) {
+	pw := newClassProbe(t)
+	cat, err := weapondef.Parse([]byte(`{"weapons":[
+		{"id":"unarmed","attack_period_ticks":7},
+		{"id":"sword","attack_period_ticks":3},
+		{"id":"imp_claw","attack_period_ticks":4}
+	]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pw.w.SetWeapons(cat)
+	alice := pw.joinWithClass("knight")
+	if got := pw.w.playerWeaponID(alice); got != weapondef.Sword {
+		t.Fatalf("weapon=%q, want sword", got)
+	}
+	if got := pw.playerPeriod(alice); got != 3 {
+		t.Fatalf("period=%d, want 3 from sword", got)
+	}
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+	for range 2 {
+		pw.w.step()
+	}
+	if hostile.hp != DummyMaxHP {
+		t.Fatalf("hit before sword period: hp=%d", hostile.hp)
+	}
+	pw.w.step()
+	if hostile.hp != DummyMaxHP-AttackDamage {
+		t.Fatalf("hp=%d after sword period, want %d", hostile.hp, DummyMaxHP-AttackDamage)
+	}
+}
+
+func TestPlayerAndNPCShareWeaponDefPeriod(t *testing.T) {
+	pw := newClassProbe(t)
+	const sharedPeriod = 2
+	cat, err := weapondef.Parse([]byte(`{"weapons":[
+		{"id":"unarmed","attack_period_ticks":4},
+		{"id":"sword","attack_period_ticks":2},
+		{"id":"imp_claw","attack_period_ticks":9}
+	]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pw.w.SetWeapons(cat)
+
+	alice := pw.joinWithClass("knight")
+	if got := pw.w.playerWeaponID(alice); got != weapondef.Sword {
+		t.Fatalf("player weapon=%q, want sword", got)
+	}
+	if got := pw.playerPeriod(alice); got != sharedPeriod {
+		t.Fatalf("player period=%d, want %d", got, sharedPeriod)
+	}
+
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+	pw.w.step()
+	if hostile.hp != DummyMaxHP {
+		t.Fatalf("player hit on tick 1: hp=%d", hostile.hp)
+	}
+	pw.w.step()
+	if hostile.hp != DummyMaxHP-AttackDamage {
+		t.Fatalf("player hp=%d after shared period, want %d", hostile.hp, DummyMaxHP-AttackDamage)
+	}
+
+	seedDeterministicCamp(t, pw.w)
+	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
+	imp.weapon = weapondef.Sword
+	if got := pw.npcPeriod(imp); got != sharedPeriod {
+		t.Fatalf("npc period=%d, want %d from shared sword def", got, sharedPeriod)
+	}
+	if got := pw.weaponPeriod(weapondef.ImpClaw); got != 9 {
+		t.Fatalf("imp_claw period=%d, want 9 (must not govern sword NPC)", got)
+	}
+
+	bob := pw.joinWithClass("knight")
+	bob.pos = imp.pos
+	imp.phase = phaseCombat
+	imp.target = bob.id
+	imp.remaining = nil
+	imp.attackProgress = 0
+	before := bob.hp
+	pw.w.step()
+	if bob.hp != before {
+		t.Fatalf("npc hit on tick 1: hp=%d", bob.hp)
+	}
+	pw.w.step()
+	if bob.hp != before-ImpDamage {
+		t.Fatalf("npc hp=%d after shared sword period, want %d", bob.hp, before-ImpDamage)
 	}
 }
 

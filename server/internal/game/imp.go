@@ -94,7 +94,7 @@ func (w *World) stepImpCombat(n *npc) {
 	}
 
 	n.attackProgress++
-	if n.attackProgress < AttackPeriodTicks {
+	if n.attackProgress < w.npcAttackPeriod(n) {
 		return
 	}
 	n.attackProgress = 0

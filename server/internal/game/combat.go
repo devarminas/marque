@@ -4,12 +4,12 @@ import (
 	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/weapondef"
 )
 
 const (
 	MaxHP             = 100
 	AttackDamage      = 10
-	AttackPeriodTicks = 4
 	AttackRange       = 1.5
 	CauseMoveTo       = "move_to"
 	CauseMove         = "move"
@@ -109,6 +109,48 @@ func (w *World) classCombatGate(p *player) bool {
 	return res.Class != nil && res.Class.Family == classdef.FamilyCombat
 }
 
+func (w *World) playerWeaponID(p *player) string {
+	worn := w.wornKinds(p)
+	for _, slot := range []string{string(SlotRightHand), string(SlotLeftHand)} {
+		kind := worn[slot]
+		if kind == "" || w.weapons == nil {
+			continue
+		}
+		if _, ok := w.weapons.Get(kind); ok {
+			return kind
+		}
+	}
+	return weapondef.Unarmed
+}
+
+func (w *World) npcWeaponID(n *npc) string {
+	if n == nil || n.weapon == "" {
+		return weapondef.Unarmed
+	}
+	return n.weapon
+}
+
+func (w *World) attackPeriodTicks(weaponID string) int {
+	if w.weapons == nil {
+		return 1
+	}
+	if period, ok := w.weapons.Period(weaponID); ok {
+		return period
+	}
+	if period, ok := w.weapons.Period(weapondef.Unarmed); ok {
+		return period
+	}
+	return 1
+}
+
+func (w *World) playerAttackPeriod(p *player) int {
+	return w.attackPeriodTicks(w.playerWeaponID(p))
+}
+
+func (w *World) npcAttackPeriod(n *npc) int {
+	return w.attackPeriodTicks(w.npcWeaponID(n))
+}
+
 func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, seq mnet.Seq) {
 	w.cancelAttack(p, CauseReplaced)
 	p.pending = 0
@@ -174,8 +216,9 @@ func (w *World) resolveAttack(p *player) {
 		w.assignHalt(p)
 	}
 
+	period := w.playerAttackPeriod(p)
 	p.attackProgress++
-	if p.attackProgress < AttackPeriodTicks {
+	if p.attackProgress < period {
 		return
 	}
 
@@ -209,8 +252,9 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 		w.assignHalt(p)
 	}
 
+	period := w.playerAttackPeriod(p)
 	p.attackProgress++
-	if p.attackProgress < AttackPeriodTicks {
+	if p.attackProgress < period {
 		return
 	}
 

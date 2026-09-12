@@ -1,4 +1,4 @@
-﻿package game
+package game
 
 import (
 	"slices"
@@ -36,7 +36,7 @@ func killImpWith(t *testing.T, pw *probeWorld, killer *player, imp *npc) {
 	killer.pos = imp.pos
 	pw.w.attack(killer, mnet.Attack{Player: imp.id}, 1)
 	for imp.hp > 0 {
-		for range AttackPeriodTicks {
+		for range pw.playerPeriod(killer) {
 			pw.w.step()
 		}
 	}

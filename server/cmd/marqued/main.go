@@ -22,6 +22,7 @@ import (
 	"github.com/devarminas/marque/server/internal/navmesh"
 	mnet "github.com/devarminas/marque/server/internal/net"
 	"github.com/devarminas/marque/server/internal/questdef"
+	"github.com/devarminas/marque/server/internal/weapondef"
 )
 
 type itemSeed struct {
@@ -94,6 +95,7 @@ func run() error {
 	enableLog := flag.Bool("gamelog", true, "write the NDJSON event log to stdout")
 	mapID := flag.String("map", game.MapVillage, "active map id (village or arena_ring_of_trials); must match client play-path selection")
 	abilitiesPath := flag.String("abilities", "", "path to shared/abilities.json (default: search from cwd, or MARQUE_ABILITIES)")
+	weaponsPath := flag.String("weapons", "", "path to shared/weapons.json (default: search from cwd, or MARQUE_WEAPONS)")
 	questsPath := flag.String("quests", "", "path to shared/quests.json (default: search from cwd, or MARQUE_QUESTS)")
 	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
 	seedClassKits := flag.Bool("seed-class-kits", false, "place one ground item per unique kind from shared/sets.json (armor + tools) on a grid near spawn for class demo/test; does not change DefaultJoinKit")
@@ -117,6 +119,19 @@ func run() error {
 		path = resolved
 	}
 	abilities, err := abilitydef.Load(path)
+	if err != nil {
+		return err
+	}
+
+	wpath := strings.TrimSpace(*weaponsPath)
+	if wpath == "" {
+		resolved, err := weapondef.ResolvePath()
+		if err != nil {
+			return err
+		}
+		wpath = resolved
+	}
+	weapons, err := weapondef.Load(wpath)
 	if err != nil {
 		return err
 	}
@@ -159,6 +174,7 @@ func run() error {
 		world.SetNav(mesh)
 	}
 	world.SetAbilities(abilities)
+	world.SetWeapons(weapons)
 	world.SetClasses(classes)
 	world.SetQuests(quests)
 

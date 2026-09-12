@@ -195,7 +195,7 @@ func TestImpMeleeDamagesPlayer(t *testing.T) {
 	imp.remaining = nil
 	before := alice.hp
 
-	for range AttackPeriodTicks {
+	for range pw.npcPeriod(imp) {
 		pw.w.step()
 	}
 	if alice.hp != before-ImpDamage {
@@ -221,7 +221,7 @@ func TestCombatClassCanAttackImp(t *testing.T) {
 	if alice.attackTarget != imp.id {
 		t.Fatalf("attackTarget=%d, want %d", alice.attackTarget, imp.id)
 	}
-	for range AttackPeriodTicks {
+	for range pw.playerPeriod(alice) {
 		pw.w.step()
 	}
 	if imp.hp != ImpMaxHP-AttackDamage {
