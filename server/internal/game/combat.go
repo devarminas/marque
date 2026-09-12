@@ -1,6 +1,8 @@
 package game
 
 import (
+	"time"
+
 	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
@@ -11,7 +13,7 @@ const (
 	MaxHP              = 100
 	AttackDamage       = 10
 	AttackRange        = 1.5
-	CombatTimeoutTicks = 150
+	CombatTimeoutTicks = int64(6 * time.Second / TickDuration)
 	CauseMoveTo        = "move_to"
 	CauseMove          = "move"
 	CausePickup        = "pickup"
