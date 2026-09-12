@@ -336,6 +336,19 @@ func TestImpThinkSelectsKiteOnCadence(t *testing.T) {
 	}
 }
 
+func TestImpKiteStaysInsideLeash(t *testing.T) {
+	from := Point{X: ImpLeashRange - 0.5, Z: 0}
+	threat := Point{X: ImpLeashRange - 1.5, Z: 0}
+	home := Point{}
+	dest := kitePoint(from, threat, home, ImpKiteDistance)
+	if distanceBetween(home, dest) > ImpLeashRange {
+		t.Fatalf("kite dest outside leash: dest=%v dist=%v", dest, distanceBetween(home, dest))
+	}
+	if dest.X <= from.X {
+		t.Fatalf("expected kite further from threat along +X, dest=%v from=%v", dest, from)
+	}
+}
+
 func TestImpCombatTransitionPatrolToAttack(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
