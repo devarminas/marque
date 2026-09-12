@@ -28,6 +28,7 @@ const CHROME_PATHS := [
 	"UI/ClassHud",
 	"UI/ClassDebug",
 	"UI/HpHud",
+	"UI/TargetFrame",
 	"UI/ErrorHud",
 	"UI/DeathOverlay",
 	"UI/Hotbar",

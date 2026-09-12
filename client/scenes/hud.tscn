@@ -1,9 +1,10 @@
-[gd_scene load_steps=41 format=3]
+[gd_scene load_steps=42 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
 [ext_resource type="PackedScene" path="res://scenes/worn_slot.tscn" id="10_worn_slot"]
 [ext_resource type="Script" path="res://scripts/hp_hud.gd" id="11_hp_hud"]
+[ext_resource type="Script" path="res://scripts/target_frame.gd" id="11_target_frame"]
 [ext_resource type="Script" path="res://scripts/death_overlay.gd" id="12_death_overlay"]
 [ext_resource type="Script" path="res://scripts/hotbar.gd" id="13_hotbar"]
 [ext_resource type="PackedScene" path="res://scenes/hotbar_slot.tscn" id="14_hotbar_slot"]
@@ -648,6 +649,144 @@ theme_override_styles/fill = SubResource("style_mana_fill")
 show_percentage = false
 
 [node name="Label" type="Label" parent="HpHud/Stack/ManaRow" unique_id=724873161]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 11
+text = "—"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TargetFrame" type="Control" parent="." unique_id=190769655 node_paths=PackedStringArray("name_label", "hp_bar", "hp_label")]
+visible = false
+layout_mode = 3
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -152.0
+offset_top = 12.0
+offset_right = 152.0
+offset_bottom = 88.0
+grow_horizontal = 2
+mouse_filter = 2
+script = ExtResource("11_target_frame")
+name_label = NodePath("Stack/NameLabel")
+hp_bar = NodePath("Stack/HpRow/Bar")
+hp_label = NodePath("Stack/HpRow/Label")
+
+[node name="Frame" type="NinePatchRect" parent="TargetFrame" unique_id=1774159569]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 28.0
+offset_top = 18.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("19_tray")
+
+[node name="Portrait" type="Control" parent="TargetFrame" unique_id=746141890]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = -26.0
+offset_top = -42.0
+offset_right = 58.0
+offset_bottom = 42.0
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Bg" type="TextureRect" parent="TargetFrame/Portrait" unique_id=1352942769]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("35_hero_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Ring" type="TextureRect" parent="TargetFrame/Portrait" unique_id=1736151618]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("34_hero_frame")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Stack" type="VBoxContainer" parent="TargetFrame" unique_id=98382755]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 68.0
+offset_top = 20.0
+offset_right = -14.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+alignment = 1
+
+[node name="NameLabel" type="Label" parent="TargetFrame/Stack" unique_id=905239957]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 13
+text = ""
+vertical_alignment = 1
+
+[node name="HpRow" type="Control" parent="TargetFrame/Stack" unique_id=1481529994]
+custom_minimum_size = Vector2(0, 13)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="Border" type="NinePatchRect" parent="TargetFrame/Stack/HpRow" unique_id=824498209]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("22_hp_frame")
+
+[node name="Bar" type="ProgressBar" parent="TargetFrame/Stack/HpRow" unique_id=1403375305]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 3.0
+offset_top = 2.0
+offset_right = -3.0
+offset_bottom = -2.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/background = SubResource("style_bar_bg")
+theme_override_styles/fill = SubResource("style_hp_fill")
+show_percentage = false
+
+[node name="Label" type="Label" parent="TargetFrame/Stack/HpRow" unique_id=905239958]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0

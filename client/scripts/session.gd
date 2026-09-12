@@ -20,6 +20,7 @@ const QuestLogPanelScript := preload("res://scripts/quest_log_panel.gd")
 const PartyPanelScript := preload("res://scripts/party_panel.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const HpHudScript := preload("res://scripts/hp_hud.gd")
+const TargetFrameScript := preload("res://scripts/target_frame.gd")
 const ClassHudScript := preload("res://scripts/class_hud.gd")
 const ClassDebugScript := preload("res://scripts/class_debug.gd")
 const ErrorHudScript := preload("res://scripts/error_hud.gd")
@@ -119,6 +120,7 @@ signal respawn_requested()
 @export var party_panel: Node
 @export var equipment_panel: Node
 @export var hp_hud: Node
+@export var target_frame: Node
 @export var class_hud: Node
 @export var class_debug: Node
 @export var error_hud: Node
@@ -137,6 +139,7 @@ var _quest_log: QuestLogPanelScript = null
 var _party: PartyPanelScript = null
 var _equipment: EquipmentPanelScript = null
 var _hp_hud: HpHudScript = null
+var _target_frame: TargetFrameScript = null
 var _class_hud: ClassHudScript = null
 var _class_debug: ClassDebugScript = null
 var _error_hud: ErrorHudScript = null
@@ -295,6 +298,10 @@ func _ready() -> void:
 	_hp_hud = hp_hud as HpHudScript
 	if _hp_hud == null:
 		push_error("Session.hp_hud must point at a node running hp_hud.gd")
+
+	_target_frame = target_frame as TargetFrameScript
+	if _target_frame == null:
+		push_error("Session.target_frame must point at a node running target_frame.gd")
 
 	_classes = ClassDefs.load_classes()
 	_class_hud = class_hud as ClassHudScript
@@ -717,6 +724,24 @@ func clear_selection() -> bool:
 	_sync_selection_chrome()
 	selection_changed.emit(0)
 	return true
+
+
+func _refresh_target_frame() -> void:
+	if _target_frame == null:
+		return
+	var id := _selected_player_id
+	if id <= 0 or not _npcs.has(id):
+		_target_frame.clear()
+		return
+	var pair := hit_points_for(id)
+	if pair.y <= 0:
+		_target_frame.clear()
+		return
+	var dummy: NpcDummyScript = _npcs.get(id)
+	var label := ""
+	if dummy != null:
+		label = dummy.display_name
+	_target_frame.apply(label, pair.x, pair.y)
 
 
 func _input(event: InputEvent) -> void:
@@ -1830,6 +1855,8 @@ func _apply_hit_points(id: int, hp: int, max_hp: int) -> void:
 		dummy.set_hit_points(hp, max_hp)
 	if id == _selected_player_id and hp == 0:
 		clear_selection()
+	elif id == _selected_player_id:
+		_refresh_target_frame()
 	if id != _you:
 		return
 	if _hp_hud != null:
@@ -1849,6 +1876,7 @@ func _sync_selection_chrome() -> void:
 		if dummy == null:
 			continue
 		dummy.set_selected(id == _selected_player_id)
+	_refresh_target_frame()
 
 
 func _apply_mana(id: int, mana: int, max_mana: int) -> void:
@@ -1866,6 +1894,8 @@ func _clear_hit_points() -> void:
 		_local.clear_hit_points()
 	if _hp_hud != null:
 		_hp_hud.clear()
+	if _target_frame != null:
+		_target_frame.clear()
 	if _death_overlay != null:
 		_death_overlay.visible = false
 

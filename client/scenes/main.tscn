@@ -40,7 +40,7 @@ wait_time = 0.25
 autostart = true
 
 [node name="UI" parent="." unique_id=1728807949 instance=ExtResource("8_hud")]
-[node name="Session" type="Node" parent="." unique_id=1289844251 node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "dialog_panel", "give_panel", "quest_log_panel", "party_panel", "equipment_panel", "hp_hud", "class_hud", "class_debug", "error_hud", "death_overlay", "esc_menu", "hotbar", "cast_bar", "camera_rig")]
+[node name="Session" type="Node" parent="." unique_id=1289844251 node_paths=PackedStringArray("net", "local_player", "remote_players", "ground_items", "resource_nodes", "npcs", "ground_picker", "inventory_panel", "dialog_panel", "give_panel", "quest_log_panel", "party_panel", "equipment_panel", "hp_hud", "target_frame", "class_hud", "class_debug", "error_hud", "death_overlay", "esc_menu", "hotbar", "cast_bar", "camera_rig")]
 script = ExtResource("6_session")
 net = NodePath("Net")
 local_player = NodePath("../PlayerCharacter/Player")
@@ -56,6 +56,7 @@ quest_log_panel = NodePath("../UI/QuestLogPanel")
 party_panel = NodePath("../UI/PartyPanel")
 equipment_panel = NodePath("../UI/RightDock")
 hp_hud = NodePath("../UI/HpHud")
+target_frame = NodePath("../UI/TargetFrame")
 class_hud = NodePath("../UI/ClassHud")
 class_debug = NodePath("../UI/ClassDebug")
 error_hud = NodePath("../UI/ErrorHud")
