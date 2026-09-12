@@ -105,6 +105,7 @@ func (w *World) stepImpCombat(n *npc) {
 	if target.hp < 0 {
 		target.hp = 0
 	}
+	w.markCombat(target)
 	fields := gamelog.Fields{
 		"npc":       n.id,
 		"target":    target.id,
@@ -123,6 +124,7 @@ func (w *World) beginImpAggro(n *npc, target *player) {
 	n.phase = phaseCombat
 	n.target = target.id
 	n.attackProgress = 0
+	w.markCombat(target)
 	w.log.Event(w.tick, EvNpcAggro, gamelog.Fields{
 		"npc":    n.id,
 		"kind":   n.kind,

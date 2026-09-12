@@ -1,25 +1,49 @@
 package game
 
 import (
+	"time"
+
 	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
 const (
-	MaxHP             = 100
-	AttackDamage      = 10
-	AttackPeriodTicks = 4
-	AttackRange       = 1.5
-	CauseMoveTo       = "move_to"
-	CauseMove         = "move"
-	CausePickup       = "pickup"
-	CauseGather       = "gather"
-	CauseReplaced     = "replaced"
-	CauseAttackerDied = "attacker_died"
+	MaxHP              = 100
+	AttackDamage       = 10
+	AttackPeriodTicks  = 4
+	AttackRange        = 1.5
+	CombatTimeoutTicks = int64(6 * time.Second / TickDuration)
+	CauseMoveTo        = "move_to"
+	CauseMove          = "move"
+	CausePickup        = "pickup"
+	CauseGather        = "gather"
+	CauseReplaced      = "replaced"
+	CauseAttackerDied  = "attacker_died"
+	CauseLeaveCombat   = "leave_combat"
 )
 
 func (p *player) dead() bool { return p.hp == 0 }
+
+func (p *player) inCombat(tick int64) bool {
+	return p.combatExpiresTick > tick
+}
+
+func (w *World) markCombat(p *player) {
+	if p.dead() {
+		return
+	}
+	p.combatExpiresTick = w.tick + CombatTimeoutTicks
+}
+
+func (p *player) clearCombat() {
+	p.combatExpiresTick = 0
+}
+
+func (w *World) playerAttackPeriod(p *player) int {
+	_ = p
+	return AttackPeriodTicks
+}
 
 func (p *player) wireState() mnet.PlayerState {
 	return mnet.PlayerState{
@@ -119,11 +143,13 @@ func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, 
 	p.clearSteer()
 	p.attackTarget = targetID
 	p.attackProgress = 0
+	p.attackApproaching = false
 	w.log.Event(w.tick, EvAttack, withSeq(playerTargetFields(p.id, targetID), seq))
 
 	if distanceBetween(p.pos, targetPos) <= AttackRange {
 		return
 	}
+	p.attackApproaching = true
 	w.steerToward(p, targetPos)
 }
 
@@ -144,6 +170,7 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 	p.y = w.mapCfg.SpawnY
 	p.vy = 0
 	p.clearSteer()
+	p.clearCombat()
 	w.broadcastPose(p)
 	w.broadcastHP(p)
 	w.broadcastMana(p)
@@ -151,6 +178,10 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 }
 
 func (w *World) resolveAttack(p *player) {
+	if !w.stickyAutoAttackAllowed(p) {
+		w.cancelAttack(p, CauseLeaveCombat)
+		return
+	}
 	if n, ok := w.npcs[p.attackTarget]; ok {
 		w.resolveAttackOnNPC(p, n)
 		return
@@ -167,15 +198,13 @@ func (w *World) resolveAttack(p *player) {
 
 	dist := distanceBetween(p.pos, target.pos)
 	if dist > AttackRange {
-		w.steerToward(p, target.pos)
 		return
 	}
-	if p.steering() {
-		w.assignHalt(p)
-	}
+	w.finishAttackApproach(p)
 
+	period := w.playerAttackPeriod(p)
 	p.attackProgress++
-	if p.attackProgress < AttackPeriodTicks {
+	if p.attackProgress < period {
 		return
 	}
 
@@ -184,6 +213,8 @@ func (w *World) resolveAttack(p *player) {
 	if target.hp < 0 {
 		target.hp = 0
 	}
+	w.markCombat(p)
+	w.markCombat(target)
 	fields := playerTargetFields(p.id, target.id)
 	fields["damage"] = AttackDamage
 	fields["target_hp"] = target.hp
@@ -202,15 +233,13 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 
 	dist := distanceBetween(p.pos, target.pos)
 	if dist > AttackRange {
-		w.steerToward(p, target.pos)
 		return
 	}
-	if p.steering() {
-		w.assignHalt(p)
-	}
+	w.finishAttackApproach(p)
 
+	period := w.playerAttackPeriod(p)
 	p.attackProgress++
-	if p.attackProgress < AttackPeriodTicks {
+	if p.attackProgress < period {
 		return
 	}
 
@@ -221,6 +250,7 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 	} else if target.hp < 0 {
 		target.hp = 0
 	}
+	w.markCombat(p)
 	fields := playerTargetFields(p.id, target.id)
 	fields["damage"] = AttackDamage
 	fields["target_hp"] = target.hp
@@ -231,6 +261,23 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 		if target.kind == KindImp {
 			w.killImp(target, p.id)
 		}
+	}
+}
+
+func (w *World) stickyAutoAttackAllowed(p *player) bool {
+	if p.combatExpiresTick == 0 {
+		return true
+	}
+	return p.inCombat(w.tick)
+}
+
+func (w *World) finishAttackApproach(p *player) {
+	if !p.attackApproaching {
+		return
+	}
+	p.attackApproaching = false
+	if p.steering() {
+		w.assignHalt(p)
 	}
 }
 
@@ -246,6 +293,7 @@ func (w *World) kill(victim *player, killer mnet.PlayerID) {
 	w.cancelAttack(victim, CauseAttackerDied)
 	w.cancelCast(victim, CauseAttackerDied)
 	w.clearAttacksOn(victim.id)
+	victim.clearCombat()
 }
 
 func (w *World) clearAttacksOn(target mnet.PlayerID) {
@@ -277,6 +325,7 @@ func (w *World) loseAttack(p *player) {
 func (w *World) clearAttack(p *player) {
 	p.attackTarget = 0
 	p.attackProgress = 0
+	p.attackApproaching = false
 }
 
 func (w *World) broadcastHP(p *player) {

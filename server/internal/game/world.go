@@ -188,8 +188,10 @@ type player struct {
 	partyID           mnet.PartyID
 	pendingInviteFrom mnet.PlayerID
 
-	attackTarget   mnet.PlayerID
-	attackProgress int
+	attackTarget      mnet.PlayerID
+	attackProgress    int
+	attackApproaching bool
+	combatExpiresTick int64
 
 	castAbility    string
 	castLocomotion string
