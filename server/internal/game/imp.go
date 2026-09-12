@@ -1,8 +1,6 @@
 package game
 
 import (
-	"math"
-
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
@@ -40,8 +38,6 @@ func (w *World) stepImp(n *npc, distance float64) {
 		w.stepImpAttack(n)
 	case phaseThink:
 		w.stepImpThink(n)
-	case phaseKite:
-		w.stepImpKite(n, arrived)
 	default:
 		if target := w.nearestLivingPlayerInRange(n.pos, ImpThreatRange); target != nil {
 			w.beginImpAggro(n, target)
@@ -165,11 +161,6 @@ func (w *World) stepImpThink(n *npc) {
 	n.thinkCount++
 
 	target := w.players[n.attackTarget]
-	if n.thinkCount%ImpKiteEvery == 0 {
-		n.phase = phaseKite
-		w.beginImpKite(n, target)
-		return
-	}
 	if distanceBetween(n.pos, target.pos) > AttackRange {
 		n.phase = phaseApproach
 		w.assignNPCPath(n, target.pos)
@@ -177,53 +168,6 @@ func (w *World) stepImpThink(n *npc) {
 	}
 	n.phase = phaseAttack
 	n.attackProgress = 0
-}
-
-func (w *World) beginImpKite(n *npc, target *player) {
-	away := kitePoint(n.pos, target.pos, n.home, ImpKiteDistance)
-	if distanceBetween(n.pos, away) < MinPathLength {
-		n.phase = phaseThink
-		n.thinkProgress = 0
-		return
-	}
-	w.assignNPCPath(n, away)
-}
-
-func (w *World) stepImpKite(n *npc, arrived bool) {
-	if w.impMustLeash(n) {
-		return
-	}
-	if !arrived && len(n.remaining) > 0 {
-		return
-	}
-	n.phase = phaseThink
-	n.thinkProgress = 0
-}
-
-func kitePoint(from, threat, home Point, distance float64) Point {
-	dx := from.X - threat.X
-	dz := from.Z - threat.Z
-	mag := math.Hypot(dx, dz)
-	if mag < MinPathLength {
-		dx = from.X - home.X
-		dz = from.Z - home.Z
-		mag = math.Hypot(dx, dz)
-		if mag < MinPathLength {
-			dx, dz, mag = 1, 0, 1
-		}
-	}
-	dest := Point{
-		X: from.X + dx/mag*distance,
-		Z: from.Z + dz/mag*distance,
-	}
-	if distanceBetween(home, dest) > ImpLeashRange {
-		scale := (ImpLeashRange - MinPathLength) / distanceBetween(home, dest)
-		dest = Point{
-			X: home.X + (dest.X-home.X)*scale,
-			Z: home.Z + (dest.Z-home.Z)*scale,
-		}
-	}
-	return dest
 }
 
 func (w *World) impMustLeash(n *npc) bool {

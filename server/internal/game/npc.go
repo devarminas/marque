@@ -40,9 +40,7 @@ const (
 	ImpThreatRange  = 8.0
 	ImpLeashRange   = 16.0
 	ImpPatrolRadius = 3.0
-	ImpThinkTicks   = 2
-	ImpKiteEvery    = 3
-	ImpKiteDistance = 4.0
+	ImpThinkTicks = 2
 
 	practiceNpcIDBand mnet.PlayerID = 1_000_000
 
@@ -59,7 +57,6 @@ const (
 	phaseApproach
 	phaseAttack
 	phaseThink
-	phaseKite
 	phaseReturn
 )
 

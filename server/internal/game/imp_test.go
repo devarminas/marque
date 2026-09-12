@@ -306,46 +306,32 @@ func TestImpThinkReturnsToAttack(t *testing.T) {
 		pw.w.step()
 	}
 	if imp.phase != phaseAttack {
-		t.Fatalf("phase=%d after Think, want Attack (thinkCount=1, kite every %d)", imp.phase, ImpKiteEvery)
+		t.Fatalf("phase=%d after Think, want Attack", imp.phase)
 	}
 }
 
-func TestImpThinkSelectsKiteOnCadence(t *testing.T) {
+func TestImpThinkApproachesWhenTargetOutOfRange(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
 	despawnOtherImps(pw.w, imp)
-	alice.pos = Point{X: imp.home.X + 1, Z: imp.home.Z}
-	imp.pos = alice.pos
-	imp.home = Point{X: alice.pos.X - 2, Z: alice.pos.Z}
+	imp.pos = imp.home
+	alice.pos = Point{X: imp.home.X + AttackRange + 2, Z: imp.home.Z}
 	imp.phase = phaseThink
 	imp.attackTarget = alice.id
 	imp.thinkProgress = 0
-	imp.thinkCount = ImpKiteEvery - 1
+	imp.thinkCount = 0
 	imp.remaining = nil
 
 	for range ImpThinkTicks {
 		pw.w.step()
 	}
-	if imp.phase != phaseKite {
-		t.Fatalf("phase=%d after Think, want Kite", imp.phase)
+	if imp.phase != phaseApproach {
+		t.Fatalf("phase=%d after Think, want Approach", imp.phase)
 	}
 	if len(imp.remaining) == 0 {
-		t.Fatal("kite assigned no path away")
-	}
-}
-
-func TestImpKiteStaysInsideLeash(t *testing.T) {
-	from := Point{X: ImpLeashRange - 0.5, Z: 0}
-	threat := Point{X: ImpLeashRange - 1.5, Z: 0}
-	home := Point{}
-	dest := kitePoint(from, threat, home, ImpKiteDistance)
-	if distanceBetween(home, dest) > ImpLeashRange {
-		t.Fatalf("kite dest outside leash: dest=%v dist=%v", dest, distanceBetween(home, dest))
-	}
-	if dest.X <= from.X {
-		t.Fatalf("expected kite further from threat along +X, dest=%v from=%v", dest, from)
+		t.Fatal("Approach assigned no path toward target")
 	}
 }
 
@@ -419,7 +405,7 @@ func despawnOtherImps(w *World, keep *npc) {
 
 func impInCombatBrain(n *npc) bool {
 	switch n.phase {
-	case phaseAggro, phaseApproach, phaseAttack, phaseThink, phaseKite:
+	case phaseAggro, phaseApproach, phaseAttack, phaseThink:
 		return true
 	default:
 		return false
