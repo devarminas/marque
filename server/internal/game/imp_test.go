@@ -73,6 +73,24 @@ func TestImpAggroNearestWhenEarlierJoinerIsCloser(t *testing.T) {
 	}
 }
 
+func TestImpAggroEqualDistanceKeepsJoinOrder(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	bob := pw.joinWithClass("knight")
+	seedDeterministicCamp(t, pw.w)
+	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
+	imp.remaining = nil
+	imp.patrolOut = false
+	alice.pos = Point{X: imp.home.X + 6, Z: imp.home.Z}
+	bob.pos = Point{X: imp.home.X + 6, Z: imp.home.Z}
+
+	pw.w.step()
+	if imp.phase != phaseCombat || imp.target != alice.id {
+		t.Fatalf("phase=%d target=%d, want join-order tie-break alice=%d (bob=%d)", imp.phase, imp.target, alice.id, bob.id)
+	}
+}
+
 func TestImpNoAggroOutsideThreatRange(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
