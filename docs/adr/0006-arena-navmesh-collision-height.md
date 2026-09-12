@@ -29,4 +29,8 @@ M14b (client play path / `main.tscn`) and M14f (client prediction against mesh h
 
 - Wiring the client play path or `main.tscn` (M14b).
 - Client prediction changes beyond this note (M14f).
-- NPC pathfinding, agent radius inflation, or multi-mesh maps.
+- Agent radius inflation, or multi-mesh maps.
+
+## Amendment (ARM-260)
+
+NPC combat locomotion on nav-backed maps uses the same mesh as players. Destination paths for approach, kite, and leash-return are server-authored on-mesh polylines (`navmesh.FindPath` → existing NPC `path` broadcast). Nil `World.nav` keeps straight-line polylines (village / tests without `SetNav`). Players still do not walk nav paths; ADR decision 6 is unchanged for player wish steering.
