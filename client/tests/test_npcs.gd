@@ -476,6 +476,7 @@ func _test_hostile_overhead_proximity_and_name() -> void:
 	var npcs: Dictionary = _session.get("_npcs")
 	var welcome_hostile: NpcDummyScript = npcs.get(1000002)
 	var far_imp: NpcDummyScript = npcs.get(1000006)
+	_session.call("_sync_npc_overhead_proximity")
 	_check(welcome_hostile != null and welcome_hostile.overhead_visible(), "welcome hostile at 3u is near")
 	_check(far_imp != null and not far_imp.overhead_visible(), "camp-distance imp stays far after spawn")
 
