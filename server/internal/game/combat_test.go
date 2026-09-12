@@ -438,6 +438,35 @@ func TestStickyAutoAttackStopsOnLeaveCombat(t *testing.T) {
 	}
 }
 
+func TestStickyAutoAttackStopsAfterNaturalCombatTimeout(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+	for range pw.w.playerAttackPeriod(alice) {
+		pw.w.step()
+	}
+	if !alice.inCombat(pw.w.tick) {
+		t.Fatal("expected in combat after first hit")
+	}
+
+	hostile.pos = Point{X: 10, Z: 0}
+	alice.clearSteer()
+	for range CombatTimeoutTicks + 1 {
+		pw.w.step()
+	}
+	if alice.attackTarget != 0 {
+		t.Fatalf("sticky AA survived natural timeout: target=%d expires=%d tick=%d",
+			alice.attackTarget, alice.combatExpiresTick, pw.w.tick)
+	}
+	cancelled := pw.events(EvAttackCancelled)
+	if len(cancelled) == 0 || cancelled[len(cancelled)-1]["cause"] != CauseLeaveCombat {
+		t.Fatalf("cancel events=%v, want trailing cause=%s", cancelled, CauseLeaveCombat)
+	}
+}
+
 func TestStickyAutoAttackContinuesWhileMovingInRange(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
