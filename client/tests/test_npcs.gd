@@ -82,6 +82,8 @@ func _ready() -> void:
 	_test_despawn_forgets_npc()
 	_test_npc_spawn_after_despawn()
 	_test_npc_spawn_missing_name_is_empty()
+	_test_hostile_overhead_proximity_and_name()
+	_test_overhead_click_resolves_like_body()
 
 	_finished = true
 
@@ -429,7 +431,84 @@ func _test_npc_spawn_after_despawn() -> void:
 	var hit: Variant = hp_map.get(1000006)
 	_check(hit is Vector2i and hit == Vector2i(50, 50), "npc_spawn applies hit points")
 	var label := imp.get_node_or_null("HpLabel") as Label3D
-	_check(label != null and label.visible and label.text == "50/50", "npc_spawn shows hp label")
+	_check(label != null and label.text == "50/50", "npc_spawn caches hp label text")
+	_check(label != null and not label.visible, "far hostile overhead stays hidden at spawn")
+	imp.refresh_overhead_proximity(Vector2(13.0, 7.5))
+	_check(label != null and label.visible, "overhead appears when the local player is beside it")
+
+
+func _test_hostile_overhead_proximity_and_name() -> void:
+	var near := NpcDummyScene.instantiate() as NpcDummyScript
+	_world.add_child(near)
+	near.configure(900001, NpcDummyScript.KindDummy, NpcDummyScript.FactionHostile, "Training Dummy")
+	near.place_at(0.0, 0.0)
+	near.set_hit_points(80, 100)
+	_check(not near.overhead_visible(), "hostile overhead waits for proximity")
+	near.refresh_overhead_proximity(Vector2(NpcDummyScript.OVERHEAD_PROXIMITY + 0.5, 0.0))
+	_check(not near.overhead_visible(), "hostile overhead stays hidden just beyond 12u")
+	near.refresh_overhead_proximity(Vector2(NpcDummyScript.OVERHEAD_PROXIMITY, 0.0))
+	_check(near.overhead_visible(), "hostile overhead shows at exactly 12u")
+	var name_label := near.get_node("NameLabel") as Label3D
+	var hp_label := near.get_node("HpLabel") as Label3D
+	_check(name_label.visible and name_label.text == "Training Dummy", "near hostile shows server name")
+	_check(hp_label.visible and hp_label.text == "80/100", "near hostile shows server hp")
+
+	var nameless := NpcDummyScene.instantiate() as NpcDummyScript
+	_world.add_child(nameless)
+	nameless.configure(900002, NpcDummyScript.KindDummy, NpcDummyScript.FactionHostile, "")
+	nameless.place_at(1.0, 0.0)
+	nameless.set_hit_points(10, 10)
+	nameless.refresh_overhead_proximity(Vector2(1.0, 0.0))
+	_check(nameless.overhead_visible(), "missing name still shows hp when near")
+	_check(
+		not (nameless.get_node("NameLabel") as Label3D).visible,
+		"empty display_name keeps the name label hidden",
+	)
+
+	var friendly := NpcDummyScene.instantiate() as NpcDummyScript
+	_world.add_child(friendly)
+	friendly.configure(900003, NpcDummyScript.KindDummy, NpcDummyScript.FactionFriendly, "")
+	friendly.place_at(50.0, 50.0)
+	friendly.set_hit_points(100, 100)
+	friendly.refresh_overhead_proximity(Vector2.ZERO)
+	_check(friendly.overhead_visible(), "friendly overhead stays always-on when hp is known")
+
+	var npcs: Dictionary = _session.get("_npcs")
+	var welcome_hostile: NpcDummyScript = npcs.get(1000002)
+	var far_imp: NpcDummyScript = npcs.get(1000006)
+	_check(welcome_hostile != null and welcome_hostile.overhead_visible(), "welcome hostile at 3u is near")
+	_check(far_imp != null and not far_imp.overhead_visible(), "camp-distance imp stays far after spawn")
+
+	near.queue_free()
+	nameless.queue_free()
+	friendly.queue_free()
+
+
+func _test_overhead_click_resolves_like_body() -> void:
+	var GroundPickerScript := preload("res://scripts/ground_picker.gd")
+	var dummy := NpcImpScene.instantiate() as NpcDummyScript
+	_world.add_child(dummy)
+	dummy.configure(900010, NpcDummyScript.KindImp, NpcDummyScript.FactionHostile, "Imp")
+	dummy.place_at(4.0, 4.0)
+	dummy.set_hit_points(50, 50)
+	dummy.refresh_overhead_proximity(Vector2(4.0, 4.0))
+	var overhead := dummy.get_node("OverheadClick") as StaticBody3D
+	var body := dummy.get_node("ClickBody") as StaticBody3D
+	_check(overhead != null and body != null, "scene authors OverheadClick and ClickBody")
+	_check(
+		overhead.collision_layer == NpcDummyScript.OVERHEAD_CLICK_LAYER,
+		"near hostile enables overhead pick layer",
+	)
+	var picker := GroundPickerScript.new()
+	var from_overhead: Node3D = picker._selectable_from_collider(overhead)
+	var from_body: Node3D = picker._selectable_from_collider(body)
+	_check(from_overhead == dummy, "overhead collider resolves to the npc")
+	_check(from_body == dummy, "body collider resolves to the same npc")
+	_check(from_overhead == from_body, "overhead and body share the selection target")
+	dummy.refresh_overhead_proximity(Vector2(100.0, 100.0))
+	_check(overhead.collision_layer == 0, "far hostile disables overhead pick")
+	dummy.queue_free()
+	picker.free()
 
 
 func _test_npc_spawn_missing_name_is_empty() -> void:
