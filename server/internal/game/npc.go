@@ -66,13 +66,13 @@ type npc struct {
 	hp      int
 	maxHP   int
 
-	camp           string
-	home           Point
-	remaining      []Point
-	phase          npcPhase
-	target         mnet.PlayerID
-	attackProgress int
-	patrolOut      bool
+	camp      string
+	home      Point
+	remaining []Point
+	phase     npcPhase
+	swingRuntime
+	castRuntime
+	patrolOut bool
 }
 
 func (n *npc) dead() bool { return n.hp == 0 }
@@ -211,7 +211,6 @@ func (w *World) SetNPCHitPointsByFaction(faction string, hp int) error {
 }
 
 // SetHostileKindHitPoints sets live hostile NPCs of kind to hp.
-// Thin WS quest probes use this so a solo kill credit stays inside the ladder budget.
 func (w *World) SetHostileKindHitPoints(kind string, hp int) error {
 	if kind == "" {
 		return fmt.Errorf("set hostile kind hp: kind must not be empty")

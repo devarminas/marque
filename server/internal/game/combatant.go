@@ -2,39 +2,62 @@ package game
 
 import mnet "github.com/devarminas/marque/server/internal/net"
 
-// combatant is the shared fighter surface for players and NPCs: pose, HP,
-// swing lock, and cast runtime. Cast resolve and effect application drive
-// through this type so enemy skills do not fork a second effect path.
+// combatant shares cast resolve/effects so NPCs do not fork a second path.
 type combatant interface {
 	combatID() mnet.PlayerID
 	combatPos() Point
 	combatHP() *int
 	combatMaxHP() int
 	combatDead() bool
-	castState() *castState
-	swingState() *swingState
+	runtimeCast() *castRuntime
+	runtimeSwing() *swingRuntime
 }
 
-type castState struct {
-	ability    string
-	locomotion string
-	target     mnet.PlayerID
-	progress   int
-	total      int
-	cost       int
+type castRuntime struct {
+	castAbility    string
+	castLocomotion string
+	castTarget     mnet.PlayerID
+	castProgress   int
+	castTotal      int
+	castCost       int
 }
 
-func (c *castState) casting() bool { return c.ability != "" }
+func (c *castRuntime) casting() bool { return c.castAbility != "" }
 
-func (c *castState) clear() {
-	*c = castState{}
+func (c *castRuntime) clear() {
+	*c = castRuntime{}
 }
 
-type swingState struct {
-	target   mnet.PlayerID
-	progress int
+type swingRuntime struct {
+	attackTarget   mnet.PlayerID
+	attackProgress int
 }
 
-func (s *swingState) clear() {
-	*s = swingState{}
+func (s *swingRuntime) clear() {
+	*s = swingRuntime{}
+}
+
+func (p *player) combatID() mnet.PlayerID   { return p.id }
+func (p *player) combatPos() Point          { return p.pos }
+func (p *player) combatHP() *int            { return &p.hp }
+func (p *player) combatMaxHP() int          { return MaxHP }
+func (p *player) combatDead() bool          { return p.dead() }
+func (p *player) runtimeCast() *castRuntime   { return &p.castRuntime }
+func (p *player) runtimeSwing() *swingRuntime { return &p.swingRuntime }
+
+func (n *npc) combatID() mnet.PlayerID   { return n.id }
+func (n *npc) combatPos() Point          { return n.pos }
+func (n *npc) combatHP() *int            { return &n.hp }
+func (n *npc) combatMaxHP() int          { return n.maxHP }
+func (n *npc) combatDead() bool          { return n.dead() }
+func (n *npc) runtimeCast() *castRuntime   { return &n.castRuntime }
+func (n *npc) runtimeSwing() *swingRuntime { return &n.swingRuntime }
+
+func (p *player) casting() bool { return p.castRuntime.casting() }
+
+func (n *npc) casting() bool { return n.castRuntime.casting() }
+
+func playerCombatant(c combatant) *player {
+	p, _ := c.(*player)
+	return p
 }

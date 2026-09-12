@@ -189,15 +189,8 @@ type player struct {
 	partyID           mnet.PartyID
 	pendingInviteFrom mnet.PlayerID
 
-	attackTarget   mnet.PlayerID
-	attackProgress int
-
-	castAbility    string
-	castLocomotion string
-	castTarget     mnet.PlayerID
-	castProgress   int
-	castTotal      int
-	castCost       int
+	swingRuntime
+	castRuntime
 
 	hp   int
 	mana int
@@ -408,6 +401,14 @@ func (w *World) step() {
 		if p.casting() {
 			w.advanceCast(p)
 		}
+	}
+
+	for _, id := range w.npcOrder {
+		n := w.npcs[id]
+		if n == nil || !n.casting() {
+			continue
+		}
+		w.advanceCast(n)
 	}
 
 	w.respawnNodes()
