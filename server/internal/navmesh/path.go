@@ -122,7 +122,7 @@ func (m *Mesh) FindPath(fromX, fromZ, toX, toZ float64) (path []PathPoint, ok bo
 			start := PathPoint{X: startX, Z: startZ}
 			end := PathPoint{X: endX, Z: endZ}
 			portals = append(portals, portal{left: end, right: end})
-			pulled := stringPull(start, portals)
+			pulled := funnelPath(start, portals)
 			if startOn {
 				pulled = prependPoint(from, pulled)
 			} else {
@@ -440,7 +440,7 @@ func reconstruct(came []int, goal int) []int {
 	return out
 }
 
-func stringPull(start PathPoint, portals []portal) []PathPoint {
+func funnelPath(start PathPoint, portals []portal) []PathPoint {
 	if len(portals) == 0 {
 		return []PathPoint{start}
 	}

@@ -32,8 +32,6 @@ func (w *World) stepImp(n *npc, distance float64) {
 	case phaseCombat:
 		walking := len(n.remaining) > 0
 		w.stepImpCombat(n)
-		// Chase refreshes the path every tick until melee; halt clears remaining
-		// without Advance, so treat that stop as arrival for GAMELOG symmetry.
 		if walking && len(n.remaining) == 0 {
 			arrived = true
 		}
