@@ -86,8 +86,8 @@ func TestImpAggroEqualDistanceKeepsJoinOrder(t *testing.T) {
 	bob.pos = Point{X: imp.home.X + 6, Z: imp.home.Z}
 
 	pw.w.step()
-	if imp.phase != phaseCombat || imp.target != alice.id {
-		t.Fatalf("phase=%d target=%d, want join-order tie-break alice=%d (bob=%d)", imp.phase, imp.target, alice.id, bob.id)
+	if imp.phase != phaseCombat || imp.attackTarget != alice.id {
+		t.Fatalf("phase=%d target=%d, want join-order tie-break alice=%d (bob=%d)", imp.phase, imp.attackTarget, alice.id, bob.id)
 	}
 }
 
