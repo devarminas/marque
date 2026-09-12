@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const RelPath = "shared/maps/arena_ring_of_trials_nav.json"
@@ -43,6 +44,9 @@ type Vec3 struct {
 type Mesh struct {
 	Vertices []Vec3
 	Polys    [][3]int
+
+	graphOnce sync.Once
+	pathGraph *pathGraph
 }
 
 type fileMesh struct {
