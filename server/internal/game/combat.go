@@ -139,6 +139,11 @@ func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, 
 	w.cancelAttack(p, CauseReplaced)
 	w.cancelCast(p, CauseReplaced)
 	p.clearSteer()
+	// Expired combat must not poison a fresh sticky arm: stickyAutoAttackAllowed
+	// treats a non-zero expires tick as "must still be in combat".
+	if p.combatExpiresTick != 0 && !p.inCombat(w.tick) {
+		p.clearCombat()
+	}
 	p.attackTarget = targetID
 	p.attackProgress = 0
 	p.attackApproaching = false
@@ -313,6 +318,9 @@ func (w *World) cancelAttack(p *player, cause string) {
 		"cause":  cause,
 	})
 	w.clearAttack(p)
+	if cause == CauseLeaveCombat {
+		p.clearCombat()
+	}
 }
 
 func (w *World) loseAttack(p *player) {

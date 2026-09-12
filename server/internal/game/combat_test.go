@@ -429,6 +429,9 @@ func TestStickyAutoAttackStopsOnLeaveCombat(t *testing.T) {
 	if alice.attackTarget != 0 {
 		t.Fatalf("sticky AA survived leave-combat: target=%d", alice.attackTarget)
 	}
+	if alice.combatExpiresTick != 0 {
+		t.Fatalf("leave-combat left stale expires=%d tick=%d", alice.combatExpiresTick, pw.w.tick)
+	}
 	cancelled := pw.events(EvAttackCancelled)
 	if len(cancelled) != 1 || cancelled[0]["cause"] != CauseLeaveCombat {
 		t.Fatalf("cancel events=%v, want cause=%s", cancelled, CauseLeaveCombat)
@@ -461,9 +464,68 @@ func TestStickyAutoAttackStopsAfterNaturalCombatTimeout(t *testing.T) {
 		t.Fatalf("sticky AA survived natural timeout: target=%d expires=%d tick=%d",
 			alice.attackTarget, alice.combatExpiresTick, pw.w.tick)
 	}
+	if alice.combatExpiresTick != 0 {
+		t.Fatalf("natural timeout left stale expires=%d tick=%d", alice.combatExpiresTick, pw.w.tick)
+	}
 	cancelled := pw.events(EvAttackCancelled)
 	if len(cancelled) == 0 || cancelled[len(cancelled)-1]["cause"] != CauseLeaveCombat {
 		t.Fatalf("cancel events=%v, want trailing cause=%s", cancelled, CauseLeaveCombat)
+	}
+}
+
+func TestStickyAutoAttackRestartsAfterNaturalCombatTimeout(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+	for range pw.w.playerAttackPeriod(alice) {
+		pw.w.step()
+	}
+	if !alice.inCombat(pw.w.tick) {
+		t.Fatal("expected in combat after first hit")
+	}
+
+	hostile.pos = Point{X: 10, Z: 0}
+	alice.clearSteer()
+	for range CombatTimeoutTicks + 1 {
+		pw.w.step()
+	}
+	if alice.attackTarget != 0 || alice.combatExpiresTick != 0 {
+		t.Fatalf("expected cleared sticky after timeout: target=%d expires=%d tick=%d",
+			alice.attackTarget, alice.combatExpiresTick, pw.w.tick)
+	}
+
+	hostile.pos = Point{X: 1, Z: 0}
+	hitsBefore := len(pw.events(EvAttackHit))
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 1)
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("re-attack did not arm sticky: target=%d", alice.attackTarget)
+	}
+	for range pw.w.playerAttackPeriod(alice) {
+		pw.w.step()
+	}
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("re-attack sticky died before hit: target=%d expires=%d tick=%d",
+			alice.attackTarget, alice.combatExpiresTick, pw.w.tick)
+	}
+	if got := len(pw.events(EvAttackHit)); got != hitsBefore+1 {
+		t.Fatalf("hits after re-attack=%d, want %d", got, hitsBefore+1)
+	}
+	if !alice.inCombat(pw.w.tick) {
+		t.Fatalf("re-attack hit did not markCombat: expires=%d tick=%d",
+			alice.combatExpiresTick, pw.w.tick)
+	}
+	leaveCancels := 0
+	for _, ev := range pw.events(EvAttackCancelled) {
+		if ev["cause"] == CauseLeaveCombat {
+			leaveCancels++
+		}
+	}
+	if leaveCancels != 1 {
+		t.Fatalf("leave_combat cancels=%d, want 1 (timeout only): %v",
+			leaveCancels, pw.events(EvAttackCancelled))
 	}
 }
 
