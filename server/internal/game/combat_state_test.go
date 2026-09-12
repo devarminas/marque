@@ -31,7 +31,7 @@ func TestPlayerEntersCombatOnTakeDamage(t *testing.T) {
 	imp := pw.w.npcByKind(KindImp)
 	despawnOtherImps(pw.w, imp)
 	alice.pos = imp.pos
-	imp.phase = phaseCombat
+	imp.phase = phaseAttack
 	imp.attackTarget = alice.id
 	imp.remaining = nil
 
