@@ -65,10 +65,10 @@ func TestFindPathBlockedIntoSolidHole(t *testing.T) {
 	if !m.ContainsXZ(end.X, end.Z) {
 		t.Fatalf("end off mesh %v", end)
 	}
-	if hypot2(end.X-toX, end.Z-toZ) < 1e-3 {
+	if math.Hypot(end.X-toX, end.Z-toZ) < 1e-3 {
 		t.Fatalf("reached off-mesh destination %v", end)
 	}
-	if hypot2(end.X-fromX, end.Z-fromZ) > 2 {
+	if math.Hypot(end.X-fromX, end.Z-fromZ) > 2 {
 		t.Fatalf("slid too far past hole edge: %v", end)
 	}
 }
@@ -86,7 +86,7 @@ func assertPathOnMesh(t *testing.T, m *Mesh, path []PathPoint) {
 		segMidZ := (a.Z + b.Z) / 2
 		onMid := m.ContainsXZ(segMidX, segMidZ)
 		mx, mz := m.Move(a.X, a.Z, b.X, b.Z)
-		moveReaches := hypot2(mx-b.X, mz-b.Z) <= 1e-3
+		moveReaches := math.Hypot(mx-b.X, mz-b.Z) <= 1e-3
 		if !onMid && !moveReaches {
 			t.Fatalf("segment %d→%d leaves mesh: mid off and Move stopped at (%v,%v) short of %v", i, i+1, mx, mz, b)
 		}

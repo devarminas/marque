@@ -88,7 +88,6 @@ func portalFromCenter(va, vb Vec3, center PathPoint) portal {
 	b := PathPoint{X: vb.X, Z: vb.Z}
 	mid := PathPoint{X: (a.X + b.X) / 2, Z: (a.Z + b.Z) / 2}
 	dir := PathPoint{X: mid.X - center.X, Z: mid.Z - center.Z}
-	// Visual left of travel from the triangle center through the shared edge.
 	if cross2(dir, PathPoint{X: a.X - center.X, Z: a.Z - center.Z}) > 0 {
 		return portal{left: a, right: b}
 	}
@@ -106,7 +105,7 @@ func (m *Mesh) FindPath(fromX, fromZ, toX, toZ float64) (path []PathPoint, ok bo
 	endX, endZ, endPolys, endOn := m.locate(toX, toZ)
 	mx, mz := m.Move(fromX, fromZ, toX, toZ)
 
-	if startOn && hypot2(mx-toX, mz-toZ) < pathReachEps {
+	if startOn && math.Hypot(mx-toX, mz-toZ) < pathReachEps {
 		return []PathPoint{from, to}, true
 	}
 	if !startOn && endOn && len(startPolys) == 0 {
@@ -158,7 +157,7 @@ func (m *Mesh) FindPath(fromX, fromZ, toX, toZ float64) (path []PathPoint, ok bo
 
 func clampPath(from PathPoint, mx, mz float64) []PathPoint {
 	stop := PathPoint{X: mx, Z: mz}
-	if hypot2(stop.X-from.X, stop.Z-from.Z) < pathReachEps {
+	if math.Hypot(stop.X-from.X, stop.Z-from.Z) < pathReachEps {
 		return []PathPoint{from}
 	}
 	return []PathPoint{from, stop}
@@ -176,7 +175,7 @@ func (m *Mesh) pathOnMesh(path []PathPoint) bool {
 	for i := 0; i+1 < len(path); i++ {
 		a, b := path[i], path[i+1]
 		mx, mz := m.Move(a.X, a.Z, b.X, b.Z)
-		if hypot2(mx-b.X, mz-b.Z) > pathSnapEps {
+		if math.Hypot(mx-b.X, mz-b.Z) > pathSnapEps {
 			return false
 		}
 	}
@@ -199,18 +198,15 @@ func pathUsable(path []PathPoint, to PathPoint) bool {
 		return false
 	}
 	last := path[len(path)-1]
-	if hypot2(last.X-to.X, last.Z-to.Z) < pathReachEps {
+	if math.Hypot(last.X-to.X, last.Z-to.Z) < pathReachEps {
 		return true
 	}
-	return pathLength(path) > 0
-}
-
-func pathLength(path []PathPoint) float64 {
-	var total float64
 	for i := 1; i < len(path); i++ {
-		total += hypot2(path[i].X-path[i-1].X, path[i].Z-path[i-1].Z)
+		if math.Hypot(path[i].X-path[i-1].X, path[i].Z-path[i-1].Z) > pathReachEps {
+			return true
+		}
 	}
-	return total
+	return false
 }
 
 func compactPath(path []PathPoint) []PathPoint {
@@ -220,7 +216,7 @@ func compactPath(path []PathPoint) []PathPoint {
 	out := path[:1]
 	for _, p := range path[1:] {
 		prev := out[len(out)-1]
-		if hypot2(p.X-prev.X, p.Z-prev.Z) > pathReachEps {
+		if math.Hypot(p.X-prev.X, p.Z-prev.Z) > pathReachEps {
 			out = append(out, p)
 		}
 	}
@@ -231,7 +227,7 @@ func prependPoint(p PathPoint, path []PathPoint) []PathPoint {
 	if len(path) == 0 {
 		return []PathPoint{p}
 	}
-	if hypot2(path[0].X-p.X, path[0].Z-p.Z) < pathReachEps {
+	if math.Hypot(path[0].X-p.X, path[0].Z-p.Z) < pathReachEps {
 		path[0] = p
 		return path
 	}
@@ -243,7 +239,7 @@ func appendPoint(path []PathPoint, p PathPoint) []PathPoint {
 		return []PathPoint{p}
 	}
 	last := path[len(path)-1]
-	if hypot2(last.X-p.X, last.Z-p.Z) < pathReachEps {
+	if math.Hypot(last.X-p.X, last.Z-p.Z) < pathReachEps {
 		path[len(path)-1] = p
 		return path
 	}
@@ -332,7 +328,7 @@ func portalBetween(g *pathGraph, a, b int) portal {
 
 type astarNode struct {
 	poly int
-	g, f float64
+	f    float64
 	idx  int
 }
 
@@ -389,8 +385,7 @@ func (g *pathGraph) aStar(starts, goals []int) ([]int, bool) {
 		gScore[start] = 0
 		node := &astarNode{
 			poly: start,
-			g:    0,
-			f:    hypot2(g.centroid[start].X-goalHint.X, g.centroid[start].Z-goalHint.Z),
+			f:    math.Hypot(g.centroid[start].X-goalHint.X, g.centroid[start].Z-goalHint.Z),
 		}
 		heap.Push(open, node)
 		inOpen[start] = node
@@ -413,20 +408,19 @@ func (g *pathGraph) aStar(starts, goals []int) ([]int, bool) {
 			if closed[e.poly] {
 				continue
 			}
-			step := hypot2(g.centroid[cur.poly].X-g.centroid[e.poly].X, g.centroid[cur.poly].Z-g.centroid[e.poly].Z)
+			step := math.Hypot(g.centroid[cur.poly].X-g.centroid[e.poly].X, g.centroid[cur.poly].Z-g.centroid[e.poly].Z)
 			tentative := gScore[cur.poly] + step
 			if tentative >= gScore[e.poly] {
 				continue
 			}
 			came[e.poly] = cur.poly
 			gScore[e.poly] = tentative
-			f := tentative + hypot2(g.centroid[e.poly].X-goalHint.X, g.centroid[e.poly].Z-goalHint.Z)
+			f := tentative + math.Hypot(g.centroid[e.poly].X-goalHint.X, g.centroid[e.poly].Z-goalHint.Z)
 			if node := inOpen[e.poly]; node != nil {
-				node.g = tentative
 				node.f = f
 				heap.Fix(open, node.idx)
 			} else {
-				node := &astarNode{poly: e.poly, g: tentative, f: f}
+				node := &astarNode{poly: e.poly, f: f}
 				heap.Push(open, node)
 				inOpen[e.poly] = node
 			}
@@ -498,11 +492,7 @@ func stringPull(start PathPoint, portals []portal) []PathPoint {
 }
 
 func pointsEqual(a, b PathPoint) bool {
-	return hypot2(a.X-b.X, a.Z-b.Z) < pathReachEps
-}
-
-func hypot2(dx, dz float64) float64 {
-	return math.Hypot(dx, dz)
+	return math.Hypot(a.X-b.X, a.Z-b.Z) < pathReachEps
 }
 
 func cross2(a, b PathPoint) float64 {

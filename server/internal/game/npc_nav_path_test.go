@@ -195,15 +195,12 @@ func assertGamePathOnMesh(t *testing.T, mesh *navmesh.Mesh, points []Point) {
 func assertGameNoHoleTunnel(t *testing.T, points []Point, from, to, mid Point) {
 	t.Helper()
 	for i := 0; i+1 < len(points); i++ {
-		if tunnelsHoleChord(points[i], points[i+1], from, to, mid) {
+		a, b := points[i], points[i+1]
+		segMid := Point{X: (a.X + b.X) / 2, Z: (a.Z + b.Z) / 2}
+		if math.Abs(segMid.X-mid.X) < 1e-3 && math.Abs(segMid.Z-mid.Z) < 1e-3 &&
+			math.Abs(a.X-from.X) < 1e-3 && math.Abs(a.Z-from.Z) < 1e-3 &&
+			math.Abs(b.X-to.X) < 1e-3 && math.Abs(b.Z-to.Z) < 1e-3 {
 			t.Fatalf("tunneled hole mid via segment %d", i)
 		}
 	}
-}
-
-func tunnelsHoleChord(a, b, from, to, mid Point) bool {
-	segMid := Point{X: (a.X + b.X) / 2, Z: (a.Z + b.Z) / 2}
-	return math.Abs(segMid.X-mid.X) < 1e-3 && math.Abs(segMid.Z-mid.Z) < 1e-3 &&
-		math.Abs(a.X-from.X) < 1e-3 && math.Abs(a.Z-from.Z) < 1e-3 &&
-		math.Abs(b.X-to.X) < 1e-3 && math.Abs(b.Z-to.Z) < 1e-3
 }
