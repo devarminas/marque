@@ -132,15 +132,16 @@ func (w *World) npcWeaponID(n *npc) string {
 
 func (w *World) attackPeriodTicks(weaponID string) int {
 	if w.weapons == nil {
-		return 1
+		panic("game: weapons catalog required for auto-attack")
 	}
 	if period, ok := w.weapons.Period(weaponID); ok {
 		return period
 	}
-	if period, ok := w.weapons.Period(weapondef.Unarmed); ok {
-		return period
+	period, ok := w.weapons.Period(weapondef.Unarmed)
+	if !ok {
+		panic("game: weapons catalog missing unarmed")
 	}
-	return 1
+	return period
 }
 
 func (w *World) playerAttackPeriod(p *player) int {
