@@ -98,6 +98,7 @@ class Recorder:
 		npc_ids: PackedInt64Array,
 		npc_kinds: PackedStringArray,
 		npc_factions: PackedStringArray,
+		npc_names: PackedStringArray,
 		npc_positions: PackedVector2Array,
 		npc_hps: PackedInt32Array,
 		npc_max_hps: PackedInt32Array,
@@ -107,6 +108,7 @@ class Recorder:
 			"ids": npc_ids,
 			"kinds": npc_kinds,
 			"factions": npc_factions,
+			"names": npc_names,
 			"positions": npc_positions,
 			"hps": npc_hps,
 			"max_hps": npc_max_hps,
@@ -322,6 +324,10 @@ func _test_welcome_carries_npcs() -> void:
 		Array(listed["kinds"]) == ["dummy", "dummy"],
 		"and kinds, got %s" % [Array(listed["kinds"])],
 	)
+	_check(
+		Array(listed["names"]) == ["", ""],
+		"missing name fields become empty strings, got %s" % [Array(listed["names"])],
+	)
 	_check(Array(listed["hps"]) == [100, 80], "and hit points, got %s" % [Array(listed["hps"])])
 	recorder.release()
 
@@ -471,7 +477,7 @@ func _test_a_null_list_means_empty() -> void:
 			["welcomed", 1, 5, [1]],
 			["welcome_items", [], [], []],
 			["welcome_nodes", [], [], [], []],
-			["welcome_npcs", [], [], [], [], [], []],
+			["welcome_npcs", [], [], [], [], [], [], []],
 		],
 		"a welcome whose items are null still joins the client, got %s" % [nulled],
 	)
@@ -557,6 +563,7 @@ func _replay(frame: String) -> Array:
 					Array(event["ids"]),
 					Array(event["kinds"]),
 					Array(event["factions"]),
+					Array(event["names"]),
 					Array(event["positions"]),
 					Array(event["hps"]),
 					Array(event["max_hps"]),

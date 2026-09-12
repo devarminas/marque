@@ -145,6 +145,7 @@ func _test_welcome_accepts_neutral_quest_giver() -> void:
 			npc_ids: PackedInt64Array,
 			npc_kinds: PackedStringArray,
 			npc_factions: PackedStringArray,
+			_names: PackedStringArray,
 			_pos: PackedVector2Array,
 			_hps: PackedInt32Array,
 			_max_hps: PackedInt32Array,

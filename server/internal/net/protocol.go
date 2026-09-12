@@ -89,6 +89,7 @@ type NpcState struct {
 	ID      PlayerID `json:"id"`
 	Kind    string   `json:"kind"`
 	Faction string   `json:"faction"`
+	Name    string   `json:"name,omitempty"`
 	X       float64  `json:"x"`
 	Z       float64  `json:"z"`
 	HP      int      `json:"hp"`

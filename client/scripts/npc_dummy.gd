@@ -21,6 +21,7 @@ const WALK_CLIP_SPEED := 0.65
 var npc_id := 0
 var kind := KindDummy
 var faction := FactionHostile
+var display_name := ""
 
 var clock: TickClock = null
 
@@ -78,10 +79,11 @@ func _physics_process(_delta: float) -> void:
 		_meter_label.modulate = Color(1, 0.55, 0.2, 1)
 
 
-func configure(id: int, npc_kind: String, npc_faction: String) -> void:
+func configure(id: int, npc_kind: String, npc_faction: String, npc_name: String = "") -> void:
 	npc_id = id
 	kind = npc_kind
 	faction = npc_faction
+	display_name = npc_name
 	name = "Npc%d" % id
 	_apply_faction_color()
 	if kind == KindDummy and _meter == null:

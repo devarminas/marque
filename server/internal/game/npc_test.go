@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -41,6 +42,9 @@ func TestSeedPracticeDummiesWelcome(t *testing.T) {
 	}
 	if friendly.HP != DummyMaxHP || hostile.HP != DummyMaxHP || friendly.MaxHP != DummyMaxHP || hostile.MaxHP != DummyMaxHP {
 		t.Fatalf("hp friendly=%d/%d hostile=%d/%d", friendly.HP, friendly.MaxHP, hostile.HP, hostile.MaxHP)
+	}
+	if friendly.Name != "Training Dummy" || hostile.Name != "Training Dummy" {
+		t.Fatalf("names friendly=%q hostile=%q", friendly.Name, hostile.Name)
 	}
 	spawned := pw.events(EvNpcSpawned)
 	if len(spawned) != 2 {
@@ -275,5 +279,46 @@ func TestDummyHealNeverZeroes(t *testing.T) {
 	}
 	if friendly.dead() {
 		t.Fatal("friendly dummy dead after heal")
+	}
+}
+
+func TestImpDisplayNameRoundTrip(t *testing.T) {
+	pw := newProbeWorld(t)
+	seedDeterministicCamp(t, pw.w)
+	states := pw.w.npcStates()
+	if len(states) == 0 {
+		t.Fatal("no imps seeded")
+	}
+	for _, s := range states {
+		if s.Kind != KindImp {
+			continue
+		}
+		if s.Name != "Imp" {
+			t.Fatalf("wire name=%q for kind=%q, want Imp", s.Name, s.Kind)
+		}
+		raw, err := mnet.Encode(mnet.NpcSpawn(s))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var env struct {
+			NpcSpawn *mnet.NpcSpawn `json:"npc_spawn"`
+		}
+		if err := json.Unmarshal(raw, &env); err != nil {
+			t.Fatalf("decode envelope: %v raw=%s", err, raw)
+		}
+		if env.NpcSpawn == nil {
+			t.Fatalf("missing npc_spawn in %s", raw)
+		}
+		if env.NpcSpawn.Name != "Imp" {
+			t.Fatalf("decoded name=%q, want Imp; raw=%s", env.NpcSpawn.Name, raw)
+		}
+		return
+	}
+	t.Fatal("no imp in npcStates")
+}
+
+func TestNpcDisplayNameEmptyUnknownKind(t *testing.T) {
+	if got := npcDisplayName("no_such_kind"); got != "" {
+		t.Fatalf("unknown kind display name=%q, want empty", got)
 	}
 }

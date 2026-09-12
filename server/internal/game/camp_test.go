@@ -34,6 +34,9 @@ func TestSeedImpCampWelcome(t *testing.T) {
 		if s.Kind != KindImp || s.Faction != FactionHostile {
 			t.Fatalf("state=%+v", s)
 		}
+		if s.Name != "Imp" {
+			t.Fatalf("name=%q, want Imp", s.Name)
+		}
 		if s.HP != ImpMaxHP || s.MaxHP != ImpMaxHP {
 			t.Fatalf("hp=%d/%d, want %d", s.HP, s.MaxHP, ImpMaxHP)
 		}
@@ -177,6 +180,9 @@ func TestCampRespawnBroadcastsNpcSpawn(t *testing.T) {
 	}
 	if spawn.Kind != KindImp || spawn.Faction != FactionHostile {
 		t.Fatalf("npc_spawn=%+v", spawn)
+	}
+	if spawn.Name != "Imp" {
+		t.Fatalf("npc_spawn name=%q, want Imp", spawn.Name)
 	}
 	if spawn.HP != ImpMaxHP || spawn.MaxHP != ImpMaxHP {
 		t.Fatalf("npc_spawn hp=%d/%d", spawn.HP, spawn.MaxHP)
