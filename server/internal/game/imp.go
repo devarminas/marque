@@ -1,4 +1,4 @@
-﻿package game
+package game
 
 import (
 	"github.com/devarminas/marque/server/internal/gamelog"
@@ -32,8 +32,6 @@ func (w *World) stepImp(n *npc, distance float64) {
 	case phaseCombat:
 		walking := len(n.remaining) > 0
 		w.stepImpCombat(n)
-		// Chase refreshes the path every tick until melee; halt clears remaining
-		// without Advance, so treat that stop as arrival for GAMELOG symmetry.
 		if walking && len(n.remaining) == 0 {
 			arrived = true
 		}
@@ -179,7 +177,7 @@ func (w *World) firstLivingPlayerInRange(origin Point, radius float64) *player {
 }
 
 func (w *World) assignNPCPath(n *npc, dest Point) {
-	points, assign := npcDestinationPath(n, dest)
+	points, assign := w.npcDestinationPath(n, dest)
 	if !assign {
 		return
 	}
@@ -201,8 +199,17 @@ func (w *World) assignNPCHalt(n *npc) {
 	w.assignNPCPath(n, n.pos)
 }
 
-func npcDestinationPath(n *npc, dest Point) (points []Point, assign bool) {
+func (w *World) npcDestinationPath(n *npc, dest Point) (points []Point, assign bool) {
 	line := StraightLine(n.pos, dest)
+	if w.nav != nil {
+		navPath, _ := w.nav.FindPath(n.pos.X, n.pos.Z, dest.X, dest.Z)
+		if len(navPath) > 0 {
+			line = make([]Point, len(navPath))
+			for i, p := range navPath {
+				line[i] = Point{X: p.X, Z: p.Z}
+			}
+		}
+	}
 	if length(line) >= MinPathLength {
 		return line, true
 	}
