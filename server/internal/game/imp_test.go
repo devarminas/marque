@@ -1,4 +1,4 @@
-package game
+﻿package game
 
 import (
 	"testing"
@@ -405,9 +405,10 @@ func despawnOtherImps(w *World, keep *npc) {
 
 func impInCombatBrain(n *npc) bool {
 	switch n.phase {
-	case phaseAggro, phaseApproach, phaseAttack, phaseThink:
+	case phaseAggro, phaseApproach, phaseAttack, phaseThink, phaseCastSkill:
 		return true
 	default:
 		return false
 	}
 }
+

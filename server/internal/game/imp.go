@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/devarminas/marque/server/internal/abilitydef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
@@ -17,7 +18,9 @@ func (w *World) stepNPCs(distance float64) {
 
 func (w *World) stepImp(n *npc, distance float64) {
 	arrived := false
-	if len(n.remaining) > 0 {
+	rooted := n.casting() && n.castLocomotion == abilitydef.LocomotionRooted
+	if !rooted && len(n.remaining) > 0 {
+		w.interruptCastOnMove(n, CauseMove)
 		n.pos, n.remaining = Advance(n.pos, n.remaining, distance)
 		if len(n.remaining) == 0 {
 			arrived = true
@@ -38,6 +41,8 @@ func (w *World) stepImp(n *npc, distance float64) {
 		w.stepImpAttack(n)
 	case phaseThink:
 		w.stepImpThink(n)
+	case phaseCastSkill:
+		w.stepImpCastSkill(n)
 	default:
 		if target := w.nearestLivingPlayerInRange(n.pos, ImpThreatRange); target != nil {
 			w.beginImpAggro(n, target)
@@ -161,6 +166,9 @@ func (w *World) stepImpThink(n *npc) {
 	n.thinkCount++
 
 	target := w.players[n.attackTarget]
+	if n.thinkCount%ImpCastEvery == 0 && w.beginImpCastSkill(n, target) {
+		return
+	}
 	if distanceBetween(n.pos, target.pos) > AttackRange {
 		n.phase = phaseApproach
 		w.assignNPCPath(n, target.pos)
@@ -168,6 +176,38 @@ func (w *World) stepImpThink(n *npc) {
 	}
 	n.phase = phaseAttack
 	n.attackProgress = 0
+}
+
+func (w *World) beginImpCastSkill(n *npc, target *player) bool {
+	if w.abilities == nil {
+		return false
+	}
+	ability, ok := w.abilities.Get(ImpSkillID)
+	if !ok {
+		return false
+	}
+	if target.id != n.id && distanceBetween(n.pos, target.pos) > ability.Range {
+		return false
+	}
+	if ability.Locomotion != abilitydef.LocomotionMovable && len(n.remaining) > 0 {
+		w.assignNPCHalt(n)
+	}
+	if rej := w.castAbility(n, ImpSkillID, target.id); rej != nil {
+		return false
+	}
+	n.phase = phaseCastSkill
+	return true
+}
+
+func (w *World) stepImpCastSkill(n *npc) {
+	if w.impMustLeash(n) {
+		return
+	}
+	if n.casting() {
+		return
+	}
+	n.phase = phaseThink
+	n.thinkProgress = 0
 }
 
 func (w *World) impMustLeash(n *npc) bool {
@@ -203,6 +243,7 @@ func (w *World) beginImpLeash(n *npc) {
 	prev := n.attackTarget
 	n.phase = phaseReturn
 	n.attackTarget = 0
+	w.cancelCast(n, CauseLeash)
 	w.resetImpCombat(n)
 	w.log.Event(w.tick, EvNpcLeash, gamelog.Fields{
 		"npc":    n.id,

@@ -41,6 +41,8 @@ const (
 	ImpLeashRange   = 16.0
 	ImpPatrolRadius = 3.0
 	ImpThinkTicks = 2
+	ImpCastEvery  = 2
+	ImpSkillID    = "fireball"
 
 	practiceNpcIDBand mnet.PlayerID = 1_000_000
 
@@ -57,6 +59,7 @@ const (
 	phaseApproach
 	phaseAttack
 	phaseThink
+	phaseCastSkill
 	phaseReturn
 )
 
