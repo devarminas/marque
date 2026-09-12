@@ -1061,18 +1061,17 @@ func _npc_state(entry: Variant, where: String, text: String) -> Dictionary:
 			% [where, faction, text]
 		)
 		return {}
-	var display_name := ""
+	var npc_name := ""
 	if state.has("name"):
-		var raw_name: Variant = state["name"]
-		if typeof(raw_name) != TYPE_STRING:
+		if typeof(state["name"]) != TYPE_STRING:
 			push_error("net_client: %s name is not a string: %s" % [where, text])
 			return {}
-		display_name = raw_name
+		npc_name = state["name"]
 	return {
 		"id": int(state["id"]),
 		"kind": state["kind"],
 		"faction": faction,
-		"name": display_name,
+		"name": npc_name,
 		"position": Vector2(state["x"], state["z"]),
 		"hp": int(state["hp"]),
 		"max_hp": int(state["max_hp"]),

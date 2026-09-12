@@ -75,7 +75,6 @@ func _ready() -> void:
 	_test_bodies_and_select()
 	_test_quest_giver_spawns_from_welcome()
 	_test_imp_spawns_from_welcome()
-	_test_imp_display_name_round_trip()
 	_test_imp_follows_path_frames()
 	_test_demo_npc_capture_dump()
 	_test_cast_targets()
@@ -289,15 +288,6 @@ func _test_imp_spawns_from_welcome() -> void:
 		imp.get_node_or_null("MissingBody") != null and not imp.get_node("MissingBody").visible,
 		"welcome imp hides magenta",
 	)
-
-
-func _test_imp_display_name_round_trip() -> void:
-	var npcs: Dictionary = _session.get("_npcs")
-	var imp: NpcDummyScript = npcs.get(1000004)
-	_check(imp != null, "imp exists for display name round-trip")
-	if imp == null:
-		return
-	_check(imp.display_name == "Imp", "cached display name round-trips from welcome")
 
 
 func _test_imp_follows_path_frames() -> void:

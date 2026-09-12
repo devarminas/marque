@@ -79,7 +79,7 @@ func _physics_process(_delta: float) -> void:
 		_meter_label.modulate = Color(1, 0.55, 0.2, 1)
 
 
-func configure(id: int, npc_kind: String, npc_faction: String, npc_name: String = "") -> void:
+func configure(id: int, npc_kind: String, npc_faction: String, npc_name: String) -> void:
 	npc_id = id
 	kind = npc_kind
 	faction = npc_faction

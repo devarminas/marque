@@ -1707,11 +1707,9 @@ func _ensure_node(id: int, kind: String, state: String) -> ResourceNodeScript:
 	return body
 
 
-func _ensure_npc(id: int, kind: String, faction: String, display_name: String = "") -> NpcDummyScript:
+func _ensure_npc(id: int, kind: String, faction: String, display_name: String) -> NpcDummyScript:
 	var existing: NpcDummyScript = _npcs.get(id)
 	if existing != null:
-		if display_name != "":
-			existing.display_name = display_name
 		return existing
 	if id <= 0:
 		push_error("session: npc ids start at 1, got %d" % id)
