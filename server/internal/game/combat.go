@@ -21,6 +21,7 @@ const (
 	CauseReplaced      = "replaced"
 	CauseAttackerDied  = "attacker_died"
 	CauseLeaveCombat   = "leave_combat"
+	CauseLeash         = "leash"
 )
 
 func (p *player) dead() bool { return p.hp == 0 }

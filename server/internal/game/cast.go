@@ -120,7 +120,7 @@ func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
 }
 
 // castAbility is the non-player entry to shared resolve/apply. Player wire
-// gates stay on World.cast. NPCs pay no mana until ARM-262.
+// gates stay on World.cast. NPCs pay no mana in v1.
 func (w *World) castAbility(c combatant, abilityID string, targetID mnet.PlayerID) *mnet.RejectError {
 	if c.combatDead() {
 		return &mnet.RejectError{
