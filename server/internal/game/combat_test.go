@@ -117,7 +117,7 @@ func TestAttackPeriodPausesOffRange(t *testing.T) {
 	}
 }
 
-func TestMoveCancelsPendingAttackFromCombat(t *testing.T) {
+func TestMoveKeepsStickyAutoAttack(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	hostile := pw.seedHostile()
@@ -127,20 +127,11 @@ func TestMoveCancelsPendingAttackFromCombat(t *testing.T) {
 	pw.w.step()
 
 	pw.w.move(alice, mnet.Move{DX: -1, DZ: 0}, 0)
-	if alice.attackTarget != 0 {
-		t.Fatalf("pending attack survived move: target=%d", alice.attackTarget)
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("sticky AA cleared on move: target=%d", alice.attackTarget)
 	}
-	cancelled := pw.events(EvAttackCancelled)
-	if len(cancelled) != 1 || cancelled[0]["cause"] != CauseMove {
-		t.Fatalf("cancel events=%v, want one cause=%s", cancelled, CauseMove)
-	}
-
-	before := hostile.hp
-	for range pw.playerPeriod(alice) + 2 {
-		pw.w.step()
-	}
-	if hostile.hp != before {
-		t.Fatalf("hits continued after cancel: hp %d→%d", before, hostile.hp)
+	if got := pw.events(EvAttackCancelled); len(got) != 0 {
+		t.Fatalf("cancel events=%v, want none", got)
 	}
 }
 
@@ -569,6 +560,105 @@ func TestAttackPeriodTicksPanicsWithoutUnarmed(t *testing.T) {
 		}
 	}()
 	_ = pw.w.attackPeriodTicks("missing_weapon")
+}
+
+
+func TestStickyAutoAttackRepeatsAtWeaponPeriod(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+
+	period := pw.playerPeriod(alice)
+	for range period * 3 {
+		pw.w.step()
+	}
+	if got := len(pw.events(EvAttackHit)); got != 3 {
+		t.Fatalf("hits=%d, want 3 without re-issuing attack", got)
+	}
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("sticky AA lost target: %d", alice.attackTarget)
+	}
+}
+
+func TestStickyAutoAttackPausesOutOfRangeWithoutRechase(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+	pw.w.step()
+
+	hostile.pos = Point{X: 10, Z: 0}
+	alice.clearSteer()
+	before := alice.pos
+	pw.w.step()
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("sticky AA cleared on out-of-range: %d", alice.attackTarget)
+	}
+	if alice.steering() || alice.pos != before {
+		t.Fatalf("out-of-range re-chased: steer=%v pos=%v", alice.steering(), alice.pos)
+	}
+	if hostile.hp != DummyMaxHP {
+		t.Fatalf("out-of-range hit: hp=%d", hostile.hp)
+	}
+}
+
+func TestStickyAutoAttackStopsOnLeaveCombat(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+	for range pw.playerPeriod(alice) {
+		pw.w.step()
+	}
+	if alice.attackTarget != hostile.id || !alice.inCombat(pw.w.tick) {
+		t.Fatalf("expected sticky AA in combat: target=%d expires=%d tick=%d",
+			alice.attackTarget, alice.combatExpiresTick, pw.w.tick)
+	}
+
+	alice.combatExpiresTick = pw.w.tick
+	before := hostile.hp
+	pw.w.step()
+	if alice.attackTarget != 0 {
+		t.Fatalf("sticky AA survived leave-combat: target=%d", alice.attackTarget)
+	}
+	cancelled := pw.events(EvAttackCancelled)
+	if len(cancelled) != 1 || cancelled[0]["cause"] != CauseLeaveCombat {
+		t.Fatalf("cancel events=%v, want cause=%s", cancelled, CauseLeaveCombat)
+	}
+	if hostile.hp != before {
+		t.Fatalf("hit after leave-combat: hp %d→%d", before, hostile.hp)
+	}
+}
+
+func TestStickyAutoAttackContinuesWhileMovingInRange(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 0.5, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+
+	period := pw.playerPeriod(alice)
+	pw.w.move(alice, mnet.Move{DX: 0, DZ: 1}, 0)
+	for range period {
+		pw.w.step()
+	}
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("sticky AA cleared while moving in range: %d", alice.attackTarget)
+	}
+	if got := len(pw.events(EvAttackHit)); got != 1 {
+		t.Fatalf("hits=%d, want 1 while moving in range", got)
+	}
+	if !alice.steering() {
+		t.Fatal("in-range sticky AA halted player wish")
+	}
 }
 
 func (pw *probeWorld) join() *player {

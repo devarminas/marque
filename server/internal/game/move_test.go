@@ -47,7 +47,7 @@ func TestMoveIdlePoseKeepalive(t *testing.T) {
 	t.Skip("idle pose reanchor deferred until client applies pose (silence harness); PoseIdleEveryTicks kept")
 }
 
-func TestMoveCancelsPendingAttack(t *testing.T) {
+func TestMoveDoesNotCancelStickyAutoAttack(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	hostile := pw.seedHostile()
@@ -57,19 +57,11 @@ func TestMoveCancelsPendingAttack(t *testing.T) {
 	pw.w.step()
 
 	pw.w.move(alice, mnet.Move{DX: -1, DZ: 0}, 0)
-	if alice.attackTarget != 0 {
-		t.Fatalf("pending attack survived move: target=%d", alice.attackTarget)
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("sticky AA cleared on move: target=%d", alice.attackTarget)
 	}
-	cancelled := pw.events(EvAttackCancelled)
-	if len(cancelled) != 1 || cancelled[0]["cause"] != CauseMove {
-		t.Fatalf("cancel events=%v, want one cause=%s", cancelled, CauseMove)
-	}
-	before := hostile.hp
-	for range pw.playerPeriod(alice) + 2 {
-		pw.w.step()
-	}
-	if hostile.hp != before {
-		t.Fatalf("hits continued after cancel: hp %d→%d", before, hostile.hp)
+	if got := pw.events(EvAttackCancelled); len(got) != 0 {
+		t.Fatalf("cancel events=%v, want none", got)
 	}
 }
 
@@ -276,7 +268,7 @@ func TestMidAirJumpRefused(t *testing.T) {
 	}
 }
 
-func TestJumpCancelsPendingAttack(t *testing.T) {
+func TestJumpKeepsStickyAutoAttack(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	hostile := pw.seedHostile()
@@ -286,14 +278,13 @@ func TestJumpCancelsPendingAttack(t *testing.T) {
 	pw.w.step()
 
 	pw.w.move(alice, mnet.Move{DX: -1, DZ: 0, Jump: true}, 0)
-	if alice.attackTarget != 0 {
-		t.Fatalf("pending attack survived jump+move: target=%d", alice.attackTarget)
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("sticky AA cleared on jump+move: target=%d", alice.attackTarget)
 	}
 	if alice.vy != JumpSpeed {
-		t.Fatalf("vy=%v, want JumpSpeed after canceling move", alice.vy)
+		t.Fatalf("vy=%v, want JumpSpeed", alice.vy)
 	}
-	cancelled := pw.events(EvAttackCancelled)
-	if len(cancelled) != 1 || cancelled[0]["cause"] != CauseMove {
-		t.Fatalf("cancel events=%v, want one cause=%s", cancelled, CauseMove)
+	if got := pw.events(EvAttackCancelled); len(got) != 0 {
+		t.Fatalf("cancel events=%v, want none", got)
 	}
 }

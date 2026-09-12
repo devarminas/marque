@@ -20,6 +20,7 @@ const (
 	CauseGather        = "gather"
 	CauseReplaced      = "replaced"
 	CauseAttackerDied  = "attacker_died"
+	CauseLeaveCombat   = "leave_combat"
 )
 
 func (p *player) dead() bool { return p.hp == 0 }
@@ -180,11 +181,13 @@ func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, 
 	p.clearSteer()
 	p.attackTarget = targetID
 	p.attackProgress = 0
+	p.attackApproaching = false
 	w.log.Event(w.tick, EvAttack, withSeq(playerTargetFields(p.id, targetID), seq))
 
 	if distanceBetween(p.pos, targetPos) <= AttackRange {
 		return
 	}
+	p.attackApproaching = true
 	w.steerToward(p, targetPos)
 }
 
@@ -213,6 +216,10 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 }
 
 func (w *World) resolveAttack(p *player) {
+	if !w.stickyAutoAttackAllowed(p) {
+		w.cancelAttack(p, CauseLeaveCombat)
+		return
+	}
 	if n, ok := w.npcs[p.attackTarget]; ok {
 		w.resolveAttackOnNPC(p, n)
 		return
@@ -229,12 +236,9 @@ func (w *World) resolveAttack(p *player) {
 
 	dist := distanceBetween(p.pos, target.pos)
 	if dist > AttackRange {
-		w.steerToward(p, target.pos)
 		return
 	}
-	if p.steering() {
-		w.assignHalt(p)
-	}
+	w.finishAttackApproach(p)
 
 	period := w.playerAttackPeriod(p)
 	p.attackProgress++
@@ -267,12 +271,9 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 
 	dist := distanceBetween(p.pos, target.pos)
 	if dist > AttackRange {
-		w.steerToward(p, target.pos)
 		return
 	}
-	if p.steering() {
-		w.assignHalt(p)
-	}
+	w.finishAttackApproach(p)
 
 	period := w.playerAttackPeriod(p)
 	p.attackProgress++
@@ -298,6 +299,23 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 		if target.kind == KindImp {
 			w.killImp(target, p.id)
 		}
+	}
+}
+
+func (w *World) stickyAutoAttackAllowed(p *player) bool {
+	if p.combatExpiresTick == 0 {
+		return true
+	}
+	return p.inCombat(w.tick)
+}
+
+func (w *World) finishAttackApproach(p *player) {
+	if !p.attackApproaching {
+		return
+	}
+	p.attackApproaching = false
+	if p.steering() {
+		w.assignHalt(p)
 	}
 }
 
@@ -345,6 +363,7 @@ func (w *World) loseAttack(p *player) {
 func (w *World) clearAttack(p *player) {
 	p.attackTarget = 0
 	p.attackProgress = 0
+	p.attackApproaching = false
 }
 
 func (w *World) broadcastHP(p *player) {

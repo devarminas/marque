@@ -29,8 +29,9 @@ func (c *castRuntime) clear() {
 }
 
 type swingRuntime struct {
-	attackTarget   mnet.PlayerID
-	attackProgress int
+	attackTarget      mnet.PlayerID
+	attackProgress    int
+	attackApproaching bool
 }
 
 func (s *swingRuntime) clear() {
