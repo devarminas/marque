@@ -40,6 +40,7 @@ const SCENE_SUITES: Array = [
 	{"name": "equipment", "scene": "res://tests/test_equipment.tscn"},
 	{"name": "equipment wiring", "scene": "res://tests/test_equipment_wiring.tscn"},
 	{"name": "hp", "scene": "res://tests/test_hp.tscn"},
+	{"name": "target frame", "scene": "res://tests/test_target_frame.tscn"},
 	{"name": "class", "scene": "res://tests/test_class.tscn"},
 	{"name": "class debug", "scene": "res://tests/test_class_debug.tscn"},
 	{"name": "error hud", "scene": "res://tests/test_error_hud.tscn"},
