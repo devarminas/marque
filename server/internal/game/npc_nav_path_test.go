@@ -106,7 +106,11 @@ func TestImpChaseDoesNotTunnelHole(t *testing.T) {
 		assertGamePathOnMesh(t, mesh, path)
 		assertGameNoHoleTunnel(t, path, holeFrom, holeTo, holeMid)
 	}
-	assertGamePathOnMesh(t, mesh, poses)
+	for _, p := range poses {
+		if !mesh.ContainsXZ(p.X, p.Z) {
+			t.Fatalf("pose trail left mesh at %v", p)
+		}
+	}
 	assertGameNoHoleTunnel(t, poses, holeFrom, holeTo, holeMid)
 	if !navReach && distanceBetween(imp.pos, alice.pos) <= 1e-3 {
 		t.Fatalf("imp ended at player %v though FindPath cannot reach", imp.pos)

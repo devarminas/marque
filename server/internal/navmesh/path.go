@@ -133,8 +133,20 @@ func (m *Mesh) FindPath(fromX, fromZ, toX, toZ float64) (path []PathPoint, ok bo
 				pulled = appendPoint(pulled, to)
 			}
 			pulled = compactPath(pulled)
+			if !m.pathOnMesh(pulled) {
+				pulled = compactPath(corridorWaypoints(PathPoint{X: startX, Z: startZ}, g, corridor, PathPoint{X: endX, Z: endZ}))
+				pulled = prependPoint(from, pulled)
+				if endOn {
+					pulled = appendPoint(pulled, to)
+				}
+				pulled = compactPath(pulled)
+			}
 			if len(pulled) < 2 {
 				pulled = []PathPoint{from, to}
+			}
+			if !m.pathOnMesh(pulled) {
+				clamped := clampPath(from, mx, mz)
+				return clamped, pathUsable(clamped, to)
 			}
 			return pulled, pathUsable(pulled, to)
 		}
@@ -150,6 +162,36 @@ func clampPath(from PathPoint, mx, mz float64) []PathPoint {
 		return []PathPoint{from}
 	}
 	return []PathPoint{from, stop}
+}
+
+func (m *Mesh) pathOnMesh(path []PathPoint) bool {
+	if len(path) == 0 {
+		return false
+	}
+	for _, p := range path {
+		if !m.ContainsXZ(p.X, p.Z) {
+			return false
+		}
+	}
+	for i := 0; i+1 < len(path); i++ {
+		a, b := path[i], path[i+1]
+		mx, mz := m.Move(a.X, a.Z, b.X, b.Z)
+		if hypot2(mx-b.X, mz-b.Z) > pathSnapEps {
+			return false
+		}
+	}
+	return true
+}
+
+func corridorWaypoints(start PathPoint, g *pathGraph, corridor []int, end PathPoint) []PathPoint {
+	out := []PathPoint{start}
+	for i := 0; i+1 < len(corridor); i++ {
+		p := portalBetween(g, corridor[i], corridor[i+1])
+		mid := PathPoint{X: (p.left.X + p.right.X) / 2, Z: (p.left.Z + p.right.Z) / 2}
+		out = append(out, mid)
+	}
+	out = append(out, end)
+	return out
 }
 
 func pathUsable(path []PathPoint, to PathPoint) bool {
