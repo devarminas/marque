@@ -27,7 +27,7 @@ func TestImpPatrolsNearHome(t *testing.T) {
 	}
 }
 
-func TestImpAggroFirstPlayerInThreatRange(t *testing.T) {
+func TestImpAggroNearestPlayerInThreatRange(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	bob := pw.joinWithClass("knight")
@@ -40,12 +40,36 @@ func TestImpAggroFirstPlayerInThreatRange(t *testing.T) {
 	bob.pos = Point{X: imp.home.X + 6, Z: imp.home.Z}
 
 	pw.w.step()
-	if imp.phase != phaseCombat || imp.attackTarget != alice.id {
-		t.Fatalf("phase=%d target=%d, want combat on first-in-order alice=%d (bob=%d)", imp.phase, imp.attackTarget, alice.id, bob.id)
+	if imp.phase != phaseCombat || imp.attackTarget != bob.id {
+		t.Fatalf("phase=%d target=%d, want combat on nearest bob=%d (alice=%d)", imp.phase, imp.attackTarget, bob.id, alice.id)
 	}
 	aggro := pw.events(EvNpcAggro)
-	if len(aggro) != 1 || aggro[0]["target"] != float64(alice.id) {
+	if len(aggro) != 1 || aggro[0]["target"] != float64(bob.id) {
 		t.Fatalf("npc_aggro=%v", aggro)
+	}
+	if !bob.inCombat(pw.w.tick) {
+		t.Fatal("nearest aggro target should be in combat")
+	}
+	if alice.inCombat(pw.w.tick) {
+		t.Fatal("farther player should not enter combat from someone else's aggro")
+	}
+}
+
+func TestImpAggroNearestWhenEarlierJoinerIsCloser(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	bob := pw.joinWithClass("knight")
+	seedDeterministicCamp(t, pw.w)
+	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
+	imp.remaining = nil
+	imp.patrolOut = false
+	alice.pos = Point{X: imp.home.X + 5, Z: imp.home.Z}
+	bob.pos = Point{X: imp.home.X + 7, Z: imp.home.Z}
+
+	pw.w.step()
+	if imp.phase != phaseCombat || imp.attackTarget != alice.id {
+		t.Fatalf("phase=%d target=%d, want nearest earlier-joiner alice=%d (bob=%d)", imp.phase, imp.attackTarget, alice.id, bob.id)
 	}
 }
 

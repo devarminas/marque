@@ -299,6 +299,12 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 		target.applyHeal(amount)
 	case abilitydef.EffectDamage:
 		target.applyDamage(amount)
+		if p := playerCombatant(c); p != nil {
+			w.markCombat(p)
+		}
+		if target.plyr != nil {
+			w.markCombat(target.plyr)
+		}
 	default:
 		if p := playerCombatant(c); p != nil {
 			w.refundMana(p, cost)

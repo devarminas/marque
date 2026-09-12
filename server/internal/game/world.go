@@ -197,6 +197,8 @@ type player struct {
 
 	skillXP map[string]int64
 
+	combatExpiresTick int64
+
 	lastSeq mnet.Seq
 
 	expiresTick int64

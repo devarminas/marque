@@ -22,12 +22,12 @@ const (
 
 func (p *player) dead() bool { return p.hp == 0 }
 
-func (p *player) InCombat(tick int64) bool {
+func (p *player) inCombat(tick int64) bool {
 	return p.combatExpiresTick > tick
 }
 
 func (w *World) markCombat(p *player) {
-	if p == nil || p.dead() {
+	if p.dead() {
 		return
 	}
 	p.combatExpiresTick = w.tick + CombatTimeoutTicks

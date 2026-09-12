@@ -12,7 +12,7 @@ Players have no server in-combat / out-of-combat flag. Imp aggro walks `w.order`
 
 1. **In-combat events.** A living player enters (or refreshes) combat when they deal damage, take damage, or gain enemy aggro. Healing alone does not. Practice-dummy damage counts as dealing damage.
 2. **Timeout.** `CombatTimeoutTicks = 150` (**6 s** at `TickDuration = 40 ms`). After that many ticks with no combat event, the player is out of combat. Document the wall-clock here; do not invent a second clock.
-3. **Storage.** Server owns `lastCombatTick` on the player. `InCombat(tick)` is true when `lastCombatTick > 0` and `tick - lastCombatTick < CombatTimeoutTicks`. Clear on death/respawn. Wire to the client only if UX needs it; v1 is server-authoritative and testable without a new frame.
+3. **Storage.** Server owns `combatExpiresTick` on the player (`0` = out of combat). `InCombat(tick)` is true when `combatExpiresTick > tick`. Each combat event sets `combatExpiresTick = tick + CombatTimeoutTicks`. Clear on death/respawn. Wire to the client only if UX needs it; v1 is server-authoritative and testable without a new frame.
 4. **Aggro selection.** Idle hostile (imp) aggro picks the **nearest living player** within `ImpThreatRange`. Equal distance keeps join-order as a stable tie-break. Hard leash rule and `ImpLeashRange` stay unchanged.
 
 ## Consequences
