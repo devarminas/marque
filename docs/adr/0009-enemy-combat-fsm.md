@@ -1,4 +1,4 @@
-# 0008. Enemy combat state machine
+# 0009. Enemy combat state machine
 
 ## Status
 
