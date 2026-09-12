@@ -1,4 +1,4 @@
-﻿package game
+package game
 
 import (
 	"errors"
@@ -6,13 +6,14 @@ import (
 
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/weapondef"
 )
 
 const (
-	KindDummy      = "dummy"
-	KindQuestGiver = "quest_giver"
+	KindDummy         = "dummy"
+	KindQuestGiver    = "quest_giver"
 	KindImpQuestGiver = "imp_quest_giver"
-	KindImp        = "imp"
+	KindImp           = "imp"
 
 	FactionFriendly = "friendly"
 	FactionHostile  = "hostile"
@@ -32,8 +33,8 @@ const (
 	ImpCampX = 12.0
 	ImpCampZ = 8.0
 
-	DummyMaxHP      = 100000
-	DummyMinHP      = 1
+	DummyMaxHP = 100000
+	DummyMinHP = 1
 
 	ImpMaxHP        = 50
 	ImpDamage       = 5
@@ -60,6 +61,7 @@ type npc struct {
 	id      mnet.PlayerID
 	kind    string
 	faction string
+	weapon  string
 	pos     Point
 	hp      int
 	maxHP   int
@@ -117,6 +119,15 @@ func (w *World) seedNPC(kind, faction string, x, z float64, maxHP int) error {
 	return w.seedNPCAt(kind, faction, x, z, maxHP, "")
 }
 
+func npcArchetypeWeapon(kind string) string {
+	switch kind {
+	case KindImp:
+		return weapondef.ImpClaw
+	default:
+		return weapondef.Unarmed
+	}
+}
+
 func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp string) error {
 	if kind == "" {
 		return errors.New("seed npc: kind must not be empty")
@@ -135,6 +146,7 @@ func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp st
 		id:      practiceNpcIDBand + w.nextNpcID,
 		kind:    kind,
 		faction: faction,
+		weapon:  npcArchetypeWeapon(kind),
 		pos:     Point{X: x, Z: z},
 		hp:      maxHP,
 		maxHP:   maxHP,
@@ -146,6 +158,7 @@ func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp st
 		"npc":     n.id,
 		"kind":    n.kind,
 		"faction": n.faction,
+		"weapon":  n.weapon,
 		"x":       n.pos.X,
 		"z":       n.pos.Z,
 		"max_hp":  n.maxHP,

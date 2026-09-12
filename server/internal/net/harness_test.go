@@ -22,6 +22,7 @@ import (
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
 	"github.com/devarminas/marque/server/internal/questdef"
+	"github.com/devarminas/marque/server/internal/weapondef"
 )
 
 const (
@@ -89,6 +90,16 @@ func mustResolveQuests(t *testing.T) string {
 	return filepath.Join(root, filepath.FromSlash(questdef.RelPath))
 }
 
+func mustResolveWeapons(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	return filepath.Join(root, filepath.FromSlash(weapondef.RelPath))
+}
+
 func newHarness(t *testing.T, seeds ...seed) *harness {
 	t.Helper()
 	return newHarnessWith(t, game.ResumeGraceTicks, nil, seeds...)
@@ -130,6 +141,11 @@ func newHarnessConfigured(t *testing.T, grace int64, kit []string, setup func(*g
 	}
 	world := game.NewWorld(hub, gamelog.New(logs, true), game.NewMemoryStore(wearables), grace, kit)
 	world.SetClasses(classes)
+	weapons, err := weapondef.Load(mustResolveWeapons(t))
+	if err != nil {
+		t.Fatalf("load weapons: %v", err)
+	}
+	world.SetWeapons(weapons)
 	quests, err := questdef.Load(mustResolveQuests(t), classes)
 	if err != nil {
 		t.Fatalf("load quests: %v", err)

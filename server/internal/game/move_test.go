@@ -65,7 +65,7 @@ func TestMoveCancelsPendingAttack(t *testing.T) {
 		t.Fatalf("cancel events=%v, want one cause=%s", cancelled, CauseMove)
 	}
 	before := hostile.hp
-	for range AttackPeriodTicks + 2 {
+	for range pw.playerPeriod(alice) + 2 {
 		pw.w.step()
 	}
 	if hostile.hp != before {

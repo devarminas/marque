@@ -1,0 +1,24 @@
+{
+  "weapons": [
+    {
+      "id": "unarmed",
+      "attack_period_ticks": 4
+    },
+    {
+      "id": "sword",
+      "attack_period_ticks": 4
+    },
+    {
+      "id": "staff",
+      "attack_period_ticks": 4
+    },
+    {
+      "id": "bow",
+      "attack_period_ticks": 4
+    },
+    {
+      "id": "imp_claw",
+      "attack_period_ticks": 4
+    }
+  ]
+}

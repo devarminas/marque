@@ -15,6 +15,7 @@ import (
 	"github.com/devarminas/marque/server/internal/navmesh"
 	mnet "github.com/devarminas/marque/server/internal/net"
 	"github.com/devarminas/marque/server/internal/questdef"
+	"github.com/devarminas/marque/server/internal/weapondef"
 )
 
 const TickDuration = 40 * time.Millisecond
@@ -233,6 +234,8 @@ type World struct {
 
 	quests *questdef.Catalog
 
+	weapons *weapondef.Catalog
+
 	players map[mnet.PlayerID]*player
 
 	parties     map[mnet.PartyID]*party
@@ -311,6 +314,10 @@ func (w *World) SetClasses(c *classdef.Catalog) {
 
 func (w *World) SetQuests(c *questdef.Catalog) {
 	w.quests = c
+}
+
+func (w *World) SetWeapons(c *weapondef.Catalog) {
+	w.weapons = c
 }
 
 func (w *World) SetNav(m *navmesh.Mesh) {
