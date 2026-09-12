@@ -469,6 +469,108 @@ func TestPlayerAndNPCShareWeaponDefPeriod(t *testing.T) {
 	}
 }
 
+func TestImpArchetypeUsesImpClawPeriod(t *testing.T) {
+	pw := newClassProbe(t)
+	const clawPeriod = 3
+	cat, err := weapondef.Parse([]byte(`{"weapons":[
+		{"id":"unarmed","attack_period_ticks":8},
+		{"id":"sword","attack_period_ticks":8},
+		{"id":"imp_claw","attack_period_ticks":3}
+	]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pw.w.SetWeapons(cat)
+	seedDeterministicCamp(t, pw.w)
+	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
+	if imp.weapon != weapondef.ImpClaw {
+		t.Fatalf("archetype weapon=%q, want %q", imp.weapon, weapondef.ImpClaw)
+	}
+	if got := pw.npcPeriod(imp); got != clawPeriod {
+		t.Fatalf("npc period=%d, want %d from imp_claw", got, clawPeriod)
+	}
+
+	alice := pw.joinWithClass("knight")
+	alice.pos = imp.pos
+	imp.phase = phaseCombat
+	imp.target = alice.id
+	imp.remaining = nil
+	imp.attackProgress = 0
+	before := alice.hp
+	for range clawPeriod - 1 {
+		pw.w.step()
+	}
+	if alice.hp != before {
+		t.Fatalf("imp hit before claw period: hp=%d", alice.hp)
+	}
+	pw.w.step()
+	if alice.hp != before-ImpDamage {
+		t.Fatalf("hp=%d after imp_claw period, want %d", alice.hp, before-ImpDamage)
+	}
+}
+
+func TestPlayerUnarmedFallbackPeriod(t *testing.T) {
+	pw := newClassProbe(t)
+	const unarmedPeriod = 3
+	cat, err := weapondef.Parse([]byte(`{"weapons":[
+		{"id":"unarmed","attack_period_ticks":3},
+		{"id":"sword","attack_period_ticks":9},
+		{"id":"imp_claw","attack_period_ticks":9}
+	]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pw.w.SetWeapons(cat)
+	alice := pw.join()
+	if got := pw.w.playerWeaponID(alice); got != weapondef.Unarmed {
+		t.Fatalf("weapon=%q, want unarmed", got)
+	}
+	if got := pw.playerPeriod(alice); got != unarmedPeriod {
+		t.Fatalf("period=%d, want %d from unarmed", got, unarmedPeriod)
+	}
+
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	// beginAttack bypasses the combat-class gate so bare hands can swing.
+	pw.w.beginAttack(alice, hostile.id, hostile.pos, 0)
+	for range unarmedPeriod - 1 {
+		pw.w.step()
+	}
+	if hostile.hp != DummyMaxHP {
+		t.Fatalf("hit before unarmed period: hp=%d", hostile.hp)
+	}
+	pw.w.step()
+	if hostile.hp != DummyMaxHP-AttackDamage {
+		t.Fatalf("hp=%d after unarmed period, want %d", hostile.hp, DummyMaxHP-AttackDamage)
+	}
+}
+
+func TestAttackPeriodTicksPanicsWithoutCatalog(t *testing.T) {
+	pw := newProbeWorld(t)
+	pw.w.SetWeapons(nil)
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic when weapons catalog is nil")
+		}
+	}()
+	_ = pw.w.attackPeriodTicks(weapondef.Unarmed)
+}
+
+func TestAttackPeriodTicksPanicsWithoutUnarmed(t *testing.T) {
+	pw := newProbeWorld(t)
+	pw.w.SetWeapons(weapondef.IncompleteCatalog([]weapondef.Weapon{
+		{ID: weapondef.Sword, AttackPeriodTicks: 4},
+	}))
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic when unarmed def is missing")
+		}
+	}()
+	_ = pw.w.attackPeriodTicks("missing_weapon")
+}
+
 func (pw *probeWorld) join() *player {
 	pw.t.Helper()
 	pw.dial("")

@@ -104,6 +104,17 @@ func (c *Catalog) Len() int {
 	return len(c.byID)
 }
 
+// IncompleteCatalog builds a catalog without requiring unarmed.
+// Production must use Load/Parse; game tests use this to exercise
+// attackPeriodTicks fail-closed paths that Parse cannot reach.
+func IncompleteCatalog(weapons []Weapon) *Catalog {
+	byID := make(map[string]Weapon, len(weapons))
+	for _, w := range weapons {
+		byID[w.ID] = w
+	}
+	return &Catalog{byID: byID}
+}
+
 func ResolvePath() (string, error) {
 	if env := strings.TrimSpace(os.Getenv("MARQUE_WEAPONS")); env != "" {
 		return env, nil
