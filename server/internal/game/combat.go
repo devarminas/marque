@@ -172,7 +172,6 @@ func (w *World) npcAttackPeriod(n *npc) int {
 }
 
 func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, seq mnet.Seq) {
-	w.cancelAttack(p, CauseReplaced)
 	p.pending = 0
 	w.clearPendingTalk(p)
 	w.cancelGather(p)
