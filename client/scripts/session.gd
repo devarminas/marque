@@ -938,6 +938,7 @@ func _on_welcome_npcs(
 		body.place_at(ground.x, ground.y)
 		_apply_hit_points(id, npc_hps[index], npc_max_hps[index])
 
+	_sync_npc_overhead_proximity()
 	if not _npcs.is_empty():
 		print("session: %d practice npc(s) in the world" % _npcs.size())
 
@@ -1013,6 +1014,7 @@ func _advance_locomotion(delta: float) -> void:
 		_local_mover.soft_pull_display(delta)
 		var ground := _local_mover.display_xz()
 		_local.present_at(ground.x, ground.y, _local_mover.moving(), _local_mover.display_height())
+	_sync_npc_overhead_proximity()
 	var render_tick := _render_tick_fraction()
 	for id in _remote_poses.keys():
 		if int(id) == _you:
@@ -1172,6 +1174,7 @@ func _on_npc_spawned(
 		return
 	body.place_at(spawn_position.x, spawn_position.y)
 	_apply_hit_points(id, hp, max_hp)
+	_sync_npc_overhead_proximity()
 
 
 func _on_spawned(id: int, spawn_position: Vector2) -> void:
@@ -1853,6 +1856,7 @@ func _apply_hit_points(id: int, hp: int, max_hp: int) -> void:
 	var dummy: NpcDummyScript = _npcs.get(id)
 	if dummy != null:
 		dummy.set_hit_points(hp, max_hp)
+		_sync_npc_overhead_proximity()
 	if id == _selected_player_id and hp == 0:
 		clear_selection()
 	elif id == _selected_player_id:
@@ -1863,6 +1867,16 @@ func _apply_hit_points(id: int, hp: int, max_hp: int) -> void:
 		_hp_hud.apply(hp, max_hp)
 	if _death_overlay != null:
 		_death_overlay.visible = hp == 0
+
+
+func _sync_npc_overhead_proximity() -> void:
+	if _local == null or _npcs.is_empty():
+		return
+	var xz := Vector2(_local.position.x, _local.position.z)
+	for id: int in _npcs:
+		var dummy: NpcDummyScript = _npcs[id]
+		if dummy != null:
+			dummy.refresh_overhead_proximity(xz)
 
 
 func _sync_selection_chrome() -> void:

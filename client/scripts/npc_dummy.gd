@@ -17,6 +17,8 @@ const KindImp := "imp"
 const IDLE_ANIM := "ual2/Idle_FoldArms"
 const WALK_ANIM := "ual2/Walk_Carry"
 const WALK_CLIP_SPEED := 0.65
+const OVERHEAD_PROXIMITY := 12.0
+const OVERHEAD_CLICK_LAYER := 4
 
 var npc_id := 0
 var kind := KindDummy
@@ -34,6 +36,8 @@ var _body_mesh: MeshInstance3D = null
 var _meter: DummyMeterScript = null
 var _last_hp := -1
 var _last_max_hp := -1
+var _has_hit_points := false
+var _overhead_near := false
 var _walker: PolylineWalker = null
 var _tick_ms := 0
 var _desired_yaw := 0.0
@@ -42,6 +46,8 @@ var _missing_animation_reported := false
 
 @onready var _selection_ring: MeshInstance3D = $SelectionRing
 @onready var _hp_label: Label3D = $HpLabel
+@onready var _name_label: Label3D = $NameLabel
+@onready var _overhead_click: StaticBody3D = $OverheadClick
 var _meter_label: Label3D = null
 
 
@@ -60,10 +66,15 @@ func _ready() -> void:
 	if kind == KindDummy:
 		_meter = DummyMeterScript.new()
 		_configure_meter_label()
+	_apply_overhead_visibility()
 
 
 func _physics_process(_delta: float) -> void:
 	if kind != KindDummy or _meter == null or _meter_label == null:
+		return
+	if not _overhead_chrome_allowed():
+		_meter_label.visible = false
+		_meter_label.text = ""
 		return
 	var rate := _meter.rate_per_sec()
 	if rate <= 0.05:
@@ -89,6 +100,7 @@ func configure(id: int, npc_kind: String, npc_faction: String, npc_name: String)
 	if kind == KindDummy and _meter == null:
 		_meter = DummyMeterScript.new()
 		_configure_meter_label()
+	_apply_overhead_visibility()
 
 
 func is_talkable() -> bool:
@@ -172,10 +184,10 @@ func is_selected() -> bool:
 
 
 func set_hit_points(hp: int, max_hp: int) -> void:
-	if _hp_label == null:
-		return
-	_hp_label.visible = true
-	_hp_label.text = "%d/%d" % [hp, max_hp]
+	_has_hit_points = true
+	if _hp_label != null:
+		_hp_label.text = "%d/%d" % [hp, max_hp]
+	_apply_overhead_visibility()
 	if kind != KindDummy or _meter == null:
 		return
 	if _last_hp >= 0 and hp != _last_hp:
@@ -191,17 +203,27 @@ func observe_cast(ability_id: String) -> void:
 
 
 func clear_hit_points() -> void:
-	if _hp_label == null:
-		return
-	_hp_label.visible = false
-	_hp_label.text = ""
+	_has_hit_points = false
+	_last_hp = -1
+	_last_max_hp = -1
+	if _hp_label != null:
+		_hp_label.text = ""
 	if _meter_label != null:
 		_meter_label.visible = false
 		_meter_label.text = ""
 	if _meter != null:
 		_meter.reset()
-	_last_hp = -1
-	_last_max_hp = -1
+	_apply_overhead_visibility()
+
+
+func refresh_overhead_proximity(local_xz: Vector2) -> void:
+	var dist := Vector2(position.x, position.z).distance_to(local_xz)
+	_overhead_near = dist <= OVERHEAD_PROXIMITY
+	_apply_overhead_visibility()
+
+
+func overhead_visible() -> bool:
+	return _hp_label != null and _hp_label.visible
 
 
 func _configure_meter_label() -> void:
@@ -209,6 +231,32 @@ func _configure_meter_label() -> void:
 		return
 	_meter_label.visible = false
 	_meter_label.text = ""
+
+
+func _overhead_chrome_allowed() -> bool:
+	if not _has_hit_points:
+		return false
+	if faction != FactionHostile:
+		return true
+	return _overhead_near
+
+
+func _apply_overhead_visibility() -> void:
+	var show := _overhead_chrome_allowed()
+	if _hp_label != null:
+		_hp_label.visible = show
+	if _name_label != null:
+		if show and faction == FactionHostile and not display_name.is_empty():
+			_name_label.visible = true
+			_name_label.text = display_name
+		else:
+			_name_label.visible = false
+			_name_label.text = ""
+	if _overhead_click != null:
+		_overhead_click.collision_layer = OVERHEAD_CLICK_LAYER if show and faction == FactionHostile else 0
+	if not show and _meter_label != null:
+		_meter_label.visible = false
+		_meter_label.text = ""
 
 
 func _apply_faction_color() -> void:
