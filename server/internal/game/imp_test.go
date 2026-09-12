@@ -40,8 +40,11 @@ func TestImpAggroNearestPlayerInThreatRange(t *testing.T) {
 	bob.pos = Point{X: imp.home.X + 6, Z: imp.home.Z}
 
 	pw.w.step()
-	if imp.phase != phaseCombat || imp.attackTarget != bob.id {
-		t.Fatalf("phase=%d target=%d, want combat on nearest bob=%d (alice=%d)", imp.phase, imp.attackTarget, bob.id, alice.id)
+	if !impInCombatBrain(imp) || imp.attackTarget != bob.id {
+		t.Fatalf("phase=%d target=%d, want combat brain on nearest bob=%d (alice=%d)", imp.phase, imp.attackTarget, bob.id, alice.id)
+	}
+	if imp.phase != phaseApproach {
+		t.Fatalf("phase=%d after aggro, want Approach", imp.phase)
 	}
 	aggro := pw.events(EvNpcAggro)
 	if len(aggro) != 1 || aggro[0]["target"] != float64(bob.id) {
@@ -68,7 +71,7 @@ func TestImpAggroNearestWhenEarlierJoinerIsCloser(t *testing.T) {
 	bob.pos = Point{X: imp.home.X + 7, Z: imp.home.Z}
 
 	pw.w.step()
-	if imp.phase != phaseCombat || imp.attackTarget != alice.id {
+	if !impInCombatBrain(imp) || imp.attackTarget != alice.id {
 		t.Fatalf("phase=%d target=%d, want nearest earlier-joiner alice=%d (bob=%d)", imp.phase, imp.attackTarget, alice.id, bob.id)
 	}
 }
@@ -86,7 +89,7 @@ func TestImpAggroEqualDistanceKeepsJoinOrder(t *testing.T) {
 	bob.pos = Point{X: imp.home.X + 6, Z: imp.home.Z}
 
 	pw.w.step()
-	if imp.phase != phaseCombat || imp.attackTarget != alice.id {
+	if !impInCombatBrain(imp) || imp.attackTarget != alice.id {
 		t.Fatalf("phase=%d target=%d, want join-order tie-break alice=%d (bob=%d)", imp.phase, imp.attackTarget, alice.id, bob.id)
 	}
 }
@@ -101,7 +104,7 @@ func TestImpNoAggroOutsideThreatRange(t *testing.T) {
 	alice.pos = Point{X: imp.home.X + ImpThreatRange + 1, Z: imp.home.Z}
 
 	pw.w.step()
-	if imp.phase == phaseCombat {
+	if impInCombatBrain(imp) {
 		t.Fatal("aggroed outside threat range")
 	}
 	if got := pw.events(EvNpcAggro); len(got) != 0 {
@@ -115,7 +118,7 @@ func TestImpLeashClearsCombatAndReturnsHome(t *testing.T) {
 	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
 	alice.pos = Point{X: imp.home.X + 100, Z: imp.home.Z}
-	imp.phase = phaseCombat
+	imp.phase = phaseAttack
 	imp.attackTarget = alice.id
 	imp.pos = Point{X: imp.home.X + ImpLeashRange + 1, Z: imp.home.Z}
 	imp.remaining = nil
@@ -138,7 +141,7 @@ func TestImpLeashClearsCombatAndReturnsHome(t *testing.T) {
 	for i := 0; i < 200 && imp.phase == phaseReturn; i++ {
 		pw.w.step()
 	}
-	if imp.phase != phaseIdle {
+	if imp.phase != phasePatrol {
 		t.Fatalf("never finished return: phase=%d pos=%v", imp.phase, imp.pos)
 	}
 	if distanceBetween(imp.pos, imp.home) > MinPathLength {
@@ -161,7 +164,7 @@ func TestImpChasePathLogsArrived(t *testing.T) {
 	alice.pos = Point{X: imp.home.X + 5, Z: imp.home.Z}
 
 	pw.w.step()
-	if imp.phase != phaseCombat || len(imp.remaining) == 0 {
+	if imp.phase != phaseApproach || len(imp.remaining) == 0 {
 		t.Fatalf("expected chase path after aggro, phase=%d rem=%d", imp.phase, len(imp.remaining))
 	}
 	before := len(pw.events(EvArrived))
@@ -228,8 +231,9 @@ func TestImpMeleeDamagesPlayer(t *testing.T) {
 	alice := pw.joinWithClass("knight")
 	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
 	alice.pos = imp.pos
-	imp.phase = phaseCombat
+	imp.phase = phaseAttack
 	imp.attackTarget = alice.id
 	imp.remaining = nil
 	before := alice.hp
@@ -240,12 +244,114 @@ func TestImpMeleeDamagesPlayer(t *testing.T) {
 	if alice.hp != before-ImpDamage {
 		t.Fatalf("hp=%d, want %d", alice.hp, before-ImpDamage)
 	}
+	if imp.phase != phaseThink {
+		t.Fatalf("phase=%d after swing, want Think", imp.phase)
+	}
 	hits := pw.events(EvAttackHit)
 	if len(hits) != 1 {
 		t.Fatalf("attack_hit=%v", hits)
 	}
 	if hits[0]["damage"] != float64(ImpDamage) || hits[0]["npc"] != float64(imp.id) {
 		t.Fatalf("hit fields=%v", hits[0])
+	}
+}
+
+func TestImpAttackGatedByThink(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	seedDeterministicCamp(t, pw.w)
+	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
+	alice.pos = imp.pos
+	imp.phase = phaseAttack
+	imp.attackTarget = alice.id
+	imp.remaining = nil
+	before := alice.hp
+
+	for range pw.npcPeriod(imp) {
+		pw.w.step()
+	}
+	if alice.hp != before-ImpDamage {
+		t.Fatalf("first swing hp=%d, want %d", alice.hp, before-ImpDamage)
+	}
+	if imp.phase != phaseThink {
+		t.Fatalf("phase=%d, want Think after Attack", imp.phase)
+	}
+
+	for range ImpThinkTicks - 1 {
+		pw.w.step()
+		if imp.phase != phaseThink {
+			t.Fatalf("left Think early: phase=%d", imp.phase)
+		}
+	}
+	if alice.hp != before-ImpDamage {
+		t.Fatalf("swung during Think: hp=%d", alice.hp)
+	}
+}
+
+func TestImpThinkReturnsToAttack(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	seedDeterministicCamp(t, pw.w)
+	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
+	alice.pos = imp.pos
+	imp.phase = phaseThink
+	imp.attackTarget = alice.id
+	imp.thinkProgress = 0
+	imp.thinkCount = 0
+	imp.remaining = nil
+
+	for range ImpThinkTicks {
+		pw.w.step()
+	}
+	if imp.phase != phaseAttack {
+		t.Fatalf("phase=%d after Think, want Attack", imp.phase)
+	}
+}
+
+func TestImpThinkApproachesWhenTargetOutOfRange(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	seedDeterministicCamp(t, pw.w)
+	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
+	imp.pos = imp.home
+	alice.pos = Point{X: imp.home.X + AttackRange + 2, Z: imp.home.Z}
+	imp.phase = phaseThink
+	imp.attackTarget = alice.id
+	imp.thinkProgress = 0
+	imp.thinkCount = 0
+	imp.remaining = nil
+
+	for range ImpThinkTicks {
+		pw.w.step()
+	}
+	if imp.phase != phaseApproach {
+		t.Fatalf("phase=%d after Think, want Approach", imp.phase)
+	}
+	if len(imp.remaining) == 0 {
+		t.Fatal("Approach assigned no path toward target")
+	}
+}
+
+func TestImpCombatTransitionPatrolToAttack(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	seedDeterministicCamp(t, pw.w)
+	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
+	imp.remaining = nil
+	imp.patrolOut = false
+	imp.pos = imp.home
+	alice.pos = Point{X: imp.home.X + AttackRange*0.5, Z: imp.home.Z}
+
+	pw.w.step()
+	if imp.phase != phaseAttack {
+		t.Fatalf("phase=%d after in-range aggro, want Attack", imp.phase)
+	}
+	if len(pw.events(EvNpcAggro)) != 1 {
+		t.Fatalf("npc_aggro=%v", pw.events(EvNpcAggro))
 	}
 }
 
@@ -294,5 +400,14 @@ func despawnOtherImps(w *World, keep *npc) {
 			continue
 		}
 		w.despawnNPC(n)
+	}
+}
+
+func impInCombatBrain(n *npc) bool {
+	switch n.phase {
+	case phaseAggro, phaseApproach, phaseAttack, phaseThink:
+		return true
+	default:
+		return false
 	}
 }

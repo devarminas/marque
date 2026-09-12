@@ -445,7 +445,7 @@ func TestPlayerAndNPCShareWeaponDefPeriod(t *testing.T) {
 
 	bob := pw.joinWithClass("knight")
 	bob.pos = imp.pos
-	imp.phase = phaseCombat
+	imp.phase = phaseAttack
 	imp.attackTarget = bob.id
 	imp.remaining = nil
 	imp.attackProgress = 0
@@ -484,7 +484,7 @@ func TestImpArchetypeUsesImpClawPeriod(t *testing.T) {
 
 	alice := pw.joinWithClass("knight")
 	alice.pos = imp.pos
-	imp.phase = phaseCombat
+	imp.phase = phaseAttack
 	imp.attackTarget = alice.id
 	imp.remaining = nil
 	imp.attackProgress = 0

@@ -40,6 +40,7 @@ const (
 	ImpThreatRange  = 8.0
 	ImpLeashRange   = 16.0
 	ImpPatrolRadius = 3.0
+	ImpThinkTicks = 2
 
 	practiceNpcIDBand mnet.PlayerID = 1_000_000
 
@@ -51,8 +52,11 @@ const (
 type npcPhase uint8
 
 const (
-	phaseIdle npcPhase = iota
-	phaseCombat
+	phasePatrol npcPhase = iota
+	phaseAggro
+	phaseApproach
+	phaseAttack
+	phaseThink
 	phaseReturn
 )
 
@@ -71,7 +75,9 @@ type npc struct {
 	phase     npcPhase
 	swingRuntime
 	castRuntime
-	patrolOut bool
+	thinkProgress int
+	thinkCount    int
+	patrolOut     bool
 }
 
 func (n *npc) dead() bool { return n.hp == 0 }
