@@ -77,7 +77,7 @@ func (w *World) stepImpCombat(n *npc) {
 		w.beginImpLeash(n)
 		return
 	}
-	target, live := w.players[n.target]
+	target, live := w.players[n.attackTarget]
 	if !live || target.dead() {
 		w.beginImpLeash(n)
 		return
@@ -119,7 +119,7 @@ func (w *World) stepImpCombat(n *npc) {
 
 func (w *World) beginImpAggro(n *npc, target *player) {
 	n.phase = phaseCombat
-	n.target = target.id
+	n.attackTarget = target.id
 	n.attackProgress = 0
 	w.log.Event(w.tick, EvNpcAggro, gamelog.Fields{
 		"npc":    n.id,
@@ -132,12 +132,12 @@ func (w *World) beginImpAggro(n *npc, target *player) {
 }
 
 func (w *World) beginImpLeash(n *npc) {
-	if n.phase == phaseReturn && n.target == 0 {
+	if n.phase == phaseReturn && n.attackTarget == 0 {
 		return
 	}
-	prev := n.target
+	prev := n.attackTarget
 	n.phase = phaseReturn
-	n.target = 0
+	n.attackTarget = 0
 	n.attackProgress = 0
 	w.log.Event(w.tick, EvNpcLeash, gamelog.Fields{
 		"npc":    n.id,
@@ -221,9 +221,10 @@ func (w *World) npcDestinationPath(n *npc, dest Point) (points []Point, assign b
 
 func (w *World) killImp(n *npc, killer mnet.PlayerID) {
 	n.phase = phaseIdle
-	n.target = 0
+	n.attackTarget = 0
 	n.attackProgress = 0
 	n.remaining = nil
+	n.castRuntime.clear()
 	fields := gamelog.Fields{
 		"npc":    n.id,
 		"kind":   n.kind,

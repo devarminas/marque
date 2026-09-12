@@ -44,13 +44,13 @@ func TestImpChaseDoesNotTunnelHole(t *testing.T) {
 
 	alice := pw.join()
 	imp := &npc{
-		id:     9002,
-		kind:   KindImp,
-		hp:     ImpMaxHP,
-		home:   Point{X: -22, Z: 5},
-		pos:    Point{X: -22, Z: 5},
-		phase:  phaseCombat,
-		target: alice.id,
+		id:           9002,
+		kind:         KindImp,
+		hp:           ImpMaxHP,
+		home:         Point{X: -22, Z: 5},
+		pos:          Point{X: -22, Z: 5},
+		phase:        phaseCombat,
+		attackTarget: alice.id,
 	}
 	pw.w.npcs[imp.id] = imp
 	pw.w.npcOrder = append(pw.w.npcOrder, imp.id)
@@ -126,13 +126,13 @@ func TestImpCannotReachThroughOffMeshGap(t *testing.T) {
 
 	alice := pw.joinWithClass("knight")
 	imp := &npc{
-		id:     9003,
-		kind:   KindImp,
-		hp:     ImpMaxHP,
-		home:   Point{X: 6, Z: 6},
-		pos:    Point{X: 6, Z: 6},
-		phase:  phaseCombat,
-		target: alice.id,
+		id:           9003,
+		kind:         KindImp,
+		hp:           ImpMaxHP,
+		home:         Point{X: 6, Z: 6},
+		pos:          Point{X: 6, Z: 6},
+		phase:        phaseCombat,
+		attackTarget: alice.id,
 	}
 	pw.w.npcs[imp.id] = imp
 	pw.w.npcOrder = append(pw.w.npcOrder, imp.id)

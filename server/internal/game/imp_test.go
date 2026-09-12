@@ -40,8 +40,8 @@ func TestImpAggroFirstPlayerInThreatRange(t *testing.T) {
 	bob.pos = Point{X: imp.home.X + 6, Z: imp.home.Z}
 
 	pw.w.step()
-	if imp.phase != phaseCombat || imp.target != alice.id {
-		t.Fatalf("phase=%d target=%d, want combat on first-in-order alice=%d (bob=%d)", imp.phase, imp.target, alice.id, bob.id)
+	if imp.phase != phaseCombat || imp.attackTarget != alice.id {
+		t.Fatalf("phase=%d target=%d, want combat on first-in-order alice=%d (bob=%d)", imp.phase, imp.attackTarget, alice.id, bob.id)
 	}
 	aggro := pw.events(EvNpcAggro)
 	if len(aggro) != 1 || aggro[0]["target"] != float64(alice.id) {
@@ -74,7 +74,7 @@ func TestImpLeashClearsCombatAndReturnsHome(t *testing.T) {
 	imp := pw.w.npcByKind(KindImp)
 	alice.pos = Point{X: imp.home.X + 100, Z: imp.home.Z}
 	imp.phase = phaseCombat
-	imp.target = alice.id
+	imp.attackTarget = alice.id
 	imp.pos = Point{X: imp.home.X + ImpLeashRange + 1, Z: imp.home.Z}
 	imp.remaining = nil
 
@@ -82,8 +82,8 @@ func TestImpLeashClearsCombatAndReturnsHome(t *testing.T) {
 	if imp.phase != phaseReturn {
 		t.Fatalf("phase=%d, want return", imp.phase)
 	}
-	if imp.target != 0 {
-		t.Fatalf("target=%d after leash, want 0", imp.target)
+	if imp.attackTarget != 0 {
+		t.Fatalf("target=%d after leash, want 0", imp.attackTarget)
 	}
 	leash := pw.events(EvNpcLeash)
 	if len(leash) != 1 || leash[0]["target"] != float64(alice.id) {
@@ -107,9 +107,6 @@ func TestImpLeashClearsCombatAndReturnsHome(t *testing.T) {
 	}
 }
 
-// TestImpChasePathLogsArrived proves GAMELOG arrived carries npc after a chase
-// path ends (melee halt). Sabotage: suppress logNPCArrived — this test fails
-// with "expected arrived with npc after chase path".
 func TestImpChasePathLogsArrived(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
@@ -191,7 +188,7 @@ func TestImpMeleeDamagesPlayer(t *testing.T) {
 	imp := pw.w.npcByKind(KindImp)
 	alice.pos = imp.pos
 	imp.phase = phaseCombat
-	imp.target = alice.id
+	imp.attackTarget = alice.id
 	imp.remaining = nil
 	before := alice.hp
 
