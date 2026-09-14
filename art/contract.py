@@ -40,6 +40,13 @@ class Clip:
 
 
 @dataclass(frozen=True)
+class Piece:
+    item: str
+    slot: str
+    hides: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Contract:
     fps: int
     armature: str
@@ -48,6 +55,8 @@ class Contract:
     bones: tuple[Bone, ...]
     variants: dict[str, Variant]
     regions: dict[str, tuple[str, ...]]
+    slot_regions: dict[str, tuple[str, ...]]
+    pieces: dict[str, Piece]
     clips: dict[str, Clip]
 
     def bone(self, name: str) -> Bone:
@@ -102,6 +111,15 @@ def load(path: Path = CONTRACT_PATH) -> Contract:
         for bone in members:
             if bone not in names:
                 raise ContractError(f"region {region!r} names unknown bone {bone!r}")
+    slot_regions = {
+        slot: tuple(_typed(region, str, f"slot_regions.{slot}") for region in _typed(members, list, f"slot_regions.{slot}"))
+        for slot, members in _field(raw, "slot_regions", dict).items()
+    }
+    for slot, members in slot_regions.items():
+        for region in members:
+            if region not in regions:
+                raise ContractError(f"slot {slot!r} owns unknown region {region!r}")
+    pieces = {item: _piece(item, row, slot_regions) for item, row in _field(raw, "pieces", dict).items()}
     variants = {
         name: Variant(
             name,
@@ -129,8 +147,22 @@ def load(path: Path = CONTRACT_PATH) -> Contract:
         bones=bones,
         variants=variants,
         regions=regions,
+        slot_regions=slot_regions,
+        pieces=pieces,
         clips=clips,
     )
+
+
+def _piece(item: str, row: object, slot_regions: dict[str, tuple[str, ...]]) -> Piece:
+    row = _typed(row, dict, f"pieces.{item}")
+    slot = _field(row, "slot", str)
+    if slot not in slot_regions:
+        raise ContractError(f"piece {item!r} names unknown slot {slot!r}")
+    hides = tuple(_typed(region, str, f"pieces.{item}.hides") for region in _field(row, "hides", list))
+    for region in hides:
+        if region not in slot_regions[slot]:
+            raise ContractError(f"piece {item!r} hides region {region!r} outside slot {slot!r}")
+    return Piece(item, slot, hides)
 
 
 def _bone(row: object) -> Bone:

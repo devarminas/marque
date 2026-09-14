@@ -94,6 +94,24 @@
     "feet": ["foot_l", "foot_r", "ball_l", "ball_r"]
   },
   "slot_regions": {"helmet": ["head"], "chest": ["torso", "upper_arms", "forearms"], "trousers": ["hips", "thighs", "shins"], "feet": ["feet"]},
+  "pieces": {
+    "plate_helm": {"slot": "helmet", "hides": ["head"]},
+    "plate_chest": {"slot": "chest", "hides": ["torso", "upper_arms", "forearms"]},
+    "plate_legs": {"slot": "trousers", "hides": ["hips", "thighs", "shins"]},
+    "cloth_hood": {"slot": "helmet", "hides": []},
+    "cloth_robe": {"slot": "chest", "hides": ["torso", "upper_arms", "forearms"]},
+    "cloth_skirt": {"slot": "trousers", "hides": ["hips", "thighs"]},
+    "leather_helm": {"slot": "helmet", "hides": []},
+    "leather_chest": {"slot": "chest", "hides": ["torso"]},
+    "leather_legs": {"slot": "trousers", "hides": ["hips", "thighs", "shins"]},
+    "prospector_helm": {"slot": "helmet", "hides": []},
+    "prospector_jacket": {"slot": "chest", "hides": ["torso", "upper_arms"]},
+    "prospector_legs": {"slot": "trousers", "hides": ["hips", "thighs", "shins"]},
+    "prospector_boots": {"slot": "feet", "hides": ["feet"]},
+    "forester_cap": {"slot": "helmet", "hides": []},
+    "forester_shirt": {"slot": "chest", "hides": ["torso", "upper_arms", "forearms"]},
+    "forester_trousers": {"slot": "trousers", "hides": ["hips", "thighs", "shins"]}
+  },
   "clips": {"idle": {"frames": 60, "loop": true}, "walk": {"frames": 30, "loop": true}, "swing": {"frames": 12, "loop": false}},
   "routes": [
     {"action": "idle", "key": "", "clip": "idle"},

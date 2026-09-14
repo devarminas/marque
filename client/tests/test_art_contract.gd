@@ -2,6 +2,7 @@ extends RefCounted
 
 const ArtContract := preload("res://scripts/art_contract.gd")
 const Assertions := preload("res://tests/assertions.gd")
+const ClassDefs := preload("res://scripts/class_defs.gd")
 
 const BONE_COUNT := 23
 const IMP_PELVIS_HEIGHT := 0.62
@@ -14,6 +15,7 @@ func run(assertions: Assertions) -> void:
 	_test_the_committed_contract_is_valid(assertions, text)
 	_test_regions_partition_every_bone_but_the_root(assertions, text)
 	_test_slots_own_disjoint_regions(assertions, text)
+	_test_the_pieces_are_exactly_the_armor_the_sets_ship(assertions, text)
 	_test_every_clip_is_reached_through_a_fallback_route(assertions, text)
 	_test_an_unknown_key_falls_back_and_an_unknown_action_is_refused(assertions, text)
 	_test_the_imp_stands_at_its_own_pelvis_height(assertions, text)
@@ -61,6 +63,24 @@ func _test_slots_own_disjoint_regions(assertions: Assertions, text: String) -> v
 		unique.size() == owned.size() and not owned.has("hands"),
 		"no region belongs to two slots and hands belong to none, got %s" % [owned],
 	)
+
+
+func _test_the_pieces_are_exactly_the_armor_the_sets_ship(assertions: Assertions, text: String) -> void:
+	var contract := ArtContract.new(text)
+	var catalog := ClassDefs.load_sets()
+	var shipped := {}
+	for set_id in ClassDefs.set_ids(catalog):
+		var slots: Dictionary = ClassDefs.get_set(catalog, set_id)["slots"]
+		for slot in slots:
+			shipped[slots[slot]] = slot
+	assertions.check(shipped.size() > 0, "shared/sets.json ships %d armor piece(s)" % shipped.size())
+	for item in shipped:
+		assertions.check(
+			contract.pieces.has(item) and contract.pieces[item].slot == shipped[item],
+			"the contract declares %s in slot %s as sets.json ships it" % [item, shipped[item]],
+		)
+	for item in contract.pieces:
+		assertions.check(shipped.has(item), "sets.json ships the contract piece %s" % item)
 
 
 func _test_every_clip_is_reached_through_a_fallback_route(assertions: Assertions, text: String) -> void:
@@ -135,6 +155,10 @@ func _test_each_violation_is_named(assertions: Assertions, text: String) -> void
 			func(raw: Dictionary): raw["slot_regions"]["helmet"] = ["crown"]],
 		["a region owned by two slots", "region shins is owned by slots trousers and feet",
 			func(raw: Dictionary): raw["slot_regions"]["feet"].append("shins")],
+		["a piece in an unknown slot", "piece plate_helm names unknown slot gloves",
+			func(raw: Dictionary): raw["pieces"]["plate_helm"]["slot"] = "gloves"],
+		["a piece hiding a region its slot does not own", "piece leather_chest hides region hips outside slot chest",
+			func(raw: Dictionary): raw["pieces"]["leather_chest"]["hides"].append("hips")],
 		["a zero-frame clip", "clip idle frames must be a positive integer",
 			func(raw: Dictionary): raw["clips"]["idle"]["frames"] = 0.0],
 		["a route to an unknown clip", 'route swing/"" names unknown clip slash',

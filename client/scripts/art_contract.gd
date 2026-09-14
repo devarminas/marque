@@ -22,6 +22,13 @@ class Variant:
 	var glb := ""
 
 
+class Piece:
+	extends RefCounted
+	var item := ""
+	var slot := ""
+	var hides := PackedStringArray()
+
+
 class Clip:
 	extends RefCounted
 	var name := ""
@@ -39,6 +46,7 @@ var bones: Array[Bone] = []
 var variants := {}
 var regions := {}
 var slot_regions := {}
+var pieces := {}
 var clips := {}
 var _routes := {}
 
@@ -73,6 +81,7 @@ func _init(text: String) -> void:
 		_fail("clip_rig %s is not a declared variant" % clip_rig)
 	_parse_regions(_object(root, "regions", "contract"))
 	_parse_slot_regions(_object(root, "slot_regions", "contract"))
+	_parse_pieces(_object(root, "pieces", "contract"))
 	_parse_clips(_object(root, "clips", "contract"))
 	_parse_routes(_array(root, "routes", "contract"))
 
@@ -183,6 +192,24 @@ func _parse_slot_regions(rows: Dictionary) -> void:
 			else:
 				owner[region] = slot
 		slot_regions[slot] = members
+
+
+func _parse_pieces(rows: Dictionary) -> void:
+	for item in rows:
+		var where := "piece %s" % item
+		var row := _entry(rows[item], where)
+		var piece := Piece.new()
+		piece.item = item
+		piece.slot = _string(row, "slot", where)
+		piece.hides = _names(row.get("hides"), "%s hides" % where)
+		if not slot_regions.has(piece.slot):
+			_fail("%s names unknown slot %s" % [where, piece.slot])
+		else:
+			var owned: PackedStringArray = slot_regions[piece.slot]
+			for region in piece.hides:
+				if not owned.has(region):
+					_fail("%s hides region %s outside slot %s" % [where, region, piece.slot])
+		pieces[item] = piece
 
 
 func _parse_clips(rows: Dictionary) -> void:
