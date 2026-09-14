@@ -13,6 +13,8 @@ const PELVIS_EPSILON := 0.02
 const PELVIS_SAMPLES := 6
 const SWING_CONTACT_FRAME := 7
 const SWING_HAND_TRAVEL := 0.3
+const BODY_TRIANGLES_MIN := 4000
+const BODY_TRIANGLES_MAX := 8000
 
 var _assertions: Assertions = null
 var _finished := false
@@ -43,10 +45,27 @@ func _ready() -> void:
 		_test_every_variant_shares_the_clip_rig_rest_orientations(rigs)
 		_test_the_clip_rig_rests_like_the_rest_source(rigs)
 		_test_each_region_is_a_skinned_mesh_weighted_to_its_own_bones(rigs)
+		_test_each_body_stays_within_the_triangle_budget(rigs)
 		_test_the_clip_library_matches_the_contract()
 		await _test_the_imp_plays_idle_at_its_own_pelvis_height()
 		await _test_swing_moves_the_grip_hand()
 	_finished = true
+
+
+func _test_each_body_stays_within_the_triangle_budget(rigs: Dictionary) -> void:
+	for name in rigs:
+		var skeleton := _skeleton(rigs[name])
+		var triangles := 0
+		for region in _contract.regions:
+			var mesh := skeleton.get_node_or_null(REGION_PREFIX + region) as MeshInstance3D
+			if mesh == null:
+				continue
+			for surface in mesh.mesh.get_surface_count():
+				triangles += mesh.mesh.surface_get_array_index_len(surface) / 3
+		_assertions.check(
+			triangles >= BODY_TRIANGLES_MIN and triangles <= BODY_TRIANGLES_MAX,
+			"%s body has %d triangles, within %d to %d" % [name, triangles, BODY_TRIANGLES_MIN, BODY_TRIANGLES_MAX],
+		)
 
 
 func _test_each_rig_carries_exactly_the_contract_bones(rigs: Dictionary) -> void:
