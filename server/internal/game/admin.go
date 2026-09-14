@@ -16,6 +16,10 @@ const (
 	adminPrefixDeny  = "deny: "
 	adminPrefixUsage = "usage: "
 	adminPrefixError = "error: "
+
+	adminResultOK    = "ok"
+	adminResultDeny  = "deny"
+	adminResultError = "error"
 )
 
 type AdminACL struct {
@@ -105,37 +109,33 @@ func (w *World) SetAdminRegistry(r *AdminRegistry) {
 
 func (w *World) admin(p *player, msg mnet.Admin, seq mnet.Seq) {
 	name, args, parseErr := ParseAdminLine(msg.Line)
-	fields := gamelog.Fields{
-		"player": p.id,
-		"line":   msg.Line,
-	}
-	if name != "" {
-		fields["cmd"] = name
-	}
-	w.log.Event(w.tick, EvAdmin, withSeq(fields, seq))
-
 	if parseErr != nil {
 		w.refuseAdmin(p, parseErr, adminPrefixUsage+parseErr.Detail)
+		w.auditAdmin(p, name, args, seq, parseErr)
 		return
 	}
 	if !w.adminACL.Allowed(p.id) {
-		w.refuseAdmin(p, &mnet.RejectError{
+		rej := &mnet.RejectError{
 			Reason:      mnet.ReasonUnauthorized,
 			Detail:      "unauthorized",
 			Re:          mnet.MsgAdmin,
 			Disposition: mnet.ReplyError,
-		}, adminPrefixDeny+"unauthorized")
+		}
+		w.refuseAdmin(p, rej, adminPrefixDeny+"unauthorized")
+		w.auditAdmin(p, name, args, seq, rej)
 		return
 	}
 	h, ok := w.adminCmds.Lookup(name)
 	if !ok {
 		detail := fmt.Sprintf("unknown command %q", name)
-		w.refuseAdmin(p, &mnet.RejectError{
+		rej := &mnet.RejectError{
 			Reason:      mnet.ReasonUsage,
 			Detail:      detail,
 			Re:          mnet.MsgAdmin,
 			Disposition: mnet.ReplyError,
-		}, adminPrefixUsage+detail)
+		}
+		w.refuseAdmin(p, rej, adminPrefixUsage+detail)
+		w.auditAdmin(p, name, args, seq, rej)
 		return
 	}
 	reply, herr := h(w, p, args)
@@ -147,27 +147,57 @@ func (w *World) admin(p *player, msg mnet.Admin, seq mnet.Seq) {
 			herr.Disposition = mnet.ReplyError
 		}
 		w.refuseAdmin(p, herr, formatAdminHandlerError(herr))
+		w.auditAdmin(p, name, args, seq, herr)
 		return
 	}
+	w.auditAdmin(p, name, args, seq, nil)
 	if reply != "" {
 		w.sendAdminReply(p, adminPrefixOK+reply)
 	}
 }
 
-func (w *World) refuseAdmin(p *player, rejection *mnet.RejectError, replyText string) {
+func (w *World) auditAdmin(p *player, cmd string, args []string, seq mnet.Seq, rejection *mnet.RejectError) {
+	if args == nil {
+		args = []string{}
+	}
 	fields := gamelog.Fields{
 		"player": p.id,
-		"reason": string(rejection.Reason),
-		"detail": rejection.Detail,
+		"cmd":    cmd,
+		"args":   args,
+		"result": adminAuditResult(rejection),
 	}
-	if rejection.Re != "" {
-		fields["re"] = rejection.Re
+	if rejection != nil {
+		fields["reason"] = string(rejection.Reason)
+		if rejection.Detail != "" {
+			fields["detail"] = rejection.Detail
+		}
 	}
+	w.log.Event(w.tick, EvAdmin, withSeq(fields, seq))
+}
+
+func adminAuditResult(rejection *mnet.RejectError) string {
+	if rejection == nil {
+		return adminResultOK
+	}
+	if rejection.Reason == mnet.ReasonUnauthorized {
+		return adminResultDeny
+	}
+	return adminResultError
+}
+
+func (w *World) refuseAdmin(p *player, rejection *mnet.RejectError, replyText string) {
 	if rejection.Disposition == mnet.Ignore {
+		fields := gamelog.Fields{
+			"player": p.id,
+			"reason": string(rejection.Reason),
+			"detail": rejection.Detail,
+		}
+		if rejection.Re != "" {
+			fields["re"] = rejection.Re
+		}
 		w.log.Event(w.tick, EvIntentIgnored, fields)
 		return
 	}
-	w.log.Event(w.tick, EvAdminRejected, fields)
 	w.sendAdminReply(p, replyText)
 	if rejection.Disposition == mnet.ReplyErrorAndClose {
 		p.conn.CloseAfterFlush(mnet.DisconnectProtocol)

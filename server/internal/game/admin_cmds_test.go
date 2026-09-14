@@ -39,8 +39,9 @@ func TestAdminGiveHappyPath(t *testing.T) {
 	if got := awaitAdminReply(t, alicePeer.ws, 2*time.Second); !strings.HasPrefix(got, "ok: ") {
 		t.Fatalf("reply=%q, want ok: prefix", got)
 	}
-	if got := pw.events(EvAdminRejected); len(got) != 0 {
-		t.Fatalf("unexpected rejection %v", got)
+	got := pw.events(EvAdmin)
+	if len(got) != 1 || got[0]["result"] != adminResultOK {
+		t.Fatalf("admin audit=%v, want result=%q", got, adminResultOK)
 	}
 }
 
@@ -139,8 +140,9 @@ func TestAdminTPCoordsHappyPath(t *testing.T) {
 	if got := awaitAdminReply(t, alicePeer.ws, 2*time.Second); !strings.HasPrefix(got, "ok: ") {
 		t.Fatalf("reply=%q, want ok: prefix", got)
 	}
-	if got := pw.events(EvAdminRejected); len(got) != 0 {
-		t.Fatalf("unexpected rejection %v", got)
+	got := pw.events(EvAdmin)
+	if len(got) != 1 || got[0]["result"] != adminResultOK {
+		t.Fatalf("admin audit=%v, want result=%q", got, adminResultOK)
 	}
 }
 
