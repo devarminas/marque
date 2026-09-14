@@ -1,0 +1,212 @@
+[CmdletBinding()]
+param(
+    [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
+    [string] $OutDir = (Join-Path ([System.IO.Path]::GetTempPath()) "marque-cast-bar"),
+    [int] $ReadyTimeoutSeconds = 20,
+    [int] $ClientTimeoutSeconds = 90
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+. (Join-Path $PSScriptRoot "marque-demo-lib.ps1")
+
+$repo = Split-Path -Parent $PSScriptRoot
+$serverDir = Join-Path $repo "server"
+$clientDir = Join-Path $repo "client"
+
+$work = Join-Path ([System.IO.Path]::GetTempPath()) ("marque-cast-bar-" + [guid]::NewGuid().ToString("n"))
+New-Item -ItemType Directory -Path $work | Out-Null
+
+$binary = Join-Path $work "marqued.exe"
+$serverOut = Join-Path $OutDir "server.stdout.ndjson"
+$serverErr = Join-Path $OutDir "server.stderr.log"
+$clientOut = Join-Path $OutDir "client.stdout.log"
+$clientErr = Join-Path $OutDir "client.stderr.log"
+$prefix = Join-Path $OutDir "c"
+
+$server = $null
+$failures = New-MarqueDemoFailures
+
+function Read-ClientReport([string] $path) {
+    $report = @{
+        Joined = -1
+        Failures = New-Object System.Collections.Generic.List[string]
+        Done = $false
+        CastOk = $false
+        CastCancel = $false
+        CastBarVisible = $false
+        CastBarHidden = $false
+    }
+    if (-not (Test-Path $path)) { return $report }
+    foreach ($line in Get-Content -Path $path) {
+        switch -Regex ($line) {
+            '^DEMO joined (\d+)\s*$' { $report.Joined = [int]$Matches[1] }
+            '^DEMO FAIL (.+)$' { $report.Failures.Add($Matches[1].Trim()) }
+            '^DEMO done\s*$' { $report.Done = $true }
+            '^DEMO castok ' { $report.CastOk = $true }
+            '^DEMO castcancel ' { $report.CastCancel = $true }
+            '^DEMO castbar .+ visible=1\s*$' { $report.CastBarVisible = $true }
+            '^DEMO castbar .+ visible=0\s*$' { $report.CastBarHidden = $true }
+        }
+    }
+    return $report
+}
+
+try {
+    $null = Initialize-MarqueEvidenceDir -OutDir $OutDir -SourceScript "scripts/cast_bar_demo.ps1"
+
+    Write-Host "==> building marqued"
+    Push-Location $serverDir
+    try {
+        & go build -o $binary ./cmd/marqued
+        if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
+    } finally {
+        Pop-Location
+    }
+
+    Write-Host "==> warming the Godot import cache"
+    $warm = Start-Process -FilePath $Godot `
+        -ArgumentList @("--headless", "--path", ('"' + $clientDir + '"'), "--quit-after", "20") `
+        -NoNewWindow -PassThru -Wait `
+        -RedirectStandardOutput (Join-Path $OutDir "warm.stdout.log") `
+        -RedirectStandardError (Join-Path $OutDir "warm.stderr.log")
+    if ($warm.ExitCode -ne 0) {
+        throw "the Godot warm-up run exited $($warm.ExitCode)"
+    }
+
+    Write-Host "==> starting marqued on a free port (-admin; kit via client /give)"
+    $server = Start-Process -FilePath $binary `
+        -ArgumentList @("-addr", "127.0.0.1:0", "-admin") `
+        -NoNewWindow -PassThru `
+        -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
+    $null = $server.Handle
+
+    $address = $null
+    $deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if ($server.HasExited) {
+            throw "marqued exited with code $($server.ExitCode) before it announced an address"
+        }
+        if (Test-Path $serverOut) {
+            $line = Select-String -Path $serverOut -Pattern '"ev":"server_started"' -List
+            if ($null -ne $line) {
+                if ($line.Line -match '"addr":"([^"]+)"') { $address = $Matches[1]; break }
+                throw "server_started carried no addr: $($line.Line)"
+            }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    if ($null -eq $address) { throw "marqued never logged server_started within $ReadyTimeoutSeconds seconds" }
+    $url = "ws://$address/ws"
+    Write-Host "==> marqued listening at $url (pid $($server.Id))"
+
+    Write-Host "==> launching cast-bar client"
+    $client = Start-Process -FilePath $Godot -NoNewWindow -PassThru `
+        -ArgumentList @(
+            "--path", ('"' + $clientDir + '"'),
+            "--position", "40,60",
+            "--",
+            "--server", $url,
+            "--cast-bar-shots", ('"' + $prefix + '"')
+        ) `
+        -RedirectStandardOutput $clientOut -RedirectStandardError $clientErr
+    $null = $client.Handle
+
+    if ($client.WaitForExit($ClientTimeoutSeconds * 1000)) {
+        $client.WaitForExit()
+    } else {
+        Add-Failure "client did not finish within $ClientTimeoutSeconds seconds"
+        Stop-Process -Id $client.Id -Force -ErrorAction SilentlyContinue
+    }
+
+    Show-File "client stdout" $clientOut
+    Show-File "client stderr" $clientErr
+
+    if ($client.HasExited) {
+        $code = $client.ExitCode
+        if ($null -eq $code) {
+            Add-Failure "client exit code could not be read"
+        } elseif ($code -ne 0) {
+            Add-Failure "client exited $code"
+        }
+    }
+
+    $report = Read-ClientReport $clientOut
+    if ($report.Joined -lt 1) { Add-Failure "client never reported DEMO joined" }
+    foreach ($reason in $report.Failures) { Add-Failure "client reported DEMO FAIL: $reason" }
+    if (-not $report.Done) { Add-Failure "client never reported DEMO done" }
+    if (-not $report.CastOk) { Add-Failure "missing DEMO castok" }
+    if (-not $report.CastCancel) { Add-Failure "missing DEMO castcancel" }
+    if (-not $report.CastBarVisible) { Add-Failure "missing DEMO castbar visible=1" }
+    if (-not $report.CastBarHidden) { Add-Failure "missing DEMO castbar visible=0" }
+
+    # PNG artifacts only (ARM-289); DEMO cast lines + GAMELOG are the proof.
+    foreach ($index in 1..3) {
+        $shot = "${prefix}_$index.png"
+        if (Test-Path $shot) {
+            $size = (Get-Item $shot).Length
+            Write-Host "==> $shot ($size bytes, artifact)"
+        }
+    }
+
+    $events = Read-GameLog $serverOut
+    Write-Host "==> GAMELOG: $($events.Count) event(s) in $serverOut"
+    if ($events.Count -eq 0) { Add-Failure "the server wrote no GAMELOG events" }
+
+    $player = $report.Joined
+    if ($player -ge 1) {
+        $begin = Select-Events $events "cast_begin" $player
+        $cast = Select-Events $events "cast" $player
+        $effect = Select-Events $events "cast_effect" $player
+        $cancelled = Select-Events $events "cast_cancelled" $player
+        if ($begin.Count -lt 2) {
+            Add-Failure "cast_begin=$($begin.Count), want >= 2 (resolve + interrupt)"
+        }
+        if ($cast.Count -lt 1) {
+            Add-Failure "cast=$($cast.Count), want >= 1 resolve"
+        } elseif ([string]$cast[0].ability -ne "fireball") {
+            Add-Failure "cast ability '$($cast[0].ability)', want fireball"
+        }
+        if ($effect.Count -lt 1) {
+            Add-Failure "cast_effect=$($effect.Count), want >= 1"
+        }
+        $moveCancel = @($cancelled | Where-Object { [string]$_.cause -eq "move" })
+        if ($moveCancel.Count -lt 1) {
+            Add-Failure "cast_cancelled with cause=move=$($moveCancel.Count), want >= 1"
+        } else {
+            Write-Host "==> server: player $player cast_cancelled cause=$($moveCancel[0].cause)"
+        }
+    }
+
+    $rejected = Select-Events $events "cast_rejected"
+    if ($rejected.Count -gt 0) {
+        Add-Failure "the server logged $($rejected.Count) cast_rejected event(s)"
+    }
+} catch {
+    Add-Failure "$($_.Exception.Message)"
+} finally {
+    if ($null -ne $server) {
+        if ($server.HasExited) {
+            Add-Failure "marqued exited on its own with code $($server.ExitCode)"
+        } else {
+            Write-Host "==> stopping marqued (pid $($server.Id))"
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+            $server.WaitForExit(5000) | Out-Null
+        }
+    }
+    if (Test-Path $serverErr) {
+        $stderrText = Get-Content -Path $serverErr -Raw
+        if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+            $firstLine = $stderrText.Trim() -split "`r?`n" | Select-Object -First 1
+            Add-Failure "marqued wrote to stderr: $firstLine"
+        }
+    }
+    Show-File "marqued event log ($serverOut)" $serverOut
+    Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+}
+
+Write-MarqueDemoResult `
+    -OkMarker "CAST BAR DEMO OK" `
+    -FailMarker "CAST BAR DEMO FAILED" `
+    -EvidenceLine "evidence (screenshots, client logs, server event log): $OutDir"
