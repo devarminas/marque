@@ -684,9 +684,11 @@ func _await_peers_post_capture_ready() -> bool:
 		if not _write_barrier_file(READY_BARRIER_PREFIX, "ready %d %d" % [own_id, unix_msec_now()]):
 			return false
 		peers = 0
+		var seen_ids := {}
 		var dir := _barrier_dir()
 		if dir.is_empty():
 			return false
+		var now_msec := unix_msec_now()
 		for name in DirAccess.get_files_at(dir):
 			if not str(name).begins_with(READY_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
 				continue
@@ -696,6 +698,13 @@ func _await_peers_post_capture_ready() -> bool:
 				continue
 			if not parts[1].is_valid_int() or not parts[2].is_valid_int():
 				continue
+			# Ignore stale ready files left by an abandoned prior session id.
+			if now_msec - int(parts[2]) > 5000:
+				continue
+			var peer_id := int(parts[1])
+			if seen_ids.has(peer_id):
+				continue
+			seen_ids[peer_id] = true
 			peers += 1
 		if peers >= REQUIRED_PLAYERS:
 			print("DEMO captureready %d %d" % [peers, unix_msec_now()])
