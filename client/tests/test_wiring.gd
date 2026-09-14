@@ -15,10 +15,14 @@ const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
+# Wire decode / authored chrome can stay sub-millimetre. Wish+pose halt is
+# discrete (~0.12u/tick); arrive inside ~1.5 steps, then assert within ~2 steps.
 const EXACT_EPSILON := 0.002
-const ARRIVAL_EPSILON := 0.75
+const ARRIVAL_EPSILON := 0.18
+const POSE_EPSILON := 0.25
 const SEGMENT_EPSILON := 0.01
 const RIG_SETTLED_EPSILON := 0.01
+const ARRIVAL_SETTLE_MSEC := 400
 
 const CLOCK_SKEW_TOLERANCE := 0.95
 
@@ -752,12 +756,12 @@ func _run_live(url: String) -> void:
 	a.session.request_move(0.0, 0.0)
 	if not arrived:
 		return
-	await get_tree().process_frame
-	_check_live_ground(b, a_id, destination, EXACT_EPSILON, "B draws A at the requested point")
+	await _wait_msec(ARRIVAL_SETTLE_MSEC)
+	_check_live_ground(b, a_id, destination, POSE_EPSILON, "B draws A at the requested point")
 	_check_live_ground(
-		a, a_id, destination, EXACT_EPSILON, "and A's own body stands on the point A asked for"
+		a, a_id, destination, POSE_EPSILON, "and A's own body stands on the point A asked for"
 	)
-	_check_live_ground(c, a_id, destination, EXACT_EPSILON, "and so does the late joiner's")
+	_check_live_ground(c, a_id, destination, POSE_EPSILON, "and so does the late joiner's")
 
 	print("== joining a world where nobody is walking ==")
 	var d := await _join(url, "D")
@@ -772,7 +776,7 @@ func _run_live(url: String) -> void:
 		"and no path was replayed for them, got %d" % d.paths_for(a_id).size(),
 	)
 	_check_live_ground(
-		d, a_id, destination, EXACT_EPSILON, "the halted player is drawn where they stopped"
+		d, a_id, destination, POSE_EPSILON, "the halted player is drawn where they stopped"
 	)
 	for _frame in 20:
 		await get_tree().process_frame
@@ -780,7 +784,7 @@ func _run_live(url: String) -> void:
 		d.paths_for(a_id).is_empty(), "no path arrives for them later either"
 	)
 	_check_live_ground(
-		d, a_id, destination, EXACT_EPSILON, "and they have not drifted"
+		d, a_id, destination, POSE_EPSILON, "and they have not drifted"
 	)
 
 	print("== leaving ==")

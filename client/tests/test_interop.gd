@@ -12,6 +12,10 @@ const WAIT_FRAMES := 240
 const MAX_FPS := 30
 
 const POSITION_EPSILON := 0.0005
+# Wish+pose halt is discrete (~0.12u/tick at WalkSpeed 3); path-era snap epsilons
+# do not apply. Arrive inside ~1.5 steps, then tolerate one more step of settle.
+const POSE_ARRIVAL_EPSILON := 0.18
+const POSE_EPSILON := 0.25
 
 const EXPECTED_TICK_MS := 40
 const EXPECTED_SPEED := 3.0
@@ -534,7 +538,10 @@ func _test_wish_walk_reaches_first_destination(a: Peer) -> bool:
 	if not await _wait_until(
 		func() -> bool:
 			var here: Variant = a.latest_xz(you)
-			return here != null and Vector2(here).distance_to(FIRST_DESTINATION) < 0.75,
+			return (
+				here != null
+				and Vector2(here).distance_to(FIRST_DESTINATION) < POSE_ARRIVAL_EPSILON
+			),
 		"A's pose near the first destination",
 	):
 		a.net.send_move(0.0, 0.0)
@@ -543,10 +550,16 @@ func _test_wish_walk_reaches_first_destination(a: Peer) -> bool:
 	_check(a.paths_for(you).is_empty(), "wish walk does not produce a player path")
 	var landed: Vector2 = a.latest_xz(you)
 	_check(
-		landed.distance_to(FIRST_DESTINATION) < 0.75,
+		landed.distance_to(FIRST_DESTINATION) < POSE_ARRIVAL_EPSILON,
 		"A's last pose is near %v, got %v" % [FIRST_DESTINATION, landed],
 	)
 	await _wait_msec(ARRIVAL_WAIT_MSEC)
+	landed = a.latest_xz(you)
+	_check(
+		landed.distance_to(FIRST_DESTINATION) < POSE_EPSILON,
+		"after halt settle A's pose is at %v +/- %f, got %v"
+		% [FIRST_DESTINATION, POSE_EPSILON, landed],
+	)
 	return true
 
 
@@ -625,9 +638,9 @@ func _test_second_client_sees_the_world(a: Peer, b: Peer) -> bool:
 	_check(a_index != -1, "B's welcome includes A (%d) in %s" % [a_id, ids])
 	if a_index != -1:
 		_check(
-			_near(positions[a_index], FIRST_DESTINATION),
-			"B's welcome puts A at the point A walked to %v, got %v"
-			% [FIRST_DESTINATION, positions[a_index]],
+			positions[a_index].distance_to(FIRST_DESTINATION) < POSE_EPSILON,
+			"B's welcome puts A at the point A walked to %v +/- %f, got %v"
+			% [FIRST_DESTINATION, POSE_EPSILON, positions[a_index]],
 		)
 	var b_index := Array(ids).find(b_id)
 	if b_index != -1:
