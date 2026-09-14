@@ -118,6 +118,10 @@ Preconditions:
 
 - **Core claim is GAMELOG-only.** Pixels cannot prove exactly-one-winner. Assert
   `pickup_resolved` / `pickup_lost` first.
+- **Same-tick pickup clicks use `click_deadline_usec`.** Both clients derive one
+  absolute click moment from the quantized scenario observation (plus a short
+  post-ready pad so capture 1 can finish). Do not schedule from local `now` after
+  capture — that skews intents by a tick or two and turns the contest into a race.
 - **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
   u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
   `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away

@@ -23,8 +23,11 @@ const USEC_PER_MSEC := 1000
 # window only reached 4.56u and never printed DEMO walkaway_arrived). Approach
 # origin→(-5,-5) is ~59 ticks; fail-closed path/move_to stays in the harness.
 const CLICK_LEAD_TICKS := 75
-
-const SHOT_BEFORE_LEAD_TICKS := 23
+# Capture 1 starts SHOT_BEFORE before ready; click is CLICK_AFTER_READY after
+# ready. Together they leave ~2.6s for a 15-frame capture so a slow desktop
+# cannot overrun the shared click_deadline_usec and reintroduce click skew.
+const SHOT_BEFORE_LEAD_TICKS := 40
+const CLICK_AFTER_READY_TICKS := 25
 const SHOT_RESOLVED_OFFSET_TICKS := 98
 const WALK_AWAY_OFFSET_TICKS := 113
 const WALK_AWAY_DEADLINE_TICKS := 255
@@ -101,7 +104,11 @@ func run(
 		return 1
 	var screen: Vector2 = picked
 
-	var click_usec := clock.next_guard_usec(Time.get_ticks_usec(), click_guard_usec(tick_usec))
+	# Shared absolute deadline from the scenario observation — not next_guard from
+	# local "now" after capture. Capture duration differs per client; scheduling
+	# from now put intents two ticks apart (e.g. 435 vs 437) and broke same-tick
+	# contest. test_tick_clock expects click_deadline_usec to keep both on one tick.
+	var click_usec := click_deadline_usec(scenario_usec, clock)
 	var click_tick := clock.estimated_tick_at(click_usec)
 	if not await _await_usec(click_usec):
 		return _fail("frames stopped before the click")
@@ -147,7 +154,7 @@ static func ready_deadline_usec(scenario_usec: int, clock: TickClock) -> int:
 static func click_deadline_usec(scenario_usec: int, clock: TickClock) -> int:
 	var tick_usec := clock.tick_ms() * USEC_PER_MSEC
 	return clock.next_guard_usec(
-		ready_deadline_usec(scenario_usec, clock),
+		ready_deadline_usec(scenario_usec, clock) + CLICK_AFTER_READY_TICKS * tick_usec,
 		click_guard_usec(tick_usec),
 	)
 

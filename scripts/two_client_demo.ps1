@@ -68,16 +68,21 @@ function Read-Positions([string] $path) {
 }
 
 function Compare-Frames([string] $left, [string] $right) {
-    # System.Drawing is Windows-centric; Linux pwsh often lacks it. Wish+pose
-    # claims are proven from DEMO/GAMELOG below; skip pixel bands when unavailable.
+    # System.Drawing is Windows-centric; Linux pwsh may load the assembly stub but
+    # still fail at Bitmap.FromFile (GDI+). Wish+pose claims are proven from
+    # DEMO/GAMELOG below; skip pixel bands when Drawing/GDI+ cannot decode.
+    $a = $null
+    $b = $null
     try {
         Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+        $a = [System.Drawing.Bitmap]::FromFile($left)
+        $b = [System.Drawing.Bitmap]::FromFile($right)
     } catch {
-        Write-Host "==> Compare-Frames skipped: System.Drawing unavailable ($($_.Exception.Message))"
+        Write-Host "==> Compare-Frames skipped: System.Drawing/GDI+ unavailable ($($_.Exception.Message))"
+        if ($null -ne $a) { $a.Dispose() }
+        if ($null -ne $b) { $b.Dispose() }
         return $null
     }
-    $a = [System.Drawing.Bitmap]::FromFile($left)
-    $b = [System.Drawing.Bitmap]::FromFile($right)
     try {
         if ($a.Width -ne $b.Width -or $a.Height -ne $b.Height) {
             throw "frames differ in size: $left is $($a.Width)x$($a.Height), $right is $($b.Width)x$($b.Height)"
