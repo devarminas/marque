@@ -18,14 +18,16 @@ const JOIN_TIMEOUT_MSEC := 20000
 
 const USEC_PER_MSEC := 1000
 
-const CLICK_LEAD_TICKS := 20
+# Tick budgets were authored against ~150ms ticks. At 40ms (WalkSpeed 3), keep the
+# same wall-clock windows so wish-steer walk-away can still cover the drop click.
+const CLICK_LEAD_TICKS := 75
 
-const SHOT_BEFORE_LEAD_TICKS := 6
-const SHOT_RESOLVED_OFFSET_TICKS := 26
-const WALK_AWAY_OFFSET_TICKS := 30
-const WALK_AWAY_DEADLINE_TICKS := 68
-const SHOT_DROPPED_OFFSET_TICKS := 76
-const HOLD_UNTIL_OFFSET_TICKS := 88
+const SHOT_BEFORE_LEAD_TICKS := 23
+const SHOT_RESOLVED_OFFSET_TICKS := 98
+const WALK_AWAY_OFFSET_TICKS := 113
+const WALK_AWAY_DEADLINE_TICKS := 255
+const SHOT_DROPPED_OFFSET_TICKS := 285
+const HOLD_UNTIL_OFFSET_TICKS := 330
 
 const TICK_WAIT_BACKSTOP_MSEC := 60000
 

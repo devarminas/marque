@@ -6,7 +6,7 @@ const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 
 const JOIN_TIMEOUT_MSEC := 20000
-const CAST_WAIT_MSEC := 8000
+const CAST_WAIT_MSEC := 12000
 const HIT_WAIT_MSEC := 30000
 const SPIN_USEC := 20000
 const HOLD_MSEC := 900
@@ -16,6 +16,8 @@ const STEER_DX := 1.0
 const STEER_DZ := 0.0
 const CLICK_HEIGHT := 0.8
 const SCREENSHOT_WARMUP_FRAMES := 15
+const CAST_RANGE_SLACK := 6.0
+const APPROACH_TIMEOUT_MSEC := 8000
 
 
 var _tree: SceneTree
@@ -53,9 +55,38 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 
 	await _capture(1)
 
+	var avatar: PlayerAvatarScript = _session.avatar_for(_session.own_id())
+	if avatar == null:
+		return _fail("no local avatar after join")
+	# Wish+pose relocate first so this phase is reached even if a later cast gate
+	# trips, and so the mage starts closer to the hostile dummy (+X).
+	var start := Vector2(avatar.position.x, avatar.position.z)
+	print("DEMO pos 1 %d %f %f" % [_session.own_id(), start.x, start.y])
+	_session.request_move(0.0, 0.0)
+	await _wait_msec(SETTLE_MSEC)
+	var hold_deadline := Time.get_ticks_msec() + HOLD_MSEC
+	while Time.get_ticks_msec() < hold_deadline:
+		_session.request_move(STEER_DX, STEER_DZ)
+		await _wait_msec(100)
+	_session.request_move(0.0, 0.0)
+	await _wait_msec(SETTLE_MSEC)
+	var end := Vector2(avatar.position.x, avatar.position.z)
+	print("DEMO pos 2 %d %f %f" % [_session.own_id(), end.x, end.y])
+	var travelled := start.distance_to(end)
+	if travelled < MIN_DISPLACEMENT:
+		return _fail("displacement %f below %f after steer" % [travelled, MIN_DISPLACEMENT])
+	print("DEMO move_displacement %f" % travelled)
+	print("DEMO wish_ok")
+
 	if not _session.select_player(hostile_id):
 		return _fail("could not select hostile dummy %d" % hostile_id)
 	print("DEMO select %d hostile" % hostile_id)
+	if not await _close_in_for_cast(hostile_id, CAST_RANGE_SLACK):
+		return _fail(
+			"could not close to within %.1f of hostile %d for fireball" % [CAST_RANGE_SLACK, hostile_id]
+		)
+	_session.request_move(0.0, 0.0)
+	await _wait_msec(SETTLE_MSEC)
 	var mana_before_fire := _session.mana_for(_session.own_id()).x
 	if mana_before_fire < 0:
 		mana_before_fire = 100
@@ -64,7 +95,22 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	_session.request_cast("fireball")
 	print("DEMO cast fireball %d" % hostile_id)
 	if not await _wait_mana_drop(mana_before_fire):
-		return _fail("fireball did not spend mana")
+		var here := _session.avatar_for(_session.own_id())
+		var target: NpcDummyScript = npcs.get(hostile_id)
+		var hx := 0.0
+		var hz := 0.0
+		var tx := 0.0
+		var tz := 0.0
+		if here != null:
+			hx = here.position.x
+			hz = here.position.z
+		if target != null:
+			tx = target.position.x
+			tz = target.position.z
+		return _fail(
+			"fireball did not spend mana (class=%s mana=%d pos=(%f,%f) target=(%f,%f))"
+			% [_session.active_class_id(), _session.mana_for(_session.own_id()).x, hx, hz, tx, tz]
+		)
 	if not await _wait_cast_fx(hostile_id, "fireball"):
 		return _fail("fireball success did not play effect on hostile %d" % hostile_id)
 	var hostile: NpcDummyScript = npcs.get(hostile_id)
@@ -83,6 +129,12 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	if not _session.select_player(friendly_id):
 		return _fail("could not select friendly dummy %d" % friendly_id)
 	print("DEMO select %d friendly" % friendly_id)
+	if not await _close_in_for_cast(friendly_id, CAST_RANGE_SLACK):
+		return _fail(
+			"could not close to within %.1f of friendly %d for heal" % [CAST_RANGE_SLACK, friendly_id]
+		)
+	_session.request_move(0.0, 0.0)
+	await _wait_msec(SETTLE_MSEC)
 	var mana_before_heal := _session.mana_for(_session.own_id()).x
 	if mana_before_heal < 0:
 		mana_before_heal = 100
@@ -122,29 +174,37 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 		return _fail("hostile dummy hp never dropped after right-click attack")
 	print("DEMO attackok %d %d" % [hostile_id, _session.hit_points_for(hostile_id).x])
 	await _capture(4)
-
-	var avatar: PlayerAvatarScript = _session.avatar_for(_session.own_id())
-	if avatar == null:
-		return _fail("no local avatar after join")
-	var start := Vector2(avatar.position.x, avatar.position.z)
-	print("DEMO pos 1 %d %f %f" % [_session.own_id(), start.x, start.y])
-	var deadline := Time.get_ticks_msec() + HOLD_MSEC
-	while Time.get_ticks_msec() < deadline:
-		_session.request_move(STEER_DX, STEER_DZ)
-		await _wait_msec(100)
-	_session.request_move(0.0, 0.0)
-	await _wait_msec(SETTLE_MSEC)
-	var end := Vector2(avatar.position.x, avatar.position.z)
-	print("DEMO pos 2 %d %f %f" % [_session.own_id(), end.x, end.y])
-	var travelled := start.distance_to(end)
-	if travelled < MIN_DISPLACEMENT:
-		return _fail("displacement %f below %f after steer" % [travelled, MIN_DISPLACEMENT])
-	print("DEMO move_displacement %f" % travelled)
-	print("DEMO wish_ok")
 	await _capture(5)
 
 	print("DEMO done")
 	return 0
+
+
+func _close_in_for_cast(npc_id: int, max_dist: float) -> bool:
+	var avatar: PlayerAvatarScript = _session.avatar_for(_session.own_id())
+	var npcs: Dictionary = _session.get("_npcs")
+	var body: NpcDummyScript = npcs.get(npc_id)
+	if avatar == null or body == null:
+		return false
+	var here := Vector2(avatar.position.x, avatar.position.z)
+	var there := Vector2(body.position.x, body.position.z)
+	if here.distance_to(there) <= max_dist:
+		print("DEMO inrange %d %f" % [npc_id, here.distance_to(there)])
+		return true
+	var wish := (there - here).normalized()
+	print("DEMO approach %d %f %f" % [npc_id, wish.x, wish.y])
+	var deadline := Time.get_ticks_msec() + APPROACH_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		_session.request_move(wish.x, wish.y)
+		await _wait_msec(100)
+		here = Vector2(avatar.position.x, avatar.position.z)
+		there = Vector2(body.position.x, body.position.z)
+		if here.distance_to(there) <= max_dist:
+			_session.request_move(0.0, 0.0)
+			print("DEMO inrange %d %f" % [npc_id, here.distance_to(there)])
+			return true
+	_session.request_move(0.0, 0.0)
+	return false
 
 
 func _equip_mage_kit() -> bool:
