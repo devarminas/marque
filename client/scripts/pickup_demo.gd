@@ -55,10 +55,13 @@ const SHOT_DROPPED_OFFSET_TICKS := 285
 const HOLD_UNTIL_OFFSET_TICKS := 330
 
 const TICK_WAIT_BACKSTOP_MSEC := 60000
-const ARRIVAL_RADIUS := 0.75
+# Soft-pull display can lag sim/server by up to HARD_ERROR_M (2.0). Under dual
+# llvmpipe that lag routinely exceeds 0.75, so the walk-away kept steering past
+# the drop point, flipped wish, and never printed walkaway_arrived.
+const ARRIVAL_RADIUS := 2.0
 # After stop, soft-pull display can still lag sim/server by up to ~HARD_ERROR_M;
 # settle so DEMO walkaway_arrived is closer to the authoritative drop pose.
-const WALK_ARRIVAL_SETTLE_MSEC := 600
+const WALK_ARRIVAL_SETTLE_MSEC := 800
 const WISH_RESEND_MSEC := 100
 
 const BAG_LAYOUT_DEADLINE_MSEC := 2000

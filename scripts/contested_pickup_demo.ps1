@@ -248,7 +248,7 @@ try {
     $seed = [string]::Format([cultureinfo]::InvariantCulture, "{0},{1},acorn", $ItemX, $ItemZ)
     Write-Host "==> starting marqued on a free port with exactly one item at ($ItemX, $ItemZ)"
     $server = Start-Process -FilePath $binary `
-        -ArgumentList @("-addr", "127.0.0.1:0", "-item", $seed, "-drain-coincident-events") `
+        -ArgumentList @("-addr", "127.0.0.1:0", "-item", $seed) `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
     $null = $server.Handle

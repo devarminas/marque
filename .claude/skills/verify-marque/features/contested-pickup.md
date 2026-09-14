@@ -141,10 +141,9 @@ Preconditions:
   GL. Do **not** schedule via `TickClock.start_usec_of(aim_tick)` — even a frozen
   per-process usec still diverges under GLES re-anchors and was landing intents
   5–15 server ticks apart. `DEMO sync`'s second field is the shared
-  `fire_unix_msec` (harness parses it as Int64). Production `World.Run` stays
-  on the one-event select loop by default. The contested harness opts into
-  `-drain-coincident-events` so co-queued demo intents share one `w.tick`
-  without changing the production path. The harness may retry the whole
+  `fire_unix_msec` (harness parses it as Int64). Production `World.Run` is
+  unchanged — no `drainEvents` / coincident-drain flag. Same-tick is proven by
+  the client wall/go barrier plus harness retry. The harness may retry the whole
   contest a few times if GAMELOG still shows split ticks
   (`MaxContestAttempts`, default 5).
 - **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
@@ -154,9 +153,12 @@ Preconditions:
   `DEMO walkaway_arrived`. Arrival itself is a **wall-clock** budget from the
   moment the wish starts (`WALK_AWAY_BUDGET_TICKS` × tick_ms), not
   `click_tick + deadline` on `estimated_tick()`, so clock corrections cannot
-  make the deadline already past before the first step. After stop, the demo
-  settles briefly so soft-pulled display pose is closer to server underfoot
-  before printing `walkaway_arrived`, and keeps emitting zero wish through bag open so sticky steer cannot restart before the drop. Do not reintroduce path-span tick asserts.
+  make the deadline already past before the first step. Under dual llvmpipe,
+  soft-pull display lag can exceed 0.75u, so arrival uses `ARRIVAL_RADIUS` of
+  2.0 (`HARD_ERROR_M`) before stopping wish — otherwise the server overshoots,
+  the wish flips, and walkaway never settles. After stop, the demo settles
+  briefly so soft-pulled display pose is closer to server underfoot before
+  printing `walkaway_arrived`, and keeps emitting zero wish through bag open so sticky steer cannot restart before the drop. Do not reintroduce path-span tick asserts.
 - **There is no `item_despawn` event in the server's event log.** The despawn is a wire
   message only (`server/internal/game/items.go`, `w.broadcast(mnet.ItemDespawn...)`);
   no `EvItemDespawned` exists. A recipe that greps the GAMELOG for it finds nothing and
