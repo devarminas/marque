@@ -244,15 +244,15 @@ For the fixed M0 milestone scenario with its assertions already written, run
 
 ### What `scripts/two_client_demo.ps1` proves
 
-Both layers, since M1g. Its client layer is the `DEMO pos`
-displacements plus the named-pixel still-camera / walker-band contract; its server layer asserts, per player id resolved from that client's
-`DEMO joined` line, a `client_connected`, a `move_to`, a `path_assigned` spanning at
-least 2.0 units, and an **`arrived` after that path's `start_tick` whose coordinates
-match its endpoint** — the one event a server that hands out paths and never moves
-anybody cannot produce. It then ties the layers together: the phase-1 walker's
-`arrived` point must be within 0.05 units of where both clients drew that body in
-shot 4. Soft PNG size / existence checks are not part of the pass (ARM-289).
-
+Both layers, since M1g. Its client layer is
+the pixels and the `DEMO pos` displacements; its server layer asserts, per player
+id resolved from that client's `DEMO joined` line, a `client_connected`, at least
+one non-zero GAMELOG `move` wish for each walker, `DEMO groundclick_ignored` /
+`DEMO walkto` / `DEMO move_displacement`, and **zero** player `path_assigned` /
+`move_to` for the run. It then ties the layers together: both clients' shot-4
+`DEMO pos` for the phase-1 walker agree within 0.05 (server pose on both sides).
+Watcher displacement proves the server moved — remotes follow pose only.
+Soft PNG size / existence checks are not part of the pass (ARM-289).
 Until M1g it asserted **nothing** about the server. All twenty-odd of its checks read
 a client's stdout or a client's PNG, and it deleted the server's log at teardown, so
 `game.World.step` losing its movement line earned `TWO CLIENT DEMO OK` with
