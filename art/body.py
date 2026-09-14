@@ -15,6 +15,7 @@ SPHERE_ROUNDNESS = 2.0
 DIGITS = 6
 
 Paint = Literal["body", "joint", "horn"]
+Chunk = tuple[list[Vec3], list[tuple[int, ...]], bpy.types.Material, str]
 
 
 class Radii(NamedTuple):
@@ -70,7 +71,7 @@ class Detail:
 Shape = Segment | Joint | Detail
 
 
-def _right(shape: Shape) -> Shape:
+def _right(shape):
     bone = shape.bone[:-2] + "_r" if shape.bone.endswith("_l") else shape.bone
     if isinstance(shape, Joint):
         return replace(shape, bone=bone)
@@ -81,21 +82,21 @@ def _mirror(anchor: Anchor) -> Anchor:
     return Anchor(anchor.along, (-anchor.offset[0], anchor.offset[1], anchor.offset[2]))
 
 
-def _sides(shapes: tuple[Shape, ...]) -> tuple[Shape, ...]:
+def both_sides(shapes: tuple) -> tuple:
     return (*shapes, *(_right(shape) for shape in shapes))
 
 
 HUMAN_SHAPES: dict[str, tuple[Shape, ...]] = {
-    "feet": _sides((
+    "feet": both_sides((
         Joint("foot_l", 0.058),
         Segment("foot_l", Anchor(0.0, (0.0, 0.1, -0.058)), Anchor(1.0, (0.0, -0.2, 0.024)),
                 Radii(0.063, 0.045), Radii(0.072, 0.036), 2.6),
     )),
-    "forearms": _sides((
+    "forearms": both_sides((
         Joint("lowerarm_l", 0.063),
         Segment("lowerarm_l", Anchor(0.1), Anchor(0.92), Radii(0.057, 0.06), Radii(0.044, 0.046), 2.6),
     )),
-    "hands": _sides((
+    "hands": both_sides((
         Joint("hand_l", 0.048),
         Segment("hand_l", Anchor(0.45), Anchor(3.3), Radii(0.04, 0.048), Radii(0.036, 0.044), 2.4),
         Detail("hand_l", Anchor(0.9, (0.0, -0.035, 0.0)), Anchor(0.9, (0.04, -0.085, -0.01)), 0.02, 0.015, 2.2),
@@ -109,11 +110,11 @@ HUMAN_SHAPES: dict[str, tuple[Shape, ...]] = {
     "hips": (
         Segment("pelvis", Anchor(-0.6), Anchor(1.2), Radii(0.15, 0.105), Radii(0.14, 0.1), 3.0),
     ),
-    "shins": _sides((
+    "shins": both_sides((
         Joint("calf_l", 0.08),
         Segment("calf_l", Anchor(0.08), Anchor(0.93), Radii(0.078, 0.081), Radii(0.054, 0.057), 2.6),
     )),
-    "thighs": _sides((
+    "thighs": both_sides((
         Joint("thigh_l", 0.08),
         Segment("thigh_l", Anchor(0.1, (0.014, 0.0, 0.0)), Anchor(0.93, (0.004, 0.0, 0.0)),
                 Radii(0.1, 0.102), Radii(0.072, 0.074), 2.6),
@@ -123,7 +124,7 @@ HUMAN_SHAPES: dict[str, tuple[Shape, ...]] = {
         Segment("spine_01", Anchor(0.0), Anchor(1.3), Radii(0.085, 0.07), Radii(0.1, 0.075), 3.0),
         Segment("spine_03", Anchor(-0.9), Anchor(1.05), Radii(0.13, 0.095), Radii(0.17, 0.11), 4.0),
     ),
-    "upper_arms": _sides((
+    "upper_arms": both_sides((
         Joint("upperarm_l", 0.075),
         Segment("upperarm_l", Anchor(0.12), Anchor(0.9), Radii(0.068, 0.07), Radii(0.055, 0.057), 2.6),
     )),
@@ -139,7 +140,7 @@ IMP_HEAD: tuple[Shape, ...] = (
     Segment("neck_01", Anchor(0.1), Anchor(1.2), Radii(0.05, 0.05), Radii(0.05, 0.05), 4.0),
     Segment("Head", Anchor(-0.6, (0.0, -0.02, 0.0)), Anchor(5.0, (0.0, -0.02, 0.0)),
             Radii(0.12, 0.13), Radii(0.17, 0.17), 2.0),
-    *_sides((
+    *both_sides((
         Detail("Head", Anchor(3.8, (0.1, 0.0, 0.0)), Anchor(3.8, (0.2, 0.03, 0.2)), 0.04, 0.006, 3.0, "horn"),
     )),
 )
@@ -201,33 +202,38 @@ def check_shapes(contract: Contract) -> None:
 
 
 def build_regions(contract: Contract, rig: bpy.types.Object, variant: Variant) -> list[bpy.types.Object]:
-    materials: dict[Paint, bpy.types.Material] = {}
+    materials: dict[str, bpy.types.Material] = {}
+    palette = PALETTES[variant.name]
     return [
-        _region_object(contract, rig, variant, region, SHAPES[variant.name][region], materials)
+        skinned(f"region_{region}", rig, [
+            (*_solid(contract, variant, shape),
+             material(f"{variant.name}_{shape.paint}", palette[shape.paint], materials), shape.bone)
+            for shape in SHAPES[variant.name][region]
+        ])
         for region in sorted(SHAPES[variant.name])
     ]
 
 
-def _region_object(contract, rig, variant, region, shapes, materials) -> bpy.types.Object:
+def skinned(name: str, rig: bpy.types.Object, chunks: list[Chunk]) -> bpy.types.Object:
     verts: list[Vec3] = []
     faces: list[tuple[int, ...]] = []
-    face_paints: list[Paint] = []
+    face_materials: list[str] = []
     vertex_bones: list[str] = []
-    for shape in shapes:
-        shape_verts, shape_faces = _solid(contract, variant, shape)
+    by_name: dict[str, bpy.types.Material] = {}
+    for chunk_verts, chunk_faces, chunk_material, bone in chunks:
         base = len(verts)
-        verts.extend(shape_verts)
-        faces.extend(tuple(base + i for i in face) for face in shape_faces)
-        face_paints.extend([shape.paint] * len(shape_faces))
-        vertex_bones.extend([shape.bone] * len(shape_verts))
+        verts.extend(chunk_verts)
+        faces.extend(tuple(base + i for i in face) for face in chunk_faces)
+        face_materials.extend([chunk_material.name] * len(chunk_faces))
+        vertex_bones.extend([bone] * len(chunk_verts))
+        by_name[chunk_material.name] = chunk_material
 
-    name = f"region_{region}"
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
-    paints = sorted(set(face_paints))
-    for paint in paints:
-        mesh.materials.append(_material(variant.name, paint, materials))
-    mesh.polygons.foreach_set("material_index", [paints.index(p) for p in face_paints])
+    used = sorted(by_name)
+    for material_name in used:
+        mesh.materials.append(by_name[material_name])
+    mesh.polygons.foreach_set("material_index", [used.index(m) for m in face_materials])
     mesh.polygons.foreach_set("use_smooth", [True] * len(faces))
     mesh.update()
 
@@ -249,17 +255,17 @@ def _solid(contract: Contract, variant: Variant, shape: Shape) -> tuple[list[Vec
         case Joint():
             reach = (tail - head).normalized() * (shape.radius * variant.scale)
             sphere = Radii(shape.radius, shape.radius)
-            return _sweep(head - reach, head + reach, sphere, sphere, SPHERE_ROUNDNESS, shape.resolution, variant.scale)
+            return sweep(head - reach, head + reach, sphere, sphere, SPHERE_ROUNDNESS, shape.resolution, variant.scale)
         case Segment():
-            return _sweep(_point(head, tail, shape.start, variant), _point(head, tail, shape.end, variant),
-                          shape.start_radii, shape.end_radii, shape.roundness, shape.resolution, variant.scale)
+            return sweep(anchor_point(head, tail, shape.start, variant), anchor_point(head, tail, shape.end, variant),
+                         shape.start_radii, shape.end_radii, shape.roundness, shape.resolution, variant.scale)
         case Detail():
-            return _sweep(_point(head, tail, shape.start, variant), _point(head, tail, shape.end, variant),
-                          Radii(shape.start_radius, shape.start_radius), Radii(shape.end_radius, shape.end_radius),
-                          shape.roundness, shape.resolution, variant.scale)
+            return sweep(anchor_point(head, tail, shape.start, variant), anchor_point(head, tail, shape.end, variant),
+                         Radii(shape.start_radius, shape.start_radius), Radii(shape.end_radius, shape.end_radius),
+                         shape.roundness, shape.resolution, variant.scale)
 
 
-def _point(head: Vector, tail: Vector, anchor: Anchor, variant: Variant) -> Vector:
+def anchor_point(head: Vector, tail: Vector, anchor: Anchor, variant: Variant) -> Vector:
     return head + (tail - head) * anchor.along + Vector(scaled(anchor.offset, variant))
 
 
@@ -267,25 +273,31 @@ def _profile(t: float, roundness: float) -> float:
     return (1.0 - abs(2.0 * t - 1.0) ** roundness) ** (1.0 / roundness)
 
 
-def _sweep(start: Vector, end: Vector, start_radii: Radii, end_radii: Radii, roundness: float,
-           resolution: Resolution, scale: float) -> tuple[list[Vec3], list[tuple[int, ...]]]:
+def ring(start: Vector, end: Vector, start_radii: Radii, end_radii: Radii, roundness: float,
+         sides: int, t: float, scale: float) -> list[Vector]:
     axis = (end - start).normalized()
     reference = UP if abs(axis.dot(FORWARD)) > 0.9 else FORWARD
     across = axis.cross(reference).normalized()
     deep = axis.cross(across)
+    profile = _profile(t, roundness)
+    centre = start.lerp(end, t)
+    radius_across = (start_radii.across + (end_radii.across - start_radii.across) * t) * profile
+    radius_deep = (start_radii.deep + (end_radii.deep - start_radii.deep) * t) * profile
+    points = []
+    for side in range(sides):
+        angle = 2.0 * math.pi * side / sides
+        offset = across * (radius_across * math.cos(angle)) + deep * (radius_deep * math.sin(angle))
+        points.append(centre + offset * scale)
+    return points
 
+
+def sweep(start: Vector, end: Vector, start_radii: Radii, end_radii: Radii, roundness: float,
+          resolution: Resolution, scale: float) -> tuple[list[Vec3], list[tuple[int, ...]]]:
     sides, rings = resolution
     points = [start]
-    for ring in range(1, rings):
-        t = (1.0 - math.cos(math.pi * ring / rings)) / 2.0
-        profile = _profile(t, roundness)
-        centre = start.lerp(end, t)
-        radius_across = (start_radii.across + (end_radii.across - start_radii.across) * t) * profile
-        radius_deep = (start_radii.deep + (end_radii.deep - start_radii.deep) * t) * profile
-        for side in range(sides):
-            angle = 2.0 * math.pi * side / sides
-            offset = across * (radius_across * math.cos(angle)) + deep * (radius_deep * math.sin(angle))
-            points.append(centre + offset * scale)
+    for index in range(1, rings):
+        t = (1.0 - math.cos(math.pi * index / rings)) / 2.0
+        points.extend(ring(start, end, start_radii, end_radii, roundness, sides, t, scale))
     points.append(end)
 
     last = len(points) - 1
@@ -294,22 +306,25 @@ def _sweep(start: Vector, end: Vector, start_radii: Radii, end_radii: Radii, rou
         following = (side + 1) % sides
         faces.append((0, 1 + following, 1 + side))
         faces.append((last, last - sides + side, last - sides + following))
-        for ring in range(rings - 2):
-            lower = 1 + ring * sides
+        for band in range(rings - 2):
+            lower = 1 + band * sides
             upper = lower + sides
             faces.append((lower + side, lower + following, upper + following, upper + side))
-    return [tuple(round(c, DIGITS) + 0.0 for c in point) for point in points], faces
+    return rounded(points), faces
 
 
-def _material(variant: str, paint: Paint, materials: dict) -> bpy.types.Material:
-    if paint not in materials:
-        material = bpy.data.materials.new(f"{variant}_{paint}")
-        rgb = PALETTES[variant][paint]
-        material.diffuse_color = (*rgb, 1.0)
-        principled = material.node_tree.nodes.get("Principled BSDF") if material.node_tree else None
+def rounded(points: list[Vector]) -> list[Vec3]:
+    return [tuple(round(c, DIGITS) + 0.0 for c in point) for point in points]
+
+
+def material(name: str, rgb: Vec3, cache: dict[str, bpy.types.Material]) -> bpy.types.Material:
+    if name not in cache:
+        created = bpy.data.materials.new(name)
+        created.diffuse_color = (*rgb, 1.0)
+        principled = created.node_tree.nodes.get("Principled BSDF") if created.node_tree else None
         if principled is None:
-            raise ContractError(f"material {material.name!r} has no Principled BSDF node to paint")
+            raise ContractError(f"material {created.name!r} has no Principled BSDF node to paint")
         principled.inputs["Base Color"].default_value = (*rgb, 1.0)
         principled.inputs["Roughness"].default_value = 0.9
-        materials[paint] = material
-    return materials[paint]
+        cache[name] = created
+    return cache[name]

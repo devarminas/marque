@@ -25,8 +25,8 @@ class Pose:
 
 
 BASE: dict[str, tuple[Turn, ...]] = {
-    "upperarm_l": ((Y, 72.0),),
-    "upperarm_r": ((Y, -72.0),),
+    "upperarm_l": ((Y, 68.0),),
+    "upperarm_r": ((Y, -68.0),),
     "lowerarm_l": ((Z, -15.0),),
     "lowerarm_r": ((Z, 15.0),),
 }
@@ -62,7 +62,7 @@ def passing(swing: str, plant: str, lift: float) -> Pose:
 
 REST = pose()
 BREATH = pose((0.0, 0.0, -0.012), spine_02=((X, 3.0),), spine_03=((X, 2.0),),
-              upperarm_l=((Y, 69.0),), upperarm_r=((Y, -69.0),))
+              upperarm_l=((Y, 65.0),), upperarm_r=((Y, -65.0),))
 WINDUP = pose(
     (0.0, 0.03, -0.01),
     upperarm_r=((Y, 30.0), (Z, -18.0)),
@@ -75,9 +75,9 @@ WINDUP = pose(
 )
 CONTACT = pose(
     (0.0, -0.04, -0.04),
-    upperarm_r=((Y, -29.0), (Z, 82.0)),
-    lowerarm_r=((Y, -6.0), (Z, 9.0)),
-    upperarm_l=((Y, 72.0), (X, 25.0)),
+    upperarm_r=((Y, -25.0), (Z, 64.0)),
+    lowerarm_r=((Y, -2.0), (Z, 32.0)),
+    upperarm_l=((Y, 68.0), (X, 25.0)),
     spine_02=((Z, 12.0), (X, 6.0)),
     spine_03=((Z, 10.0), (X, 4.0)),
     thigh_l=((X, -18.0),),
@@ -86,9 +86,9 @@ CONTACT = pose(
 )
 FOLLOW = pose(
     (0.0, -0.05, -0.045),
-    upperarm_r=((Y, -45.0), (Z, 66.0)),
-    lowerarm_r=((Y, -35.0), (Z, 60.0)),
-    upperarm_l=((Y, 72.0), (X, 30.0)),
+    upperarm_r=((Y, -38.0), (Z, 44.0)),
+    lowerarm_r=((Y, 4.0), (Z, 57.0)),
+    upperarm_l=((Y, 68.0), (X, 30.0)),
     spine_02=((Z, 22.0), (X, 10.0)),
     spine_03=((Z, 12.0), (X, 6.0)),
     thigh_l=((X, -18.0),),

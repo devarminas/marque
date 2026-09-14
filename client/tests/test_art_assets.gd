@@ -120,7 +120,7 @@ func _test_each_region_is_a_skinned_mesh_weighted_to_its_own_bones(rigs: Diction
 		var skeleton := _skeleton(rigs[name])
 		var found := PackedStringArray()
 		for child in skeleton.get_children():
-			if child is MeshInstance3D:
+			if child is MeshInstance3D and String(child.name).begins_with(REGION_PREFIX):
 				found.append(child.name)
 		found.sort()
 		_assertions.check(

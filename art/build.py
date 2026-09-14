@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import bpy
 
+from armor import build_pieces, check_pieces
 from body import build_regions, check_shapes
 from clips import build_actions, check_clips
 from contract import load, res_to_path
@@ -52,11 +53,15 @@ def main() -> None:
     contract = load()
     check_shapes(contract)
     check_clips(contract)
+    check_pieces(contract)
     for name in sorted(contract.variants):
         variant = contract.variants[name]
         reset(contract.fps)
         rig = build_rig(contract, variant)
-        export(res_to_path(variant.glb), [rig, *build_regions(contract, rig, variant)], animations=False)
+        objects = [rig, *build_regions(contract, rig, variant)]
+        if name == contract.clip_rig:
+            objects.extend(build_pieces(contract, rig))
+        export(res_to_path(variant.glb), objects, animations=False)
     reset(contract.fps)
     rig = build_rig(contract, contract.variants[contract.clip_rig])
     build_actions(contract, rig)
