@@ -2,11 +2,19 @@ extends RefCounted
 
 const SessionScript := preload("res://scripts/session.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
+const DemoAdminGive := preload("res://scripts/demo_admin_give.gd")
 
 const JOIN_TIMEOUT_MSEC := 20000
 const CAST_WAIT_MSEC := 8000
 const SPIN_USEC := 20000
 const HOLD_MSEC := 1500
+
+const MAGE_KIT := [
+	"cloth_hood",
+	"cloth_robe",
+	"cloth_skirt",
+	"staff",
+]
 
 
 var _tree: SceneTree
@@ -23,6 +31,12 @@ func run(root: Node, session: SessionScript) -> int:
 		return _fail("no welcome with two practice npcs after %dms" % JOIN_TIMEOUT_MSEC)
 
 	print("DEMO joined %d" % _session.own_id())
+	var giver := DemoAdminGive.new()
+	var give_err: String = await giver.grant(
+		_session, _tree, MAGE_KIT, JOIN_TIMEOUT_MSEC
+	)
+	if not give_err.is_empty():
+		return _fail(give_err)
 	if not await _equip_mage_kit():
 		return 1
 	var npcs: Dictionary = _session.get("_npcs")
@@ -91,7 +105,7 @@ func run(root: Node, session: SessionScript) -> int:
 func _equip_mage_kit() -> bool:
 	var indices: PackedInt32Array = _session.get("_bag_indices")
 	if indices.is_empty():
-		_fail("mage join kit never arrived in the bag")
+		_fail("mage kit never arrived in the bag after /give")
 		return false
 	for slot: int in indices:
 		_session.request_equip(slot)

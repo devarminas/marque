@@ -37,9 +37,10 @@ Preconditions:
 - Marker: `CRAFT CAST DEMO OK` on the **last line** of stdout. Exit code must also
   be 0.
 
-The script builds marqued with miner + sticks + mage `-join-kit` kinds, warms Godot,
+The script builds marqued with `-admin` (empty join kit), warms Godot,
 starts the server on a free port, launches one windowed client with
-`--craft-cast-shots`, and asserts both DEMO inventory/cast lines and GAMELOG
+`--craft-cast-shots`. The client `/give`s miner + sticks + mage kinds via the
+admin bus, then asserts both DEMO inventory/cast lines and GAMELOG
 gather / use / cast_begin / cast / cast_effect / cast_cancelled.
 
 Evidence lands in `-OutDir`, default `$env:TEMP\marque-craft-cast`: six PNGs, client
@@ -47,8 +48,9 @@ stdout/stderr, and `server.stdout.ndjson`.
 
 ## Gotchas
 
-- **Sticks are join-kit seeded.** The milestone proves mine→smelt→sword, not tree
-  chop. Without `-join-kit sticks` the sword recipe cannot start.
+- **Sticks come from admin `/give`.** The milestone proves mine→smelt→sword, not tree
+  chop. Without `/give sticks` (under `-admin`) the sword recipe cannot start.
+  Do not rebuild a `-join-kit` forest for this kit.
 - **Station range is 0.5.** After mining at (2, 3) the client must walk to the
   smelter before use-on; a same-spot smelt refuses out of range.
 - **Interrupt uses `cause=move` only.** The demo steers with `request_move`

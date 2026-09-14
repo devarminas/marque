@@ -15,13 +15,6 @@ $QuestId = "slay_imps"
 $NeedKills = 5
 $CampId = "starter_town_imps"
 $ImpKind = "imp"
-$KnightKit = @(
-    "plate_helm",
-    "plate_chest",
-    "plate_legs",
-    "sword",
-    "shield"
-)
 $RewardKinds = @(
     "plate_chest",
     "plate_helm",
@@ -193,13 +186,9 @@ try {
         throw "the Godot warm-up run exited $($warm.ExitCode)"
     }
 
-    Write-Host "==> starting marqued on a free port"
-    $joinArgs = @()
-    foreach ($kind in $KnightKit) {
-        $joinArgs += @("-join-kit", $kind)
-    }
+    Write-Host "==> starting marqued on a free port (-admin; knight kit via client /give)"
     $server = Start-Process -FilePath $binary `
-        -ArgumentList (@("-addr", "127.0.0.1:0") + $joinArgs) `
+        -ArgumentList @("-addr", "127.0.0.1:0", "-admin") `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
     $null = $server.Handle

@@ -122,22 +122,9 @@ try {
         throw "the Godot warm-up run exited $($warm.ExitCode)"
     }
 
-    $joinKit = @(
-        "-join-kit", "prospector_helm",
-        "-join-kit", "prospector_jacket",
-        "-join-kit", "prospector_legs",
-        "-join-kit", "prospector_boots",
-        "-join-kit", "pickaxe",
-        "-join-kit", "sticks",
-        "-join-kit", "cloth_hood",
-        "-join-kit", "cloth_robe",
-        "-join-kit", "cloth_skirt",
-        "-join-kit", "staff"
-    )
-
-    Write-Host "==> starting marqued on a free port"
+    Write-Host "==> starting marqued on a free port (-admin; kit via client /give)"
     $server = Start-Process -FilePath $binary `
-        -ArgumentList (@("-addr", "127.0.0.1:0") + $joinKit) `
+        -ArgumentList @("-addr", "127.0.0.1:0", "-admin") `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
     $null = $server.Handle

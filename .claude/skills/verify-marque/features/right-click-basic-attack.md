@@ -38,6 +38,9 @@ Evidence for the dummy demo lands in `-OutDir` (default
 
 ## Gotchas
 
+- **Mage kit is admin `/give`.** `dummy_attack_demo.ps1` / `tab_combat_demo.ps1`
+  start with `-admin` and grant cloth + staff after join. Do not rebuild a
+  `-join-kit` forest for class gear.
 - **Left-click is not attack.** After M6c, combat demos must right-click (or call
   `request_attack`).
 - **Friendly refuse is client-first.** The client keeps the intent off the wire;
