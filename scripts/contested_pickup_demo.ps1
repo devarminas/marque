@@ -352,15 +352,14 @@ try {
     }
 
     $clickTicks = @($running | ForEach-Object { $_.Report.ClickTick })
-    Write-Host ("==> clients chose click ticks {0} and {1} (sync ticks {2} and {3})" -f `
+    Write-Host ("==> clients chose fire deadlines {0} and {1} (sync ticks {2} and {3})" -f `
         $clickTicks[0], $clickTicks[1], $running[0].Report.SyncTick, $running[1].Report.SyncTick)
     if ($clickTicks[0] -lt 0 -or $clickTicks[1] -lt 0) {
-        Add-Failure "a client never reported the tick it chose to click on"
+        Add-Failure "a client never reported the shared wall-clock fire deadline"
     } elseif ([math]::Abs($clickTicks[0] - $clickTicks[1]) -gt $MaxAimTickSkew) {
-        Add-Failure ("the two clients aimed at server ticks $($clickTicks[0]) and " +
-            "$($clickTicks[1]), $([math]::Abs($clickTicks[0] - $clickTicks[1])) apart. Anchoring " +
-            "alone separates two clocks by at most one tick, so they disagree about more than " +
-            "which side of a tick boundary they are on and neither one's aim can be trusted.")
+        Add-Failure ("the two clients disagreed on the shared wall-clock fire deadline: $($clickTicks[0]) vs " +
+            "$($clickTicks[1]) (skew $([math]::Abs($clickTicks[0] - $clickTicks[1]))). DEMO sync's second " +
+            "field is fire_unix_msec from the post-capture barrier; both must name the same moment.")
     }
 
     $events = Read-GameLog $serverOut

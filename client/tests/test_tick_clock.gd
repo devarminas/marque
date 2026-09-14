@@ -35,6 +35,7 @@ func run(assertions: Assertions) -> void:
 	_test_a_half_tick_lead_still_splits_a_server_edge(assertions)
 	_test_nearby_scenario_observations_share_a_deadline(assertions)
 	_test_start_usec_of_names_the_tick_edge(assertions)
+	_test_wall_fire_deadline_is_max_ready_plus_lead(assertions)
 	_test_barrier_aim_uses_the_later_sync(assertions)
 	_test_a_next_guard_click_keeps_two_receipts_on_one_server_tick(assertions)
 	_test_a_next_guard_click_waits_out_of_a_late_interior(assertions)
@@ -318,6 +319,20 @@ func _test_start_usec_of_names_the_tick_edge(assertions: Assertions) -> void:
 	assertions.check(
 		clock.estimated_tick_at(clock.start_usec_of(110)) == 110,
 		"start_usec_of round-trips through estimated_tick_at",
+	)
+
+
+
+func _test_wall_fire_deadline_is_max_ready_plus_lead(assertions: Assertions) -> void:
+	assertions.check(
+		PickupDemo.fire_unix_msec_from_max_ready(1_700_000_000_000)
+			== 1_700_000_000_000 + PickupDemo.POST_CAPTURE_LEAD_MSEC,
+		"wall fire is max ready plus the post-capture msec lead",
+	)
+	assertions.check(
+		PickupDemo.fire_unix_msec_from_max_ready(100)
+			== 100 + PickupDemo.POST_CAPTURE_LEAD_MSEC,
+		"a single ready still gets the full lead",
 	)
 
 

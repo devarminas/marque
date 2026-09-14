@@ -23,17 +23,17 @@ const USEC_PER_MSEC := 1000
 # window only reached 4.56u and never printed DEMO walkaway_arrived). Approach
 # origin→(-5,-5) is ~59 ticks; fail-closed path/move_to stays in the harness.
 const CLICK_LEAD_TICKS := 75
-# Capture 1 is uncoupled from the click. After both finish capture they barrier
-# and aim POST_CAPTURE_LEAD ahead of max(estimated_tick) so a slow GLES frame
-# warm-up cannot overrun the shared guard (seen under software GL).
+# Capture 1 is uncoupled from the click. After both finish capture they run a
+# two-phase barrier on a shared Unix wall deadline. Freezing start_usec_of(aim)
+# still leaves per-process TickClock anchors free to diverge under GLES and was
+# landing pickup intents 5–15 server ticks apart; wall clock is cross-process.
 const SHOT_BEFORE_LEAD_TICKS := 40
 const CLICK_AFTER_READY_TICKS := 25
-# Lead must exceed worst-case barrier wait (slow peer capture). Stale sync ticks
-# written before the wait used to leave aim only a few ticks ahead → split clicks.
-const POST_CAPTURE_LEAD_TICKS := 100
-const BARRIER_MIN_LEAD_TICKS := 40
+const POST_CAPTURE_LEAD_TICKS := 100 # retained for unit tests / DEMO aim logging
+const POST_CAPTURE_LEAD_MSEC := 2500
+const BARRIER_MIN_LEAD_TICKS := 40 # retained for unit tests
 const BARRIER_MAX_ROUNDS := 12
-const CLICK_READY_MARGIN_USEC := 500_000
+const BARRIER_MIN_SLACK_MSEC := 100
 const SHOT_RESOLVED_OFFSET_TICKS := 98
 const WALK_AWAY_OFFSET_TICKS := 113
 const WALK_AWAY_DEADLINE_TICKS := 255
@@ -55,8 +55,8 @@ const BAG_LAYOUT_DEADLINE_MSEC := 2000
 
 const SPIN_USEC := 20000
 
-# Written under the --pickup-shots directory so both clients share one max sync
-# tick before aiming. Per-process usec quanta are not comparable across Godots.
+# Written under the --pickup-shots directory so both clients share one Unix fire
+# deadline. Per-process usec quanta are not comparable across Godots.
 const SYNC_BARRIER_PREFIX := "marque-pickup-sync-"
 
 var _tree: SceneTree
@@ -99,7 +99,6 @@ func run(
 	var clock := _session.tick_clock()
 	if not clock.is_anchored():
 		return _fail("the tick clock is not anchored; there is no shared moment to click on")
-	var tick_usec := clock.tick_ms() * USEC_PER_MSEC
 	var sync_tick := clock.estimated_tick_at(scenario_usec)
 
 	# Capture before the click barrier so a slow 15-frame warm-up cannot eat the
@@ -114,18 +113,18 @@ func run(
 		return 1
 	var screen: Vector2 = picked
 
-	var planned: Variant = await _plan_shared_click(tick_usec)
+	var planned: Variant = await _plan_shared_click()
 	if planned == null:
 		return 1
-	var aim_tick: int = planned["aim"]
-	var click_usec: int = planned["usec"]
-	var click_tick: int = planned["tick"]
-	print("DEMO sync %d %d" % [sync_tick, aim_tick])
+	var fire_unix_msec: int = planned["fire_unix_msec"]
+	# DEMO sync second field is the shared wall deadline (msec); harness requires match.
+	print("DEMO sync %d %d" % [sync_tick, fire_unix_msec])
 
-	if not await _await_usec(click_usec):
-		return _fail("frames stopped before the click")
+	if not await _await_unix_msec(fire_unix_msec):
+		return _fail("frames stopped before the shared wall-clock click")
 	_click_at(screen)
-	print("DEMO pickupclick %d %d %f %f" % [clock.estimated_tick(), item_id, screen.x, screen.y])
+	var click_tick := clock.estimated_tick()
+	print("DEMO pickupclick %d %d %f %f" % [click_tick, item_id, screen.x, screen.y])
 
 	if not await _await_tick(click_tick + SHOT_RESOLVED_OFFSET_TICKS):
 		return _fail("the clock stalled before the second capture")
@@ -175,29 +174,29 @@ static func aim_tick_from_max_sync(max_sync_tick: int) -> int:
 	return max_sync_tick + POST_CAPTURE_LEAD_TICKS
 
 
-func _plan_shared_click(tick_usec: int) -> Variant:
-	var clock := _session.tick_clock()
-	var guard := click_guard_usec(tick_usec)
+static func fire_unix_msec_from_max_ready(max_ready_msec: int) -> int:
+	return max_ready_msec + POST_CAPTURE_LEAD_MSEC
+
+
+static func unix_msec_now() -> int:
+	return int(Time.get_unix_time_from_system() * 1000.0)
+
+
+func _plan_shared_click() -> Variant:
 	for generation in range(1, BARRIER_MAX_ROUNDS + 1):
-		var aim_tick: int = await _propose_aim_tick(generation)
-		if aim_tick < 0:
+		var fire_msec: int = await _propose_fire_unix_msec(generation)
+		if fire_msec < 0:
 			return null
-		# Freeze the guard usec under the commit vote. Recomputing from
-		# start_usec_of after a unanimous ready lets a mid-wait re-anchor make
-		# one client miss while the other already returned and clicked.
-		clock = _session.tick_clock()
-		var click_usec := clock.next_guard_usec(clock.start_usec_of(aim_tick), guard)
-		var click_tick := clock.estimated_tick_at(click_usec)
-		var can_make := Time.get_ticks_usec() + CLICK_READY_MARGIN_USEC < click_usec
-		if not await _commit_aim_tick(generation, aim_tick, click_usec, can_make):
-			print("DEMO barrier_retry %d %d" % [generation, aim_tick])
+		var can_make := fire_msec - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC
+		if not await _commit_fire_unix_msec(generation, fire_msec, can_make):
+			print("DEMO barrier_retry %d %d" % [generation, fire_msec])
 			continue
-		if Time.get_ticks_usec() + SPIN_USEC >= click_usec:
-			print("DEMO barrier_retry %d %d missed_after_commit" % [generation, aim_tick])
+		if unix_msec_now() + 50 >= fire_msec:
+			print("DEMO barrier_retry %d %d missed_after_commit" % [generation, fire_msec])
 			continue
-		print("DEMO clickplan %d %d %d" % [generation, aim_tick, click_tick])
-		return {"aim": aim_tick, "usec": click_usec, "tick": click_tick}
-	_fail("could not lock a shared click guard after %d barrier round(s)" % BARRIER_MAX_ROUNDS)
+		print("DEMO clickplan %d %d" % [generation, fire_msec])
+		return {"fire_unix_msec": fire_msec}
+	_fail("could not lock a shared wall-clock click after %d barrier round(s)" % BARRIER_MAX_ROUNDS)
 	return null
 
 
@@ -232,103 +231,91 @@ func _read_barrier_rows(generation: int, want_phase: String) -> Array:
 	for name in names:
 		if not str(name).begins_with(SYNC_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
 			continue
-		var text := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
-		var parts := text.split(" ")
+		var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+		var parts := body.split(" ")
 		if want_phase == "propose":
-			# propose <gen> <sync_tick>
+			# propose <gen> <ready_unix_msec>
 			if parts.size() != 3 or parts[0] != "propose":
 				continue
 			if not parts[1].is_valid_int() or not parts[2].is_valid_int():
 				continue
 			if int(parts[1]) != generation:
 				continue
-			rows.append({"sync": int(parts[2])})
+			rows.append({"ready": int(parts[2])})
 		elif want_phase == "commit":
-			# commit <gen> <aim> <ready 0|1>
+			# commit <gen> <fire_unix_msec> <ready 0|1>
 			if parts.size() != 4 or parts[0] != "commit":
 				continue
 			if not parts[1].is_valid_int() or not parts[2].is_valid_int() or not parts[3].is_valid_int():
 				continue
 			if int(parts[1]) != generation:
 				continue
-			rows.append({"aim": int(parts[2]), "ready": int(parts[3])})
+			rows.append({"fire": int(parts[2]), "ready": int(parts[3])})
 	return rows
 
 
-func _propose_aim_tick(generation: int) -> int:
-	var clock := _session.tick_clock()
-	if not _write_barrier_line("propose %d %d" % [generation, clock.estimated_tick()]):
+func _propose_fire_unix_msec(generation: int) -> int:
+	if not _write_barrier_line("propose %d %d" % [generation, unix_msec_now()]):
 		return -1
 
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		# Freshen while waiting so a slow peer cannot leave our sync tick stale.
-		clock = _session.tick_clock()
-		if not _write_barrier_line("propose %d %d" % [generation, clock.estimated_tick()]):
+		if not _write_barrier_line("propose %d %d" % [generation, unix_msec_now()]):
 			return -1
 		var rows := _read_barrier_rows(generation, "propose")
 		if rows.size() >= REQUIRED_PLAYERS:
-			# Settle: both freshen once more so they freeze the same max_sync/aim.
 			for _i in 4:
-				clock = _session.tick_clock()
-				if not _write_barrier_line("propose %d %d" % [generation, clock.estimated_tick()]):
+				if not _write_barrier_line("propose %d %d" % [generation, unix_msec_now()]):
 					return -1
 				await _tree.process_frame
 			rows = _read_barrier_rows(generation, "propose")
 			if rows.size() < REQUIRED_PLAYERS:
 				continue
-			var max_sync := clock.estimated_tick()
+			var max_ready := unix_msec_now()
 			for row in rows:
-				max_sync = maxi(max_sync, int(row["sync"]))
-			var aim := aim_tick_from_max_sync(max_sync)
-			if aim >= clock.estimated_tick() + BARRIER_MIN_LEAD_TICKS:
-				print("DEMO barrier %d %d %d %d" % [generation, rows.size(), max_sync, aim])
-				return aim
+				max_ready = maxi(max_ready, int(row["ready"]))
+			var fire := fire_unix_msec_from_max_ready(max_ready)
+			if fire - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC:
+				print("DEMO barrier %d %d %d %d" % [generation, rows.size(), max_ready, fire])
+				return fire
 		await _tree.process_frame
 	_fail(
-		"sync barrier gen %d never locked a fresh aim within %dms"
+		"sync barrier gen %d never locked a fresh wall fire within %dms"
 		% [generation, JOIN_TIMEOUT_MSEC]
 	)
 	return -1
 
 
-func _commit_aim_tick(
-	generation: int, aim_tick: int, click_usec: int, can_make: bool
-) -> bool:
+func _commit_fire_unix_msec(generation: int, fire_msec: int, can_make: bool) -> bool:
 	var ready_flag := 1 if can_make else 0
-	if not _write_barrier_line("commit %d %d %d" % [generation, aim_tick, ready_flag]):
+	if not _write_barrier_line("commit %d %d %d" % [generation, fire_msec, ready_flag]):
 		return false
 
-	# Bound the wait by remaining lead so a unanimous ready still leaves margin.
-	var lead_msec := maxi((click_usec - Time.get_ticks_usec()) / USEC_PER_MSEC, 0)
-	var wait_msec := mini(JOIN_TIMEOUT_MSEC, maxi(lead_msec - (CLICK_READY_MARGIN_USEC / USEC_PER_MSEC), 200))
-	var deadline := Time.get_ticks_msec() + wait_msec
+	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		# Peer already moved to a newer propose → abandon this vote.
 		if _peer_generation_ahead(generation):
 			print("DEMO commit_abort %d" % generation)
 			return false
-		# Re-vote if the frozen lead burned while waiting for the peer.
-		var still_ready := Time.get_ticks_usec() + CLICK_READY_MARGIN_USEC < click_usec
-		var flag := 1 if still_ready else 0
-		if flag != ready_flag:
-			ready_flag = flag
-			if not _write_barrier_line("commit %d %d %d" % [generation, aim_tick, ready_flag]):
-				return false
+		# Refresh ready vote while waiting so a slow peer cannot strand us.
+		if not _write_barrier_line("commit %d %d %d" % [generation, fire_msec, ready_flag]):
+			return false
 		var rows := _read_barrier_rows(generation, "commit")
 		if rows.size() >= REQUIRED_PLAYERS:
 			var all_ready := true
 			for row in rows:
-				if int(row["aim"]) != aim_tick or int(row["ready"]) != 1:
+				if int(row["fire"]) != fire_msec or int(row["ready"]) != 1:
 					all_ready = false
 					break
 			print(
 				"DEMO commit %d %d %d %d"
-				% [generation, rows.size(), aim_tick, 1 if all_ready else 0]
+				% [generation, rows.size(), fire_msec, 1 if all_ready else 0]
 			)
 			return all_ready
 		await _tree.process_frame
-	print("DEMO commit_timeout %d %d" % [generation, wait_msec])
+	_fail(
+		"sync commit gen %d saw fewer than %d peer vote(s) after %dms"
+		% [generation, REQUIRED_PLAYERS, JOIN_TIMEOUT_MSEC]
+	)
 	return false
 
 
@@ -339,13 +326,22 @@ func _peer_generation_ahead(generation: int) -> bool:
 	for name in DirAccess.get_files_at(dir):
 		if not str(name).begins_with(SYNC_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
 			continue
-		var text := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
-		var parts := text.split(" ")
+		var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+		var parts := body.split(" ")
 		if parts.size() < 2 or not parts[1].is_valid_int():
 			continue
 		if parts[0] in ["propose", "commit"] and int(parts[1]) > generation:
 			return true
 	return false
+
+
+func _await_unix_msec(deadline_msec: int) -> bool:
+	var backstop := Time.get_ticks_msec() + TICK_WAIT_BACKSTOP_MSEC
+	while unix_msec_now() < deadline_msec:
+		if Time.get_ticks_msec() > backstop:
+			return false
+		await _tree.process_frame
+	return true
 
 
 func _walk_away_and_drop(click_tick: int) -> bool:

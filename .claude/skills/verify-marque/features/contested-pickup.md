@@ -118,18 +118,15 @@ Preconditions:
 
 - **Core claim is GAMELOG-only.** Pixels cannot prove exactly-one-winner. Assert
   `pickup_resolved` / `pickup_lost` first.
-- **Same-tick pickup clicks use a two-phase post-capture barrier.** After shot 1,
-  both clients freshen `propose <gen> <estimated_tick>` under `--pickup-shots`,
-  settle on `aim = max(sync) + POST_CAPTURE_LEAD` (lead must stay ahead of *now*),
-  then **commit** `commit <gen> <aim> <ready>` so nobody fires alone if a peer
-  already missed the guard. Ready votes refresh while waiting; the click usec is
-  **frozen** under that commit (no post-ready `start_usec_of` recompute that a
-  heartbeat re-anchor could skew). Only a unanimous ready commit proceeds to the
-  frozen guard. A miss or newer-gen propose aborts and re-barriers. Do not
-  schedule from `next_guard(now)` after capture, and do not compare per-process
-  usec clocks across Godots. `DEMO barrier` / `DEMO commit` / `DEMO clickplan`
-  print the agreement. The harness also retries the whole contest a few times if
-  GAMELOG still shows split pickup ticks (the same-tick assert stays strict).
+- **Same-tick pickup clicks use a two-phase Unix wall barrier.** After shot 1,
+  both freshen `propose <gen> <ready_unix_msec>` under `--pickup-shots`, settle on
+  `fire = max(ready) + POST_CAPTURE_LEAD_MSEC`, then **commit** that fire so nobody
+  clicks alone if a peer already missed. Only a unanimous ready commit waits for
+  the wall deadline. Do **not** schedule via `TickClock.start_usec_of(aim_tick)` —
+  even a frozen per-process usec still diverges under GLES re-anchors and was
+  landing intents 5–15 server ticks apart. `DEMO sync`'s second field is the shared
+  `fire_unix_msec`. The harness may retry the contest a few times if GAMELOG still
+  shows split ticks, but the barrier is the primary same-tick fix.
 - **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
   u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
   `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away
