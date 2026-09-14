@@ -266,6 +266,36 @@ func TestAdminReplyPrefixesDistinguishDenyAndUsage(t *testing.T) {
 	}
 }
 
+func TestAdminReplyErrorPrefixFromHandler(t *testing.T) {
+	pw := newProbeWorld(t)
+	alicePeer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)
+	drainJoin(t, alicePeer.ws)
+	alice := pw.w.byConn[alicePeer.conn]
+	pw.w.SetAdminACL(AdminACL{DevAdmin: true})
+	reg := NewAdminRegistry()
+	reg.Register("boom", func(w *World, p *player, args []string) (string, *mnet.RejectError) {
+		return "", &mnet.RejectError{
+			Reason:      mnet.ReasonProtocolError,
+			Detail:      "handler exploded",
+			Disposition: mnet.ReplyError,
+		}
+	})
+	pw.w.SetAdminRegistry(reg)
+
+	pw.w.handleFrame(mnet.Event{
+		Kind: mnet.EventFrame,
+		Conn: alice.conn,
+		Msg:  mnet.Admin{Line: "/boom"},
+		Seq:  1,
+	})
+	if got := awaitAdminReply(t, alicePeer.ws, 2*time.Second); got != "error: handler exploded" {
+		t.Fatalf("error reply=%q, want %q", got, "error: handler exploded")
+	}
+	if got := pw.events(EvAdminRejected); len(got) != 1 {
+		t.Fatalf("rejection events=%v, want 1", got)
+	}
+}
+
 func awaitAdminReply(t *testing.T, ws *websocket.Conn, within time.Duration) string {
 	t.Helper()
 	body := awaitWireKind(t, ws, mnet.MsgAdminReply, within)
