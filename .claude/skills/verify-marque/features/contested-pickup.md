@@ -127,12 +127,13 @@ Preconditions:
   so llvmpipe frames cannot overshoot), then a final `marque-pickup-go-*`
   rendezvous so the early arriver waits for the peer before either fires
   `request_pickup` (not `push_input`, which only reaches the session on a later
-  frame). Do **not** schedule via `TickClock.start_usec_of(aim_tick)` — even a
-  frozen per-process usec still diverges under GLES re-anchors and was landing
-  intents 5–15 server ticks apart. `DEMO sync`'s second field is the shared
-  `fire_unix_msec` (harness parses it as Int64). Server `drainEvents` before
-  each tick step keeps co-queued intents on one `w.tick`. The harness may retry
-  the contest a few times if GAMELOG still shows split ticks.
+  frame under software GL). Do **not** schedule via
+  `TickClock.start_usec_of(aim_tick)` — even a frozen per-process usec still
+  diverges under GLES re-anchors and was landing intents 5–15 server ticks
+  apart. `DEMO sync`'s second field is the shared `fire_unix_msec` (harness
+  parses it as Int64). Production `World.Run` is unchanged — same-tick is a
+  demo harness concern. The harness may retry the contest a few times if
+  GAMELOG still shows split ticks.
 - **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
   u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
   `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away
