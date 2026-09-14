@@ -214,7 +214,7 @@ func run() error {
 		}
 	}
 	world.SetAdminACL(acl)
-	world.SetAdminRegistry(game.NewAdminRegistry())
+	world.SetAdminRegistry(game.NewDefaultAdminRegistry())
 
 	var groundSeeds itemSeeds
 	var classKitFields []gamelog.Fields
