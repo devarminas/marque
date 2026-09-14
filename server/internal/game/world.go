@@ -255,6 +255,11 @@ type World struct {
 
 	adminACL  AdminACL
 	adminCmds *AdminRegistry
+
+	// drainCoincidentEvents is verify/demo only. When true, Run drains queued
+	// intents before each tick step so co-timed contested pickups share one
+	// w.tick. Production default is false — the select loop is unchanged.
+	drainCoincidentEvents bool
 }
 
 func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace int64, joinKit []string) *World {
@@ -322,6 +327,12 @@ func (w *World) SetNav(m *navmesh.Mesh) {
 	w.nav = m
 }
 
+// SetDrainCoincidentEvents enables demo-only draining of queued intents in Run.
+// Production leaves this false so the select loop handles one event per wake.
+func (w *World) SetDrainCoincidentEvents(enabled bool) {
+	w.drainCoincidentEvents = enabled
+}
+
 func (w *World) Run(ctx context.Context) {
 	ticker := time.NewTicker(TickDuration)
 	defer ticker.Stop()
@@ -337,10 +348,30 @@ func (w *World) Run(ctx context.Context) {
 			return
 		case ev := <-events:
 			w.handle(ev)
+			if w.drainCoincidentEvents {
+				w.drainEvents(events)
+			}
 		case now := <-ticker.C:
+			if w.drainCoincidentEvents {
+				// Drain intents that arrived during the last tick so co-timed
+				// contested pickups share one w.tick instead of straddling a step.
+				w.drainEvents(events)
+			}
 			owed += now.Sub(last)
 			last = now
 			w.stepAll(&owed)
+		}
+	}
+}
+
+// drainEvents handles every event already queued without waiting for more.
+func (w *World) drainEvents(events <-chan mnet.Event) {
+	for {
+		select {
+		case ev := <-events:
+			w.handle(ev)
+		default:
+			return
 		}
 	}
 }

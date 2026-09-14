@@ -124,6 +124,7 @@ func run() error {
 	weaponsPath := flag.String("weapons", "", "path to shared/weapons.json (default: search from cwd, or MARQUE_WEAPONS)")
 	questsPath := flag.String("quests", "", "path to shared/quests.json (default: search from cwd, or MARQUE_QUESTS)")
 	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
+	drainCoincident := flag.Bool("drain-coincident-events", false, "demo harness: drain queued intents before each tick so co-timed contested pickups share one tick (default off; production path unchanged)")
 	seedClassKits := flag.Bool("seed-class-kits", false, "retired: hard-errors; use -admin and /give instead")
 	var seeds itemSeeds
 	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world.")
@@ -210,6 +211,9 @@ func run() error {
 	world.SetWeapons(weapons)
 	world.SetClasses(classes)
 	world.SetQuests(quests)
+	if *drainCoincident {
+		world.SetDrainCoincidentEvents(true)
+	}
 	acl := game.AdminACL{DevAdmin: *devAdmin}
 	if len(adminPlayers) > 0 {
 		acl.Players = make(map[mnet.PlayerID]struct{}, len(adminPlayers))
@@ -249,6 +253,7 @@ func run() error {
 		"skills":            classes.SkillLen(),
 		"admin":             *devAdmin,
 		"admin_players":     adminPlayers,
+		"drain_coincident":   *drainCoincident,
 	}
 	log.Event(0, game.EvServerStarted, started)
 

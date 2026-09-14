@@ -425,10 +425,11 @@ func _commit_fire_unix_msec(generation: int, fire_msec: int, can_make: bool) -> 
 		if _peer_generation_ahead(generation):
 			print("DEMO commit_abort %d" % generation)
 			return false
-		var still_ready := fire_msec - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC
-		var flag := 1 if still_ready else 0
-		if flag != ready_flag:
-			ready_flag = flag
+		# Sticky ready: once voted ready=1, never downgrade to 0. A peer that
+		# already observed unanimous commit must not be stranded by a late
+		# ready=0 rewrite under slow llvmpipe frames.
+		if ready_flag != 1 and fire_msec - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC:
+			ready_flag = 1
 		if not _write_barrier_file(
 			COMMIT_BARRIER_PREFIX, "commit %d %d %d" % [generation, fire_msec, ready_flag]
 		):
