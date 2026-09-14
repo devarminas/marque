@@ -391,6 +391,9 @@ type frame struct {
 	HP          *mnet.HP          `json:"hp"`
 	Mana        *mnet.Mana        `json:"mana"`
 	Tick        *mnet.Tick        `json:"tick"`
+	Swing       *mnet.Swing         `json:"swing"`
+	CastPhase   *mnet.CastPhase     `json:"cast_phase"`
+	Gather      *mnet.GatherStarted `json:"gather"`
 
 	raw string
 	bad string
@@ -440,6 +443,12 @@ func (f frame) kind() string {
 		return "mana"
 	case f.Tick != nil:
 		return "tick"
+	case f.Swing != nil:
+		return "swing"
+	case f.CastPhase != nil:
+		return "cast_phase"
+	case f.Gather != nil:
+		return "gather"
 	default:
 		return "none"
 	}

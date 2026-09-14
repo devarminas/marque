@@ -218,6 +218,7 @@ func (w *World) beginCast(c combatant, ability abilitydef.Ability, targetID mnet
 	}, seq)
 	mergeCasterFields(fields, c)
 	w.log.Event(w.tick, EvCastBegin, fields)
+	w.broadcast(mnet.CastPhase{ID: c.combatID(), Ability: ability.ID, Target: targetID, Phase: mnet.CastPhaseBegin}, nil)
 	if p := playerCombatant(c); p != nil {
 		w.sendCasting(p)
 	}
@@ -267,6 +268,7 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 	if p := playerCombatant(c); p != nil && !w.spendMana(p, cost) {
 		panic(fmt.Sprintf("game: player %d cannot pay %d mana for %q after its cast checks passed", p.id, cost, ability.ID))
 	}
+	w.broadcast(mnet.CastPhase{ID: c.combatID(), Ability: ability.ID, Target: target.id, Phase: mnet.CastPhaseResolve}, nil)
 
 	amount := int(math.Round(ability.Effect.Amount))
 	fields := withSeq(gamelog.Fields{
@@ -346,6 +348,7 @@ func (w *World) cancelCast(c combatant, cause string) {
 	}
 	mergeCasterFields(fields, c)
 	w.log.Event(w.tick, EvCastCancelled, fields)
+	w.broadcast(mnet.CastPhase{ID: c.combatID(), Ability: rt.castAbility, Target: rt.castTarget, Phase: mnet.CastPhaseCancel}, nil)
 	w.closeCast(c)
 }
 

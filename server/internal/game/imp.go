@@ -132,6 +132,7 @@ func (w *World) stepImpAttack(n *npc) {
 	}
 	n.attackProgress = 0
 
+	w.broadcast(mnet.Swing{ID: n.id, Target: target.id, Weapon: w.npcWeaponID(n)}, nil)
 	target.hp -= ImpDamage
 	if target.hp < 0 {
 		target.hp = 0

@@ -104,6 +104,21 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			want: `{"spawn":{"id":2,"x":0,"y":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100}}`,
 		},
 		{
+			name: "swing",
+			msg:  mnet.Swing{ID: 1, Target: 1000005, Weapon: "sword"},
+			want: `{"swing":{"id":1,"target":1000005,"weapon":"sword"}}`,
+		},
+		{
+			name: "cast_phase",
+			msg:  mnet.CastPhase{ID: 1000005, Ability: "fireball", Target: 1, Phase: mnet.CastPhaseBegin},
+			want: `{"cast_phase":{"id":1000005,"ability":"fireball","target":1,"phase":"begin"}}`,
+		},
+		{
+			name: "gather",
+			msg:  mnet.GatherStarted{ID: 1, Node: 3},
+			want: `{"gather":{"id":1,"node":3}}`,
+		},
+		{
 			name: "pose",
 			msg:  mnet.Pose{ID: 7, Tick: 1042, X: 1.2, Y: 0, Z: -0.4},
 			want: `{"pose":{"id":7,"tick":1042,"x":1.2,"y":0,"z":-0.4}}`,

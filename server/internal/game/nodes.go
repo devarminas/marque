@@ -214,6 +214,9 @@ func (w *World) resolveGather(p *player) {
 	}
 
 	p.gatherProgress++
+	if p.gatherProgress == 1 {
+		w.broadcast(mnet.GatherStarted{ID: p.id, Node: n.id}, nil)
+	}
 	if p.gatherProgress < GatherDurationTicks {
 		return
 	}

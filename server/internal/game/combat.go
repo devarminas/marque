@@ -252,6 +252,7 @@ func (w *World) resolveAttack(p *player) {
 	}
 
 	p.attackProgress = 0
+	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: w.playerWeaponID(p)}, nil)
 	target.hp -= AttackDamage
 	if target.hp < 0 {
 		target.hp = 0
@@ -287,6 +288,7 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 	}
 
 	p.attackProgress = 0
+	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: w.playerWeaponID(p)}, nil)
 	target.hp -= AttackDamage
 	if target.kind == KindDummy {
 		target.floorPracticeHP()

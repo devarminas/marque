@@ -73,6 +73,12 @@ func (pw *probeWorld) npcPeriod(n *npc) int {
 
 func (pw *probeWorld) dial(token string) *mnet.Conn {
 	pw.t.Helper()
+	conn, _ := pw.dialSocket(token)
+	return conn
+}
+
+func (pw *probeWorld) dialSocket(token string) (*mnet.Conn, *websocket.Conn) {
+	pw.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -92,10 +98,10 @@ func (pw *probeWorld) dial(token string) *mnet.Conn {
 			pw.t.Fatalf("hub emitted %v, want connected", ev.Kind)
 		}
 		pw.w.handle(ev)
-		return ev.Conn
+		return ev.Conn, ws
 	case <-time.After(5 * time.Second):
 		pw.t.Fatal("no connected event within 5s")
-		return nil
+		return nil, nil
 	}
 }
 
