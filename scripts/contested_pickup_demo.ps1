@@ -19,6 +19,10 @@ $ExpectedInventorySize = 28
 $LogCoordinateEpsilon = 1e-6
 
 $MaxLayerDisagreement = 0.05
+# walkaway_arrived is client display pose after soft-pull settle; item_spawned is
+# server underfoot. Soft-pull can still leave ~1u residual (HARD_ERROR_M is 2.0).
+# Keep the tighter epsilon for DEMO item ↔ item_spawned layer agreement.
+$MaxWalkAwayDropDisagreement = 1.5
 
 $MinDropDisplacement = 2.0
 
@@ -626,10 +630,10 @@ try {
                     ([double]$dropSpawn.x) ([double]$dropSpawn.z)
                 Write-Host ("==> client {0} walkaway_arrived is {1:N4} units from the drop spawn" -f `
                     $label, $gap)
-                if ($gap -gt $MaxLayerDisagreement) {
+                if ($gap -gt $MaxWalkAwayDropDisagreement) {
                     Add-Failure ("client $label stood at ($($report.WalkAwayArrived[0]), $($report.WalkAwayArrived[1])) " +
                         "after wish steer but item_spawned the drop at ($($dropSpawn.x), $($dropSpawn.z)): " +
-                        "$([math]::Round($gap, 3)) units apart")
+                        "$([math]::Round($gap, 3)) units apart (limit $MaxWalkAwayDropDisagreement)")
                 }
             }
         }

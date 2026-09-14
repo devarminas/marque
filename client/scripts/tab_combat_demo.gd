@@ -46,12 +46,15 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	for id: int in npcs.keys():
 		var body: NpcDummyScript = npcs[id]
 		print("DEMO npc %d %s %s %f %f" % [id, body.kind, body.faction, body.position.x, body.position.z])
+		# Practice dummies only — imps and other hostiles must not overwrite the cast target.
+		if body.kind != NpcDummyScript.KindDummy:
+			continue
 		if body.faction == NpcDummyScript.FactionFriendly:
 			friendly_id = id
 		elif body.faction == NpcDummyScript.FactionHostile:
 			hostile_id = id
 	if friendly_id == 0 or hostile_id == 0:
-		return _fail("missing friendly or hostile dummy after join")
+		return _fail("missing friendly or hostile practice dummy after join")
 
 	await _capture(1)
 
@@ -87,6 +90,9 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 		)
 	_session.request_move(0.0, 0.0)
 	await _wait_msec(SETTLE_MSEC)
+	# Re-pin practice dummy after approach — do not cast whatever last hostile won.
+	if not _session.select_player(hostile_id) or _session.selected_player_id() != hostile_id:
+		return _fail("hostile practice dummy %d was not selected for fireball" % hostile_id)
 	var mana_before_fire := _session.mana_for(_session.own_id()).x
 	if mana_before_fire < 0:
 		mana_before_fire = 100
@@ -135,6 +141,8 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 		)
 	_session.request_move(0.0, 0.0)
 	await _wait_msec(SETTLE_MSEC)
+	if not _session.select_player(friendly_id) or _session.selected_player_id() != friendly_id:
+		return _fail("friendly practice dummy %d was not selected for heal" % friendly_id)
 	var mana_before_heal := _session.mana_for(_session.own_id()).x
 	if mana_before_heal < 0:
 		mana_before_heal = 100
@@ -269,11 +277,25 @@ func _right_click_npc(npc_id: int) -> bool:
 func _wait_for_join() -> bool:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		var npcs: Dictionary = _session.get("_npcs")
-		if _session.own_id() > 0 and npcs.size() >= 2:
+		if _session.own_id() > 0 and _has_practice_dummy_pair():
 			return true
 		await _tree.process_frame
 	return false
+
+
+func _has_practice_dummy_pair() -> bool:
+	var npcs: Dictionary = _session.get("_npcs")
+	var friendly := false
+	var hostile := false
+	for id: int in npcs.keys():
+		var body: NpcDummyScript = npcs[id]
+		if body == null or body.kind != NpcDummyScript.KindDummy:
+			continue
+		if body.faction == NpcDummyScript.FactionFriendly:
+			friendly = true
+		elif body.faction == NpcDummyScript.FactionHostile:
+			hostile = true
+	return friendly and hostile
 
 
 func _wait_hp(id: int, baseline: int, want_raise: bool) -> bool:

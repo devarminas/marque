@@ -28,10 +28,18 @@ const SHOT_BEFORE_LEAD_TICKS := 23
 const SHOT_RESOLVED_OFFSET_TICKS := 98
 const WALK_AWAY_OFFSET_TICKS := 113
 const WALK_AWAY_DEADLINE_TICKS := 255
+# Remaining walk budget after the walk-away offset (255 - 113). Arrival waits on
+# wall-clock from the moment the wish starts so a late/corrected estimated_tick
+# cannot make the deadline already past before the first step.
+const WALK_AWAY_BUDGET_TICKS := WALK_AWAY_DEADLINE_TICKS - WALK_AWAY_OFFSET_TICKS
 const SHOT_DROPPED_OFFSET_TICKS := 285
 const HOLD_UNTIL_OFFSET_TICKS := 330
 
 const TICK_WAIT_BACKSTOP_MSEC := 60000
+const ARRIVAL_RADIUS := 0.75
+# After stop, soft-pull display can still lag sim/server by up to ~HARD_ERROR_M;
+# settle so DEMO walkaway_arrived is closer to the authoritative drop pose.
+const WALK_ARRIVAL_SETTLE_MSEC := 500
 
 const BAG_LAYOUT_DEADLINE_MSEC := 2000
 
@@ -176,13 +184,17 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 	print("DEMO wish %f %f" % [wish.x, wish.y])
 	_session.request_move(wish.x, wish.y)
 
-	if not await _await_arrival(click_tick + WALK_AWAY_DEADLINE_TICKS, destination):
+	var walk_budget_msec := WALK_AWAY_BUDGET_TICKS * _session.tick_clock().tick_ms()
+	if not await _await_arrival(walk_budget_msec, destination):
 		_fail(
-			"this client's own body was still walking at tick %d; dropping now would land the "
-			% (click_tick + WALK_AWAY_DEADLINE_TICKS)
-			+ "item under a walker rather than at a destination it reached"
+			"this client's own body was still walking after %dms of wish steer; dropping now "
+			% walk_budget_msec
+			+ "would land the item under a walker rather than at a destination it reached"
 		)
 		return false
+	# Stop and settle so display soft-pull catches sim/server before we claim arrived.
+	_session.request_move(0.0, 0.0)
+	await _wait_msec(WALK_ARRIVAL_SETTLE_MSEC)
 	var arrived_here := Vector2(avatar.position.x, avatar.position.z)
 	print("DEMO walkaway_arrived %f %f" % [arrived_here.x, arrived_here.y])
 
@@ -276,18 +288,24 @@ func _await_tick(target: int) -> bool:
 	return true
 
 
-func _await_arrival(deadline_tick: int, destination: Vector2) -> bool:
-	var clock := _session.tick_clock()
+func _await_arrival(budget_msec: int, destination: Vector2) -> bool:
 	var avatar := _session.avatar_for(_session.own_id())
 	if avatar == null:
 		return false
-	while clock.estimated_tick() < deadline_tick:
+	var deadline_msec := Time.get_ticks_msec() + maxi(budget_msec, 0)
+	while Time.get_ticks_msec() < deadline_msec:
 		var here := Vector2(avatar.position.x, avatar.position.z)
-		if here.distance_to(destination) <= 0.75:
+		if here.distance_to(destination) <= ARRIVAL_RADIUS:
 			_session.request_move(0.0, 0.0)
 			return true
 		await _tree.process_frame
 	return false
+
+
+func _wait_msec(msec: int) -> void:
+	if msec <= 0:
+		return
+	await _tree.create_timer(msec / 1000.0).timeout
 
 
 func _capture(index: int) -> bool:

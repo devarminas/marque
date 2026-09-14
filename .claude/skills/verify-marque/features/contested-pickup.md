@@ -29,7 +29,8 @@ not appear.
   `move` wishes; halt is `clearSteer` + pose broadcast.
 - `drop-wish-steer` — the winner logs non-zero GAMELOG `move` wishes, prints
   `DEMO wish` / `DEMO walkaway_arrived`, and `item_spawned` for the drop matches that
-  arrived pose within 0.05.
+  arrived pose within 1.5 (display soft-pull vs server underfoot; DEMO item ↔ spawn
+  stay at 0.05).
 - `drop-coordinates` — the dropped item's `item_spawned` x and z are neither the
   origin nor where the item was seeded (floors on displacement).
 - `seed-coordinates` — the seeded item's `item_spawned` x and z equal what `-item`
@@ -53,7 +54,7 @@ Minimum evidence:
 | Contest timing | same `pickup` intent ticks; `pickup_resolved.t` = `pickup_lost.t` | sync tick prints (tolerate 1) | n/a |
 | No polyline | **no** player `path_assigned`, **no** `move_to` | `DEMO wish` on winner | n/a |
 | Client saw frames | (via resolved/lost) | item body present→absent→present; inv fill | optional |
-| Drop / seed coords | `item_spawned` x,z match `-item` / winner `DEMO walkaway_arrived` | `DEMO item` agreement within 0.05 | do not assert from silhouette |
+| Drop / seed coords | `item_spawned` x,z match `-item` / winner `DEMO walkaway_arrived` | `DEMO item` agreement within 0.05; walkaway↔drop within 1.5 | do not assert from silhouette |
 
 ## How to get to it (user POV)
 
@@ -101,7 +102,8 @@ Preconditions:
 
   Layer agreement: the client whose panel filled is the player the log names as the
   winner; both clients draw the dropped item within 0.05 of where the server logged it
-  spawning; winner `walkaway_arrived` matches that spawn within 0.05.
+  spawning; winner `walkaway_arrived` matches that spawn within 1.5 (display vs
+  server underfoot); both clients draw the dropped item within 0.05 of the spawn.
 
 - **The evidence survives the run.** Everything lands in `-OutDir`, default
   `$env:TEMP\marque-contested-pickup`: six PNGs, `client-a.stdout.log` and
@@ -120,7 +122,12 @@ Preconditions:
   u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
   `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away
   window covers that span; a 38-tick budget only reaches 4.56u and never prints
-  `DEMO walkaway_arrived`. Do not reintroduce path-span tick asserts.
+  `DEMO walkaway_arrived`. Arrival itself is a **wall-clock** budget from the
+  moment the wish starts (`WALK_AWAY_BUDGET_TICKS` × tick_ms), not
+  `click_tick + deadline` on `estimated_tick()`, so clock corrections cannot
+  make the deadline already past before the first step. After stop, the demo
+  settles briefly so soft-pulled display pose is closer to server underfoot
+  before printing `walkaway_arrived`. Do not reintroduce path-span tick asserts.
 - **There is no `item_despawn` event in the server's event log.** The despawn is a wire
   message only (`server/internal/game/items.go`, `w.broadcast(mnet.ItemDespawn...)`);
   no `EvItemDespawned` exists. A recipe that greps the GAMELOG for it finds nothing and

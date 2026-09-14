@@ -48,6 +48,9 @@ stdout/stderr, `server.stdout.ndjson`, and optional `tab_combat_*.png`.
   with fireball range 8; the driver also closes in before cast. A remaining
   "did not spend mana" with in-range poses is usually kit/class or env, not
   wish+pose.
+- **Practice dummy, not last hostile.** Join worlds also spawn imps. Target
+  selection filters `kind == dummy` so a later hostile imp cannot overwrite the
+  practice dummy and pull close-in into the camp.
 - **One Godot driver.** Do not run a second `--*-shots` client against the same
   server while this milestone demo is proving AC1–AC5.
 - **Left-click is not attack.** The attack phase must right-click.
