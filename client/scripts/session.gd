@@ -27,6 +27,7 @@ const ErrorHudScript := preload("res://scripts/error_hud.gd")
 const ClassDefs := preload("res://scripts/class_defs.gd")
 const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
 const EscMenuScript := preload("res://scripts/esc_menu.gd")
+const AdminConsoleScript := preload("res://scripts/admin_console.gd")
 const HotbarScript := preload("res://scripts/hotbar.gd")
 const CastBarScript := preload("res://scripts/cast_bar.gd")
 const Keybinds := preload("res://scripts/keybinds.gd")
@@ -104,6 +105,8 @@ signal party_decline_requested()
 
 signal party_leave_requested()
 
+signal admin_requested(line: String)
+
 signal respawn_requested()
 
 @export var net: Node
@@ -126,6 +129,7 @@ signal respawn_requested()
 @export var error_hud: Node
 @export var death_overlay: Node
 @export var esc_menu: Node
+@export var admin_console: Node
 @export var hotbar: Node
 @export var cast_bar: Node
 @export var camera_rig: Node
@@ -148,6 +152,7 @@ var _skill_levels := {}
 var _active_class_id := ""
 var _death_overlay: DeathOverlayScript = null
 var _esc_menu: EscMenuScript = null
+var _admin_console: AdminConsoleScript = null
 var _hotbar: HotbarScript = null
 var _cast_bar: CastBarScript = null
 var _hp := {}
@@ -235,6 +240,7 @@ func _ready() -> void:
 	_net.quest_log_changed.connect(_on_quest_log_changed)
 	_net.party_changed.connect(_on_party_changed)
 	_net.party_invite_notice_changed.connect(_on_party_invite_notice_changed)
+	_net.admin_reply_received.connect(_on_admin_reply_received)
 	_net.equipment_changed.connect(_on_equipment_changed)
 	_net.class_changed.connect(_on_class_changed)
 	_net.skills_changed.connect(_on_skills_changed)
@@ -327,6 +333,11 @@ func _ready() -> void:
 	else:
 		_esc_menu.resume_requested.connect(_on_esc_resume_requested)
 		_esc_menu.exit_requested.connect(_on_esc_exit_requested)
+	_admin_console = admin_console as AdminConsoleScript
+	if _admin_console == null:
+		push_error("Session.admin_console must point at a node running admin_console.gd")
+	else:
+		_admin_console.line_submitted.connect(_on_admin_line_submitted)
 	_hotbar = hotbar as HotbarScript
 	if _hotbar == null:
 		push_error("Session.hotbar must point at a node running hotbar.gd")
@@ -580,6 +591,14 @@ func request_party_leave() -> void:
 	_net.send_party_leave()
 
 
+func request_admin(line: String) -> void:
+	admin_requested.emit(line)
+	if _net == null or not _net.is_open():
+		push_warning("session: admin line dropped, the socket is not open")
+		return
+	_net.send_admin(line)
+
+
 func request_cast(ability_id: String) -> void:
 	if ability_id.is_empty():
 		return
@@ -745,7 +764,15 @@ func _refresh_target_frame() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if event.is_action_pressed("toggle_admin_console"):
+		_toggle_admin_console()
+		get_viewport().set_input_as_handled()
+		return
 	if not event.is_action_pressed("ui_cancel"):
+		return
+	if _admin_console != null and _admin_console.is_open():
+		_close_admin_console()
+		get_viewport().set_input_as_handled()
 		return
 	if _esc_menu != null and _esc_menu.is_options_open():
 		if _esc_menu.cancel_keybind_capture():
@@ -772,9 +799,15 @@ func is_esc_menu_open() -> bool:
 	return _esc_menu != null and _esc_menu.is_open()
 
 
+func is_admin_console_open() -> bool:
+	return _admin_console != null and _admin_console.is_open()
+
+
 func _open_esc_menu() -> void:
 	if _esc_menu == null:
 		return
+	if is_admin_console_open():
+		_close_admin_console()
 	if _move_held:
 		_send_move_chord(0.0, 0.0)
 	_esc_menu.open_menu()
@@ -784,6 +817,43 @@ func _close_esc_menu() -> void:
 	if _esc_menu == null:
 		return
 	_esc_menu.close_menu()
+
+
+func _toggle_admin_console() -> void:
+	if _admin_console == null:
+		return
+	if _admin_console.is_open():
+		_close_admin_console()
+		return
+	if _net == null or not _net.is_open():
+		return
+	if is_esc_menu_open():
+		return
+	_open_admin_console()
+
+
+func _open_admin_console() -> void:
+	if _admin_console == null:
+		return
+	if _move_held:
+		_send_move_chord(0.0, 0.0)
+	_admin_console.open_console()
+
+
+func _close_admin_console() -> void:
+	if _admin_console == null:
+		return
+	_admin_console.close_console()
+
+
+func _on_admin_line_submitted(line: String) -> void:
+	request_admin(line)
+
+
+func _on_admin_reply_received(text: String) -> void:
+	if _admin_console == null:
+		return
+	_admin_console.append_line(text)
 
 
 func _on_esc_resume_requested() -> void:
@@ -1040,7 +1110,7 @@ func _render_tick_fraction() -> float:
 func _poll_move_intent() -> void:
 	if _net == null or not _net.is_open() or not _clock.is_anchored():
 		return
-	if is_esc_menu_open():
+	if is_esc_menu_open() or is_admin_console_open():
 		return
 
 	var local_x := 0.0
@@ -1268,6 +1338,8 @@ func _on_disconnected(code: int, reason: String) -> void:
 	_connection_over = true
 	_liveness_deadline_msec = 0
 	_casts_awaiting_mana.clear()
+	if _admin_console != null and _admin_console.is_open():
+		_close_admin_console()
 	if _cast_bar != null:
 		_cast_bar.clear()
 	if _dialog != null:

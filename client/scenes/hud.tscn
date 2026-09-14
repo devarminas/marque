@@ -1,4 +1,4 @@
-[gd_scene load_steps=42 format=3]
+[gd_scene load_steps=43 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
@@ -18,6 +18,7 @@
 [ext_resource type="Script" path="res://scripts/party_panel.gd" id="40_party_panel"]
 [ext_resource type="Script" path="res://scripts/esc_menu.gd" id="41_esc_menu"]
 [ext_resource type="Script" path="res://scripts/keybinds_panel.gd" id="42_keybinds_panel"]
+[ext_resource type="Script" path="res://scripts/admin_console.gd" id="43_admin_console"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/basic_bar2.png" id="19_tray"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/hp_line.png" id="20_hp_line"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/mana_line.png" id="21_mana_line"]
@@ -1098,6 +1099,82 @@ mouse_filter = 2
 texture = ExtResource("37_pattern")
 expand_mode = 1
 stretch_mode = 6
+
+[node name="AdminConsole" type="PanelContainer" parent="." unique_id=2280000001 node_paths=PackedStringArray("scrollback", "line_edit")]
+visible = false
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -280.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 0
+custom_minimum_size = Vector2(320, 160)
+theme_override_styles/panel = SubResource("style_dock_panel")
+script = ExtResource("43_admin_console")
+scrollback = NodePath("Margin/Rows/Scroll/Scrollback")
+line_edit = NodePath("Margin/Rows/InputRow/Line")
+
+[node name="Margin" type="MarginContainer" parent="AdminConsole" unique_id=2280000002]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="Rows" type="VBoxContainer" parent="AdminConsole/Margin" unique_id=2280000003]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Heading" type="Label" parent="AdminConsole/Margin/Rows" unique_id=2280000004]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 14
+text = "Admin"
+
+[node name="Scroll" type="ScrollContainer" parent="AdminConsole/Margin/Rows" unique_id=2280000005]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+horizontal_scroll_mode = 0
+
+[node name="Scrollback" type="RichTextLabel" parent="AdminConsole/Margin/Rows/Scroll" unique_id=2280000006]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_colors/default_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/normal_font_size = 14
+bbcode_enabled = false
+fit_content = true
+scroll_active = false
+autowrap_mode = 3
+
+[node name="InputRow" type="HBoxContainer" parent="AdminConsole/Margin/Rows" unique_id=2280000007]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Prompt" type="Label" parent="AdminConsole/Margin/Rows/InputRow" unique_id=2280000008]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.78, 0.8, 0.82, 1)
+theme_override_font_sizes/font_size = 14
+text = ">"
+
+[node name="Line" type="LineEdit" parent="AdminConsole/Margin/Rows/InputRow" unique_id=2280000009]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+placeholder_text = "admin command"
+caret_blink = true
 
 [node name="EscMenu" type="Control" parent="." unique_id=2180000001 node_paths=PackedStringArray("resume_button", "options_button", "exit_button", "options_panel", "options_back_button", "keybinds_panel")]
 visible = false
