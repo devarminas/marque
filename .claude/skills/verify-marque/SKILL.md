@@ -338,12 +338,16 @@ timeout at all. What a frozen server actually does is pass every client-layer as
 and lose on the event log, which is the reason the GAMELOG layer exists. Load is the
 remaining explanation and nobody has reproduced the timeout under it.
 
-**GAMELOG vocabulary (M0):** `server_started`, `server_stopping`, `client_connected`,
-`client_disconnected`, `move_to`, `move_to_rejected`, `intent_ignored`, `path_assigned`,
-`arrived`, `path_replayed`, `ticks_dropped`, `frame_dropped`. The constants live in
+**GAMELOG vocabulary (M0 + wish+pose):** `server_started`, `server_stopping`,
+`client_connected`, `client_disconnected`, `move`, `move_rejected`, `move_to_rejected`,
+`intent_ignored`, `path_assigned` (NPC only for players' locomotion model), `arrived`
+(NPC path completion; players do not log path `arrived`), `path_replayed`,
+`ticks_dropped`, `frame_dropped`. The constants live in
 `server/internal/game/world.go`; M1 adds new `ev` values rather than changing these.
-`arrived` is shared: players set `player`, NPCs set `npc` (ARM-232 chase/leash/patrol
-path completion). `path_assigned` already follows the same field split.
+`arrived` is shared: players historically set `player`, NPCs set `npc` (ARM-232
+chase/leash/patrol path completion). Player polyline `path_assigned` / player
+`arrived` are retired for locomotion proofs — use `move` + pose/`DEMO pos`.
+`path_assigned` already follows the player/npc field split.
 
 **`client_disconnected` carries a latched, cause-authoritative `reason` (M1f).** The reason
 names why the connection died, never which component noticed: `closed` for a clean logout,
@@ -440,11 +444,11 @@ number and report what you got rather than comparing against a figure written he
   paths.
 - **A starved display fails every visual assertion at once.** Each capture waits 15
   rendered frames; measured under load on this machine, one took about 4.4 seconds,
-  longer than the 2.07-second walk it brackets, so both frames of a phase showed the
-  walker already arrived and every displacement read 0. Six client-side failures
+  longer than the walk window it brackets, so both frames of a phase showed the
+  walker already far along and every displacement read wrong. Six client-side failures
   together with a healthy GAMELOG is that, not a broken build. Confirm it from the
-  server's clock — the two `move_to` events sit ~23 ticks apart on a healthy run and
-  sat 81 apart here — and free the display before believing anything visual.
+  server's clock — the walkers' first non-zero `move` wishes should sit about one
+  phase gap apart — and free the display before believing anything visual.
 
 ## The still-camera control
 
