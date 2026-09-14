@@ -354,6 +354,18 @@ func _test_barrier_aim_uses_the_later_sync(assertions: Assertions) -> void:
 		PickupDemo.POST_CAPTURE_LEAD_MSEC >= 1000,
 		"wall fire lead must cover barrier settle under software GL",
 	)
+	assertions.check(
+		PickupDemo.BARRIER_MAX_ROUNDS >= 12,
+		"enough barrier rounds to recover from go_miss under dual llvmpipe",
+	)
+	assertions.check(
+		PickupDemo.GO_PEER_WAIT_MSEC >= 500,
+		"go rendezvous must wait long enough for a late llvmpipe wake",
+	)
+	assertions.check(
+		PickupDemo.WALL_SPIN_REMAINING_MSEC >= 250,
+		"wall busy-spin window must cover a worst-case software GL frame",
+	)
 	var pair := _run18_clocks()
 	var clock_a: TickClock = pair["clock_a"]
 	var clock_b: TickClock = pair["clock_b"]

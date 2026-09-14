@@ -9,7 +9,7 @@ param(
     [int] $ClientTimeoutSeconds = 150,
     # Demo-only: if GAMELOG pickup intents land on different ticks, re-run the
     # whole contest. The same-tick assert is never weakened — only retried.
-    [int] $MaxContestAttempts = 3
+    [int] $MaxContestAttempts = 5
 )
 
 Set-StrictMode -Version Latest

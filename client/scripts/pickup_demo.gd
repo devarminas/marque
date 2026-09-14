@@ -30,12 +30,20 @@ const CLICK_LEAD_TICKS := 75
 const SHOT_BEFORE_LEAD_TICKS := 40
 const CLICK_AFTER_READY_TICKS := 25
 const POST_CAPTURE_LEAD_TICKS := 100 # retained for unit tests / DEMO aim logging
+# Dual llvmpipe propose+commit can burn 1–2s of frames; keep multi-second slack
+# so both still share one fire after convergence.
 const POST_CAPTURE_LEAD_MSEC := 6000
 const BARRIER_MIN_LEAD_TICKS := 40 # retained for unit tests
-const BARRIER_MAX_ROUNDS := 12
-const BARRIER_MIN_SLACK_MSEC := 250
+const BARRIER_MAX_ROUNDS := 24
+const BARRIER_MIN_SLACK_MSEC := 400
 # After capture, wait this long for abandon/resume to restore peer + seed.
 const POST_CAPTURE_RESTORE_MSEC := 15000
+# Last-N msec of the wall wait busy-spins instead of awaiting frames. llvmpipe
+# frames often run 50–200ms; 250ms was still overshooting the shared deadline.
+const WALL_SPIN_REMAINING_MSEC := 500
+# After the wall deadline, wait this long for the peer's go file before aborting
+# the generation (do not fire alone — that produced single-pickup runs).
+const GO_PEER_WAIT_MSEC := 2000
 const SHOT_RESOLVED_OFFSET_TICKS := 98
 const WALK_AWAY_OFFSET_TICKS := 113
 const WALK_AWAY_DEADLINE_TICKS := 255
@@ -134,6 +142,9 @@ func run(
 		return 1
 	var screen: Vector2 = picked
 
+	# Propose → commit → wall wait → go rendezvous. Go miss retries the next
+	# barrier generation instead of firing alone (asymmetric commit/go was the
+	# "only one pickup" failure under dual llvmpipe).
 	var planned: Variant = await _plan_shared_click()
 	if planned == null:
 		return 1
@@ -142,21 +153,18 @@ func run(
 	# DEMO sync second field is the shared wall deadline (msec); harness requires match.
 	print("DEMO sync %d %d" % [sync_tick, fire_unix_msec])
 
-	if not await _await_unix_msec(fire_unix_msec):
-		return _fail("frames stopped before the shared wall-clock click")
-	# Final go-file gate: the early arriver waits briefly for the peer so both
-	# fire after the slower wake, not one frame-overshoot apart.
-	await _final_go_rendezvous(fire_generation, fire_unix_msec)
-	# Re-check the seed still exists after the wall wait (peer may have raced).
+	# Re-check the seed still exists after wall+go (peer may have raced).
 	if _session.item_for(item_id) == null:
 		return _fail("seed item %d vanished before wall-fire pickup" % item_id)
 	# Wire the pickup now. push_input/_click_at only reaches the session on a
 	# later frame under software GL and was splitting server intent ticks even
 	# when both processes woke on the same wall deadline. Screen projection
-	# above already proved the item is clickable.
+	# above already proved the item is clickable. Wall+go already succeeded
+	# inside _plan_shared_click.
 	_session.request_pickup(item_id)
 	var click_tick := clock.estimated_tick()
 	print("DEMO pickupclick %d %d %f %f" % [click_tick, item_id, screen.x, screen.y])
+	print("DEMO firegen %d %d" % [fire_generation, fire_unix_msec])
 
 	if not await _await_tick(click_tick + SHOT_RESOLVED_OFFSET_TICKS):
 		return _fail("the clock stalled before the second capture")
@@ -230,6 +238,14 @@ func _plan_shared_click() -> Variant:
 			print("DEMO barrier_retry %d %d missed_after_commit" % [generation, fire_msec])
 			continue
 		print("DEMO clickplan %d %d" % [generation, fire_msec])
+		if not await _await_unix_msec(fire_msec):
+			_fail("frames stopped before the shared wall-clock click")
+			return null
+		# Require the peer's go before either fires. A solo fire after go_timeout
+		# left GAMELOG with one pickup while the peer retried generations.
+		if not await _final_go_rendezvous(generation, fire_msec):
+			print("DEMO barrier_retry %d %d go_miss" % [generation, fire_msec])
+			continue
 		return {"fire_unix_msec": fire_msec, "generation": generation}
 	_fail("could not lock a shared wall-clock click after %d barrier round(s)" % BARRIER_MAX_ROUNDS)
 	return null
@@ -420,15 +436,29 @@ func _commit_fire_unix_msec(generation: int, fire_msec: int, can_make: bool) -> 
 		var rows := _read_barrier_rows(COMMIT_BARRIER_PREFIX, generation, "commit")
 		if rows.size() >= REQUIRED_PLAYERS:
 			var all_ready := true
+			var fire_mismatch := false
 			for row in rows:
-				if int(row["fire"]) != fire_msec or int(row["ready"]) != 1:
+				if int(row["fire"]) != fire_msec:
+					fire_mismatch = true
 					all_ready = false
 					break
-			print(
-				"DEMO commit %d %d %d %d"
-				% [generation, rows.size(), fire_msec, 1 if all_ready else 0]
-			)
-			return all_ready
+				if int(row["ready"]) != 1:
+					all_ready = false
+			# Do not abort on a brief ready=0: under llvmpipe one client can read
+			# the peer's stale flag, return false, and leave while the peer still
+			# sees unanimous ready=1 and fires alone.
+			if fire_mismatch:
+				print(
+					"DEMO commit %d %d %d 0"
+					% [generation, rows.size(), fire_msec]
+				)
+				return false
+			if all_ready:
+				print(
+					"DEMO commit %d %d %d 1"
+					% [generation, rows.size(), fire_msec]
+				)
+				return true
 		await _tree.process_frame
 	print("DEMO commit_timeout %d %d" % [generation, wait_msec])
 	return false
@@ -453,28 +483,29 @@ func _await_unix_msec(deadline_msec: int) -> bool:
 	while unix_msec_now() < deadline_msec:
 		if Time.get_ticks_msec() > backstop:
 			return false
-		# llvmpipe frames often take 50–150ms. Only await a frame when the
+		# llvmpipe frames often take 50–200ms. Only await a frame when the
 		# remaining lead is larger than a worst-case frame; otherwise a single
 		# await overshoots the shared deadline and splits server ticks.
-		if deadline_msec - unix_msec_now() > 250:
+		if deadline_msec - unix_msec_now() > WALL_SPIN_REMAINING_MSEC:
 			await _tree.process_frame
 	return true
 
 
-# After the wall deadline, both write a go file and the early arriver waits for
-# the peer (bounded) so clicks leave the process together.
-func _final_go_rendezvous(generation: int, fire_msec: int) -> void:
+# After the wall deadline, both write a go file and wait for the peer. Returns
+# true only when both go files are visible — false means retry the barrier.
+func _final_go_rendezvous(generation: int, fire_msec: int) -> bool:
 	if not _write_barrier_file(GO_BARRIER_PREFIX, "go %d %d" % [generation, unix_msec_now()]):
-		return
-	var wait_until := maxi(fire_msec + 150, unix_msec_now() + 150)
-	var backstop := Time.get_ticks_msec() + 500
+		return false
+	var wait_until := maxi(fire_msec + GO_PEER_WAIT_MSEC, unix_msec_now() + GO_PEER_WAIT_MSEC)
+	var backstop := Time.get_ticks_msec() + GO_PEER_WAIT_MSEC + 500
 	while unix_msec_now() < wait_until and Time.get_ticks_msec() < backstop:
 		var rows := _read_go_rows(generation)
 		if rows.size() >= REQUIRED_PLAYERS:
 			print("DEMO go %d %d" % [generation, rows.size()])
-			return
+			return true
 		# Busy-spin — do not await frames here.
 	print("DEMO go_timeout %d" % generation)
+	return false
 
 
 func _read_go_rows(generation: int) -> Array:

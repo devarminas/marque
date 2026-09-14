@@ -119,25 +119,32 @@ Preconditions:
 - **Core claim is GAMELOG-only.** Pixels cannot prove exactly-one-winner. Assert
   `pickup_resolved` / `pickup_lost` first.
 - **Same-tick pickup clicks use a two-phase Unix wall barrier.** After shot 1,
-  both freshen `propose <gen> <ready_unix_msec>` in `marque-pickup-sync-*` under
-  `--pickup-shots`, settle on `fire = max(ready) + POST_CAPTURE_LEAD_MSEC`, then
-  vote `commit <gen> <fire> <ready>` in **separate** `marque-pickup-commit-*`
+  wait for the contest world to restore (dual llvmpipe capture can abandon and
+  free the seed / drop the peer), then `marque-pickup-ready-*` so neither client
+  starts propose alone. Both then freshen `propose <gen> <ready_unix_msec>` in
+  `marque-pickup-sync-*` under `--pickup-shots`, settle on
+  `fire = max(ready) + POST_CAPTURE_LEAD_MSEC`, then vote
+  `commit <gen> <fire> <ready>` in **separate** `marque-pickup-commit-*`
   files after both propose rows converge on the same `fire` value. Once a
   propose row carries a `fire` field, never rewrite it as ready-only — that
   thrash made peers observe `fire=-1` under llvmpipe and exhausted the wall
   lead before a match. If the candidate goes stale mid-converge, bump
   `fire = now + POST_CAPTURE_LEAD_MSEC` rather than spinning until the join
-  timeout. Only a unanimous ready commit waits for the wall deadline
-  (busy-spin the last 250ms so llvmpipe frames cannot overshoot), then a final
-  `marque-pickup-go-*` rendezvous so the early arriver waits for the peer
-  before either fires `request_pickup` (not `push_input`, which only reaches
-  the session on a later frame under software GL). Do **not** schedule via
-  `TickClock.start_usec_of(aim_tick)` — even a frozen per-process usec still
-  diverges under GLES re-anchors and was landing intents 5–15 server ticks
-  apart. `DEMO sync`'s second field is the shared `fire_unix_msec` (harness
-  parses it as Int64). Production `World.Run` is unchanged — same-tick is a
-  demo harness concern. The harness may retry the contest a few times if
-  GAMELOG still shows split ticks.
+  timeout. Commit does **not** abort on a brief peer `ready=0` (that asymmetric
+  early exit left one client firing alone under llvmpipe); it waits until
+  unanimous ready or timeout. Only a unanimous ready commit waits for the wall
+  deadline (busy-spin the last `WALL_SPIN_REMAINING_MSEC` so llvmpipe frames
+  cannot overshoot), then a final `marque-pickup-go-*` rendezvous that **must**
+  see the peer before either fires `request_pickup` (go miss retries the next
+  barrier generation — do not fire alone). `request_pickup` is used instead of
+  `push_input`, which only reaches the session on a later frame under software
+  GL. Do **not** schedule via `TickClock.start_usec_of(aim_tick)` — even a frozen
+  per-process usec still diverges under GLES re-anchors and was landing intents
+  5–15 server ticks apart. `DEMO sync`'s second field is the shared
+  `fire_unix_msec` (harness parses it as Int64). Production `World.Run` is
+  unchanged — same-tick is a demo harness concern. The harness may retry the
+  whole contest a few times if GAMELOG still shows split ticks
+  (`MaxContestAttempts`, default 5).
 - **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
   u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
   `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away
