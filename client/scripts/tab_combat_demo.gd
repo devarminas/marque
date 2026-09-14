@@ -4,6 +4,7 @@ const SessionScript := preload("res://scripts/session.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
+const DemoAdminGive := preload("res://scripts/demo_admin_give.gd")
 
 const JOIN_TIMEOUT_MSEC := 20000
 const CAST_WAIT_MSEC := 12000
@@ -31,6 +32,13 @@ const CLICK_NUDGES := [
 	Vector2(0, -4),
 ]
 
+const MAGE_KIT := [
+	"cloth_hood",
+	"cloth_robe",
+	"cloth_skirt",
+	"staff",
+]
+
 
 var _tree: SceneTree
 var _root: Node
@@ -50,6 +58,12 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 		return _fail("no welcome with two practice npcs after %dms" % JOIN_TIMEOUT_MSEC)
 
 	print("DEMO joined %d" % _session.own_id())
+	var giver := DemoAdminGive.new()
+	var give_err: String = await giver.grant(
+		_session, _tree, MAGE_KIT, JOIN_TIMEOUT_MSEC
+	)
+	if not give_err.is_empty():
+		return _fail(give_err)
 	if not await _equip_mage_kit():
 		return 1
 	var npcs: Dictionary = _session.get("_npcs")
@@ -240,19 +254,14 @@ func _close_in_for_cast(npc_id: int, max_dist: float) -> bool:
 
 
 func _equip_mage_kit() -> bool:
-	# Join-kit inventory can land after welcome/npcs; wait for the full mage set.
-	const KIT_PIECES := 4
-	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	var indices: PackedInt32Array = _session.get("_bag_indices")
-	while indices.size() < KIT_PIECES and Time.get_ticks_msec() < deadline:
-		await _tree.process_frame
-		indices = _session.get("_bag_indices")
-	if indices.size() < KIT_PIECES:
-		_fail("mage join kit incomplete in the bag (%d/%d)" % [indices.size(), KIT_PIECES])
+	if indices.is_empty():
+		_fail("mage kit never arrived in the bag after /give")
 		return false
 	for slot: int in indices:
 		_session.request_equip(slot)
 		await _tree.process_frame
+	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
 		if _session.active_class_id() == "mage":
 			print("DEMO class mage")

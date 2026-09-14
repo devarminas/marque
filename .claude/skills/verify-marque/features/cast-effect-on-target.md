@@ -33,6 +33,8 @@ stdout/stderr and `server.stdout.ndjson`.
 
 ## Gotchas
 
+- **Mage kit is admin `/give`.** `dummy_cast_demo.ps1` starts marqued with
+  `-admin`; the client grants the mage set after join. No `-join-kit` forest.
 - **Mana, not HP.** Heal on a full-HP dummy still flashes because mana spent;
   binding only to `hp` would miss that case and would also flash on melee hits.
 - **Flash is short-lived.** Assert `CastHitFx` as soon as `cast_effect_played`

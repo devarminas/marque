@@ -64,9 +64,10 @@ Preconditions:
 - Marker: `ENEMY QUEST DEMO OK` on the **last line** of stdout. Exit code must
   also be 0.
 
-The script builds marqued, warms Godot once, starts the server on a free port
-with a repeated `-join-kit` knight set, launches two windowed clients with
-`--enemy-quest-shots` and `--enemy-quest-role leader|member`, and asserts the
+The script builds marqued with `-admin` (no join-kit forest), warms Godot once,
+starts the server on a free port, launches two windowed clients with
+`--enemy-quest-shots` and `--enemy-quest-role leader|member`. Each client
+`/give`s the knight set via the admin bus, then asserts the
 minimum evidence table above plus no party/talk/dialog rejects and `DEMO done`.
 
 Evidence lands in `-OutDir`, default `$env:TEMP\marque-enemy-quest`.
@@ -78,9 +79,9 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-enemy-quest`.
   Imp-compatible walk/idle clips land. Server chase completion is GAMELOG
   `arrived` with `npc` (Go: `TestImpChasePathLogsArrived`); this demo does not
   require that line for `ENEMY QUEST DEMO OK`.
-- **Knight kit is a harness seed.** `DefaultJoinKit` stays empty; the demo
-  passes five `-join-kit` flags. Clients equip into class `knight` before
-  fighting.
+- **Knight kit is admin `/give`.** `DefaultJoinKit` stays empty; the harness
+  starts with `-admin` and each client grants the five knight kinds. Clients
+  equip into class `knight` before fighting. Do not pass a `-join-kit` forest.
 - **Party credit is map-wide.** The harness still requires both clients to
   accept the quest and be party members during credit; both help kill so the
   tank survives Imp multi-pull.

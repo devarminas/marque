@@ -57,16 +57,11 @@ try {
         Pop-Location
     }
 
-    $mageJoinKit = @(
-        "-join-kit", "cloth_hood",
-        "-join-kit", "cloth_robe",
-        "-join-kit", "cloth_skirt",
-        "-join-kit", "staff"
-    )
-    $server = Start-Process -FilePath $binary -ArgumentList (@(
+    $server = Start-Process -FilePath $binary -ArgumentList @(
         "-addr", "127.0.0.1:0",
-        "-friendly-hp", "$FriendlyHP"
-    ) + $mageJoinKit) -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr `
+        "-friendly-hp", "$FriendlyHP",
+        "-admin"
+    ) -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr `
         -NoNewWindow -PassThru
 
     $deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
