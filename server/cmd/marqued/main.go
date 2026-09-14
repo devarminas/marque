@@ -79,6 +79,32 @@ func (k *kindList) Set(value string) error {
 	return nil
 }
 
+type playerIDList []mnet.PlayerID
+
+func (p *playerIDList) String() string {
+	parts := make([]string, 0, len(*p))
+	for _, id := range *p {
+		parts = append(parts, strconv.FormatInt(int64(id), 10))
+	}
+	return strings.Join(parts, " ")
+}
+
+func (p *playerIDList) Set(value string) error {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return fmt.Errorf("player id is empty")
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return fmt.Errorf("player id %q: %w", value, err)
+	}
+	if n < 1 {
+		return fmt.Errorf("player id %q must be >= 1", value)
+	}
+	*p = append(*p, mnet.PlayerID(n))
+	return nil
+}
+
 const shutdownGrace = 5 * time.Second
 
 const wsPath = "/ws"
@@ -103,6 +129,9 @@ func run() error {
 	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world. Combines with -seed-class-kits.")
 	joinKit := append(kindList(nil), game.DefaultJoinKit...)
 	flag.Var(&joinKit, "join-kit", "seed this kind into the bag of every joining player (demo harness).\nRepeat the flag for more kinds. Omit it entirely to keep the shipped DefaultJoinKit.")
+	devAdmin := flag.Bool("admin", false, "grant every connected player admin (dev harness; default deny)")
+	var adminPlayers playerIDList
+	flag.Var(&adminPlayers, "admin-player", "allow this player id to run admin commands.\nRepeat the flag for more ids. Ignored when -admin is set.")
 	flag.Parse()
 
 	mapCfg, err := game.LookupMap(strings.TrimSpace(*mapID))
@@ -177,6 +206,15 @@ func run() error {
 	world.SetWeapons(weapons)
 	world.SetClasses(classes)
 	world.SetQuests(quests)
+	acl := game.AdminACL{DevAdmin: *devAdmin}
+	if len(adminPlayers) > 0 {
+		acl.Players = make(map[mnet.PlayerID]struct{}, len(adminPlayers))
+		for _, id := range adminPlayers {
+			acl.Players[id] = struct{}{}
+		}
+	}
+	world.SetAdminACL(acl)
+	world.SetAdminRegistry(game.NewAdminRegistry())
 
 	var groundSeeds itemSeeds
 	var classKitFields []gamelog.Fields
@@ -218,6 +256,8 @@ func run() error {
 		"quests_path":       qpath,
 		"classes":           classes.ClassLen(),
 		"skills":            classes.SkillLen(),
+		"admin":             *devAdmin,
+		"admin_players":     adminPlayers,
 	}
 	if *seedClassKits {
 		started["class_kit_seeds"] = classKitFields
