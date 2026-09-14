@@ -179,21 +179,28 @@ func _mine_rock(rock_id: int) -> bool:
 
 
 func _walk_near(x: float, z: float) -> bool:
-	var avatar := _session.avatar_for(_session.own_id())
-	var here := Vector2.ZERO if avatar == null else Vector2(avatar.position.x, avatar.position.z)
-	var wish := (Vector2(x, z) - here).normalized()
-	_session.request_move(wish.x, wish.y)
 	print("DEMO walkto %f %f" % [x, z])
-	if not await _wait_until(
-		func() -> bool:
-			return _own_distance_to(x, z) <= NEAR_STATION,
-		WALK_TIMEOUT_MSEC,
-	):
-		_session.request_move(0.0, 0.0)
-		_fail("never reached station vicinity (%f,%f)" % [x, z])
-		return false
+	var deadline := Time.get_ticks_msec() + WALK_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		var avatar := _session.avatar_for(_session.own_id())
+		if avatar == null:
+			await _tree.process_frame
+			continue
+		var here := Vector2(avatar.position.x, avatar.position.z)
+		var there := Vector2(x, z)
+		var dist := here.distance_to(there)
+		if dist <= NEAR_STATION:
+			_session.request_move(0.0, 0.0)
+			# Let server pose catch the predicted avatar before station use.
+			await _wait_msec(400)
+			if _own_distance_to(x, z) <= NEAR_STATION:
+				return true
+		var wish := (there - here).normalized()
+		_session.request_move(wish.x, wish.y)
+		await _wait_msec(100)
 	_session.request_move(0.0, 0.0)
-	return true
+	_fail("never reached station vicinity (%f,%f)" % [x, z])
+	return false
 
 
 func _smelt_ore(smelter_id: int) -> bool:
