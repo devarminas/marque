@@ -224,24 +224,9 @@ func _run_equip_demo(args: Array) -> void:
 	get_tree().quit(code)
 
 
-func _run_gather_craft_demo(args: Array) -> void:
-	var prefix := _argument_after(args, GATHER_CRAFT_SHOTS_FLAG)
-	if prefix.is_empty():
-		push_error("%s needs an output path prefix after it" % GATHER_CRAFT_SHOTS_FLAG)
-		get_tree().quit(1)
-		return
-
-	var session := get_node_or_null("Session") as SessionScript
-	var inventory := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
-	var equipment := get_node_or_null("UI/RightDock") as EquipmentPanelScript
-	if session == null or inventory == null or equipment == null:
-		push_error("main.tscn is missing Session or UI/RightDock")
-		get_tree().quit(1)
-		return
-
+func _run_gather_craft_demo(_args: Array) -> void:
 	var demo := GatherCraftDemoScript.new()
-	var code: int = await demo.run(self, session, inventory, equipment, prefix)
-	get_tree().quit(code)
+	get_tree().quit(demo.run())
 
 
 func _run_gather_error_demo(args: Array) -> void:

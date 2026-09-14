@@ -64,9 +64,9 @@ pass. Server layer: exactly one `gather_rejected` with reason
 - **The refused gather never logs `gather`.** A refusal on receipt logs
   `gather_rejected` only, so "exactly one accepted `gather`" is what proves the left
   click sent nothing, not a count of `gather_rejected`.
-- **Empty join kit.** `DefaultJoinKit` is empty since M7. Any recipe that assumes a
-  bag axe at join, `scripts/gather_craft_demo.ps1` among them, cannot reach its
-  scenario. Seed the kit on the ground with `-item x,z,kind` and pick it up.
+- **Empty join kit.** `DefaultJoinKit` is empty since M7. Seed the kit on the
+  ground with `-item x,z,kind` and pick it up (as this demo does). Do not drive
+  `scripts/gather_craft_demo.ps1` (ARM-287 fail-closed stub).
 - **The linger window is a tuning knob.** The harness accepts 3000..9000ms around the
   authored 4.0s `wait_time` rather than asserting the number, so a retune does not
   turn the demo red for the wrong reason.
