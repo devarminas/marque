@@ -14,3 +14,7 @@ func is_open() -> bool:
 func send_admin(line: String, seq: int = 0) -> Error:
 	admin_lines.append(line)
 	return OK
+
+
+func send_pickup(item_id: int, seq: int = 0) -> Error:
+	return OK

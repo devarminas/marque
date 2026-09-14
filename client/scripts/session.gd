@@ -337,7 +337,7 @@ func _ready() -> void:
 	if _admin_console == null:
 		push_error("Session.admin_console must point at a node running admin_console.gd")
 	else:
-		_admin_console.line_submitted.connect(_on_admin_line_submitted)
+		_admin_console.line_submitted.connect(request_admin)
 	_hotbar = hotbar as HotbarScript
 	if _hotbar == null:
 		push_error("Session.hotbar must point at a node running hotbar.gd")
@@ -844,10 +844,6 @@ func _close_admin_console() -> void:
 	if _admin_console == null:
 		return
 	_admin_console.close_console()
-
-
-func _on_admin_line_submitted(line: String) -> void:
-	request_admin(line)
 
 
 func _on_admin_reply_received(text: String) -> void:

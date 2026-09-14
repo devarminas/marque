@@ -46,13 +46,6 @@ func close_console() -> void:
 		line_edit.clear()
 
 
-func toggle() -> void:
-	if visible:
-		close_console()
-	else:
-		open_console()
-
-
 func append_line(text: String) -> void:
 	if scrollback == null:
 		return
@@ -67,10 +60,6 @@ func scrollback_text() -> String:
 	if scrollback == null:
 		return ""
 	return scrollback.get_parsed_text()
-
-
-func history() -> PackedStringArray:
-	return _history.duplicate()
 
 
 func _on_text_submitted(text: String) -> void:
@@ -94,10 +83,10 @@ func _on_line_gui_input(event: InputEvent) -> void:
 		return
 	if key.keycode == KEY_UP:
 		_history_older()
-		accept_event()
+		line_edit.accept_event()
 	elif key.keycode == KEY_DOWN:
 		_history_newer()
-		accept_event()
+		line_edit.accept_event()
 
 
 func _history_older() -> void:

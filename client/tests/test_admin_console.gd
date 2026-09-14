@@ -4,11 +4,14 @@ extends Node3D
 const MainScene := preload("res://scenes/main.tscn")
 const SessionScript := preload("res://scripts/session.gd")
 const AdminConsoleScript := preload("res://scripts/admin_console.gd")
+const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const StubNet := preload("res://tests/stub_admin_net.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
 const TOGGLE_ACTION := "toggle_admin_console"
 const TOGGLE_KEY := KEY_QUOTELEFT
+const CAMERA_HEIGHT := 20.0
+const CLICK_ITEM_ID := 5
 const WELCOME := '{"welcome":{"you":1,"tick_ms":150,"tick":100,"players":[{"id":1,"x":0.0,"z":0.0},{"id":2,"x":3.0,"z":0.0}]}}'
 const SETTLE_FRAMES := 3
 const SCRIPTS_DIR := "res://scripts"
@@ -31,7 +34,11 @@ var _root: Node3D = null
 var _session: SessionScript = null
 var _console: AdminConsoleScript = null
 var _stub: StubNet = null
+var _picker: GroundPickerScript = null
+var _camera: Camera3D = null
 var _admin_intents := PackedStringArray()
+var _pickup_intents := PackedInt32Array()
+var _click_point := Vector2.INF
 
 
 func is_finished() -> bool:
@@ -58,11 +65,18 @@ func _ready() -> void:
 	_session = _root.get_node("Session") as SessionScript
 	_console = _root.get_node("UI/AdminConsole") as AdminConsoleScript
 	_stub = _root.get_node("Session/Net") as StubNet
+	_picker = _root.get_node("GroundPicker") as GroundPickerScript
+	_camera = _root.get_node("PlayerCharacter/CameraRig/Camera3D") as Camera3D
+	var rig := _root.get_node("PlayerCharacter/CameraRig") as Node3D
+	if rig != null:
+		rig.set_process(false)
 	_session.admin_requested.connect(func(line: String) -> void: _admin_intents.append(line))
+	_session.pickup_requested.connect(func(id: int) -> void: _pickup_intents.append(id))
 	_stub.ingest_text_frame(WELCOME)
 
 	await get_tree().process_frame
 	await get_tree().process_frame
+	await get_tree().physics_frame
 
 	_test_the_console_hangs_off_the_ui_layer()
 	_test_session_never_builds_the_console()
@@ -74,7 +88,8 @@ func _ready() -> void:
 	await _test_history_walks_with_up_and_down()
 	await _test_open_console_blocks_move_chords()
 	await _test_escape_closes_console_before_menu()
-	await _test_closed_console_does_not_steal_clicks()
+	await _test_an_open_console_swallows_a_click()
+	await _test_a_closed_console_lets_the_same_click_through()
 
 	print(
 		"ADMIN CONSOLE RAN: %d assertions, %d failed"
@@ -270,13 +285,102 @@ func _test_escape_closes_console_before_menu() -> void:
 		menu.close_menu()
 
 
-func _test_closed_console_does_not_steal_clicks() -> void:
-	_close_console()
-	_check(not _console.visible, "precondition: console closed")
+func _test_an_open_console_swallows_a_click() -> void:
+	_look_straight_down()
+	_console.visible = true
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	_click_point = _point_inside_the_console()
 	_check(
-		_console.mouse_filter == Control.MOUSE_FILTER_STOP,
-		"closed console keeps authored STOP (visibility gates hits)",
+		_click_point != Vector2.INF,
+		"the open admin console covers a point inside the viewport to click (rect %s screen %s)"
+		% [_console.get_global_rect(), _camera.get_viewport().get_visible_rect()],
 	)
+	if _click_point == Vector2.INF:
+		return
+
+	var under: Variant = _picker.pick_ground(_click_point)
+	_check(under != null, "there is ground under %v to stand an item on" % _click_point)
+	if under == null:
+		_click_point = Vector2.INF
+		return
+	var here: Vector2 = under
+	await _stand_an_item_at(here)
+	var resolved := _picker.pick(_click_point)
+	_check(
+		resolved["target"] == GroundPickerScript.Target.ITEM,
+		"and item %d stands on it, so a click that got through would pick it up, got target %d"
+		% [CLICK_ITEM_ID, resolved["target"]],
+	)
+
+	_pickup_intents.clear()
+	await _push_left_click(_click_point)
+	_check(
+		_pickup_intents.is_empty(),
+		"but a click on the open admin console at %v sends no pickup, got %s"
+		% [_click_point, _pickup_intents],
+	)
+
+
+func _test_a_closed_console_lets_the_same_click_through() -> void:
+	if _click_point == Vector2.INF:
+		return
+	_console.visible = false
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	_pickup_intents.clear()
+	await _push_left_click(_click_point)
+	_check(
+		_pickup_intents.size() == 1 and _pickup_intents[0] == CLICK_ITEM_ID,
+		"with the console closed the very same click at %v picks item %d up, got %s"
+		% [_click_point, CLICK_ITEM_ID, _pickup_intents],
+	)
+
+
+func _look_straight_down() -> void:
+	_camera.global_transform = Transform3D(
+		Basis(Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0)),
+		Vector3(0.0, CAMERA_HEIGHT, 0.0),
+	)
+
+
+func _point_inside_the_console() -> Vector2:
+	var screen := _camera.get_viewport().get_visible_rect()
+	var covered := _console.get_global_rect().intersection(screen)
+	if not covered.has_area():
+		return Vector2.INF
+	return Vector2(
+		covered.position.x + minf(12.0, covered.size.x * 0.2),
+		covered.position.y + covered.size.y * 0.5,
+	)
+
+
+func _stand_an_item_at(ground: Vector2) -> void:
+	_stub.ingest_text_frame(
+		'{"welcome":{"you":1,"tick_ms":150,"tick":900,'
+		+ '"players":[{"id":1,"x":0.0,"z":0.0}],"items":[]}}'
+	)
+	_stub.ingest_text_frame(
+		'{"item_spawn":{"id":%d,"kind":"acorn","x":%f,"z":%f}}'
+		% [CLICK_ITEM_ID, ground.x, ground.y]
+	)
+	await get_tree().process_frame
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+
+func _push_left_click(screen_position: Vector2) -> void:
+	var viewport := _camera.get_viewport()
+	for pressed: bool in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = pressed
+		event.position = screen_position
+		event.global_position = screen_position
+		viewport.push_input(event)
+	await get_tree().process_frame
 
 
 func _close_console() -> void:
