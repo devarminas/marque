@@ -127,7 +127,7 @@ Preconditions:
   `click_tick + deadline` on `estimated_tick()`, so clock corrections cannot
   make the deadline already past before the first step. After stop, the demo
   settles briefly so soft-pulled display pose is closer to server underfoot
-  before printing `walkaway_arrived`. Do not reintroduce path-span tick asserts.
+  before printing `walkaway_arrived`, and keeps emitting zero wish through bag open so sticky steer cannot restart before the drop. Do not reintroduce path-span tick asserts.
 - **There is no `item_despawn` event in the server's event log.** The despawn is a wire
   message only (`server/internal/game/items.go`, `w.broadcast(mnet.ItemDespawn...)`);
   no `EvItemDespawned` exists. A recipe that greps the GAMELOG for it finds nothing and

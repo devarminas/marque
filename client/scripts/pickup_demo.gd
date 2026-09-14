@@ -39,7 +39,8 @@ const TICK_WAIT_BACKSTOP_MSEC := 60000
 const ARRIVAL_RADIUS := 0.75
 # After stop, soft-pull display can still lag sim/server by up to ~HARD_ERROR_M;
 # settle so DEMO walkaway_arrived is closer to the authoritative drop pose.
-const WALK_ARRIVAL_SETTLE_MSEC := 500
+const WALK_ARRIVAL_SETTLE_MSEC := 600
+const WISH_RESEND_MSEC := 100
 
 const BAG_LAYOUT_DEADLINE_MSEC := 2000
 
@@ -193,8 +194,13 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 		)
 		return false
 	# Stop and settle so display soft-pull catches sim/server before we claim arrived.
-	_session.request_move(0.0, 0.0)
-	await _wait_msec(WALK_ARRIVAL_SETTLE_MSEC)
+	# Keep emitting zero through settle and bag layout so sticky wish cannot restart.
+	if not await _hold_zero_wish(WALK_ARRIVAL_SETTLE_MSEC):
+		return false
+	avatar = _session.avatar_for(_session.own_id())
+	if avatar == null:
+		_fail("local avatar vanished after walk-away settle")
+		return false
 	var arrived_here := Vector2(avatar.position.x, avatar.position.z)
 	print("DEMO walkaway_arrived %f %f" % [arrived_here.x, arrived_here.y])
 
@@ -211,10 +217,12 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 	if opened == null:
 		return false
 	var centre: Vector2 = opened
+	_session.request_move(0.0, 0.0)
 	print("DEMO dropclick %d %d %f %f" % [
 		_session.tick_clock().estimated_tick(), slot, centre.x, centre.y
 	])
 	_click_at(centre, true)
+	_session.request_move(0.0, 0.0)
 	return true
 
 
@@ -241,6 +249,7 @@ func _open_the_bag_onto(slot: int, widget: Control) -> Variant:
 				+ "laying out and any rect read now is stale"
 			)
 			return null
+		_session.request_move(0.0, 0.0)
 		settled = widget.get_global_rect()
 		await _tree.process_frame
 
@@ -293,13 +302,31 @@ func _await_arrival(budget_msec: int, destination: Vector2) -> bool:
 	if avatar == null:
 		return false
 	var deadline_msec := Time.get_ticks_msec() + maxi(budget_msec, 0)
+	var next_wish_msec := 0
 	while Time.get_ticks_msec() < deadline_msec:
+		avatar = _session.avatar_for(_session.own_id())
+		if avatar == null:
+			return false
 		var here := Vector2(avatar.position.x, avatar.position.z)
 		if here.distance_to(destination) <= ARRIVAL_RADIUS:
 			_session.request_move(0.0, 0.0)
 			return true
+		var now := Time.get_ticks_msec()
+		if now >= next_wish_msec:
+			var wish := (destination - here).normalized()
+			_session.request_move(wish.x, wish.y)
+			next_wish_msec = now + WISH_RESEND_MSEC
 		await _tree.process_frame
 	return false
+
+
+func _hold_zero_wish(msec: int) -> bool:
+	var deadline := Time.get_ticks_msec() + maxi(msec, 0)
+	while Time.get_ticks_msec() < deadline:
+		_session.request_move(0.0, 0.0)
+		await _tree.create_timer(WISH_RESEND_MSEC / 1000.0).timeout
+	_session.request_move(0.0, 0.0)
+	return true
 
 
 func _wait_msec(msec: int) -> void:
