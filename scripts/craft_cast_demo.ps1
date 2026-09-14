@@ -293,9 +293,9 @@ try {
         if ($effect.Count -lt 1) {
             Add-Failure "cast_effect=$($effect.Count), want >= 1"
         }
-        $moveCancel = @($cancelled | Where-Object { [string]$_.cause -eq "move" -or [string]$_.cause -eq "move_to" })
+        $moveCancel = @($cancelled | Where-Object { [string]$_.cause -eq "move" })
         if ($moveCancel.Count -lt 1) {
-            Add-Failure "cast_cancelled with move/move_to=$($moveCancel.Count), want >= 1"
+            Add-Failure "cast_cancelled with cause=move=$($moveCancel.Count), want >= 1"
         } else {
             Write-Host "==> server: player $player cast_cancelled cause=$($moveCancel[0].cause)"
         }

@@ -15,7 +15,7 @@ interrupt outside grace.
   sticks.
 - `cast-resolve` — GAMELOG `cast_begin` then `cast` / `cast_effect` for fireball;
   DEMO `castbar visible=1` then `visible=0` and `castok`.
-- `cast-interrupt` — GAMELOG `cast_cancelled` with cause `move` (or `move_to`); DEMO
+- `cast-interrupt` — GAMELOG `cast_cancelled` with cause `move`; DEMO
   `castcancel` and no success effect for that cast.
 - `demo-pass` — harness exits 0 with `CRAFT CAST DEMO OK` as its last line, and the
   client prints `DEMO done`.
@@ -51,8 +51,8 @@ stdout/stderr, and `server.stdout.ndjson`.
   chop. Without `-join-kit sticks` the sword recipe cannot start.
 - **Station range is 0.5.** After mining at (2, 3) the client must walk to the
   smelter before use-on; a same-spot smelt refuses out of range.
-- **Interrupt uses `move`, not only `move_to`.** The demo steers with
-  `request_move` so GAMELOG cause is `move`. Grace is the last two ticks of an
-  8-tick fireball; walk earlier.
+- **Interrupt uses `cause=move` only.** The demo steers with `request_move`
+  (wish+pose); GAMELOG cancel cause is `move`, never `move_to`. Grace is the
+  last two ticks of an 8-tick fireball; walk earlier.
 - **Class swap mid-run.** Unequip the miner set before wearing mage gear or fireball
   is refused with `needs_class`.
