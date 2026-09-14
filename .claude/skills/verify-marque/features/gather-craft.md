@@ -56,5 +56,8 @@ Preconditions:
   trees in `world_map` are not gather nodes.
 - **Self-use only.** Craft is two left-clicks on the same `logs` slot
   (`on` equals `slot`). Do not invent a second recipe.
-- **Tracked quarantine.** See
-  [decisions.tsv](../decisions.tsv) row `ARM-287`.
+- **Tracked quarantine (ARM-287).** `gather_craft_demo` is fail-closed on
+  purpose: empty `DefaultJoinKit` / stale `axe`+weapon asserts, never migrated
+  to wish+pose + `/give`. Contested craft race needs a later migrate; live
+  gather proof is `gather_error_demo.ps1`. Reason lives in this note and PR
+  #191 — do not revive a committed `decisions.tsv`.
