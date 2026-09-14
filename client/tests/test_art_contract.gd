@@ -81,6 +81,13 @@ func _test_the_pieces_are_exactly_the_armor_the_sets_ship(assertions: Assertions
 		)
 	for item in contract.pieces:
 		assertions.check(shipped.has(item), "sets.json ships the contract piece %s" % item)
+	var tools := ClassDefs.tool_kinds(catalog)
+	var items := PackedStringArray(contract.hand_items.keys())
+	items.sort()
+	assertions.check(
+		tools.size() > 0 and items == tools,
+		"the contract hand items equal the tool kinds sets.json ships %s, got %s" % [tools, items],
+	)
 
 
 func _test_every_clip_is_reached_through_a_fallback_route(assertions: Assertions, text: String) -> void:

@@ -24,7 +24,9 @@ def build_and_hash(outputs: list[Path]) -> dict[Path, str]:
 
 def main() -> None:
     contract = load()
-    outputs = sorted({res_to_path(variant.glb) for variant in contract.variants.values()} | {res_to_path(contract.clips_glb)})
+    outputs = sorted({res_to_path(variant.glb) for variant in contract.variants.values()}
+                     | {res_to_path(contract.clips_glb)}
+                     | {res_to_path(path) for path in contract.hand_items.values()})
     first = build_and_hash(outputs)
     second = build_and_hash(outputs)
     for path in outputs:

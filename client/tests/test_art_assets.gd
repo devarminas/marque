@@ -15,6 +15,10 @@ const SWING_CONTACT_FRAME := 7
 const SWING_HAND_TRAVEL := 0.3
 const BODY_TRIANGLES_MIN := 4000
 const BODY_TRIANGLES_MAX := 8000
+const PIECE_TRIANGLES_MIN := 300
+const PIECE_TRIANGLES_MAX := 2000
+const ITEM_TRIANGLES_MIN := 200
+const ITEM_TRIANGLES_MAX := 2000
 
 var _assertions: Assertions = null
 var _finished := false
@@ -46,6 +50,8 @@ func _ready() -> void:
 		_test_the_clip_rig_rests_like_the_rest_source(rigs)
 		_test_each_region_is_a_skinned_mesh_weighted_to_its_own_bones(rigs)
 		_test_each_body_stays_within_the_triangle_budget(rigs)
+		_test_each_piece_is_a_skinned_mesh_weighted_to_its_slot_bones(rigs[_contract.clip_rig])
+		_test_each_hand_item_is_a_static_mesh_gripped_at_the_origin()
 		_test_the_clip_library_matches_the_contract()
 		await _test_the_imp_plays_idle_at_its_own_pelvis_height()
 		await _test_swing_moves_the_grip_hand()
@@ -66,6 +72,76 @@ func _test_each_body_stays_within_the_triangle_budget(rigs: Dictionary) -> void:
 			triangles >= BODY_TRIANGLES_MIN and triangles <= BODY_TRIANGLES_MAX,
 			"%s body has %d triangles, within %d to %d" % [name, triangles, BODY_TRIANGLES_MIN, BODY_TRIANGLES_MAX],
 		)
+
+
+func _test_each_piece_is_a_skinned_mesh_weighted_to_its_slot_bones(rig: Node3D) -> void:
+	var skeleton := _skeleton(rig)
+	var found := PackedStringArray()
+	for child in skeleton.get_children():
+		if child is MeshInstance3D and not String(child.name).begins_with(REGION_PREFIX):
+			found.append(child.name)
+	found.sort()
+	var expected := PackedStringArray(_contract.pieces.keys())
+	expected.sort()
+	_assertions.check(found == expected, "%s carries one mesh per contract piece, got %s" % [_contract.clip_rig, found])
+	for item in _contract.pieces:
+		var mesh := skeleton.get_node_or_null(NodePath(item)) as MeshInstance3D
+		if mesh == null:
+			continue
+		var bones := PackedStringArray()
+		for region in _contract.slot_regions[_contract.pieces[item].slot]:
+			bones.append_array(_contract.regions[region])
+		_assertions.check(
+			mesh.skin != null and mesh.get_node(mesh.skeleton) == skeleton,
+			"piece %s is skinned to the rig skeleton" % item,
+		)
+		var strays := _vertices_off_region(mesh, skeleton, bones)
+		_assertions.check(
+			strays.is_empty(),
+			"piece %s weights every vertex fully to one bone of slot %s, strays %s"
+			% [item, _contract.pieces[item].slot, strays],
+		)
+		var triangles := _triangles(mesh.mesh)
+		_assertions.check(
+			triangles >= PIECE_TRIANGLES_MIN and triangles <= PIECE_TRIANGLES_MAX,
+			"piece %s has %d triangles, within %d to %d" % [item, triangles, PIECE_TRIANGLES_MIN, PIECE_TRIANGLES_MAX],
+		)
+
+
+func _test_each_hand_item_is_a_static_mesh_gripped_at_the_origin() -> void:
+	for item in _contract.hand_items:
+		var scene := load(_contract.hand_items[item]) as PackedScene
+		_assertions.check(scene != null, "%s loads as a scene" % _contract.hand_items[item])
+		if scene == null:
+			continue
+		var instance := scene.instantiate() as Node3D
+		add_child(instance)
+		var meshes := instance.find_children("*", "MeshInstance3D", true, false)
+		_assertions.check(
+			meshes.size() == 1 and instance.find_children("*", "Skeleton3D", true, false).is_empty(),
+			"%s holds one static mesh and no skeleton, got %d meshes" % [item, meshes.size()],
+		)
+		if meshes.size() == 1:
+			var mesh := meshes[0] as MeshInstance3D
+			var bounds := mesh.global_transform * mesh.get_aabb()
+			_assertions.check(bounds.grow(0.001).has_point(Vector3.ZERO), "%s bounds contain its grip origin" % item)
+			_assertions.check(
+				bounds.size.y >= bounds.size.x and bounds.size.y >= bounds.size.z or item == "shield",
+				"%s runs its long axis along +Y, size %s" % [item, bounds.size],
+			)
+			var triangles := _triangles(mesh.mesh)
+			_assertions.check(
+				triangles >= ITEM_TRIANGLES_MIN and triangles <= ITEM_TRIANGLES_MAX,
+				"%s has %d triangles, within %d to %d" % [item, triangles, ITEM_TRIANGLES_MIN, ITEM_TRIANGLES_MAX],
+			)
+		instance.queue_free()
+
+
+func _triangles(mesh: Mesh) -> int:
+	var triangles := 0
+	for surface in mesh.get_surface_count():
+		triangles += mesh.surface_get_array_index_len(surface) / 3
+	return triangles
 
 
 func _test_each_rig_carries_exactly_the_contract_bones(rigs: Dictionary) -> void:
