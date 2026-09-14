@@ -112,6 +112,11 @@ func run(
 	if not await _capture(1):
 		return _fail("capture 1 failed")
 
+	# Capture under dual llvmpipe can starve the socket long enough to abandon
+	# and resume; the pre-capture GroundItem node is then freed. Re-resolve by id.
+	item = _session.item_for(item_id)
+	if item == null or not is_instance_valid(item):
+		return _fail("seed item %d missing after capture 1" % item_id)
 	var picked: Variant = _screen_position_of(item)
 	if picked == null:
 		return 1
