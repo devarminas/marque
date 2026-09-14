@@ -239,14 +239,17 @@ func _read_barrier_rows(prefix: String, generation: int, want_phase: String) -> 
 		var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
 		var parts := body.split(" ")
 		if want_phase == "propose":
-			# propose <gen> <ready_unix_msec>
-			if parts.size() != 3 or parts[0] != "propose":
+			# propose <gen> <ready_unix_msec> [fire_unix_msec]
+			if parts.size() < 3 or parts[0] != "propose":
 				continue
 			if not parts[1].is_valid_int() or not parts[2].is_valid_int():
 				continue
 			if int(parts[1]) != generation:
 				continue
-			rows.append({"ready": int(parts[2])})
+			var row := {"ready": int(parts[2]), "fire": -1}
+			if parts.size() >= 4 and parts[3].is_valid_int():
+				row["fire"] = int(parts[3])
+			rows.append(row)
 		elif want_phase == "commit":
 			# commit <gen> <fire_unix_msec> <ready 0|1>
 			if parts.size() != 4 or parts[0] != "commit":
@@ -271,24 +274,59 @@ func _propose_fire_unix_msec(generation: int) -> int:
 		if not _write_barrier_file(SYNC_BARRIER_PREFIX, "propose %d %d" % [generation, unix_msec_now()]):
 			return -1
 		var rows := _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
-		if rows.size() >= REQUIRED_PLAYERS:
-			# Settle while keeping propose files alive (commit uses a separate prefix).
-			for _i in 4:
-				if not _write_barrier_file(
-					SYNC_BARRIER_PREFIX, "propose %d %d" % [generation, unix_msec_now()]
-				):
-					return -1
-				await _tree.process_frame
-			rows = _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
-			if rows.size() < REQUIRED_PLAYERS:
-				continue
-			var max_ready := unix_msec_now()
-			for row in rows:
-				max_ready = maxi(max_ready, int(row["ready"]))
-			var fire := fire_unix_msec_from_max_ready(max_ready)
-			if fire - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC:
-				print("DEMO barrier %d %d %d %d" % [generation, rows.size(), max_ready, fire])
-				return fire
+		if rows.size() < REQUIRED_PLAYERS:
+			await _tree.process_frame
+			continue
+
+		# Publish a fire candidate from the shared max ready, then converge so
+		# both clients lock the *same* fire (split candidates made every commit
+		# return ready=0 under llvmpipe).
+		var max_ready := unix_msec_now()
+		for row in rows:
+			max_ready = maxi(max_ready, int(row["ready"]))
+		var fire := fire_unix_msec_from_max_ready(max_ready)
+		if not _write_barrier_file(
+			SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), fire]
+		):
+			return -1
+		for _i in 4:
+			await _tree.process_frame
+			if not _write_barrier_file(
+				SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), fire]
+			):
+				return -1
+
+		rows = _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
+		if rows.size() < REQUIRED_PLAYERS:
+			continue
+		var agreed := fire
+		var all_have_fire := true
+		for row in rows:
+			if int(row["fire"]) < 0:
+				all_have_fire = false
+				break
+			agreed = maxi(agreed, int(row["fire"]))
+		if not all_have_fire:
+			continue
+		# Republish the max so a peer that proposed an earlier fire adopts it.
+		if not _write_barrier_file(
+			SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), agreed]
+		):
+			return -1
+		for _i in 3:
+			await _tree.process_frame
+
+		rows = _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
+		if rows.size() < REQUIRED_PLAYERS:
+			continue
+		var matched := true
+		for row in rows:
+			if int(row["fire"]) != agreed:
+				matched = false
+				break
+		if matched and agreed - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC:
+			print("DEMO barrier %d %d %d %d" % [generation, rows.size(), max_ready, agreed])
+			return agreed
 		await _tree.process_frame
 	_fail(
 		"sync barrier gen %d never locked a fresh wall fire within %dms"
