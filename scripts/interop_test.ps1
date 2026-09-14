@@ -106,10 +106,11 @@ try {
     }
 
     foreach ($suite in @("INTEROP", "WIRING")) {
-        if ($transcript -match "$suite SKIPPED") {
+        # Line-anchor so "EQUIPMENT WIRING RAN" cannot shadow the WIRING suite.
+        if ($transcript -match "(?m)^$suite SKIPPED") {
             $failures.Add("the $suite suite skipped itself despite MARQUE_WS_URL being set")
         }
-        if ($transcript -match "$suite RAN: (\d+) assertions, (\d+) failed") {
+        if ($transcript -match "(?m)^$suite RAN: (\d+) assertions, (\d+) failed") {
             $ran = [int]$Matches[1]
             $failed = [int]$Matches[2]
             Write-Host "==> $suite`: $ran assertions, $failed failed"

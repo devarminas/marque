@@ -12,10 +12,9 @@ const WAIT_FRAMES := 240
 const MAX_FPS := 30
 
 const POSITION_EPSILON := 0.0005
-# Wish+pose halt is discrete (~0.12u/tick at WalkSpeed 3) plus wire latency;
-# path-era snap epsilons do not apply. Arrive inside a few steps, then settle.
-const POSE_ARRIVAL_EPSILON := 0.35
-const POSE_EPSILON := 0.5
+# Re-aim sticky wish until pose enters this band, then halt. Welcome asserts use
+# the server-owned halt pose (exact), not an invented destination epsilon.
+const WISH_STOP_RADIUS := 0.75
 
 const EXPECTED_TICK_MS := 40
 const EXPECTED_SPEED := 3.0
@@ -30,6 +29,9 @@ const OUT_OF_BOUNDS := Vector2(200.0, 0.0)
 const ARRIVAL_WAIT_MSEC := 800
 const MIDWALK_WAIT_MSEC := 450
 const ABANDON_SETTLE_MSEC := 1000
+
+# Server-owned pose where A halted after the first wish walk.
+var _halt_after_first_walk := SPAWN_POSITION
 
 
 class Peer:
@@ -511,7 +513,10 @@ func _test_move_to_is_refused(a: Peer) -> bool:
 		String(failure["re"]) == "move_to",
 		'error.re names move_to, got "%s"' % String(failure["re"]),
 	)
-	_check(not String(failure["msg"]).is_empty(), "error.msg is non-empty")
+	_check(
+		String(failure["msg"]).contains("illegal_sample"),
+		'error.msg names illegal_sample, got "%s"' % String(failure["msg"]),
+	)
 	_check(
 		a.paths_for(you).size() == paths_before,
 		"a refused move_to broadcasts no player path (%d before, %d after)"
@@ -529,9 +534,13 @@ func _test_move_to_is_refused(a: Peer) -> bool:
 		String(a.errors[a.errors.size() - 1]["re"]) == "move_to",
 		"out-of-bounds move_to is also refused as move_to",
 	)
+	_check(
+		String(a.errors[a.errors.size() - 1]["msg"]).contains("illegal_sample"),
+		"out-of-bounds move_to is also illegal_sample",
+	)
 	# NPC patrols still emit path_assigned; only the player's paths must stay empty.
 	_check(
-		a.paths_for(int(a.welcome["you"])).is_empty(),
+		a.paths_for(you).is_empty(),
 		"no player path frames after retired move_to attempts",
 	)
 	return true
@@ -550,7 +559,7 @@ func _test_wish_walk_reaches_first_destination(a: Peer) -> bool:
 		var here: Variant = a.latest_xz(you)
 		if here != null:
 			var pos: Vector2 = here
-			if pos.distance_to(FIRST_DESTINATION) < POSE_ARRIVAL_EPSILON:
+			if pos.distance_to(FIRST_DESTINATION) < WISH_STOP_RADIUS:
 				arrived = true
 				break
 			var aim := FIRST_DESTINATION - pos
@@ -563,17 +572,16 @@ func _test_wish_walk_reaches_first_destination(a: Peer) -> bool:
 		_check(false, "timed out waiting for A's pose near the first destination")
 		return false
 	_check(a.paths_for(you).is_empty(), "wish walk does not produce a player path")
-	var landed: Vector2 = a.latest_xz(you)
-	_check(
-		landed.distance_to(FIRST_DESTINATION) < POSE_ARRIVAL_EPSILON,
-		"A's last pose is near %v, got %v" % [FIRST_DESTINATION, landed],
-	)
+	# Settle so the zero wish lands; later welcomes must match this server halt.
 	await _wait_msec(ARRIVAL_WAIT_MSEC)
-	landed = a.latest_xz(you)
+	var landed_variant: Variant = a.latest_xz(you)
+	_check(landed_variant != null, "A has a pose after the wish halt")
+	if landed_variant == null:
+		return false
+	_halt_after_first_walk = landed_variant
 	_check(
-		landed.distance_to(FIRST_DESTINATION) < POSE_EPSILON,
-		"after halt settle A's pose is at %v +/- %f, got %v"
-		% [FIRST_DESTINATION, POSE_EPSILON, landed],
+		_halt_after_first_walk.distance_to(FIRST_DESTINATION) < WISH_STOP_RADIUS,
+		"A's halt pose is near %v, got %v" % [FIRST_DESTINATION, _halt_after_first_walk],
 	)
 	return true
 
@@ -654,9 +662,9 @@ func _test_second_client_sees_the_world(a: Peer, b: Peer) -> bool:
 	_check(a_index != -1, "B's welcome includes A (%d) in %s" % [a_id, ids])
 	if a_index != -1:
 		_check(
-			positions[a_index].distance_to(FIRST_DESTINATION) < POSE_EPSILON,
-			"B's welcome puts A at the point A walked to %v +/- %f, got %v"
-			% [FIRST_DESTINATION, POSE_EPSILON, positions[a_index]],
+			_near(positions[a_index], _halt_after_first_walk),
+			"B's welcome puts A at A's server halt pose %v, got %v"
+			% [_halt_after_first_walk, positions[a_index]],
 		)
 	var b_index := Array(ids).find(b_id)
 	if b_index != -1:
@@ -688,13 +696,13 @@ func _test_second_client_sees_the_first_walk(a: Peer, b: Peer) -> bool:
 	var a_id := int(a.welcome["you"])
 	b.poses.clear()
 	a.poses.clear()
-	var wish := (SECOND_DESTINATION - FIRST_DESTINATION).normalized()
+	var wish := (SECOND_DESTINATION - _halt_after_first_walk).normalized()
 	_check(a.net.send_move(wish.x, wish.y) == OK, "A's move wish sent")
 	if not await _wait_until(
 		func() -> bool:
 			var here: Variant = b.latest_xz(a_id)
-			return here != null and Vector2(here).distance_to(FIRST_DESTINATION) > 0.35,
-		"B observes A's pose leave the first destination",
+			return here != null and Vector2(here).distance_to(_halt_after_first_walk) > 0.35,
+		"B observes A's pose leave the first halt",
 	):
 		a.net.send_move(0.0, 0.0)
 		return false
@@ -702,7 +710,7 @@ func _test_second_client_sees_the_first_walk(a: Peer, b: Peer) -> bool:
 	_check(a.paths_for(a_id).is_empty(), "A does not receive a player path for its own walk")
 	var seen: Vector2 = b.latest_xz(a_id)
 	_check(
-		_progress_along(FIRST_DESTINATION, SECOND_DESTINATION, seen) > 0.0,
+		_progress_along(_halt_after_first_walk, SECOND_DESTINATION, seen) > 0.0,
 		"B's pose for A has advanced toward the second destination (%v)" % seen,
 	)
 	return true
@@ -718,14 +726,14 @@ func _test_late_joiner_sees_pose_not_path(a: Peer, c: Peer) -> void:
 	if index == -1:
 		return
 	var listed: Vector2 = (c.welcome["positions"] as PackedVector2Array)[index]
-	var travelled := _progress_along(FIRST_DESTINATION, SECOND_DESTINATION, listed)
+	var travelled := _progress_along(_halt_after_first_walk, SECOND_DESTINATION, listed)
 	_check(
 		travelled > 0.0 and travelled < 1.0,
-		"C's welcome puts A partway along the walk, not at either end (t = %f)" % travelled,
+		"C's welcome puts A partway along the wish walk, not at either end (t = %f)" % travelled,
 	)
 	_check(
-		_distance_to_segment(FIRST_DESTINATION, SECOND_DESTINATION, listed) < 1.0,
-		"C's welcome puts A near the walk corridor, got %v" % listed,
+		_distance_to_segment(_halt_after_first_walk, SECOND_DESTINATION, listed) < 1.0,
+		"C's welcome puts A near the wish corridor, got %v" % listed,
 	)
 
 

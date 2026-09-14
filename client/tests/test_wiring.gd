@@ -14,16 +14,16 @@ const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const Assertions := preload("res://tests/assertions.gd")
+const LocalMover := preload("res://scripts/local_mover.gd")
 
-# Wire decode / authored chrome can stay sub-millimetre. Live wish+pose uses
-# soft-pull display (SOFT_ERROR_M 0.35) and remote pose interp — path-era snap
-# and 1cm corridor asserts do not apply.
+# Wire decode / authored chrome can stay sub-millimetre. Soft-pull display lag is
+# bounded by LocalMover.HARD_ERROR_M; remotes follow server pose at EXACT_EPSILON.
 const EXACT_EPSILON := 0.002
-const ARRIVAL_EPSILON := 0.75
-const POSE_EPSILON := 0.75
-const CORRIDOR_EPSILON := 0.5
+const HARD_ERROR_M := LocalMover.HARD_ERROR_M
+const SOFT_ERROR_M := LocalMover.SOFT_ERROR_M
+const ARRIVAL_EPSILON := HARD_ERROR_M
 const RIG_SETTLED_EPSILON := 0.01
-const ARRIVAL_SETTLE_MSEC := 400
+const HALT_SETTLE_MSEC := 800
 
 const CLOCK_SKEW_TOLERANCE := 0.95
 
@@ -696,6 +696,7 @@ func _run_live(url: String) -> void:
 		a.paths_for(a_id).is_empty() and b.paths_for(a_id).is_empty(),
 		"player walk does not broadcast path frames",
 	)
+	_check(a.move_tos.is_empty(), "wish steer does not emit move_to")
 
 	print("== B watches A walk ==")
 	await _wait_msec(FIRST_SAMPLE_MSEC)
@@ -747,9 +748,9 @@ func _run_live(url: String) -> void:
 			% [late_here, live_here, late_here.distance_to(live_here)],
 		)
 
-	print("== A arrives near where A was sent ==")
+	print("== A halts under zero wish ==")
 	# Re-aim the sticky wish each frame so soft-pull display homes into the
-	# arrival band instead of flybys from a single constant-direction wish.
+	# arrival band (HARD_ERROR policy) instead of flybys from a single constant wish.
 	var arrived := false
 	for _frame in WAIT_FRAMES:
 		var here: Variant = a.ground_of(a_id)
@@ -767,24 +768,36 @@ func _run_live(url: String) -> void:
 	_check(arrived, "A to reach the destination under re-aimed sticky wish")
 	if not arrived:
 		return
-	await _wait_msec(ARRIVAL_SETTLE_MSEC)
-	var halt_here: Variant = a.ground_of(a_id)
-	if halt_here == null:
-		_check(false, "A has no ground pose after sticky-wish halt")
+	await _wait_msec(HALT_SETTLE_MSEC)
+	# Remotes follow server pose — B's draw is the authoritative halt truth.
+	var halt_variant: Variant = b.ground_of(a_id)
+	_check(halt_variant != null, "B still has a body for A after the wish halt")
+	if halt_variant == null:
 		return
-	var halt_pose: Vector2 = halt_here
-	# Sticky wish can overshoot by a tick or two after the arrival probe; prove the
-	# halt landed near the click, then use the settled pose as the shared truth.
+	var halt: Vector2 = halt_variant
 	_check(
-		halt_pose.distance_to(destination) < POSE_EPSILON,
-		"A's halt pose is near the requested point %v +/- %f, got %v"
-		% [destination, POSE_EPSILON, halt_pose],
+		halt.distance_to(destination) < HARD_ERROR_M,
+		"A's server halt is within HARD_ERROR of the aim %v, got %v" % [destination, halt],
 	)
-	_check_live_ground(b, a_id, halt_pose, POSE_EPSILON, "B draws A at A's halt pose")
+	_check(
+		a.paths_for(a_id).is_empty()
+		and b.paths_for(a_id).is_empty()
+		and c.paths_for(a_id).is_empty(),
+		"halt does not produce player path frames",
+	)
 	_check_live_ground(
-		a, a_id, halt_pose, POSE_EPSILON, "and A's own body stands on A's halt pose"
+		b, a_id, halt, EXACT_EPSILON, "B draws A at A's server halt pose"
 	)
-	_check_live_ground(c, a_id, halt_pose, POSE_EPSILON, "and so does the late joiner's")
+	_check_live_ground(
+		a,
+		a_id,
+		halt,
+		HARD_ERROR_M,
+		"A's own display is within HARD_ERROR of the server halt",
+	)
+	_check_live_ground(
+		c, a_id, halt, EXACT_EPSILON, "and so does the late joiner"
+	)
 
 	print("== joining a world where nobody is walking ==")
 	var d := await _join(url, "D")
@@ -799,7 +812,7 @@ func _run_live(url: String) -> void:
 		"and no path was replayed for them, got %d" % d.paths_for(a_id).size(),
 	)
 	_check_live_ground(
-		d, a_id, halt_pose, POSE_EPSILON, "the halted player is drawn near where they stopped"
+		d, a_id, halt, EXACT_EPSILON, "the halted player is drawn at the server halt pose"
 	)
 	for _frame in 20:
 		await get_tree().process_frame
@@ -807,7 +820,7 @@ func _run_live(url: String) -> void:
 		d.paths_for(a_id).is_empty(), "no path arrives for them later either"
 	)
 	_check_live_ground(
-		d, a_id, halt_pose, POSE_EPSILON, "and they have not drifted"
+		d, a_id, halt, EXACT_EPSILON, "and they have not drifted"
 	)
 
 	print("== leaving ==")
@@ -913,8 +926,8 @@ func _sample(
 	var watched_here: Vector2 = watched
 	var owned_here: Vector2 = owned
 	_check(
-		_distance_to_segment(origin, destination, watched_here) < CORRIDOR_EPSILON,
-		"%s: the walker is in the wish corridor, at %v" % [what, watched_here],
+		_distance_to_segment(origin, destination, watched_here) < SOFT_ERROR_M,
+		"%s: the walker is on the wish corridor, at %v" % [what, watched_here],
 	)
 	_check(
 		watched_here.distance_to(owned_here) < CLOCK_SKEW_TOLERANCE,
