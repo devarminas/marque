@@ -323,8 +323,9 @@ func _test_start_usec_of_names_the_tick_edge(assertions: Assertions) -> void:
 
 func _test_barrier_aim_uses_the_later_sync(assertions: Assertions) -> void:
 	assertions.check(
-		PickupDemo.aim_tick_from_max_sync(250) == 250 + PickupDemo.CLICK_LEAD_TICKS,
-		"aim is max sync plus the click lead",
+		PickupDemo.aim_tick_from_max_sync(250)
+			== 250 + PickupDemo.POST_CAPTURE_LEAD_TICKS,
+		"aim is max sync plus the post-capture lead",
 	)
 	var pair := _run18_clocks()
 	var clock_a: TickClock = pair["clock_a"]

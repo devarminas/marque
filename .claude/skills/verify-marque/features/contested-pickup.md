@@ -118,8 +118,14 @@ Preconditions:
 
 - **Core claim is GAMELOG-only.** Pixels cannot prove exactly-one-winner. Assert
   `pickup_resolved` / `pickup_lost` first.
-- **Same-tick pickup clicks use a shared aim-tick barrier** (see below) — not
-  `next_guard(now)` after capture, and not per-process usec quanta alone.
+- **Same-tick pickup clicks use a post-capture aim-tick barrier.** After shot 1,
+  each writes `(generation, estimated_tick)` under the `--pickup-shots` directory.
+  Both take `max(sync) + POST_CAPTURE_LEAD` and fire at that tick's guard via
+  `TickClock.start_usec_of`. Missed guards re-barrier with a new generation.
+  Do not schedule from `next_guard(now)` after capture alone, and do not rely on
+  per-process usec quanta — those are not comparable across two Godot processes.
+  `DEMO sync` prints roster sync and the agreed aim; the harness still tolerates
+  one tick of aim skew from anchor flooring.
 - **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
   u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
   `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away
@@ -155,16 +161,7 @@ Preconditions:
   `w.order` with a pending pickup and in range takes it. It is reproducible for a given
   connection order and it is *not* reproducible across runs, because the two clients
   race to connect. Both labels have won here. Assert that exactly one won, never which.
-- **The clients agree on a moment through a shared aim tick, not wall-clock
-  usec.** Each writes its `estimated_tick` at roster-ready into a barrier file
-  under the `--pickup-shots` directory, takes `max(sync) + CLICK_LEAD`, and
-  fires at that tick's guard via `TickClock.start_usec_of` — not
-  `next_guard(now)` after capture, which desyncs when the 15-frame warm-up
-  finishes at different times. `DEMO sync` prints local sync and the agreed
-  aim; the harness still tolerates one tick of aim skew from anchor flooring.
-  Per-process `Time.get_ticks_usec` quanta are not comparable across two Godot
-  processes, which is why the barrier exists.
 
-  **What decides whether a run was a contest is a server-side number, not this one.**
+  **What decides whether a run was a contest is a server-side number, not the DEMO sync print.**
   The check that decides the milestone is same-tick `pickup` intents plus
   `pickup_resolved.t == pickup_lost.t`.
