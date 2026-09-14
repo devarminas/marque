@@ -84,9 +84,15 @@ func TestAdminUnauthorizedDoesNotRunHandler(t *testing.T) {
 	if alice.pos != before {
 		t.Fatalf("unauthorized admin mutated pose %v → %v", before, alice.pos)
 	}
-	got := pw.events(EvAdminRejected)
+	got := pw.events(EvAdmin)
 	if len(got) != 1 {
-		t.Fatalf("rejection events=%v, want 1", got)
+		t.Fatalf("admin audit events=%v, want 1", got)
+	}
+	if got[0]["result"] != adminResultDeny {
+		t.Fatalf("result=%v, want %q", got[0]["result"], adminResultDeny)
+	}
+	if got[0]["cmd"] != "noop" {
+		t.Fatalf("cmd=%v, want noop", got[0]["cmd"])
 	}
 	if got[0]["reason"] != string(mnet.ReasonUnauthorized) {
 		t.Fatalf("reason=%v, want unauthorized", got[0]["reason"])
@@ -106,9 +112,15 @@ func TestAdminUnknownCommandUsage(t *testing.T) {
 		Seq:  1,
 	})
 
-	got := pw.events(EvAdminRejected)
+	got := pw.events(EvAdmin)
 	if len(got) != 1 {
-		t.Fatalf("rejection events=%v, want 1", got)
+		t.Fatalf("admin audit events=%v, want 1", got)
+	}
+	if got[0]["result"] != adminResultError {
+		t.Fatalf("result=%v, want %q", got[0]["result"], adminResultError)
+	}
+	if got[0]["cmd"] != "nope" {
+		t.Fatalf("cmd=%v, want nope", got[0]["cmd"])
 	}
 	if got[0]["reason"] != string(mnet.ReasonUsage) {
 		t.Fatalf("reason=%v, want usage", got[0]["reason"])
@@ -127,9 +139,12 @@ func TestAdminEmptyLineUsage(t *testing.T) {
 		Seq:  1,
 	})
 
-	got := pw.events(EvAdminRejected)
+	got := pw.events(EvAdmin)
 	if len(got) != 1 {
-		t.Fatalf("rejection events=%v, want 1", got)
+		t.Fatalf("admin audit events=%v, want 1", got)
+	}
+	if got[0]["result"] != adminResultError {
+		t.Fatalf("result=%v, want %q", got[0]["result"], adminResultError)
 	}
 	if got[0]["reason"] != string(mnet.ReasonUsage) {
 		t.Fatalf("reason=%v, want usage", got[0]["reason"])
@@ -161,11 +176,19 @@ func TestAdminAuthorizedStubRunsOnHandleFrame(t *testing.T) {
 	if !ran {
 		t.Fatal("authorized stub did not run")
 	}
-	if got := pw.events(EvAdmin); len(got) != 1 {
-		t.Fatalf("admin events=%v, want 1", got)
+	got := pw.events(EvAdmin)
+	if len(got) != 1 {
+		t.Fatalf("admin audit events=%v, want 1", got)
 	}
-	if got := pw.events(EvAdminRejected); len(got) != 0 {
-		t.Fatalf("unexpected rejection %v", got)
+	if got[0]["result"] != adminResultOK {
+		t.Fatalf("result=%v, want %q", got[0]["result"], adminResultOK)
+	}
+	if got[0]["cmd"] != "noop" {
+		t.Fatalf("cmd=%v, want noop", got[0]["cmd"])
+	}
+	args, ok := got[0]["args"].([]any)
+	if !ok || len(args) != 1 || args[0] != "x" {
+		t.Fatalf("args=%v, want [x]", got[0]["args"])
 	}
 }
 
@@ -291,8 +314,86 @@ func TestAdminReplyErrorPrefixFromHandler(t *testing.T) {
 	if got := awaitAdminReply(t, alicePeer.ws, 2*time.Second); got != "error: handler exploded" {
 		t.Fatalf("error reply=%q, want %q", got, "error: handler exploded")
 	}
-	if got := pw.events(EvAdminRejected); len(got) != 1 {
-		t.Fatalf("rejection events=%v, want 1", got)
+	got := pw.events(EvAdmin)
+	if len(got) != 1 {
+		t.Fatalf("admin audit events=%v, want 1", got)
+	}
+	if got[0]["result"] != adminResultError {
+		t.Fatalf("result=%v, want %q", got[0]["result"], adminResultError)
+	}
+	if got[0]["cmd"] != "boom" {
+		t.Fatalf("cmd=%v, want boom", got[0]["cmd"])
+	}
+}
+
+func TestAdminAuditOutcomeFields(t *testing.T) {
+	pw := newProbeWorld(t)
+	alice := pw.join()
+	pw.w.SetAdminACL(AdminACL{DevAdmin: true})
+	reg := NewAdminRegistry()
+	reg.Register("noop", func(w *World, p *player, args []string) (string, *mnet.RejectError) {
+		return "done", nil
+	})
+	pw.w.SetAdminRegistry(reg)
+
+	pw.w.handleFrame(mnet.Event{
+		Kind: mnet.EventFrame,
+		Conn: alice.conn,
+		Msg:  mnet.Admin{Line: "/noop a b"},
+		Seq:  7,
+	})
+	okEv := pw.events(EvAdmin)
+	if len(okEv) != 1 {
+		t.Fatalf("ok audit events=%v, want 1", okEv)
+	}
+	if okEv[0]["t"] == nil {
+		t.Fatal("ok audit missing tick t")
+	}
+	if okEv[0]["player"] != float64(alice.id) {
+		t.Fatalf("player=%v, want %d", okEv[0]["player"], alice.id)
+	}
+	if okEv[0]["cmd"] != "noop" || okEv[0]["result"] != adminResultOK || okEv[0]["seq"] != float64(7) {
+		t.Fatalf("ok audit=%v", okEv[0])
+	}
+	args, ok := okEv[0]["args"].([]any)
+	if !ok || len(args) != 2 || args[0] != "a" || args[1] != "b" {
+		t.Fatalf("args=%v, want [a b]", okEv[0]["args"])
+	}
+	if _, hasLine := okEv[0]["line"]; hasLine {
+		t.Fatalf("audit must not log raw line: %v", okEv[0])
+	}
+
+	pw.logs.Reset()
+	pw.w.SetAdminACL(AdminACL{})
+	pw.w.handleFrame(mnet.Event{
+		Kind: mnet.EventFrame,
+		Conn: alice.conn,
+		Msg:  mnet.Admin{Line: "/noop"},
+		Seq:  8,
+	})
+	denyEv := pw.events(EvAdmin)
+	if len(denyEv) != 1 || denyEv[0]["result"] != adminResultDeny {
+		t.Fatalf("deny audit=%v, want result=%q", denyEv, adminResultDeny)
+	}
+
+	pw.logs.Reset()
+	pw.w.SetAdminACL(AdminACL{DevAdmin: true})
+	pw.w.handleFrame(mnet.Event{
+		Kind: mnet.EventFrame,
+		Conn: alice.conn,
+		Msg:  mnet.Admin{Line: "/missing 1"},
+		Seq:  9,
+	})
+	errEv := pw.events(EvAdmin)
+	if len(errEv) != 1 || errEv[0]["result"] != adminResultError {
+		t.Fatalf("error audit=%v, want result=%q", errEv, adminResultError)
+	}
+	errArgs, ok := errEv[0]["args"].([]any)
+	if !ok || len(errArgs) != 1 || errArgs[0] != "1" {
+		t.Fatalf("error args=%v, want [1]", errEv[0]["args"])
+	}
+	if got := pw.events(EvAdminRejected); len(got) != 0 {
+		t.Fatalf("unexpected admin_rejected %v", got)
 	}
 }
 
