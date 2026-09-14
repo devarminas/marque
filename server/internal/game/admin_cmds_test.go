@@ -3,10 +3,12 @@ package game
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/devarminas/marque/server/internal/classdef"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
@@ -269,6 +271,62 @@ func TestAdminSpawnAndHeal(t *testing.T) {
 	}
 	if hp.ID != alice.id || hp.HP != MaxHP {
 		t.Fatalf("wire hp=%+v, want id=%d hp=%d", hp, alice.id, MaxHP)
+	}
+}
+
+func TestAdminGiveAllClassKitKinds(t *testing.T) {
+	pw := newProbeWorld(t)
+	alicePeer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)
+	drainJoin(t, alicePeer.ws)
+	alice := pw.w.byConn[alicePeer.conn]
+	pw.w.SetAdminACL(AdminACL{DevAdmin: true})
+	pw.w.SetAdminRegistry(NewDefaultAdminRegistry())
+
+	classes, err := classdef.LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	wearables, err := classes.Wearables()
+	if err != nil {
+		t.Fatalf("Wearables: %v", err)
+	}
+	kinds := make([]string, 0, len(wearables))
+	for kind := range wearables {
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	if len(kinds) == 0 {
+		t.Fatal("expected sets-derived wearable kinds")
+	}
+	if len(kinds) > InventorySize {
+		t.Fatalf("%d kit kinds exceed InventorySize %d", len(kinds), InventorySize)
+	}
+
+	for i, kind := range kinds {
+		pw.w.handleFrame(mnet.Event{
+			Kind: mnet.EventFrame,
+			Conn: alice.conn,
+			Msg:  mnet.Admin{Line: "/give " + kind},
+			Seq:  mnet.Seq(i + 1),
+		})
+		if got := awaitAdminReply(t, alicePeer.ws, 2*time.Second); !strings.HasPrefix(got, "ok: ") {
+			t.Fatalf("give %s reply=%q, want ok: prefix", kind, got)
+		}
+		if got := countKind(pw.w.items.Inventory(alice.id), kind); got != 1 {
+			t.Fatalf("after give %s count=%d, want 1", kind, got)
+		}
+	}
+	got := pw.events(EvAdmin)
+	if len(got) != len(kinds) {
+		t.Fatalf("admin audit count=%d, want %d", len(got), len(kinds))
+	}
+	for i, ev := range got {
+		if ev["result"] != adminResultOK || ev["cmd"] != "give" {
+			t.Fatalf("audit[%d]=%v, want give/ok", i, ev)
+		}
+	}
+	if len(DefaultJoinKit) != 0 {
+		t.Fatalf("DefaultJoinKit=%v, want empty", DefaultJoinKit)
 	}
 }
 

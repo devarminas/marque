@@ -63,6 +63,6 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-quest`: three PNGs,
   talk while the quest is `active` (ARM-191). Give itself is immediate and
   range-gated (`GiveRange` == `TalkRange`); the first talk walks the player in.
 - **Cite.** Pattern matches `scripts/equip_demo.ps1` / `gather_craft_demo.ps1`
-  and ARM-143 seed style (`scripts/seed_class_kits_demo.ps1`,
-  `features/seed-class-kits.md`): flag seed, DEMO lines, GAMELOG asserts, last-line
-  marker.
+  and admin give kit style (`scripts/admin_give_class_kits_demo.ps1`,
+  `features/admin-give-class-kits.md`): ACL boot, DEMO/harness lines, GAMELOG
+  asserts, last-line marker.
