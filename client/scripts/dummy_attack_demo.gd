@@ -52,12 +52,15 @@ func run(root: Node, session: SessionScript) -> int:
 	for id: int in npcs.keys():
 		var body: NpcDummyScript = npcs[id]
 		print("DEMO npc %d %s %s %f %f" % [id, body.kind, body.faction, body.position.x, body.position.z])
+		# Practice dummies only — imps and other hostiles must not become the attack target.
+		if body.kind != NpcDummyScript.KindDummy:
+			continue
 		if body.faction == NpcDummyScript.FactionFriendly:
 			friendly_id = id
 		elif body.faction == NpcDummyScript.FactionHostile:
 			hostile_id = id
 	if friendly_id == 0 or hostile_id == 0:
-		return _fail("missing friendly or hostile dummy after join")
+		return _fail("missing friendly or hostile practice dummy after join")
 
 	_refuses.clear()
 	if not await _right_click_npc(friendly_id):
@@ -69,8 +72,12 @@ func run(root: Node, session: SessionScript) -> int:
 			"friendly right-click did not select %d, got %d"
 			% [friendly_id, _session.selected_player_id()]
 		)
+	# Right-click on a non-hostile practice dummy selects only (ARM-252 talk path).
+	# Refuse is proven via the same request_attack gate the headless suite uses.
+	_session.request_attack(friendly_id)
+	await _tree.process_frame
 	if _refuses.is_empty():
-		return _fail("friendly right-click did not refuse attack")
+		return _fail("friendly attack did not refuse")
 	if _refuses[0]["reason"] != "wrong_target":
 		return _fail("friendly refuse reason %s, want wrong_target" % _refuses[0]["reason"])
 	print("DEMO refuse %d wrong_target" % friendly_id)
@@ -154,11 +161,25 @@ func _right_click_npc(npc_id: int) -> bool:
 func _wait_for_join() -> bool:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		var npcs: Dictionary = _session.get("_npcs")
-		if _session.own_id() > 0 and npcs.size() >= 2:
+		if _session.own_id() > 0 and _has_practice_dummy_pair():
 			return true
 		await _tree.process_frame
 	return false
+
+
+func _has_practice_dummy_pair() -> bool:
+	var npcs: Dictionary = _session.get("_npcs")
+	var friendly := false
+	var hostile := false
+	for id: int in npcs.keys():
+		var body: NpcDummyScript = npcs[id]
+		if body == null or body.kind != NpcDummyScript.KindDummy:
+			continue
+		if body.faction == NpcDummyScript.FactionFriendly:
+			friendly = true
+		elif body.faction == NpcDummyScript.FactionHostile:
+			hostile = true
+	return friendly and hostile
 
 
 func _wait_hp_drop(id: int, baseline: int) -> bool:

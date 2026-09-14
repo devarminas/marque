@@ -45,12 +45,15 @@ func run(root: Node, session: SessionScript) -> int:
 	for id: int in npcs.keys():
 		var body: NpcDummyScript = npcs[id]
 		print("DEMO npc %d %s %s %f %f" % [id, body.kind, body.faction, body.position.x, body.position.z])
+		# Practice dummies only — imps and other hostiles must not become the cast target.
+		if body.kind != NpcDummyScript.KindDummy:
+			continue
 		if body.faction == NpcDummyScript.FactionFriendly:
 			friendly_id = id
 		elif body.faction == NpcDummyScript.FactionHostile:
 			hostile_id = id
 	if friendly_id == 0 or hostile_id == 0:
-		return _fail("missing friendly or hostile dummy after join")
+		return _fail("missing friendly or hostile practice dummy after join")
 
 	if not _session.select_player(friendly_id):
 		return _fail("could not select friendly dummy %d" % friendly_id)
@@ -127,11 +130,25 @@ func _on_cast_effect(target_id: int, ability_id: String) -> void:
 func _wait_for_join() -> bool:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		var npcs: Dictionary = _session.get("_npcs")
-		if _session.own_id() > 0 and npcs.size() >= 2:
+		if _session.own_id() > 0 and _has_practice_dummy_pair():
 			return true
 		await _tree.process_frame
 	return false
+
+
+func _has_practice_dummy_pair() -> bool:
+	var npcs: Dictionary = _session.get("_npcs")
+	var friendly := false
+	var hostile := false
+	for id: int in npcs.keys():
+		var body: NpcDummyScript = npcs[id]
+		if body == null or body.kind != NpcDummyScript.KindDummy:
+			continue
+		if body.faction == NpcDummyScript.FactionFriendly:
+			friendly = true
+		elif body.faction == NpcDummyScript.FactionHostile:
+			hostile = true
+	return friendly and hostile
 
 
 func _wait_hp(id: int, baseline: int, want_raise: bool) -> bool:
