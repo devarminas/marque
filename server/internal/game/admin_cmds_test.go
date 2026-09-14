@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -11,7 +12,9 @@ import (
 
 func TestAdminGiveHappyPath(t *testing.T) {
 	pw := newProbeWorld(t)
-	alice := pw.join()
+	alicePeer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)
+	drainJoin(t, alicePeer.ws)
+	alice := pw.w.byConn[alicePeer.conn]
 	pw.w.SetAdminACL(AdminACL{DevAdmin: true})
 	pw.w.SetAdminRegistry(NewDefaultAdminRegistry())
 
@@ -24,6 +27,17 @@ func TestAdminGiveHappyPath(t *testing.T) {
 
 	if got := countKind(pw.w.items.Inventory(alice.id), KindSticks); got != 3 {
 		t.Fatalf("sticks=%d, want 3", got)
+	}
+	invBody := awaitWireKind(t, alicePeer.ws, "inventory", 2*time.Second)
+	var inv mnet.Inventory
+	if err := json.Unmarshal(invBody, &inv); err != nil {
+		t.Fatalf("inventory: %v: %s", err, invBody)
+	}
+	if countKind(slotsFromWire(inv), KindSticks) != 3 {
+		t.Fatalf("wire inventory sticks missing: %s", invBody)
+	}
+	if got := awaitAdminReply(t, alicePeer.ws, 2*time.Second); !strings.HasPrefix(got, "ok: ") {
+		t.Fatalf("reply=%q, want ok: prefix", got)
 	}
 	if got := pw.events(EvAdminRejected); len(got) != 0 {
 		t.Fatalf("unexpected rejection %v", got)
@@ -98,7 +112,9 @@ func TestAdminGiveBadArgs(t *testing.T) {
 
 func TestAdminTPCoordsHappyPath(t *testing.T) {
 	pw := newProbeWorld(t)
-	alice := pw.join()
+	alicePeer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)
+	drainJoin(t, alicePeer.ws)
+	alice := pw.w.byConn[alicePeer.conn]
 	pw.w.SetAdminACL(AdminACL{DevAdmin: true})
 	pw.w.SetAdminRegistry(NewDefaultAdminRegistry())
 
@@ -111,6 +127,17 @@ func TestAdminTPCoordsHappyPath(t *testing.T) {
 
 	if alice.pos.X != 4 || alice.pos.Z != 5 {
 		t.Fatalf("pose=%v, want (4,5)", alice.pos)
+	}
+	poseBody := awaitWireKind(t, alicePeer.ws, mnet.MsgPose, 2*time.Second)
+	var pose mnet.Pose
+	if err := json.Unmarshal(poseBody, &pose); err != nil {
+		t.Fatalf("pose: %v: %s", err, poseBody)
+	}
+	if pose.ID != alice.id || pose.X != 4 || pose.Z != 5 {
+		t.Fatalf("wire pose=%+v, want id=%d x=4 z=5", pose, alice.id)
+	}
+	if got := awaitAdminReply(t, alicePeer.ws, 2*time.Second); !strings.HasPrefix(got, "ok: ") {
+		t.Fatalf("reply=%q, want ok: prefix", got)
 	}
 	if got := pw.events(EvAdminRejected); len(got) != 0 {
 		t.Fatalf("unexpected rejection %v", got)
@@ -186,7 +213,9 @@ func TestAdminTPBadArgs(t *testing.T) {
 
 func TestAdminSpawnAndHeal(t *testing.T) {
 	pw := newProbeWorld(t)
-	alice := pw.join()
+	alicePeer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)
+	drainJoin(t, alicePeer.ws)
+	alice := pw.w.byConn[alicePeer.conn]
 	alice.pos = Point{X: 2, Z: 2}
 	alice.hp = 10
 	alice.mana = 5
@@ -213,6 +242,14 @@ func TestAdminSpawnAndHeal(t *testing.T) {
 	if imp.home != imp.pos {
 		t.Fatalf("imp home=%v, want spawn pose %v", imp.home, imp.pos)
 	}
+	spawnBody := awaitWireKind(t, alicePeer.ws, "npc_spawn", 2*time.Second)
+	var spawn mnet.NpcSpawn
+	if err := json.Unmarshal(spawnBody, &spawn); err != nil {
+		t.Fatalf("npc_spawn: %v: %s", err, spawnBody)
+	}
+	if spawn.Kind != KindImp {
+		t.Fatalf("npc_spawn kind=%q, want %q", spawn.Kind, KindImp)
+	}
 
 	pw.w.handleFrame(mnet.Event{
 		Kind: mnet.EventFrame,
@@ -223,8 +260,24 @@ func TestAdminSpawnAndHeal(t *testing.T) {
 	if alice.hp != MaxHP || alice.mana != MaxMana {
 		t.Fatalf("hp/mana=%d/%d, want %d/%d", alice.hp, alice.mana, MaxHP, MaxMana)
 	}
+	hpBody := awaitWireKind(t, alicePeer.ws, "hp", 2*time.Second)
+	var hp mnet.HP
+	if err := json.Unmarshal(hpBody, &hp); err != nil {
+		t.Fatalf("hp: %v: %s", err, hpBody)
+	}
+	if hp.ID != alice.id || hp.HP != MaxHP {
+		t.Fatalf("wire hp=%+v, want id=%d hp=%d", hp, alice.id, MaxHP)
+	}
 }
 
 func itoaPlayer(id mnet.PlayerID) string {
 	return fmt.Sprintf("%d", id)
+}
+
+func slotsFromWire(inv mnet.Inventory) []Slot {
+	out := make([]Slot, 0, len(inv.Slots))
+	for _, s := range inv.Slots {
+		out = append(out, Slot{Index: s.Slot, Kind: s.Kind})
+	}
+	return out
 }
