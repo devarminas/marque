@@ -287,7 +287,6 @@ func _run_craft_cast_demo(args: Array) -> void:
 
 
 func _run_combat_demo(_args: Array) -> void:
-	# ARM-284: fail-closed. Do not spin up session/UI for the retired PvP demo.
 	var demo := CombatDemoScript.new()
 	get_tree().quit(demo.run())
 
