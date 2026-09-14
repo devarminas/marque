@@ -17,7 +17,19 @@ const STEER_DZ := 0.0
 const CLICK_HEIGHT := 0.8
 const SCREENSHOT_WARMUP_FRAMES := 15
 const CAST_RANGE_SLACK := 6.0
+# After heal the follow camera sits near the friendly dummy. Closing only to
+# cast slack still leaves a long pick ray; tighten for the attack click so the
+# hostile practice dummy fills the probe under llvmpipe.
+const ATTACK_PICK_RANGE := 3.0
 const APPROACH_TIMEOUT_MSEC := 8000
+const CLICK_HEIGHTS := [0.8, 1.2, 0.4, 1.6, 0.25]
+const CLICK_NUDGES := [
+	Vector2.ZERO,
+	Vector2(4, 0),
+	Vector2(-4, 0),
+	Vector2(0, 4),
+	Vector2(0, -4),
+]
 
 
 var _tree: SceneTree
@@ -171,15 +183,18 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 
 	# Heal leaves the mage next to the friendly dummy. A single unprojected
 	# right-click under llvmpipe often hits the green capsule (or keeps the
-	# friendly selection) instead of the red one — close in first, then retry
-	# until the picker selects the hostile practice dummy.
-	if not await _close_in_for_cast(hostile_id, CAST_RANGE_SLACK):
+	# friendly selection) instead of the red one — close in first, settle the
+	# follow camera, then only fire a click whose GroundPicker probe names the
+	# hostile practice dummy (kind==dummy).
+	if not await _close_in_for_cast(hostile_id, ATTACK_PICK_RANGE):
 		return _fail(
 			"could not close to within %.1f of hostile %d for right-click attack"
-			% [CAST_RANGE_SLACK, hostile_id]
+			% [ATTACK_PICK_RANGE, hostile_id]
 		)
 	_session.request_move(0.0, 0.0)
 	await _wait_msec(SETTLE_MSEC)
+	for _i in 8:
+		await _tree.process_frame
 	var attack_hp_before := _session.hit_points_for(hostile_id).x
 	if not await _right_click_until_selected(hostile_id):
 		return _fail(
@@ -253,23 +268,25 @@ func _on_cast_effect(target_id: int, ability_id: String) -> void:
 
 
 func _right_click_until_selected(npc_id: int) -> bool:
-	const ATTEMPTS := 5
-	const HEIGHTS := [0.8, 1.2, 0.4, 1.6]
-	for attempt in ATTEMPTS:
-		var height: float = HEIGHTS[attempt % HEIGHTS.size()]
-		if not await _right_click_npc(npc_id, height):
-			continue
-		await _wait_msec(SETTLE_MSEC)
-		if _session.selected_player_id() == npc_id:
-			return true
-		print(
-			"DEMO rightclick_miss %d attempt=%d got=%d height=%f"
-			% [npc_id, attempt + 1, _session.selected_player_id(), height]
-		)
+	# Probe aims until GroundPicker names this practice dummy, then click that
+	# screen point. Never fire a click that would keep/select the friendly.
+	const ROUNDS := 3
+	for round_i in ROUNDS:
+		if await _right_click_npc(npc_id):
+			await _wait_msec(SETTLE_MSEC)
+			if _session.selected_player_id() == npc_id:
+				return true
+			print(
+				"DEMO rightclick_miss %d round=%d got=%d"
+				% [npc_id, round_i + 1, _session.selected_player_id()]
+			)
+		else:
+			print("DEMO rightclick_nopick %d round=%d" % [npc_id, round_i + 1])
+			await _wait_msec(SETTLE_MSEC)
 	return _session.selected_player_id() == npc_id
 
 
-func _right_click_npc(npc_id: int, click_height: float = CLICK_HEIGHT) -> bool:
+func _right_click_npc(npc_id: int, _click_height: float = CLICK_HEIGHT) -> bool:
 	var npcs: Dictionary = _session.get("_npcs")
 	var body: NpcDummyScript = npcs.get(npc_id)
 	if body == null:
@@ -277,41 +294,54 @@ func _right_click_npc(npc_id: int, click_height: float = CLICK_HEIGHT) -> bool:
 	var camera := _root.get_viewport().get_camera_3d()
 	if camera == null:
 		return false
-	var world_pos := body.global_position + Vector3(0, click_height, 0)
-	var screen := camera.unproject_position(world_pos)
 	var picker := _root.get_node_or_null("GroundPicker") as GroundPickerScript
 	if picker == null:
 		return false
-	# Prefer an aim that already ray-hits the intended body under the current camera.
-	var picked := picker.pick(screen)
-	if picked.get("target", GroundPickerScript.Target.NOTHING) != GroundPickerScript.Target.PLAYER:
-		# Nudge toward body center in screen space if the first unproject misses.
-		var center := camera.unproject_position(body.global_position + Vector3(0, 1.0, 0))
-		screen = center
-		picked = picker.pick(screen)
-	var hit_body: Node3D = picked.get("player")
-	if hit_body != null and hit_body != body:
-		# Aim past the wrong collider: lean the sample toward the camera-facing
-		# side of the intended capsule so the first hit is ours.
-		var cam_dir := (camera.global_position - body.global_position).normalized()
-		world_pos = body.global_position + cam_dir * 0.35 + Vector3(0, click_height, 0)
-		screen = camera.unproject_position(world_pos)
-	var press := InputEventMouseButton.new()
-	press.button_index = MOUSE_BUTTON_RIGHT
-	press.pressed = true
-	press.position = screen
-	press.global_position = screen
-	_root.get_viewport().push_input(press)
-	await _tree.process_frame
-	var release := InputEventMouseButton.new()
-	release.button_index = MOUSE_BUTTON_RIGHT
-	release.pressed = false
-	release.position = screen
-	release.global_position = screen
-	_root.get_viewport().push_input(release)
-	await _tree.process_frame
-	await _tree.physics_frame
-	return true
+	var cam_dir := (camera.global_position - body.global_position).normalized()
+	for height: float in CLICK_HEIGHTS:
+		var samples: Array[Vector3] = [
+			body.global_position + Vector3(0, height, 0),
+			body.global_position + cam_dir * 0.35 + Vector3(0, height, 0),
+		]
+		for world_pos: Vector3 in samples:
+			if camera.is_position_behind(world_pos):
+				continue
+			var centre := camera.unproject_position(world_pos)
+			for nudge: Vector2 in CLICK_NUDGES:
+				var screen := centre + nudge
+				var probed := picker.pick(screen)
+				if not _pick_is_npc(probed, body):
+					continue
+				print(
+					"DEMO pickaim %d h=%.2f nudge=%f,%f screen=%f,%f"
+					% [npc_id, height, nudge.x, nudge.y, screen.x, screen.y]
+				)
+				var press := InputEventMouseButton.new()
+				press.button_index = MOUSE_BUTTON_RIGHT
+				press.pressed = true
+				press.position = screen
+				press.global_position = screen
+				_root.get_viewport().push_input(press)
+				await _tree.process_frame
+				var release := InputEventMouseButton.new()
+				release.button_index = MOUSE_BUTTON_RIGHT
+				release.pressed = false
+				release.position = screen
+				release.global_position = screen
+				_root.get_viewport().push_input(release)
+				await _tree.process_frame
+				await _tree.physics_frame
+				return true
+	return false
+
+
+func _pick_is_npc(picked: Dictionary, want: NpcDummyScript) -> bool:
+	if int(picked.get("target", GroundPickerScript.Target.NOTHING)) != GroundPickerScript.Target.PLAYER:
+		return false
+	var hit: Node3D = picked.get("player")
+	if hit == want:
+		return true
+	return hit != null and hit.get_parent() == want
 
 
 func _wait_for_join() -> bool:
