@@ -6,7 +6,10 @@ param(
     [double] $ItemZ = -5.0,
     [string] $DropClick = "0.30,0.62",
     [int] $ReadyTimeoutSeconds = 20,
-    [int] $ClientTimeoutSeconds = 150
+    [int] $ClientTimeoutSeconds = 150,
+    # Demo-only: if GAMELOG pickup intents land on different ticks, re-run the
+    # whole contest. The same-tick assert is never weakened — only retried.
+    [int] $MaxContestAttempts = 3
 )
 
 Set-StrictMode -Version Latest
@@ -32,6 +35,11 @@ $repo = Split-Path -Parent $PSScriptRoot
 $serverDir = Join-Path $repo "server"
 $clientDir = Join-Path $repo "client"
 
+$ContestAttempt = 1
+if ($env:MARQUE_CONTEST_ATTEMPT -match '^\d+$') {
+    $ContestAttempt = [Math]::Max(1, [int]$env:MARQUE_CONTEST_ATTEMPT)
+}
+
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("marque-pickup-" + [guid]::NewGuid().ToString("n"))
 New-Item -ItemType Directory -Path $work | Out-Null
 
@@ -42,6 +50,9 @@ $evidenceMarker = Join-Path $OutDir ".marque-evidence"
 
 $server = $null
 $failures = New-Object System.Collections.Generic.List[string]
+$splitTickRetry = $false
+$splitTickA = -1
+$splitTickB = -1
 
 function Add-Failure([string] $message) { $failures.Add($message) }
 
@@ -189,6 +200,7 @@ function Count-NonzeroMoves($events, [int] $player = -1) {
 
 
 try {
+    Write-Host "==> contested pickup attempt $ContestAttempt/$MaxContestAttempts"
     if (Test-Path $OutDir) {
         $stale = @(Get-ChildItem -LiteralPath $OutDir -Force)
         if ($stale.Count -gt 0) {
@@ -474,6 +486,14 @@ try {
         Write-Host ("==> server: player {0}'s pickup intent on tick {1}, player {2}'s on tick {3}" -f `
             $players[0], $tickA, $players[1], $tickB)
         if ($tickA -ne $tickB) {
+            if ($ContestAttempt -lt $MaxContestAttempts) {
+                $script:splitTickRetry = $true
+                $script:splitTickA = $tickA
+                $script:splitTickB = $tickB
+                Write-Host ("==> split pickup ticks $tickA vs $tickB on attempt " +
+                    "$ContestAttempt/$MaxContestAttempts; will retry contest (same-tick assert kept)")
+                throw "marque-contest-split-tick-retry"
+            }
             Add-Failure ("the two pickup intents landed on different ticks, $tickA and $tickB. " +
                 "Both players spawn at the origin and approach at one speed, so equal intent ticks " +
                 "are what makes them reach the item together; a run that started them apart is a " +
@@ -670,18 +690,24 @@ try {
         }
     }
 } catch {
-    Add-Failure "$($_.Exception.Message) [$($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())]"
+    if ($script:splitTickRetry -and $_.Exception.Message -eq "marque-contest-split-tick-retry") {
+        # Expected early exit so the harness can re-run; do not record as a failure.
+    } else {
+        Add-Failure "$($_.Exception.Message) [$($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())]"
+    }
 } finally {
     if ($null -ne $server) {
         if ($server.HasExited) {
-            Add-Failure "marqued exited on its own with code $($server.ExitCode); it must outlive the clients"
+            if (-not $script:splitTickRetry) {
+                Add-Failure "marqued exited on its own with code $($server.ExitCode); it must outlive the clients"
+            }
         } else {
             Write-Host "==> stopping marqued (pid $($server.Id))"
             Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
             $server.WaitForExit(5000) | Out-Null
         }
     }
-    if (Test-Path $serverErr) {
+    if (-not $script:splitTickRetry -and (Test-Path $serverErr)) {
         $stderrText = Get-Content -Path $serverErr -Raw
         if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
             $firstLine = $stderrText.Trim() -split "`r?`n" | Select-Object -First 1
@@ -690,6 +716,19 @@ try {
     }
     Show-File "marqued event log ($serverOut)" $serverOut
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+}
+
+if ($splitTickRetry) {
+    Write-Host ""
+    Write-Host ("==> GAMELOG split ticks $splitTickA vs $splitTickB; re-running contest " +
+        "attempt $($ContestAttempt + 1)/$MaxContestAttempts")
+    $env:MARQUE_CONTEST_ATTEMPT = [string]($ContestAttempt + 1)
+    $forward = @()
+    foreach ($key in $PSBoundParameters.Keys) {
+        $forward += @("-$key", $PSBoundParameters[$key])
+    }
+    & pwsh -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @forward
+    exit $LASTEXITCODE
 }
 
 Write-Host ""

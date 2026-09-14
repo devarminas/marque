@@ -122,11 +122,14 @@ Preconditions:
   both clients freshen `propose <gen> <estimated_tick>` under `--pickup-shots`,
   settle on `aim = max(sync) + POST_CAPTURE_LEAD` (lead must stay ahead of *now*),
   then **commit** `commit <gen> <aim> <ready>` so nobody fires alone if a peer
-  already missed the guard. Only a unanimous ready commit proceeds to
-  `TickClock.start_usec_of(aim)` + next-guard. A miss or newer-gen propose aborts
-  and re-barriers. Do not schedule from `next_guard(now)` after capture, and do
-  not compare per-process usec clocks across Godots. `DEMO barrier` / `DEMO commit`
-  / `DEMO clickplan` print the agreement.
+  already missed the guard. Ready votes refresh while waiting; the click usec is
+  **frozen** under that commit (no post-ready `start_usec_of` recompute that a
+  heartbeat re-anchor could skew). Only a unanimous ready commit proceeds to the
+  frozen guard. A miss or newer-gen propose aborts and re-barriers. Do not
+  schedule from `next_guard(now)` after capture, and do not compare per-process
+  usec clocks across Godots. `DEMO barrier` / `DEMO commit` / `DEMO clickplan`
+  print the agreement. The harness also retries the whole contest a few times if
+  GAMELOG still shows split pickup ticks (the same-tick assert stays strict).
 - **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
   u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
   `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away

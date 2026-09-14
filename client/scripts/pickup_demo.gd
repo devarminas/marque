@@ -32,7 +32,7 @@ const CLICK_AFTER_READY_TICKS := 25
 # written before the wait used to leave aim only a few ticks ahead → split clicks.
 const POST_CAPTURE_LEAD_TICKS := 100
 const BARRIER_MIN_LEAD_TICKS := 40
-const BARRIER_MAX_ROUNDS := 8
+const BARRIER_MAX_ROUNDS := 12
 const CLICK_READY_MARGIN_USEC := 500_000
 const SHOT_RESOLVED_OFFSET_TICKS := 98
 const WALK_AWAY_OFFSET_TICKS := 113
@@ -182,18 +182,19 @@ func _plan_shared_click(tick_usec: int) -> Variant:
 		var aim_tick: int = await _propose_aim_tick(generation)
 		if aim_tick < 0:
 			return null
-		# Recompute after the barrier — heartbeats may have re-anchored mid-wait.
+		# Freeze the guard usec under the commit vote. Recomputing from
+		# start_usec_of after a unanimous ready lets a mid-wait re-anchor make
+		# one client miss while the other already returned and clicked.
 		clock = _session.tick_clock()
 		var click_usec := clock.next_guard_usec(clock.start_usec_of(aim_tick), guard)
 		var click_tick := clock.estimated_tick_at(click_usec)
 		var can_make := Time.get_ticks_usec() + CLICK_READY_MARGIN_USEC < click_usec
-		if not await _commit_aim_tick(generation, aim_tick, can_make):
+		if not await _commit_aim_tick(generation, aim_tick, click_usec, can_make):
 			print("DEMO barrier_retry %d %d" % [generation, aim_tick])
 			continue
-		# Both voted ready; refresh usec once more so we click the shared aim.
-		clock = _session.tick_clock()
-		click_usec = clock.next_guard_usec(clock.start_usec_of(aim_tick), guard)
-		click_tick = clock.estimated_tick_at(click_usec)
+		if Time.get_ticks_usec() + SPIN_USEC >= click_usec:
+			print("DEMO barrier_retry %d %d missed_after_commit" % [generation, aim_tick])
+			continue
 		print("DEMO clickplan %d %d %d" % [generation, aim_tick, click_tick])
 		return {"aim": aim_tick, "usec": click_usec, "tick": click_tick}
 	_fail("could not lock a shared click guard after %d barrier round(s)" % BARRIER_MAX_ROUNDS)
@@ -291,17 +292,29 @@ func _propose_aim_tick(generation: int) -> int:
 	return -1
 
 
-func _commit_aim_tick(generation: int, aim_tick: int, can_make: bool) -> bool:
+func _commit_aim_tick(
+	generation: int, aim_tick: int, click_usec: int, can_make: bool
+) -> bool:
 	var ready_flag := 1 if can_make else 0
 	if not _write_barrier_line("commit %d %d %d" % [generation, aim_tick, ready_flag]):
 		return false
 
-	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
+	# Bound the wait by remaining lead so a unanimous ready still leaves margin.
+	var lead_msec := maxi((click_usec - Time.get_ticks_usec()) / USEC_PER_MSEC, 0)
+	var wait_msec := mini(JOIN_TIMEOUT_MSEC, maxi(lead_msec - (CLICK_READY_MARGIN_USEC / USEC_PER_MSEC), 200))
+	var deadline := Time.get_ticks_msec() + wait_msec
 	while Time.get_ticks_msec() < deadline:
 		# Peer already moved to a newer propose → abandon this vote.
 		if _peer_generation_ahead(generation):
 			print("DEMO commit_abort %d" % generation)
 			return false
+		# Re-vote if the frozen lead burned while waiting for the peer.
+		var still_ready := Time.get_ticks_usec() + CLICK_READY_MARGIN_USEC < click_usec
+		var flag := 1 if still_ready else 0
+		if flag != ready_flag:
+			ready_flag = flag
+			if not _write_barrier_line("commit %d %d %d" % [generation, aim_tick, ready_flag]):
+				return false
 		var rows := _read_barrier_rows(generation, "commit")
 		if rows.size() >= REQUIRED_PLAYERS:
 			var all_ready := true
@@ -315,10 +328,7 @@ func _commit_aim_tick(generation: int, aim_tick: int, can_make: bool) -> bool:
 			)
 			return all_ready
 		await _tree.process_frame
-	_fail(
-		"sync commit gen %d saw fewer than %d peer vote(s) after %dms"
-		% [generation, REQUIRED_PLAYERS, JOIN_TIMEOUT_MSEC]
-	)
+	print("DEMO commit_timeout %d %d" % [generation, wait_msec])
 	return false
 
 

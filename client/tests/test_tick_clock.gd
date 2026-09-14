@@ -327,6 +327,14 @@ func _test_barrier_aim_uses_the_later_sync(assertions: Assertions) -> void:
 			== 250 + PickupDemo.POST_CAPTURE_LEAD_TICKS,
 		"aim is max sync plus the post-capture lead",
 	)
+	assertions.check(
+		PickupDemo.POST_CAPTURE_LEAD_TICKS >= 100,
+		"post-capture lead must leave room for propose+commit under llvmpipe",
+	)
+	assertions.check(
+		PickupDemo.CLICK_READY_MARGIN_USEC >= 250_000,
+		"commit ready requires half a second of lead before the frozen guard",
+	)
 	var pair := _run18_clocks()
 	var clock_a: TickClock = pair["clock_a"]
 	var clock_b: TickClock = pair["clock_b"]
