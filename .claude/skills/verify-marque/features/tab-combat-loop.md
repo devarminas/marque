@@ -54,3 +54,7 @@ stdout/stderr, `server.stdout.ndjson`, and optional `tab_combat_*.png`.
 - **One Godot driver.** Do not run a second `--*-shots` client against the same
   server while this milestone demo is proving AC1–AC5.
 - **Left-click is not attack.** The attack phase must right-click.
+- **Close in before hostile right-click.** After heal the mage stands next to the
+  friendly dummy; a single unprojected right-click under llvmpipe often picks the
+  green capsule. The driver closes toward the hostile again and retries aim
+  (height / camera-facing nudge) until selection is the red practice dummy.
