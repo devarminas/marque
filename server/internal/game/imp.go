@@ -343,7 +343,7 @@ func (w *World) killImp(n *npc, killer mnet.PlayerID) {
 	n.attackTarget = 0
 	w.resetImpCombat(n)
 	n.remaining = nil
-	n.castRuntime.clear()
+	w.cancelCast(n, CauseAttackerDied)
 	fields := gamelog.Fields{
 		"npc":    n.id,
 		"kind":   n.kind,

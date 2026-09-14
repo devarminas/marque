@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/devarminas/marque/server/internal/abilitydef"
@@ -14,6 +15,11 @@ const (
 
 	EvCastBegin     = "cast_begin"
 	EvCastCancelled = "cast_cancelled"
+
+	CauseUnknownAbility   = "unknown_ability"
+	CauseTargetLost       = "target_lost"
+	CauseOutOfRange       = "out_of_range"
+	CauseInsufficientMana = "insufficient_mana"
 )
 
 type castTarget struct {
@@ -114,9 +120,7 @@ func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
 		return
 	}
 
-	if rej := w.applyCast(p, ability, target, cost, seq); rej != nil {
-		w.refuse(p, rej)
-	}
+	w.applyCast(p, ability, target, cost, seq)
 }
 
 // castAbility is the non-player entry to shared resolve/apply. Player wire
@@ -180,7 +184,8 @@ func (w *World) castAbility(c combatant, abilityID string, targetID mnet.PlayerI
 		w.beginCast(c, ability, target.id, cost, 0)
 		return nil
 	}
-	return w.applyCast(c, ability, target, cost, 0)
+	w.applyCast(c, ability, target, cost, 0)
+	return nil
 }
 
 func (w *World) preparePlayerCast(p *player, ability abilitydef.Ability) {
@@ -235,53 +240,32 @@ func (w *World) advanceCast(c combatant) {
 
 func (w *World) finishCast(c combatant) {
 	rt := c.runtimeCast()
-	abilityID := rt.castAbility
-	targetID := rt.castTarget
-	cost := rt.castCost
-	rt.clear()
-
-	ability, ok := w.abilities.Get(abilityID)
+	ability, ok := w.abilities.Get(rt.castAbility)
 	if !ok {
-		w.sendCastingClearIfPlayer(c)
+		w.cancelCast(c, CauseUnknownAbility)
 		return
 	}
-	target, rejection := w.resolveCastTarget(c, ability, targetID)
+	target, rejection := w.resolveCastTarget(c, ability, rt.castTarget)
 	if rejection != nil {
-		w.sendCastingClearIfPlayer(c)
-		fields := gamelog.Fields{
-			"ability": abilityID,
-			"target":  targetID,
-			"cause":   "target_lost",
-		}
-		mergeCasterFields(fields, c)
-		w.log.Event(w.tick, EvCastCancelled, fields)
+		w.cancelCast(c, CauseTargetLost)
 		return
 	}
 	if target.id != c.combatID() && distanceBetween(c.combatPos(), target.pos) > ability.Range {
-		w.sendCastingClearIfPlayer(c)
-		fields := gamelog.Fields{
-			"ability": abilityID,
-			"target":  targetID,
-			"cause":   "out_of_range",
-		}
-		mergeCasterFields(fields, c)
-		w.log.Event(w.tick, EvCastCancelled, fields)
+		w.cancelCast(c, CauseOutOfRange)
 		return
 	}
-	_ = w.applyCast(c, ability, target, cost, 0)
-	w.sendCastingClearIfPlayer(c)
+	cost := rt.castCost
+	if p := playerCombatant(c); p != nil && p.mana < cost {
+		w.cancelCast(c, CauseInsufficientMana)
+		return
+	}
+	w.closeCast(c)
+	w.applyCast(c, ability, target, cost, 0)
 }
 
-func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castTarget, cost int, seq mnet.Seq) *mnet.RejectError {
-	if p := playerCombatant(c); p != nil {
-		if !w.spendMana(p, cost) {
-			return &mnet.RejectError{
-				Reason:      mnet.ReasonInsufficientMana,
-				Detail:      "not enough mana",
-				Re:          mnet.MsgCast,
-				Disposition: mnet.ReplyError,
-			}
-		}
+func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castTarget, cost int, seq mnet.Seq) {
+	if p := playerCombatant(c); p != nil && !w.spendMana(p, cost) {
+		panic(fmt.Sprintf("game: player %d cannot pay %d mana for %q after its cast checks passed", p.id, cost, ability.ID))
 	}
 
 	amount := int(math.Round(ability.Effect.Amount))
@@ -306,15 +290,7 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 			w.markCombat(target.plyr)
 		}
 	default:
-		if p := playerCombatant(c); p != nil {
-			w.refundMana(p, cost)
-		}
-		return &mnet.RejectError{
-			Reason:      mnet.ReasonUnknownAbility,
-			Detail:      "unknown effect",
-			Re:          mnet.MsgCast,
-			Disposition: mnet.ReplyError,
-		}
+		panic(fmt.Sprintf("game: ability %q has effect kind %q, which the catalog rejects", ability.ID, ability.Effect.Kind))
 	}
 
 	effectFields := gamelog.Fields{
@@ -334,13 +310,12 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 				w.killImp(target.npc, c.combatID())
 			}
 		}
-		return nil
+		return
 	}
 	w.broadcastHP(target.plyr)
 	if ability.Effect.Kind == abilitydef.EffectDamage && target.plyr.dead() {
 		w.kill(target.plyr, c.combatID())
 	}
-	return nil
 }
 
 func (w *World) interruptCastOnMove(c combatant, cause string) {
@@ -371,7 +346,11 @@ func (w *World) cancelCast(c combatant, cause string) {
 	}
 	mergeCasterFields(fields, c)
 	w.log.Event(w.tick, EvCastCancelled, fields)
-	rt.clear()
+	w.closeCast(c)
+}
+
+func (w *World) closeCast(c combatant) {
+	c.runtimeCast().clear()
 	w.sendCastingClearIfPlayer(c)
 }
 
