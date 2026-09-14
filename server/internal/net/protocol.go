@@ -362,7 +362,6 @@ type PartyKick struct {
 	Player PlayerID `json:"player"`
 }
 
-// Admin carries a raw console line; the server parses name and args.
 type Admin struct {
 	Line string `json:"line"`
 }

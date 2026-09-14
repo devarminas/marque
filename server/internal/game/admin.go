@@ -13,7 +13,6 @@ const (
 	EvAdminRejected = "admin_rejected"
 )
 
-// AdminACL is the v1 privilege gate: default deny.
 type AdminACL struct {
 	DevAdmin bool
 	Players  map[mnet.PlayerID]struct{}
@@ -33,7 +32,6 @@ func (a AdminACL) Allowed(id mnet.PlayerID) bool {
 // AdminHandler runs on the world goroutine after ACL and parse succeed.
 type AdminHandler func(w *World, p *player, args []string) (reply string, err *mnet.RejectError)
 
-// AdminRegistry maps command name → handler.
 type AdminRegistry struct {
 	cmds map[string]AdminHandler
 }
@@ -67,7 +65,6 @@ func (r *AdminRegistry) Lookup(name string) (AdminHandler, bool) {
 	return h, ok
 }
 
-// ParseAdminLine splits a console line into command name and args.
 func ParseAdminLine(line string) (name string, args []string, err *mnet.RejectError) {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
