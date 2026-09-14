@@ -122,12 +122,13 @@ Preconditions:
   both freshen `propose <gen> <ready_unix_msec>` in `marque-pickup-sync-*` under
   `--pickup-shots`, settle on `fire = max(ready) + POST_CAPTURE_LEAD_MSEC`, then
   vote `commit <gen> <fire> <ready>` in **separate** `marque-pickup-commit-*`
-  files so a peer still settling cannot lose the propose row. Only a unanimous
-  ready commit waits for the wall deadline. Do **not** schedule via
+  files after both propose rows converge on the same `fire` value. Only a
+  unanimous ready commit waits for the wall deadline. Do **not** schedule via
   `TickClock.start_usec_of(aim_tick)` — even a frozen per-process usec still
   diverges under GLES re-anchors and was landing intents 5–15 server ticks apart.
-  `DEMO sync`'s second field is the shared `fire_unix_msec`. The harness may
-  retry the contest a few times if GAMELOG still shows split ticks.
+  `DEMO sync`'s second field is the shared `fire_unix_msec` (harness parses it as
+  Int64). The harness may retry the contest a few times if GAMELOG still shows
+  split ticks.
 - **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
   u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
   `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away

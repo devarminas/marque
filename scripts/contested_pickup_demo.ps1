@@ -30,6 +30,8 @@ $MaxWalkAwayDropDisagreement = 1.5
 $MinDropDisplacement = 2.0
 
 $MaxAimTickSkew = 1
+# fire_unix_msec is Unix epoch millis — exceeds Int32.
+$MaxFireDeadlineSkewMsec = 1
 
 $repo = Split-Path -Parent $PSScriptRoot
 $serverDir = Join-Path $repo "server"
@@ -76,7 +78,7 @@ function Read-ClientReport([string] $path) {
         Failures = New-Object System.Collections.Generic.List[string]
         Done = $false
         SyncTick = -1
-        ClickTick = -1
+        ClickTick = [int64](-1)
         Outcome = -1
         SeedItem = $null
         Wish = $null
@@ -96,7 +98,7 @@ function Read-ClientReport([string] $path) {
             '^DEMO done\s*$' { $report.Done = $true }
             '^DEMO sync (-?\d+) (-?\d+)\s*$' {
                 $report.SyncTick = [int]$Matches[1]
-                $report.ClickTick = [int]$Matches[2]
+                $report.ClickTick = [int64]$Matches[2]
             }
             '^DEMO outcome (\d+)\s*$' { $report.Outcome = [int]$Matches[1] }
             '^DEMO wish (-?[0-9.eE+-]+) (-?[0-9.eE+-]+)\s*$' {
@@ -351,12 +353,12 @@ try {
         Add-Failure "both clients report joining as player $($ids[0]); they are not two players"
     }
 
-    $clickTicks = @($running | ForEach-Object { $_.Report.ClickTick })
+    $clickTicks = @($running | ForEach-Object { [int64]$_.Report.ClickTick })
     Write-Host ("==> clients chose fire deadlines {0} and {1} (sync ticks {2} and {3})" -f `
         $clickTicks[0], $clickTicks[1], $running[0].Report.SyncTick, $running[1].Report.SyncTick)
     if ($clickTicks[0] -lt 0 -or $clickTicks[1] -lt 0) {
         Add-Failure "a client never reported the shared wall-clock fire deadline"
-    } elseif ([math]::Abs($clickTicks[0] - $clickTicks[1]) -gt $MaxAimTickSkew) {
+    } elseif ([math]::Abs($clickTicks[0] - $clickTicks[1]) -gt $MaxFireDeadlineSkewMsec) {
         Add-Failure ("the two clients disagreed on the shared wall-clock fire deadline: $($clickTicks[0]) vs " +
             "$($clickTicks[1]) (skew $([math]::Abs($clickTicks[0] - $clickTicks[1]))). DEMO sync's second " +
             "field is fire_unix_msec from the post-capture barrier; both must name the same moment.")

@@ -30,10 +30,10 @@ const CLICK_LEAD_TICKS := 75
 const SHOT_BEFORE_LEAD_TICKS := 40
 const CLICK_AFTER_READY_TICKS := 25
 const POST_CAPTURE_LEAD_TICKS := 100 # retained for unit tests / DEMO aim logging
-const POST_CAPTURE_LEAD_MSEC := 2500
+const POST_CAPTURE_LEAD_MSEC := 4000
 const BARRIER_MIN_LEAD_TICKS := 40 # retained for unit tests
 const BARRIER_MAX_ROUNDS := 12
-const BARRIER_MIN_SLACK_MSEC := 100
+const BARRIER_MIN_SLACK_MSEC := 200
 const SHOT_RESOLVED_OFFSET_TICKS := 98
 const WALK_AWAY_OFFSET_TICKS := 113
 const WALK_AWAY_DEADLINE_TICKS := 255
@@ -393,7 +393,10 @@ func _await_unix_msec(deadline_msec: int) -> bool:
 	while unix_msec_now() < deadline_msec:
 		if Time.get_ticks_msec() > backstop:
 			return false
-		await _tree.process_frame
+		# Frame waits under llvmpipe can overshoot the deadline by hundreds of ms
+		# and split same-tick intents; busy-spin the last slice.
+		if deadline_msec - unix_msec_now() > 40:
+			await _tree.process_frame
 	return true
 
 
