@@ -129,20 +129,8 @@ func run(
 		return 1
 	_print_quest_log(2)
 
-	# Imps can still kill after the objective is ready; talk refuses while dead.
-	if _session.hit_points_for(_session.own_id()).x == 0:
-		if not await _maybe_respawn():
-			return 1
-
-	_session.request_talk(giver_id)
-	print("DEMO talkturnin %d" % giver_id)
-	if not await _wait_dialog_option(giver_id, DialogPanelScript.OPTION_TURN_IN):
-		return _fail("turn-in dialog never opened on npc %d" % giver_id)
-	_session.request_dialog_option(giver_id, DialogPanelScript.OPTION_TURN_IN)
-	print("DEMO turnin %d" % giver_id)
-
-	if not await _wait_quest_status("complete"):
-		return _fail("quest_log never showed %s as complete" % QUEST_ID)
+	if not await _turn_in_quest(giver_id):
+		return 1
 	if not await _wait_rewards():
 		return _fail("bag never held the knight reward kinds after turn-in")
 	print("DEMO complete %s" % QUEST_ID)
@@ -155,6 +143,31 @@ func run(
 	await _wait_msec(HOLD_MSEC)
 	print("DEMO done")
 	return 0
+
+
+func _turn_in_quest(giver_id: int) -> bool:
+	# Combat can kill during the walk-to-NPC / dialog window; retry after respawn.
+	var deadline := Time.get_ticks_msec() + STEP_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		if _session.hit_points_for(_session.own_id()).x == 0:
+			if not await _maybe_respawn():
+				return false
+		_session.request_talk(giver_id)
+		print("DEMO talkturnin %d" % giver_id)
+		if not await _wait_dialog_option(giver_id, DialogPanelScript.OPTION_TURN_IN):
+			continue
+		if _session.hit_points_for(_session.own_id()).x == 0:
+			continue
+		_session.request_dialog_option(giver_id, DialogPanelScript.OPTION_TURN_IN)
+		print("DEMO turnin %d" % giver_id)
+		var complete_deadline := Time.get_ticks_msec() + 8000
+		while Time.get_ticks_msec() < complete_deadline:
+			if _quest_status_for(QUEST_ID) == "complete":
+				return true
+			if _session.hit_points_for(_session.own_id()).x == 0:
+				break
+			await _tree.process_frame
+	return _fail_bool("quest never turned in on npc %d" % giver_id)
 
 
 func _wait_for_join() -> bool:
