@@ -87,18 +87,18 @@ def _sides(shapes: tuple[Shape, ...]) -> tuple[Shape, ...]:
 
 HUMAN_SHAPES: dict[str, tuple[Shape, ...]] = {
     "feet": _sides((
-        Joint("foot_l", 0.042),
-        Segment("foot_l", Anchor(0.0, (0.0, 0.05, -0.064)), Anchor(1.0, (0.0, -0.085, 0.02)),
-                Radii(0.042, 0.036), Radii(0.048, 0.03), 2.3),
+        Joint("foot_l", 0.058),
+        Segment("foot_l", Anchor(0.0, (0.0, 0.1, -0.058)), Anchor(1.0, (0.0, -0.2, 0.024)),
+                Radii(0.063, 0.045), Radii(0.072, 0.036), 2.6),
     )),
     "forearms": _sides((
-        Joint("lowerarm_l", 0.043),
-        Segment("lowerarm_l", Anchor(0.1), Anchor(0.92), Radii(0.042, 0.044), Radii(0.032, 0.034), 2.6),
+        Joint("lowerarm_l", 0.063),
+        Segment("lowerarm_l", Anchor(0.1), Anchor(0.92), Radii(0.057, 0.06), Radii(0.044, 0.046), 2.6),
     )),
     "hands": _sides((
-        Joint("hand_l", 0.032),
-        Segment("hand_l", Anchor(0.45), Anchor(3.3), Radii(0.02, 0.04), Radii(0.018, 0.036), 2.4),
-        Detail("hand_l", Anchor(0.9, (0.0, -0.028, 0.0)), Anchor(0.9, (0.035, -0.058, -0.006)), 0.014, 0.01, 2.2),
+        Joint("hand_l", 0.048),
+        Segment("hand_l", Anchor(0.45), Anchor(3.3), Radii(0.04, 0.048), Radii(0.036, 0.044), 2.4),
+        Detail("hand_l", Anchor(0.9, (0.0, -0.035, 0.0)), Anchor(0.9, (0.04, -0.085, -0.01)), 0.02, 0.015, 2.2),
     )),
     "head": (
         Joint("neck_01", 0.05),
@@ -107,15 +107,16 @@ HUMAN_SHAPES: dict[str, tuple[Shape, ...]] = {
                 Radii(0.07, 0.08), Radii(0.1, 0.11), 2.0),
     ),
     "hips": (
-        Segment("pelvis", Anchor(-0.6), Anchor(1.2), Radii(0.13, 0.095), Radii(0.125, 0.09), 3.0),
+        Segment("pelvis", Anchor(-0.6), Anchor(1.2), Radii(0.15, 0.105), Radii(0.14, 0.1), 3.0),
     ),
     "shins": _sides((
-        Joint("calf_l", 0.058),
-        Segment("calf_l", Anchor(0.08), Anchor(0.93), Radii(0.058, 0.06), Radii(0.04, 0.042), 2.6),
+        Joint("calf_l", 0.08),
+        Segment("calf_l", Anchor(0.08), Anchor(0.93), Radii(0.078, 0.081), Radii(0.054, 0.057), 2.6),
     )),
     "thighs": _sides((
-        Joint("thigh_l", 0.066),
-        Segment("thigh_l", Anchor(0.1), Anchor(0.93), Radii(0.078, 0.08), Radii(0.056, 0.058), 2.6),
+        Joint("thigh_l", 0.08),
+        Segment("thigh_l", Anchor(0.1, (0.014, 0.0, 0.0)), Anchor(0.93, (0.004, 0.0, 0.0)),
+                Radii(0.1, 0.102), Radii(0.072, 0.074), 2.6),
     )),
     "torso": (
         Joint("spine_01", 0.075),
@@ -123,14 +124,14 @@ HUMAN_SHAPES: dict[str, tuple[Shape, ...]] = {
         Segment("spine_03", Anchor(-0.9), Anchor(1.05), Radii(0.13, 0.095), Radii(0.17, 0.11), 4.0),
     ),
     "upper_arms": _sides((
-        Joint("upperarm_l", 0.056),
-        Segment("upperarm_l", Anchor(0.12), Anchor(0.9), Radii(0.05, 0.052), Radii(0.04, 0.042), 2.6),
+        Joint("upperarm_l", 0.075),
+        Segment("upperarm_l", Anchor(0.12), Anchor(0.9), Radii(0.068, 0.07), Radii(0.055, 0.057), 2.6),
     )),
 }
 
 IMP_GIRTH: dict[str, float] = {
-    "feet": 1.0, "forearms": 0.95, "hands": 1.15, "hips": 1.15,
-    "shins": 0.95, "thighs": 0.95, "torso": 1.2, "upper_arms": 0.95,
+    "feet": 1.05, "forearms": 1.08, "hands": 1.2, "hips": 1.2,
+    "shins": 1.08, "thighs": 1.08, "torso": 1.25, "upper_arms": 1.08,
 }
 
 IMP_HEAD: tuple[Shape, ...] = (
@@ -180,7 +181,7 @@ SHAPES: dict[str, dict[str, tuple[Shape, ...]]] = {"human": HUMAN_SHAPES, "imp":
 
 PALETTES: dict[str, dict[Paint, Vec3]] = {
     "human": {"body": (0.86, 0.47, 0.2), "joint": (0.4, 0.3, 0.52)},
-    "imp": {"body": (0.66, 0.18, 0.13), "joint": (0.28, 0.08, 0.07), "horn": (0.86, 0.8, 0.62)},
+    "imp": {"body": (0.66, 0.18, 0.13), "joint": (0.1, 0.05, 0.12), "horn": (0.86, 0.8, 0.62)},
 }
 
 
