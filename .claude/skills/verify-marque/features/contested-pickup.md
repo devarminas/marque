@@ -118,14 +118,15 @@ Preconditions:
 
 - **Core claim is GAMELOG-only.** Pixels cannot prove exactly-one-winner. Assert
   `pickup_resolved` / `pickup_lost` first.
-- **Same-tick pickup clicks use a post-capture aim-tick barrier.** After shot 1,
-  each writes `(generation, estimated_tick)` under the `--pickup-shots` directory.
-  Both take `max(sync) + POST_CAPTURE_LEAD` and fire at that tick's guard via
-  `TickClock.start_usec_of`. Missed guards re-barrier with a new generation.
-  Do not schedule from `next_guard(now)` after capture alone, and do not rely on
-  per-process usec quanta — those are not comparable across two Godot processes.
-  `DEMO sync` prints roster sync and the agreed aim; the harness still tolerates
-  one tick of aim skew from anchor flooring.
+- **Same-tick pickup clicks use a two-phase post-capture barrier.** After shot 1,
+  both clients freshen `propose <gen> <estimated_tick>` under `--pickup-shots`,
+  settle on `aim = max(sync) + POST_CAPTURE_LEAD` (lead must stay ahead of *now*),
+  then **commit** `commit <gen> <aim> <ready>` so nobody fires alone if a peer
+  already missed the guard. Only a unanimous ready commit proceeds to
+  `TickClock.start_usec_of(aim)` + next-guard. A miss or newer-gen propose aborts
+  and re-barriers. Do not schedule from `next_guard(now)` after capture, and do
+  not compare per-process usec clocks across Godots. `DEMO barrier` / `DEMO commit`
+  / `DEMO clickplan` print the agreement.
 - **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
   u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
   `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away

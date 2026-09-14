@@ -28,8 +28,12 @@ const CLICK_LEAD_TICKS := 75
 # warm-up cannot overrun the shared guard (seen under software GL).
 const SHOT_BEFORE_LEAD_TICKS := 40
 const CLICK_AFTER_READY_TICKS := 25
-const POST_CAPTURE_LEAD_TICKS := 50
+# Lead must exceed worst-case barrier wait (slow peer capture). Stale sync ticks
+# written before the wait used to leave aim only a few ticks ahead → split clicks.
+const POST_CAPTURE_LEAD_TICKS := 100
+const BARRIER_MIN_LEAD_TICKS := 40
 const BARRIER_MAX_ROUNDS := 8
+const CLICK_READY_MARGIN_USEC := 500_000
 const SHOT_RESOLVED_OFFSET_TICKS := 98
 const WALK_AWAY_OFFSET_TICKS := 113
 const WALK_AWAY_DEADLINE_TICKS := 255
@@ -175,63 +179,163 @@ func _plan_shared_click(tick_usec: int) -> Variant:
 	var clock := _session.tick_clock()
 	var guard := click_guard_usec(tick_usec)
 	for generation in range(1, BARRIER_MAX_ROUNDS + 1):
-		var aim_tick: int = await _agree_aim_tick(clock.estimated_tick(), generation)
+		var aim_tick: int = await _propose_aim_tick(generation)
 		if aim_tick < 0:
 			return null
 		# Recompute after the barrier — heartbeats may have re-anchored mid-wait.
+		clock = _session.tick_clock()
 		var click_usec := clock.next_guard_usec(clock.start_usec_of(aim_tick), guard)
 		var click_tick := clock.estimated_tick_at(click_usec)
-		if Time.get_ticks_usec() + SPIN_USEC < click_usec:
-			print("DEMO clickplan %d %d %d" % [generation, aim_tick, click_tick])
-			return {"aim": aim_tick, "usec": click_usec, "tick": click_tick}
-		print("DEMO barrier_retry %d %d" % [generation, aim_tick])
+		var can_make := Time.get_ticks_usec() + CLICK_READY_MARGIN_USEC < click_usec
+		if not await _commit_aim_tick(generation, aim_tick, can_make):
+			print("DEMO barrier_retry %d %d" % [generation, aim_tick])
+			continue
+		# Both voted ready; refresh usec once more so we click the shared aim.
+		clock = _session.tick_clock()
+		click_usec = clock.next_guard_usec(clock.start_usec_of(aim_tick), guard)
+		click_tick = clock.estimated_tick_at(click_usec)
+		print("DEMO clickplan %d %d %d" % [generation, aim_tick, click_tick])
+		return {"aim": aim_tick, "usec": click_usec, "tick": click_tick}
 	_fail("could not lock a shared click guard after %d barrier round(s)" % BARRIER_MAX_ROUNDS)
 	return null
 
 
-func _agree_aim_tick(sync_tick: int, generation: int) -> int:
+func _barrier_dir() -> String:
 	var dir := _prefix.get_base_dir()
 	if dir.is_empty():
 		_fail("pickup shots prefix has no directory for the sync barrier")
-		return -1
-	var path := dir.path_join("%s%d.txt" % [SYNC_BARRIER_PREFIX, _session.own_id()])
+	return dir
+
+
+func _barrier_path() -> String:
+	return _barrier_dir().path_join("%s%d.txt" % [SYNC_BARRIER_PREFIX, _session.own_id()])
+
+
+func _write_barrier_line(line: String) -> bool:
+	var path := _barrier_path()
 	var out := FileAccess.open(path, FileAccess.WRITE)
 	if out == null:
 		_fail("could not write sync barrier %s: %s" % [path, FileAccess.get_open_error()])
-		return -1
-	out.store_line("%d %d" % [generation, sync_tick])
+		return false
+	out.store_line(line)
 	out.close()
+	return true
 
-	var max_sync := sync_tick
-	var peers := 0
+
+func _read_barrier_rows(generation: int, want_phase: String) -> Array:
+	var rows: Array = []
+	var dir := _barrier_dir()
+	if dir.is_empty():
+		return rows
+	var names := DirAccess.get_files_at(dir)
+	for name in names:
+		if not str(name).begins_with(SYNC_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
+			continue
+		var text := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+		var parts := text.split(" ")
+		if want_phase == "propose":
+			# propose <gen> <sync_tick>
+			if parts.size() != 3 or parts[0] != "propose":
+				continue
+			if not parts[1].is_valid_int() or not parts[2].is_valid_int():
+				continue
+			if int(parts[1]) != generation:
+				continue
+			rows.append({"sync": int(parts[2])})
+		elif want_phase == "commit":
+			# commit <gen> <aim> <ready 0|1>
+			if parts.size() != 4 or parts[0] != "commit":
+				continue
+			if not parts[1].is_valid_int() or not parts[2].is_valid_int() or not parts[3].is_valid_int():
+				continue
+			if int(parts[1]) != generation:
+				continue
+			rows.append({"aim": int(parts[2]), "ready": int(parts[3])})
+	return rows
+
+
+func _propose_aim_tick(generation: int) -> int:
+	var clock := _session.tick_clock()
+	if not _write_barrier_line("propose %d %d" % [generation, clock.estimated_tick()]):
+		return -1
+
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		peers = 0
-		max_sync = sync_tick
-		var names := DirAccess.get_files_at(dir)
-		for name in names:
-			if not str(name).begins_with(SYNC_BARRIER_PREFIX):
+		# Freshen while waiting so a slow peer cannot leave our sync tick stale.
+		clock = _session.tick_clock()
+		if not _write_barrier_line("propose %d %d" % [generation, clock.estimated_tick()]):
+			return -1
+		var rows := _read_barrier_rows(generation, "propose")
+		if rows.size() >= REQUIRED_PLAYERS:
+			# Settle: both freshen once more so they freeze the same max_sync/aim.
+			for _i in 4:
+				clock = _session.tick_clock()
+				if not _write_barrier_line("propose %d %d" % [generation, clock.estimated_tick()]):
+					return -1
+				await _tree.process_frame
+			rows = _read_barrier_rows(generation, "propose")
+			if rows.size() < REQUIRED_PLAYERS:
 				continue
-			if not str(name).ends_with(".txt"):
-				continue
-			var text := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
-			var parts := text.split(" ")
-			if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
-				continue
-			if int(parts[0]) != generation:
-				continue
-			peers += 1
-			max_sync = maxi(max_sync, int(parts[1]))
-		if peers >= REQUIRED_PLAYERS:
+			var max_sync := clock.estimated_tick()
+			for row in rows:
+				max_sync = maxi(max_sync, int(row["sync"]))
 			var aim := aim_tick_from_max_sync(max_sync)
-			print("DEMO barrier %d %d %d %d" % [generation, peers, max_sync, aim])
-			return aim
+			if aim >= clock.estimated_tick() + BARRIER_MIN_LEAD_TICKS:
+				print("DEMO barrier %d %d %d %d" % [generation, rows.size(), max_sync, aim])
+				return aim
 		await _tree.process_frame
 	_fail(
-		"sync barrier gen %d saw %d peer file(s) after %dms, want %d"
-		% [generation, peers, JOIN_TIMEOUT_MSEC, REQUIRED_PLAYERS]
+		"sync barrier gen %d never locked a fresh aim within %dms"
+		% [generation, JOIN_TIMEOUT_MSEC]
 	)
 	return -1
+
+
+func _commit_aim_tick(generation: int, aim_tick: int, can_make: bool) -> bool:
+	var ready_flag := 1 if can_make else 0
+	if not _write_barrier_line("commit %d %d %d" % [generation, aim_tick, ready_flag]):
+		return false
+
+	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		# Peer already moved to a newer propose → abandon this vote.
+		if _peer_generation_ahead(generation):
+			print("DEMO commit_abort %d" % generation)
+			return false
+		var rows := _read_barrier_rows(generation, "commit")
+		if rows.size() >= REQUIRED_PLAYERS:
+			var all_ready := true
+			for row in rows:
+				if int(row["aim"]) != aim_tick or int(row["ready"]) != 1:
+					all_ready = false
+					break
+			print(
+				"DEMO commit %d %d %d %d"
+				% [generation, rows.size(), aim_tick, 1 if all_ready else 0]
+			)
+			return all_ready
+		await _tree.process_frame
+	_fail(
+		"sync commit gen %d saw fewer than %d peer vote(s) after %dms"
+		% [generation, REQUIRED_PLAYERS, JOIN_TIMEOUT_MSEC]
+	)
+	return false
+
+
+func _peer_generation_ahead(generation: int) -> bool:
+	var dir := _barrier_dir()
+	if dir.is_empty():
+		return false
+	for name in DirAccess.get_files_at(dir):
+		if not str(name).begins_with(SYNC_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
+			continue
+		var text := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+		var parts := text.split(" ")
+		if parts.size() < 2 or not parts[1].is_valid_int():
+			continue
+		if parts[0] in ["propose", "commit"] and int(parts[1]) > generation:
+			return true
+	return false
 
 
 func _walk_away_and_drop(click_tick: int) -> bool:
