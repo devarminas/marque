@@ -81,8 +81,8 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
 - [Two clients race for one item](./contested-pickup.md) — M1: one winner, drop,
   `item_spawned` coordinates.
 - [Equip the join-kit weapon](./equip-weapon.md) — M3 equip / unequip.
-- [Gather then craft](./gather-craft.md) — M4 equip, contested tree, craft
-  logs→sticks.
+- [Gather then craft](./gather-craft.md) — M4 product; `gather_craft_demo.ps1` is
+  a fail-closed stub (ARM-287). Live gather via `gather_error_demo`.
 - [Mine, smelt, craft sword, cast bar](./craft-cast-demo.md) — M12 mine→smelt→sword
   plus fireball cast-bar resolve/interrupt (`CRAFT CAST DEMO OK`).
 - [Right-click a tree, chop it or be told why not](./gather-refusal.md) — ARM-147

@@ -28,7 +28,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/two_client_demo.ps1` | `TWO CLIENT DEMO OK` |
 | `scripts/contested_pickup_demo.ps1` | `CONTESTED PICKUP DEMO OK` |
 | `scripts/equip_demo.ps1` | `EQUIP DEMO OK` |
-| `scripts/gather_craft_demo.ps1` | `GATHER CRAFT DEMO OK` |
+| `scripts/gather_craft_demo.ps1` | **retired** (ARM-287 fail-closed stub). Exits non-zero with a clear message. Drive `gather_error_demo.ps1` for live gather proof. |
 | `scripts/craft_cast_demo.ps1` | `CRAFT CAST DEMO OK` |
 | `scripts/gather_error_demo.ps1` | `GATHER ERROR DEMO OK` |
 | `scripts/dummy_cast_demo.ps1` | `DUMMY CAST DEMO OK` |
@@ -184,8 +184,13 @@ enforces the allowlist; the skill text alone is not enough.
 | `--pickup-shots <abs-prefix>` | Enter the contested-pickup demo mode (`pickup_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M1e.** Both clients run this with identical arguments; neither is told who wins. Absolute host path required, for `--shots`' reason. |
 | `--drop-click fx,fy` | Where the winner of that contest clicks the ground before dropping, as viewport fractions. Required alongside `--pickup-shots`, and refused rather than defaulted if it will not parse. |
 | `--equip-shots <abs-prefix>` | Enter the equip milestone demo mode (`equip_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M3d.** Single client; the demo starts marqued with `-join-kit sword`. Absolute host path required. |
+<<<<<<< HEAD
 | `--gather-craft-shots <abs-prefix>` | Enter the gather-then-craft milestone demo mode (`gather_craft_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M4e.** Two clients; both equip then race the primary seeded tree at (5, 0). Absolute host path required. |
 | `--craft-cast-shots <abs-prefix>` | Enter the M12 craft+cast milestone demo (`craft_cast_demo.gd`); write `<prefix>_1.png` … `<prefix>_6.png`. Single client: marqued with `-admin`; client `/give`s miner/sticks/mage kit, then mine→smelt→craft sword, then fireball cast-bar resolve and walk interrupt. Absolute host path required. |
+=======
+| `--gather-craft-shots <abs-prefix>` | **Fail-closed** (ARM-287). `gather_craft_demo.gd` / `scripts/gather_craft_demo.ps1` exit non-zero; do not drive for proof. Use `--gather-error-shots` for live gather. |
+| `--craft-cast-shots <abs-prefix>` | Enter the M12 craft+cast milestone demo (`craft_cast_demo.gd`); write `<prefix>_1.png` … `<prefix>_6.png`. Single client: mine→smelt→craft sword, then fireball cast-bar resolve and walk interrupt. Absolute host path required. |
+>>>>>>> b333dad (feat(verify): fail-close retired gather_craft (ARM-287))
 | `--gather-error-shots <abs-prefix>` | Enter the refused-gather demo mode (`gather_error_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **ARM-147.** One client; right-clicks the tree unarmed, reads the refusal, wears a ground-seeded lumberjack set, chops. Absolute host path required. |
 | `--combat-shots <abs-prefix>` | **Fail-closed** (ARM-284). `combat_demo.gd` / `scripts/combat_demo.ps1` exit non-zero; do not drive for proof. Use `--dummy-attack` / `--tab-combat-shots`. |
 | `--combat-role attacker\|victim` | Legacy companion to `--combat-shots`. Same fail-closed rule; ignored by the stub. |
