@@ -61,6 +61,7 @@ const SPIN_USEC := 20000
 # slow settler lose its peer and deadlock across generations under llvmpipe.
 const SYNC_BARRIER_PREFIX := "marque-pickup-sync-"
 const COMMIT_BARRIER_PREFIX := "marque-pickup-commit-"
+const GO_BARRIER_PREFIX := "marque-pickup-go-"
 
 var _tree: SceneTree
 var _root: Node
@@ -120,11 +121,15 @@ func run(
 	if planned == null:
 		return 1
 	var fire_unix_msec: int = planned["fire_unix_msec"]
+	var fire_generation: int = planned["generation"]
 	# DEMO sync second field is the shared wall deadline (msec); harness requires match.
 	print("DEMO sync %d %d" % [sync_tick, fire_unix_msec])
 
 	if not await _await_unix_msec(fire_unix_msec):
 		return _fail("frames stopped before the shared wall-clock click")
+	# Final go-file gate: the early arriver waits briefly for the peer so both
+	# click after the slower wake, not one frame-overshoot apart.
+	await _final_go_rendezvous(fire_generation, fire_unix_msec)
 	_click_at(screen)
 	var click_tick := clock.estimated_tick()
 	print("DEMO pickupclick %d %d %f %f" % [click_tick, item_id, screen.x, screen.y])
@@ -201,7 +206,7 @@ func _plan_shared_click() -> Variant:
 			print("DEMO barrier_retry %d %d missed_after_commit" % [generation, fire_msec])
 			continue
 		print("DEMO clickplan %d %d" % [generation, fire_msec])
-		return {"fire_unix_msec": fire_msec}
+		return {"fire_unix_msec": fire_msec, "generation": generation}
 	_fail("could not lock a shared wall-clock click after %d barrier round(s)" % BARRIER_MAX_ROUNDS)
 	return null
 
@@ -393,11 +398,48 @@ func _await_unix_msec(deadline_msec: int) -> bool:
 	while unix_msec_now() < deadline_msec:
 		if Time.get_ticks_msec() > backstop:
 			return false
-		# Frame waits under llvmpipe can overshoot the deadline by hundreds of ms
-		# and split same-tick intents; busy-spin the last slice.
-		if deadline_msec - unix_msec_now() > 40:
+		# llvmpipe frames often take 50–150ms. Only await a frame when the
+		# remaining lead is larger than a worst-case frame; otherwise a single
+		# await overshoots the shared deadline and splits server ticks.
+		if deadline_msec - unix_msec_now() > 250:
 			await _tree.process_frame
 	return true
+
+
+# After the wall deadline, both write a go file and the early arriver waits for
+# the peer (bounded) so clicks leave the process together.
+func _final_go_rendezvous(generation: int, fire_msec: int) -> void:
+	if not _write_barrier_file(GO_BARRIER_PREFIX, "go %d %d" % [generation, unix_msec_now()]):
+		return
+	var wait_until := maxi(fire_msec + 150, unix_msec_now() + 150)
+	var backstop := Time.get_ticks_msec() + 500
+	while unix_msec_now() < wait_until and Time.get_ticks_msec() < backstop:
+		var rows := _read_go_rows(generation)
+		if rows.size() >= REQUIRED_PLAYERS:
+			print("DEMO go %d %d" % [generation, rows.size()])
+			return
+		# Busy-spin — do not await frames here.
+	print("DEMO go_timeout %d" % generation)
+
+
+func _read_go_rows(generation: int) -> Array:
+	var rows: Array = []
+	var dir := _barrier_dir()
+	if dir.is_empty():
+		return rows
+	for name in DirAccess.get_files_at(dir):
+		if not str(name).begins_with(GO_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
+			continue
+		var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+		var parts := body.split(" ")
+		if parts.size() != 3 or parts[0] != "go":
+			continue
+		if not parts[1].is_valid_int() or not parts[2].is_valid_int():
+			continue
+		if int(parts[1]) != generation:
+			continue
+		rows.append({"at": int(parts[2])})
+	return rows
 
 
 func _walk_away_and_drop(click_tick: int) -> bool:
