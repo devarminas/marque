@@ -68,9 +68,17 @@ function Read-Positions([string] $path) {
 }
 
 function Compare-Frames([string] $left, [string] $right) {
-    # System.Drawing is Windows-centric; Linux pwsh may load the assembly stub but
-    # still fail at Bitmap.FromFile (GDI+). Wish+pose claims are proven from
-    # DEMO/GAMELOG below; skip pixel bands when Drawing/GDI+ cannot decode.
+    # System.Drawing/GDI+ is Windows-centric. On Linux, Add-Type can succeed while
+    # Bitmap.FromFile still native-aborts and kills the harness before DEMO/GAMELOG
+    # asserts. Skip the entire pixel path off Windows; wish+pose claims are proven
+    # from DEMO/GAMELOG below either way.
+    $onWindows = ($env:OS -eq 'Windows_NT') -or (
+        $PSVersionTable.PSEdition -eq 'Desktop' -and -not ($IsLinux -eq $true)
+    )
+    if (-not $onWindows) {
+        Write-Host "==> Compare-Frames skipped: System.Drawing/GDI+ not used off Windows; DEMO/GAMELOG wish+pose asserts still apply"
+        return $null
+    }
     $a = $null
     $b = $null
     try {

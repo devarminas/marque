@@ -82,9 +82,11 @@ Preconditions:
   the watcher's `DEMO pos` for the walker is server pose. Movement claims need both
   plus GAMELOG `move`.
 - **System.Drawing / GDI+ is Windows-centric.** `Compare-Frames` needs that stack.
-  Linux pwsh may load the assembly stub and still fail at `Bitmap.FromFile`. The
-  harness catches both and skips pixel bands, then still asserts DEMO/GAMELOG
-  wish+pose (fail-closed on player `path_assigned` / `move_to`).
+  On Linux, `Add-Type System.Drawing` can succeed while `Bitmap.FromFile` still
+  native-aborts and kills the harness before DEMO/GAMELOG asserts. The harness
+  therefore skips the entire pixel path off Windows (and still catches Drawing
+  failures on Windows), then asserts DEMO/GAMELOG wish+pose (fail-closed on
+  player `path_assigned` / `move_to`).
 - **The sky-band flake waiver is retired (ARM-183).** The still-camera control no
   longer demands byte-exactness, so the GPU noise that used to trip it is inside the
   tolerance. A top-quarter failure is a finding, not something to rerun away. See
