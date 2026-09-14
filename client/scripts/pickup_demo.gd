@@ -30,10 +30,12 @@ const CLICK_LEAD_TICKS := 75
 const SHOT_BEFORE_LEAD_TICKS := 40
 const CLICK_AFTER_READY_TICKS := 25
 const POST_CAPTURE_LEAD_TICKS := 100 # retained for unit tests / DEMO aim logging
-const POST_CAPTURE_LEAD_MSEC := 4000
+const POST_CAPTURE_LEAD_MSEC := 5000
 const BARRIER_MIN_LEAD_TICKS := 40 # retained for unit tests
 const BARRIER_MAX_ROUNDS := 12
-const BARRIER_MIN_SLACK_MSEC := 200
+const BARRIER_MIN_SLACK_MSEC := 250
+# After capture, wait this long for abandon/resume to restore peer + seed.
+const POST_CAPTURE_RESTORE_MSEC := 15000
 const SHOT_RESOLVED_OFFSET_TICKS := 98
 const WALK_AWAY_OFFSET_TICKS := 113
 const WALK_AWAY_DEADLINE_TICKS := 255
@@ -62,6 +64,7 @@ const SPIN_USEC := 20000
 const SYNC_BARRIER_PREFIX := "marque-pickup-sync-"
 const COMMIT_BARRIER_PREFIX := "marque-pickup-commit-"
 const GO_BARRIER_PREFIX := "marque-pickup-go-"
+const READY_BARRIER_PREFIX := "marque-pickup-ready-"
 
 var _tree: SceneTree
 var _root: Node
@@ -112,11 +115,20 @@ func run(
 	if not await _capture(1):
 		return _fail("capture 1 failed")
 
-	# Capture under dual llvmpipe can starve the socket long enough to abandon
-	# and resume; the pre-capture GroundItem node is then freed. Re-resolve by id.
-	item = _session.item_for(item_id)
-	if item == null or not is_instance_valid(item):
-		return _fail("seed item %d missing after capture 1" % item_id)
+	# Dual llvmpipe capture can starve the socket long enough to abandon and
+	# resume; the pre-capture GroundItem is freed and the peer may vanish from
+	# the roster briefly. Wait for the world to be contest-ready again, then
+	# take whatever seed id is present (resume may renumber).
+	var restored: Variant = await _await_contest_world_after_capture()
+	if restored == null:
+		return 1
+	item_id = int(restored["id"])
+	item = restored["item"]
+	# Do not start the wall barrier until both peers have restored. Otherwise the
+	# early client burns propose generations alone and the late one sees
+	# "barrier never locked" / a single pickup.
+	if not await _await_peers_post_capture_ready():
+		return 1
 	var picked: Variant = _screen_position_of(item)
 	if picked == null:
 		return 1
@@ -135,6 +147,9 @@ func run(
 	# Final go-file gate: the early arriver waits briefly for the peer so both
 	# fire after the slower wake, not one frame-overshoot apart.
 	await _final_go_rendezvous(fire_generation, fire_unix_msec)
+	# Re-check the seed still exists after the wall wait (peer may have raced).
+	if _session.item_for(item_id) == null:
+		return _fail("seed item %d vanished before wall-fire pickup" % item_id)
 	# Wire the pickup now. push_input/_click_at only reaches the session on a
 	# later frame under software GL and was splitting server intent ticks even
 	# when both processes woke on the same wall deadline. Screen projection
@@ -564,6 +579,71 @@ func _open_the_bag_onto(slot: int, widget: Control) -> Variant:
 
 	print("DEMO bagopen %d" % _session.tick_clock().estimated_tick())
 	return centre
+
+
+func _await_contest_world_after_capture() -> Variant:
+	var deadline := Time.get_ticks_msec() + POST_CAPTURE_RESTORE_MSEC
+	while Time.get_ticks_msec() < deadline:
+		if not _session.tick_clock().is_anchored():
+			await _tree.process_frame
+			continue
+		if _session.known_ids().size() < REQUIRED_PLAYERS:
+			await _tree.process_frame
+			continue
+		var ids := _session.known_item_ids()
+		if ids.is_empty():
+			await _tree.process_frame
+			continue
+		var id: int = ids[0]
+		var body := _session.item_for(id)
+		if body != null and is_instance_valid(body):
+			print("DEMO seedrestore %d %s %f %f" % [id, body.kind, body.position.x, body.position.z])
+			return {"id": id, "item": body}
+		await _tree.process_frame
+	_fail(
+		"contest world not ready after capture 1 within %dms (players=%d items=%d)"
+		% [
+			POST_CAPTURE_RESTORE_MSEC,
+			_session.known_ids().size(),
+			_session.known_item_ids().size(),
+		]
+	)
+	return null
+
+
+func _await_peers_post_capture_ready() -> bool:
+	var own_id := _session.own_id()
+	if not _write_barrier_file(READY_BARRIER_PREFIX, "ready %d %d" % [own_id, unix_msec_now()]):
+		return false
+	var deadline := Time.get_ticks_msec() + POST_CAPTURE_RESTORE_MSEC
+	var peers := 0
+	while Time.get_ticks_msec() < deadline:
+		# Freshen so a peer that checks mid-wait still sees us as live.
+		if not _write_barrier_file(READY_BARRIER_PREFIX, "ready %d %d" % [own_id, unix_msec_now()]):
+			return false
+		peers = 0
+		var dir := _barrier_dir()
+		if dir.is_empty():
+			return false
+		for name in DirAccess.get_files_at(dir):
+			if not str(name).begins_with(READY_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
+				continue
+			var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+			var parts := body.split(" ")
+			if parts.size() != 3 or parts[0] != "ready":
+				continue
+			if not parts[1].is_valid_int() or not parts[2].is_valid_int():
+				continue
+			peers += 1
+		if peers >= REQUIRED_PLAYERS:
+			print("DEMO captureready %d %d" % [peers, unix_msec_now()])
+			return true
+		await _tree.process_frame
+	_fail(
+		"post-capture ready barrier saw %d peer file(s) after %dms, want %d"
+		% [peers, POST_CAPTURE_RESTORE_MSEC, REQUIRED_PLAYERS]
+	)
+	return false
 
 
 func _wait_for_scenario() -> int:
