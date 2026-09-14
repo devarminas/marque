@@ -130,9 +130,13 @@ Preconditions:
   thrash made peers observe `fire=-1` under llvmpipe and exhausted the wall
   lead before a match. If the candidate goes stale mid-converge, bump
   `fire = now + POST_CAPTURE_LEAD_MSEC` rather than spinning until the join
-  timeout. Commit does **not** abort on a brief peer `ready=0` (that asymmetric
+  timeout. Commit stays in a fire+grace joinable window (busy-spin near the
+  fire) and will **adopt/join** a peer that already locked `ready=1` rather than
+  aborting into a solo next generation after one oversize llvmpipe hitch.
+  Commit does **not** abort on a brief peer `ready=0` (that asymmetric
   early exit left one client firing alone under llvmpipe); it waits until
-  unanimous ready or timeout. Only a unanimous ready commit waits for the wall
+  unanimous ready, peer-locked join, or the joinable window ends. Only a
+  unanimous ready (or adopted) commit waits for the wall
   deadline (busy-spin the last `WALL_SPIN_REMAINING_MSEC` so llvmpipe frames
   cannot overshoot), then a final `marque-pickup-go-*` rendezvous that **must**
   see the peer before either fires `request_pickup` (go miss retries the next

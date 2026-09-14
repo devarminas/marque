@@ -235,9 +235,14 @@ func _plan_shared_click() -> Variant:
 			return null
 		var can_make := fire_msec - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC
 		if not await _commit_fire_unix_msec(generation, fire_msec, can_make):
-			print("DEMO barrier_retry %d %d" % [generation, fire_msec])
-			continue
-		if unix_msec_now() + 50 >= fire_msec:
+			# Peer may already have locked this fire while our commit loop starved
+			# under llvmpipe; adopt it rather than opening a solo next generation.
+			if _peer_locked_fire(generation, fire_msec) and _fire_still_joinable(fire_msec):
+				print("DEMO commit_adopt %d %d" % [generation, fire_msec])
+			else:
+				print("DEMO barrier_retry %d %d" % [generation, fire_msec])
+				continue
+		if not _fire_still_joinable(fire_msec):
 			print("DEMO barrier_retry %d %d missed_after_commit" % [generation, fire_msec])
 			continue
 		print("DEMO clickplan %d %d" % [generation, fire_msec])
@@ -421,10 +426,13 @@ func _commit_fire_unix_msec(generation: int, fire_msec: int, can_make: bool) -> 
 	):
 		return false
 
-	var slack_msec := maxi(fire_msec - unix_msec_now(), 0)
-	var wait_msec := mini(JOIN_TIMEOUT_MSEC, maxi(slack_msec - BARRIER_MIN_SLACK_MSEC, 200))
-	var deadline := Time.get_ticks_msec() + wait_msec
-	while Time.get_ticks_msec() < deadline:
+	# Stay in the commit loop for the whole joinable window (fire + grace), not a
+	# precomputed monotonic deadline from start slack. A single long llvmpipe
+	# hitch used to expire the old deadline while unix was already past fire,
+	# then the late peer opened a solo gen-2 and the contest collapsed to one
+	# pickup.
+	var spins := 0
+	while _fire_still_joinable(fire_msec):
 		if _peer_generation_ahead(generation):
 			print("DEMO commit_abort %d" % generation)
 			return false
@@ -440,6 +448,7 @@ func _commit_fire_unix_msec(generation: int, fire_msec: int, can_make: bool) -> 
 		var rows := _read_barrier_rows(COMMIT_BARRIER_PREFIX, generation, "commit")
 		if rows.size() >= REQUIRED_PLAYERS:
 			var all_ready := true
+			var peer_locked := false
 			var fire_mismatch := false
 			for row in rows:
 				if int(row["fire"]) != fire_msec:
@@ -448,6 +457,8 @@ func _commit_fire_unix_msec(generation: int, fire_msec: int, can_make: bool) -> 
 					break
 				if int(row["ready"]) != 1:
 					all_ready = false
+				else:
+					peer_locked = true
 			# Do not abort on a brief ready=0: under llvmpipe one client can read
 			# the peer's stale flag, return false, and leave while the peer still
 			# sees unanimous ready=1 and fires alone.
@@ -463,9 +474,34 @@ func _commit_fire_unix_msec(generation: int, fire_msec: int, can_make: bool) -> 
 					% [generation, rows.size(), fire_msec]
 				)
 				return true
-		await _tree.process_frame
-	print("DEMO commit_timeout %d %d" % [generation, wait_msec])
+			if peer_locked:
+				print("DEMO commit_join %d %d" % [generation, fire_msec])
+				return true
+		# Busy-spin near the fire; only await frames while lead is comfortable.
+		if fire_msec - unix_msec_now() > 300:
+			await _tree.process_frame
+		else:
+			spins += 1
+			if spins % 64 == 0:
+				await _tree.process_frame
+	if _peer_locked_fire(generation, fire_msec):
+		print("DEMO commit_adopt %d %d" % [generation, fire_msec])
+		return true
+	print("DEMO commit_timeout %d %d" % [generation, fire_msec])
 	return false
+
+
+func _peer_locked_fire(generation: int, fire_msec: int) -> bool:
+	for row in _read_barrier_rows(COMMIT_BARRIER_PREFIX, generation, "commit"):
+		if int(row["fire"]) == fire_msec and int(row["ready"]) == 1:
+			return true
+	return false
+
+
+func _fire_still_joinable(fire_msec: int) -> bool:
+	# Allow a short post-fire grace so a peer that already locked is not abandoned
+	# after one oversize software-GL frame.
+	return unix_msec_now() <= fire_msec + 400
 
 
 func _peer_generation_ahead(generation: int) -> bool:
