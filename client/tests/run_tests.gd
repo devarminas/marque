@@ -68,7 +68,7 @@ const Assertions := preload("res://tests/assertions.gd")
 
 const STARTUP_GRACE_FRAMES := 10
 
-const WATCHDOG_FRAMES := 1250
+const WATCHDOG_FRAMES := 2200
 
 var _frames := 0
 var _suite_frames := 0

@@ -525,7 +525,11 @@ func _test_move_to_is_refused(a: Peer) -> bool:
 		String(a.errors[a.errors.size() - 1]["re"]) == "move_to",
 		"out-of-bounds move_to is also refused as move_to",
 	)
-	_check(a.paths.is_empty(), "no player path frames after retired move_to attempts")
+	# NPC patrols still emit path_assigned; only the player's paths must stay empty.
+	_check(
+		a.paths_for(int(a.welcome["you"])).is_empty(),
+		"no player path frames after retired move_to attempts",
+	)
 	return true
 
 
