@@ -129,6 +129,11 @@ func run(
 		return 1
 	_print_quest_log(2)
 
+	# Imps can still kill after the objective is ready; talk refuses while dead.
+	if _session.hit_points_for(_session.own_id()).x == 0:
+		if not await _maybe_respawn():
+			return 1
+
 	_session.request_talk(giver_id)
 	print("DEMO talkturnin %d" % giver_id)
 	if not await _wait_dialog_option(giver_id, DialogPanelScript.OPTION_TURN_IN):
@@ -225,6 +230,10 @@ func _kill_until_ready() -> bool:
 		if await _maybe_respawn():
 			pass
 		if _quest_objective_ready():
+			# One last death check: lingering aggro can kill on the ready tick.
+			if _session.hit_points_for(_session.own_id()).x == 0:
+				if not await _maybe_respawn():
+					return false
 			return true
 		var imp_id := _nearest_living_imp()
 		if imp_id <= 0:
