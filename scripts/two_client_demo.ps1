@@ -342,17 +342,18 @@ try {
             $failures.Add("client $label never reported 'DEMO done'")
         }
 
+        # Named-pixel still-camera / walker-band needs these frames. Soft size
+        # soft-pass retired (ARM-289); missing file fails for the pixel contract.
         $frames = @{}
         foreach ($index in 1, 2, 3, 4) {
             $shot = "$($client.Prefix)_$index.png"
             if (-not (Test-Path $shot)) {
-                $failures.Add("client $label never wrote $shot")
+                $failures.Add("named-pixel input missing: $shot")
                 continue
             }
             $frames[$index] = $shot
             $size = (Get-Item $shot).Length
             Write-Host "==> $shot ($size bytes)"
-            if ($size -lt 4096) { $failures.Add("$shot is only $size bytes; that is not a frame") }
         }
 
         $positions = Read-Positions $client.Stdout

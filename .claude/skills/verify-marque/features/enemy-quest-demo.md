@@ -36,10 +36,10 @@ Minimum evidence for the load-bearing claims:
 |---|---|---|---|
 | Party formed | `party_joined` | `DEMO party` (2 members) | optional |
 | Quest accepted | `quest_accepted` ×2 | `DEMO accepted slay_imps active` | optional |
-| Mid-chase NPC state | optional | `DEMO midchase`; `DEMO npc`/`DEMO anim`; walking, has_path, or ≥0.5u imp displacement | shot 2 PNG >4KB |
+| Mid-chase NPC state | optional | `DEMO midchase`; `DEMO npc`/`DEMO anim`; walking, has_path, or ≥0.5u imp displacement | optional |
 | Camp kills | ≥5 `npc_despawned` kind `imp` camp `starter_town_imps` | kill/progress lines if present | optional |
 | Party kill credit | `quest_kill_progress` count 5 each; shared-credit tick | objective `(5/5)` on shot 3 | optional |
-| Turn-in | `quest_completed` ×1 each | `DEMO complete`; shot 4 knight kinds | PNGs >4KB |
+| Turn-in | `quest_completed` ×1 each | `DEMO complete`; shot 4 knight kinds | optional |
 
 Shot map: 1 accept, 2 mid-chase, 3 killsready `(5/5)`, 4 complete.
 

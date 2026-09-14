@@ -1,6 +1,6 @@
 ---
 name: verify-marque
-description: Drive Project Marque the way a player does — the real marqued Go server plus real Godot 4.7 clients — and prove behavioural claims from self-captured screenshots, the clients' DEMO lines, and the server's NDJSON event log. Use whenever a claim about client or server behaviour needs evidence stronger than a passing unit test.
+description: Drive Project Marque the way a player does — the real marqued Go server plus real Godot 4.7 clients — and prove behavioural claims from the clients' DEMO lines and the server's NDJSON GAMELOG. PNG checks are named-pixel contracts only; screenshot presence is never proof. Use whenever a claim about client or server behaviour needs evidence stronger than a passing unit test.
 ---
 
 # Verify Marque
@@ -54,20 +54,20 @@ marker from the **last line** of the output instead of grepping for it: all thre
 PowerShell harnesses here print theirs last, and a grep matches a forgery buried
 anywhere in the middle.
 
-**Two evidence layers, and a behavioural claim usually needs both.** Players move by
-wish samples and server `pose`; remotes follow server pose only. Own-avatar
-`DEMO pos` can include prediction, so after a walk the pixels and `DEMO pos` lines
-prove what the *client drew*, while the GAMELOG `move` wishes prove what the
-*server accepted*. A server whose tick loop stopped integrating would still let a
-predicting local avatar drift; the other client's body for that player would not.
-"The player moved" for a two-client claim is proven by watcher `DEMO pos`
-displacement **and** the server's `move` events, not by either alone.
+**Default proof is DEMO lines + GAMELOG. Both layers, not either alone.** Client
+stdout (`DEMO pos`, `DEMO joined`, inventory/cast lines, …) proves what the *client
+drew or reported*; the GAMELOG proves what the *server believes*. A server whose tick
+loop stopped advancing players can still look fine on the client if the client is
+interpolating or predicting from a stale handoff. "The player moved" is proven by
+client-side displacement (`DEMO pos`) **and** the matching GAMELOG event (`arrived`,
+`move`, …), never by pixels alone and never by a PNG that merely exists.
 
-**A screenshot assertion must name the specific thing that would be missing.** "The
-screenshot shows lighting" was passed in this repo by a build whose sun pointed at
-the sky, lit by ambient alone; "the avatar casts a shadow on the ground" would have
-failed it instantly. Assert the shadow, the second body, the displacement between two
-named frames — never the vibe.
+**PNG is optional and named-pixel only.** A screenshot assertion must name the
+specific pixel fact that would be missing if the claim were false — the cast shadow,
+the second body, the still-camera quiet band, the label-band differing pixels.
+"`a_1.png` exists and is over 4KB" is never proof (ARM-289). Do not steer a recipe
+toward soft visual-only passes. If the claim does not need a named-pixel contract,
+leave the Pixel column empty or `optional` and prove it with DEMO + GAMELOG.
 
 ## Proof ladder
 
@@ -80,15 +80,16 @@ split into a client skill and a server skill.
 | Go unit | Store, tick, intent rejection, GAMELOG shape | From `server/`: `CGO_ENABLED=1 go test -race ./...` (C toolchain on PATH) |
 | Headless Godot | Client frame handling, suites, signals (no pixels) | `godot --headless --path client --script res://tests/run_tests.gd`; full stack via `scripts/interop_test.ps1` |
 | Thin WS probe | Wire replies the flag path cannot reach | Throwaway WebSocket client outside the repo (see *Raw protocol probes*) |
-| Live windowed demo | DEMO lines, pixels, two-client choreography | Existing `scripts/*_demo.ps1` only |
+| Live windowed demo | DEMO lines + GAMELOG; named-pixel only when a recipe names one | Existing `scripts/*_demo.ps1` only |
 
 **No new windowed demo per quest id.** New quest coverage extends Go, headless, or
 thin WS. Do not add `*_demo.ps1`, `*_demo.gd`, or a new `--*-shots` flag for a
 quest string. Existing demos stay; they do not multiply with content.
 
-**Evidence kinds** fold into feature recipes (GAMELOG / DEMO / pixel), never a fifth
-H2. Feature files keep Atlas's four H2s only. Name the default driver rung in
-`Driving` when the recipe has one.
+**Evidence kinds** fold into feature recipes (GAMELOG / DEMO / named-pixel), never a
+fifth H2. Feature files keep Atlas's four H2s only. Default minimum evidence is
+DEMO + GAMELOG; name a pixel contract only when the claim is visual. Name the
+default driver rung in `Driving` when the recipe has one.
 
 **outcome-not-chase.** `ENEMY QUEST DEMO OK` proves party, camp kills, and quest
 complete. It does not prove Imp chase or walk-anim. Chase timing is Go/GAMELOG:
@@ -217,10 +218,10 @@ It builds marqued, warms the caches, starts the server on a free port, runs clie
 leaves the evidence directory behind — the path is printed, defaulting under
 `$env:TEMP\marque-verify\`.
 
-**All three harnesses empty their output directory before they run**, because the only
-checks any of them makes on a frame are that it exists and is over 4KB, and a stale PNG
-from a previous run satisfies both. `run.ps1`'s default path is fresh every run, so
-this bites only a reused `-EvidenceDir`; `two_client_demo.ps1`'s default is the fixed
+**All three harnesses empty their output directory before they run**, so a reused
+`-EvidenceDir` cannot leave stale `DEMO` logs, GAMELOG, or PNG artifacts from a prior
+run. `run.ps1`'s default path is fresh every run, so this bites only a reused
+`-EvidenceDir`; `two_client_demo.ps1`'s default is the fixed
 `$env:TEMP\marque-two-client` and `contested_pickup_demo.ps1`'s the fixed
 `$env:TEMP\marque-contested-pickup`, both reused forever. Each drops a
 `.marque-evidence` marker into the directories it owns and **refuses to run into a
@@ -229,26 +230,28 @@ not point any of them at a directory you care about, and do not treat files in a
 evidence directory as belonging to the run you are reading unless that run's own output
 printed them.
 
-`VERIFY HARNESS OK` asserts only structure: the server announced itself, outlived the
-clients, and wrote nothing to stderr; both clients joined, printed `DEMO done`,
-exited 0, and wrote four >4KB frames each. **It deliberately asserts nothing
-behavioural.** Your claim is proven by your own assertions against the evidence
-files — and per the two-layer rule above, a movement claim needs the GAMELOG as well
-as the pixels, because a frozen server still earns `VERIFY HARNESS OK`.
+`VERIFY HARNESS OK` asserts only structure on the default proof layers: the server
+announced itself (`server_started` GAMELOG), outlived the clients, and wrote nothing
+to stderr; both clients joined (`DEMO joined`), printed `DEMO done`, and exited 0.
+PNG self-captures may still land in the evidence directory as artifacts; **their
+presence or byte size is not a harness pass** (ARM-289). **It deliberately asserts
+nothing behavioural.** Your claim is proven by your own assertions against the
+evidence files — DEMO + GAMELOG by default; named-pixel only when you name the
+contract. A frozen server still earns `VERIFY HARNESS OK` on structure alone.
 
 For the fixed M0 milestone scenario with its assertions already written, run
 `scripts/two_client_demo.ps1` instead; this harness exists for every other scenario.
 
 ### What `scripts/two_client_demo.ps1` proves
 
-Both layers, since M1g. Its client layer is
-the pixels and the `DEMO pos` displacements; its server layer asserts, per player
-id resolved from that client's `DEMO joined` line, a `client_connected`, at least
-one non-zero GAMELOG `move` wish for each walker, `DEMO groundclick_ignored` /
-`DEMO walkto` / `DEMO move_displacement`, and **zero** player `path_assigned` /
-`move_to` for the run. It then ties the layers together: both clients' shot-4
-`DEMO pos` for the phase-1 walker agree within 0.05 (server pose on both sides).
-Watcher displacement proves the server moved — remotes follow pose only.
+Both layers, since M1g. Its client layer is the `DEMO pos`
+displacements plus the named-pixel still-camera / walker-band contract; its server layer asserts, per player id resolved from that client's
+`DEMO joined` line, a `client_connected`, a `move_to`, a `path_assigned` spanning at
+least 2.0 units, and an **`arrived` after that path's `start_tick` whose coordinates
+match its endpoint** — the one event a server that hands out paths and never moves
+anybody cannot produce. It then ties the layers together: the phase-1 walker's
+`arrived` point must be within 0.05 units of where both clients drew that body in
+shot 4. Soft PNG size / existence checks are not part of the pass (ARM-289).
 
 Until M1g it asserted **nothing** about the server. All twenty-odd of its checks read
 a client's stdout or a client's PNG, and it deleted the server's log at teardown, so
@@ -315,7 +318,7 @@ Everything a `run.ps1` drive can prove lands in its evidence directory:
 | `server.stderr.log` | Empty on a healthy run. Anything here is a panic or a fatal. |
 | `client-a.stdout.log`, `client-b.stdout.log` | The `DEMO` lines (grammar below), plus anything the client logged loudly. |
 | `client-a.stderr.log`, `client-b.stderr.log` | **Where a client failure actually lands.** `push_error` and `printerr` go here, not to stdout. |
-| `a_1.png` … `a_4.png`, `b_1.png` … `b_4.png` | Self-captures. Shots 1–2 bracket phase 1 (a's walk), shots 3–4 bracket phase 2 (b's walk). |
+| `a_1.png` … `a_4.png`, `b_1.png` … `b_4.png` | Self-captures (artifacts). Not soft-pass proof: assert only via a named-pixel contract, or ignore them and prove with DEMO + GAMELOG. Shots 1–2 bracket phase 1 (a's walk), shots 3–4 bracket phase 2 (b's walk). |
 | `.marque-evidence` | The harness's claim on the directory. Its presence is what lets the next run empty it. |
 
 `scripts/two_client_demo.ps1` writes the same set, under its `-OutDir`, with the
@@ -382,14 +385,17 @@ always resolve ids via `DEMO joined`. Shared dump helper:
 
 - Exercise the real user path — a synthesised click through the picker — never an
   internal setter. There are no test-only endpoints here; do not add one for a proof.
-- Capture the action and the resulting state: the GAMELOG `move` wish **and** the
-  displacement it caused, not just a final screen.
-- Assert both layers: what the client drew (`DEMO pos`, pixels) and what the server
+- **Default:** assert DEMO + GAMELOG for the claim. Capture the action and the
+  resulting state (e.g. GAMELOG `move` **and** `DEMO pos` displacement),
+  not just a final screen.
+- Assert both layers: what the client reported (`DEMO …`) and what the server
   believes (GAMELOG). Movement example: displacement between bracketing shots of at
   least 2.0 world units **and** non-zero GAMELOG `move` for that player id (watcher
   `DEMO pos` for two-client claims).
-- Name the pixel fact that would be missing if the claim were false: the cast shadow,
-  the second body, the frames that must differ where the walker crossed.
+- **PNG only with a named-pixel contract.** Name the pixel fact that would be missing
+  if the claim were false: the cast shadow, the second body, the still-camera quiet
+  band, the frames that must differ where the walker crossed. File existence or
+  `>4KB` is never enough.
 - No mocks. There is no production boundary here that isolates an external system —
   both binaries are real or the run proves nothing.
 - A comparison over zero input passes vacuously. Before trusting any "identical" or

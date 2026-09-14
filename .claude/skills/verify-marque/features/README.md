@@ -32,11 +32,13 @@ doctor, drive, evidence, and cleanup live in [../SKILL.md](../SKILL.md).
 ## Proof and skip reporting
 
 - Capture the user action and the resulting state, not only the final screen.
-- Assert both evidence layers when the claim spans them: what the client drew
-  (`DEMO` lines, PNGs) and what the server believes (GAMELOG). Name the minimum
-  set inside Sub-features, Driving, or Gotchas. Do not invent a fifth H2.
-- Every screenshot assertion names the pixel fact that would be missing if the
-  claim were false.
+- **Default proof is DEMO + GAMELOG.** Assert both layers when the claim spans them:
+  what the client reported (`DEMO` lines) and what the server believes (GAMELOG).
+  Name the minimum set inside Sub-features, Driving, or Gotchas. Do not invent a
+  fifth H2.
+- **PNG is named-pixel only.** A screenshot assertion must name the pixel fact that
+  would be missing if the claim were false. File existence or `>4KB` is never proof
+  (ARM-289). Leave Pixel empty/`optional` when DEMO + GAMELOG already kill the claim.
 - Record the feature ID and the entry point used with every artifact.
 - Report an unreachable path with the attempted command and the unmet
   precondition. Do not report a skipped entry point as verified through a
@@ -53,7 +55,8 @@ behaviour, then exactly four H2 sections in order:
 4. `Gotchas`
 
 Sub-features stay `id: observable end state`. Encode rung choice and minimum
-evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
+evidence (GAMELOG / DEMO / named-pixel) inside those four H2s only. Default
+minimum is DEMO + GAMELOG; pixel cells are named contracts or `optional`.
 
 ## Join & leave
 
@@ -68,7 +71,7 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
 - [Move-to walk](./move-to-walk.md) — **retired** (ARM-239). Player polyline walk
   is gone; see [Polish](./polish/README.md) for graduated action-movement e2e.
 - [Two clients see each other walk](./two-clients-see-each-other.md) — M0 both
-  directions, still-camera pixel control, server pose.
+  directions, named-pixel still-camera band, server pose (DEMO + GAMELOG default).
 - [WASD direction move](./wasd-move.md) — wish samples + server pose. WASD is the
   only movement gesture (ARM-145 / ARM-239).
 - [Arena collision and height](./arena-collision-height.md) — Ring of Trials
