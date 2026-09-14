@@ -337,26 +337,10 @@ func (w *World) Run(ctx context.Context) {
 			return
 		case ev := <-events:
 			w.handle(ev)
-			w.drainEvents(events)
 		case now := <-ticker.C:
-			// Drain intents that arrived during the last tick so co-timed
-			// contested pickups share one w.tick instead of straddling a step.
-			w.drainEvents(events)
 			owed += now.Sub(last)
 			last = now
 			w.stepAll(&owed)
-		}
-	}
-}
-
-// drainEvents handles every event already queued without waiting for more.
-func (w *World) drainEvents(events <-chan mnet.Event) {
-	for {
-		select {
-		case ev := <-events:
-			w.handle(ev)
-		default:
-			return
 		}
 	}
 }
