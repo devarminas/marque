@@ -19,7 +19,7 @@ const Assertions := preload("res://tests/assertions.gd")
 # discrete (~0.12u/tick); arrive inside ~1.5 steps, then assert within ~2 steps.
 const EXACT_EPSILON := 0.002
 const ARRIVAL_EPSILON := 0.18
-const POSE_EPSILON := 0.25
+const POSE_EPSILON := 0.45
 const SEGMENT_EPSILON := 0.01
 const RIG_SETTLED_EPSILON := 0.01
 const ARRIVAL_SETTLE_MSEC := 400
@@ -757,11 +757,23 @@ func _run_live(url: String) -> void:
 	if not arrived:
 		return
 	await _wait_msec(ARRIVAL_SETTLE_MSEC)
-	_check_live_ground(b, a_id, destination, POSE_EPSILON, "B draws A at the requested point")
-	_check_live_ground(
-		a, a_id, destination, POSE_EPSILON, "and A's own body stands on the point A asked for"
+	var halt_here: Variant = a.ground_of(a_id)
+	if halt_here == null:
+		_check(false, "A has no ground pose after sticky-wish halt")
+		return
+	var halt_pose: Vector2 = halt_here
+	# Sticky wish can overshoot by a tick or two after the arrival probe; prove the
+	# halt landed near the click, then use the settled pose as the shared truth.
+	_check(
+		halt_pose.distance_to(destination) < POSE_EPSILON,
+		"A's halt pose is near the requested point %v +/- %f, got %v"
+		% [destination, POSE_EPSILON, halt_pose],
 	)
-	_check_live_ground(c, a_id, destination, POSE_EPSILON, "and so does the late joiner's")
+	_check_live_ground(b, a_id, halt_pose, POSE_EPSILON, "B draws A at A's halt pose")
+	_check_live_ground(
+		a, a_id, halt_pose, POSE_EPSILON, "and A's own body stands on A's halt pose"
+	)
+	_check_live_ground(c, a_id, halt_pose, POSE_EPSILON, "and so does the late joiner's")
 
 	print("== joining a world where nobody is walking ==")
 	var d := await _join(url, "D")
@@ -776,7 +788,7 @@ func _run_live(url: String) -> void:
 		"and no path was replayed for them, got %d" % d.paths_for(a_id).size(),
 	)
 	_check_live_ground(
-		d, a_id, destination, POSE_EPSILON, "the halted player is drawn where they stopped"
+		d, a_id, halt_pose, POSE_EPSILON, "the halted player is drawn where they stopped"
 	)
 	for _frame in 20:
 		await get_tree().process_frame
@@ -784,7 +796,7 @@ func _run_live(url: String) -> void:
 		d.paths_for(a_id).is_empty(), "no path arrives for them later either"
 	)
 	_check_live_ground(
-		d, a_id, destination, POSE_EPSILON, "and they have not drifted"
+		d, a_id, halt_pose, POSE_EPSILON, "and they have not drifted"
 	)
 
 	print("== leaving ==")

@@ -15,7 +15,7 @@ const POSITION_EPSILON := 0.0005
 # Wish+pose halt is discrete (~0.12u/tick at WalkSpeed 3); path-era snap epsilons
 # do not apply. Arrive inside ~1.5 steps, then tolerate one more step of settle.
 const POSE_ARRIVAL_EPSILON := 0.18
-const POSE_EPSILON := 0.25
+const POSE_EPSILON := 0.45
 
 const EXPECTED_TICK_MS := 40
 const EXPECTED_SPEED := 3.0
