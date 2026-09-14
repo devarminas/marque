@@ -15,14 +15,15 @@ lines and GAMELOG events must agree.
   `attackok` and GAMELOG `attack` / `attack_hit`.
 - `wasd-relocate` — `request_move` wish displaces the avatar; DEMO
   `move_displacement` / `wish_ok`; GAMELOG non-zero `move`; **no** player
-  `path_assigned` / `move_to`.
+  `path_assigned` / `move_to`. The live demo runs this wish phase before casts so
+  range/mana gates cannot skip the wish+pose proof.
 
 ## How to get to it (user POV)
 
+- Hold W/A/S/D to walk under server authority (demo relocates first).
 - Tab or left-click the red dummy, press hotbar 2 (fireball).
 - Tab or left-click the green dummy, press hotbar 1 (heal).
 - Right-click the red dummy to swing.
-- Hold W/A/S/D to walk under server authority.
 
 ## Driving it with verify-marque
 
