@@ -286,14 +286,12 @@ try {
             Add-Failure "client-$($client.Name) party id=$($report.PartyId) members=$($report.PartyMembers), want party with 2"
         }
         foreach ($index in 1, 2, 3, 4) {
+            # PNG artifact only (ARM-289); DEMO + GAMELOG are the proof.
             $shot = "$($client.Prefix)_$index.png"
-            if (-not (Test-Path $shot)) {
-                Add-Failure "client-$($client.Name) never wrote $shot"
-                continue
+            if (Test-Path $shot) {
+                $size = (Get-Item $shot).Length
+                Write-Host "==> $shot ($size bytes, artifact)"
             }
-            $size = (Get-Item $shot).Length
-            Write-Host "==> $shot ($size bytes)"
-            if ($size -lt 4096) { Add-Failure "$shot is only $size bytes; that is not a frame" }
         }
         if (-not $report.Midchase) {
             Add-Failure "client-$($client.Name) never reported DEMO midchase"

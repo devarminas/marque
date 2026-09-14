@@ -42,13 +42,15 @@ lumberjack set between spawn and the tree, and runs one windowed client in
 `--gather-error-shots` mode. `DefaultJoinKit` stays empty, so the no-tool case is
 reached by joining, not by patching the server.
 
-Three frames land in `-OutDir`, default `$env:TEMP\marque-gather-error`:
+Three frames land in `-OutDir`, default `$env:TEMP\marque-gather-error`. Default
+proof is DEMO + GAMELOG; the PNG pair is a **named-pixel** contract (label band),
+not a soft existence check (ARM-289):
 
-| Frame | What it must show |
+| Frame | Named pixel / DEMO fact |
 |---|---|
-| `a_1.png` | the refusal text on screen, right after an unarmed right-click |
-| `a_2.png` | the same view with the text gone |
-| `a_3.png` | the depleted tree and `logs` in the bag, error label empty |
+| `a_1.png` | refusal text present in the ErrorHud band (paired with `DEMO errorhud`) |
+| `a_2.png` | same band cleared; control band left of it stays quiet |
+| `a_3.png` | depleted tree + `logs` in bag via DEMO; error label empty |
 
 Both layers are asserted. Client layer: the `DEMO errortext`, `DEMO errorhud`,
 `DEMO errorcleared`, `DEMO leftclickgathers`, `DEMO class` and `DEMO gathered` lines,

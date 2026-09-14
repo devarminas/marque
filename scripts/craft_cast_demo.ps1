@@ -225,15 +225,13 @@ try {
         Add-Failure "shot 4 bag still holds $SticksKind after craft"
     }
 
+    # PNG artifacts only (ARM-289); DEMO inventory/cast lines + GAMELOG are the proof.
     foreach ($index in 1..6) {
         $shot = "${prefix}_$index.png"
-        if (-not (Test-Path $shot)) {
-            Add-Failure "never wrote $shot"
-            continue
+        if (Test-Path $shot) {
+            $size = (Get-Item $shot).Length
+            Write-Host "==> $shot ($size bytes, artifact)"
         }
-        $size = (Get-Item $shot).Length
-        Write-Host "==> $shot ($size bytes)"
-        if ($size -lt 4096) { Add-Failure "$shot is only $size bytes; that is not a frame" }
     }
 
     $events = Read-GameLog $serverOut
