@@ -32,13 +32,14 @@ Preconditions:
 - Marker: `ADMIN GIVE CLASS KITS DEMO OK` on the **last line** of stdout. Exit
   code must also be 0.
 
-The script builds marqued and `admin_give_kits`, starts marqued with `-admin`
-on a free port, connects the harness over `/ws`, `/give`s every sets-derived
-wearable kind, and asserts GAMELOG admin ok lines plus an empty join kit.
+The script builds marqued and `admin_give_kits`, asserts `-seed-class-kits`
+hard-errors with a `/give` pointer, starts marqued with `-admin` on a free
+port, connects the harness over `/ws`, `/give`s every sets-derived wearable
+kind, and asserts GAMELOG admin ok lines plus an empty join kit.
 
 Evidence lands in `-OutDir`, default `$env:TEMP\marque-admin-give-class-kits`:
 `server.stdout.ndjson`, `server.stderr.log`, `harness.stdout.log`,
-`harness.stderr.log`.
+`harness.stderr.log`, `retired-flag.stdout.log`, `retired-flag.stderr.log`.
 
 ## Gotchas
 

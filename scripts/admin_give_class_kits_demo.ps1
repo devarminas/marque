@@ -57,6 +57,26 @@ try {
         Pop-Location
     }
 
+    $retiredOut = Join-Path $OutDir "retired-flag.stdout.log"
+    $retiredErr = Join-Path $OutDir "retired-flag.stderr.log"
+    $retired = Start-Process -FilePath $binary -ArgumentList @(
+        "-addr", "127.0.0.1:0",
+        "-seed-class-kits"
+    ) -RedirectStandardOutput $retiredOut -RedirectStandardError $retiredErr `
+        -NoNewWindow -PassThru -Wait
+    if ($retired.ExitCode -eq 0) {
+        Add-Failure "-seed-class-kits exited 0; want hard-error"
+    } else {
+        $retiredText = ""
+        if (Test-Path $retiredErr) { $retiredText = Get-Content $retiredErr -Raw }
+        if ($retiredText -notmatch '-seed-class-kits retired') {
+            Add-Failure "-seed-class-kits stderr missing retirement message"
+        }
+        if ($retiredText -notmatch '/give') {
+            Add-Failure "-seed-class-kits stderr missing /give pointer"
+        }
+    }
+
     $server = Start-Process -FilePath $binary -ArgumentList @(
         "-addr", "127.0.0.1:0",
         "-admin"
