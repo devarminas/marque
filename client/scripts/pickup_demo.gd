@@ -57,7 +57,10 @@ const SPIN_USEC := 20000
 
 # Written under the --pickup-shots directory so both clients share one Unix fire
 # deadline. Per-process usec quanta are not comparable across Godots.
+# Propose and commit use separate files: overwriting propose with commit made a
+# slow settler lose its peer and deadlock across generations under llvmpipe.
 const SYNC_BARRIER_PREFIX := "marque-pickup-sync-"
+const COMMIT_BARRIER_PREFIX := "marque-pickup-commit-"
 
 var _tree: SceneTree
 var _root: Node
@@ -185,6 +188,9 @@ static func unix_msec_now() -> int:
 func _plan_shared_click() -> Variant:
 	for generation in range(1, BARRIER_MAX_ROUNDS + 1):
 		var fire_msec: int = await _propose_fire_unix_msec(generation)
+		if fire_msec == -2:
+			print("DEMO barrier_retry %d peer_ahead" % generation)
+			continue
 		if fire_msec < 0:
 			return null
 		var can_make := fire_msec - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC
@@ -207,12 +213,11 @@ func _barrier_dir() -> String:
 	return dir
 
 
-func _barrier_path() -> String:
-	return _barrier_dir().path_join("%s%d.txt" % [SYNC_BARRIER_PREFIX, _session.own_id()])
-
-
-func _write_barrier_line(line: String) -> bool:
-	var path := _barrier_path()
+func _write_barrier_file(prefix: String, line: String) -> bool:
+	var dir := _barrier_dir()
+	if dir.is_empty():
+		return false
+	var path := dir.path_join("%s%d.txt" % [prefix, _session.own_id()])
 	var out := FileAccess.open(path, FileAccess.WRITE)
 	if out == null:
 		_fail("could not write sync barrier %s: %s" % [path, FileAccess.get_open_error()])
@@ -222,14 +227,14 @@ func _write_barrier_line(line: String) -> bool:
 	return true
 
 
-func _read_barrier_rows(generation: int, want_phase: String) -> Array:
+func _read_barrier_rows(prefix: String, generation: int, want_phase: String) -> Array:
 	var rows: Array = []
 	var dir := _barrier_dir()
 	if dir.is_empty():
 		return rows
 	var names := DirAccess.get_files_at(dir)
 	for name in names:
-		if not str(name).begins_with(SYNC_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
+		if not str(name).begins_with(prefix) or not str(name).ends_with(".txt"):
 			continue
 		var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
 		var parts := body.split(" ")
@@ -255,20 +260,26 @@ func _read_barrier_rows(generation: int, want_phase: String) -> Array:
 
 
 func _propose_fire_unix_msec(generation: int) -> int:
-	if not _write_barrier_line("propose %d %d" % [generation, unix_msec_now()]):
+	if not _write_barrier_file(SYNC_BARRIER_PREFIX, "propose %d %d" % [generation, unix_msec_now()]):
 		return -1
 
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		if not _write_barrier_line("propose %d %d" % [generation, unix_msec_now()]):
+		if _peer_generation_ahead(generation):
+			print("DEMO propose_abort %d" % generation)
+			return -2
+		if not _write_barrier_file(SYNC_BARRIER_PREFIX, "propose %d %d" % [generation, unix_msec_now()]):
 			return -1
-		var rows := _read_barrier_rows(generation, "propose")
+		var rows := _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
 		if rows.size() >= REQUIRED_PLAYERS:
+			# Settle while keeping propose files alive (commit uses a separate prefix).
 			for _i in 4:
-				if not _write_barrier_line("propose %d %d" % [generation, unix_msec_now()]):
+				if not _write_barrier_file(
+					SYNC_BARRIER_PREFIX, "propose %d %d" % [generation, unix_msec_now()]
+				):
 					return -1
 				await _tree.process_frame
-			rows = _read_barrier_rows(generation, "propose")
+			rows = _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
 			if rows.size() < REQUIRED_PLAYERS:
 				continue
 			var max_ready := unix_msec_now()
@@ -288,18 +299,27 @@ func _propose_fire_unix_msec(generation: int) -> int:
 
 func _commit_fire_unix_msec(generation: int, fire_msec: int, can_make: bool) -> bool:
 	var ready_flag := 1 if can_make else 0
-	if not _write_barrier_line("commit %d %d %d" % [generation, fire_msec, ready_flag]):
+	if not _write_barrier_file(
+		COMMIT_BARRIER_PREFIX, "commit %d %d %d" % [generation, fire_msec, ready_flag]
+	):
 		return false
 
-	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
+	var slack_msec := maxi(fire_msec - unix_msec_now(), 0)
+	var wait_msec := mini(JOIN_TIMEOUT_MSEC, maxi(slack_msec - BARRIER_MIN_SLACK_MSEC, 200))
+	var deadline := Time.get_ticks_msec() + wait_msec
 	while Time.get_ticks_msec() < deadline:
 		if _peer_generation_ahead(generation):
 			print("DEMO commit_abort %d" % generation)
 			return false
-		# Refresh ready vote while waiting so a slow peer cannot strand us.
-		if not _write_barrier_line("commit %d %d %d" % [generation, fire_msec, ready_flag]):
+		var still_ready := fire_msec - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC
+		var flag := 1 if still_ready else 0
+		if flag != ready_flag:
+			ready_flag = flag
+		if not _write_barrier_file(
+			COMMIT_BARRIER_PREFIX, "commit %d %d %d" % [generation, fire_msec, ready_flag]
+		):
 			return false
-		var rows := _read_barrier_rows(generation, "commit")
+		var rows := _read_barrier_rows(COMMIT_BARRIER_PREFIX, generation, "commit")
 		if rows.size() >= REQUIRED_PLAYERS:
 			var all_ready := true
 			for row in rows:
@@ -312,10 +332,7 @@ func _commit_fire_unix_msec(generation: int, fire_msec: int, can_make: bool) -> 
 			)
 			return all_ready
 		await _tree.process_frame
-	_fail(
-		"sync commit gen %d saw fewer than %d peer vote(s) after %dms"
-		% [generation, REQUIRED_PLAYERS, JOIN_TIMEOUT_MSEC]
-	)
+	print("DEMO commit_timeout %d %d" % [generation, wait_msec])
 	return false
 
 
@@ -324,8 +341,6 @@ func _peer_generation_ahead(generation: int) -> bool:
 	if dir.is_empty():
 		return false
 	for name in DirAccess.get_files_at(dir):
-		if not str(name).begins_with(SYNC_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
-			continue
 		var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
 		var parts := body.split(" ")
 		if parts.size() < 2 or not parts[1].is_valid_int():

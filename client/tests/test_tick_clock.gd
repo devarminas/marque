@@ -347,8 +347,12 @@ func _test_barrier_aim_uses_the_later_sync(assertions: Assertions) -> void:
 		"post-capture lead must leave room for propose+commit under llvmpipe",
 	)
 	assertions.check(
-		PickupDemo.CLICK_READY_MARGIN_USEC >= 250_000,
-		"commit ready requires half a second of lead before the frozen guard",
+		PickupDemo.BARRIER_MIN_SLACK_MSEC >= 50,
+		"wall commit ready requires slack before the shared fire deadline",
+	)
+	assertions.check(
+		PickupDemo.POST_CAPTURE_LEAD_MSEC >= 1000,
+		"wall fire lead must cover barrier settle under software GL",
 	)
 	var pair := _run18_clocks()
 	var clock_a: TickClock = pair["clock_a"]
