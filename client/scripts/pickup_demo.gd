@@ -30,7 +30,7 @@ const CLICK_LEAD_TICKS := 75
 const SHOT_BEFORE_LEAD_TICKS := 40
 const CLICK_AFTER_READY_TICKS := 25
 const POST_CAPTURE_LEAD_TICKS := 100 # retained for unit tests / DEMO aim logging
-const POST_CAPTURE_LEAD_MSEC := 5000
+const POST_CAPTURE_LEAD_MSEC := 6000
 const BARRIER_MIN_LEAD_TICKS := 40 # retained for unit tests
 const BARRIER_MAX_ROUNDS := 12
 const BARRIER_MIN_SLACK_MSEC := 250
@@ -292,6 +292,10 @@ func _read_barrier_rows(prefix: String, generation: int, want_phase: String) -> 
 
 
 func _propose_fire_unix_msec(generation: int) -> int:
+	# Ready-only announce first. Once a fire candidate is published, never wipe
+	# it back to a 2-field propose — that thrash left peers seeing fire=-1 under
+	# llvmpipe and burned the wall lead before both could match.
+	var my_fire := -1
 	if not _write_barrier_file(SYNC_BARRIER_PREFIX, "propose %d %d" % [generation, unix_msec_now()]):
 		return -1
 
@@ -300,35 +304,55 @@ func _propose_fire_unix_msec(generation: int) -> int:
 		if _peer_generation_ahead(generation):
 			print("DEMO propose_abort %d" % generation)
 			return -2
-		if not _write_barrier_file(SYNC_BARRIER_PREFIX, "propose %d %d" % [generation, unix_msec_now()]):
-			return -1
+
 		var rows := _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
 		if rows.size() < REQUIRED_PLAYERS:
+			# Keep refreshing ready so a late peer still sees a live timestamp.
+			if my_fire < 0:
+				if not _write_barrier_file(
+					SYNC_BARRIER_PREFIX, "propose %d %d" % [generation, unix_msec_now()]
+				):
+					return -1
+			else:
+				if not _write_barrier_file(
+					SYNC_BARRIER_PREFIX,
+					"propose %d %d %d" % [generation, unix_msec_now(), my_fire]
+				):
+					return -1
 			await _tree.process_frame
 			continue
 
-		# Publish a fire candidate from the shared max ready, then converge so
-		# both clients lock the *same* fire (split candidates made every commit
-		# return ready=0 under llvmpipe).
 		var max_ready := unix_msec_now()
+		var peer_fire := my_fire
 		for row in rows:
 			max_ready = maxi(max_ready, int(row["ready"]))
-		var fire := fire_unix_msec_from_max_ready(max_ready)
+			peer_fire = maxi(peer_fire, int(row["fire"]))
+
+		# Prefer any peer fire already on the table; otherwise mint from max ready.
+		# If the candidate is too close, bump it forward from *now* so slow
+		# frame waits cannot exhaust POST_CAPTURE_LEAD_MSEC mid-converge.
+		var fire := peer_fire if peer_fire >= 0 else fire_unix_msec_from_max_ready(max_ready)
+		if fire - unix_msec_now() < BARRIER_MIN_SLACK_MSEC:
+			fire = fire_unix_msec_from_max_ready(unix_msec_now())
+		my_fire = fire
 		if not _write_barrier_file(
-			SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), fire]
+			SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), my_fire]
 		):
 			return -1
-		for _i in 4:
+
+		# Short settle: mix a couple of frames (so the socket keeps breathing)
+		# with immediate re-reads so we do not burn seconds per attempt.
+		for _i in 2:
 			await _tree.process_frame
 			if not _write_barrier_file(
-				SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), fire]
+				SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), my_fire]
 			):
 				return -1
 
 		rows = _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
 		if rows.size() < REQUIRED_PLAYERS:
 			continue
-		var agreed := fire
+		var agreed := my_fire
 		var all_have_fire := true
 		for row in rows:
 			if int(row["fire"]) < 0:
@@ -337,13 +361,19 @@ func _propose_fire_unix_msec(generation: int) -> int:
 			agreed = maxi(agreed, int(row["fire"]))
 		if not all_have_fire:
 			continue
-		# Republish the max so a peer that proposed an earlier fire adopts it.
+
+		# Adopt the max and hold it for a couple frames so the peer can copy.
+		my_fire = agreed
 		if not _write_barrier_file(
 			SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), agreed]
 		):
 			return -1
-		for _i in 3:
+		for _i in 2:
 			await _tree.process_frame
+			if not _write_barrier_file(
+				SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), agreed]
+			):
+				return -1
 
 		rows = _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
 		if rows.size() < REQUIRED_PLAYERS:
@@ -356,6 +386,7 @@ func _propose_fire_unix_msec(generation: int) -> int:
 		if matched and agreed - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC:
 			print("DEMO barrier %d %d %d %d" % [generation, rows.size(), max_ready, agreed])
 			return agreed
+		# Matched but stale, or still split: loop and bump fire from now.
 		await _tree.process_frame
 	_fail(
 		"sync barrier gen %d never locked a fresh wall fire within %dms"

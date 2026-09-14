@@ -122,12 +122,16 @@ Preconditions:
   both freshen `propose <gen> <ready_unix_msec>` in `marque-pickup-sync-*` under
   `--pickup-shots`, settle on `fire = max(ready) + POST_CAPTURE_LEAD_MSEC`, then
   vote `commit <gen> <fire> <ready>` in **separate** `marque-pickup-commit-*`
-  files after both propose rows converge on the same `fire` value. Only a
-  unanimous ready commit waits for the wall deadline (busy-spin the last 250ms
-  so llvmpipe frames cannot overshoot), then a final `marque-pickup-go-*`
-  rendezvous so the early arriver waits for the peer before either fires
-  `request_pickup` (not `push_input`, which only reaches the session on a later
-  frame under software GL). Do **not** schedule via
+  files after both propose rows converge on the same `fire` value. Once a
+  propose row carries a `fire` field, never rewrite it as ready-only — that
+  thrash made peers observe `fire=-1` under llvmpipe and exhausted the wall
+  lead before a match. If the candidate goes stale mid-converge, bump
+  `fire = now + POST_CAPTURE_LEAD_MSEC` rather than spinning until the join
+  timeout. Only a unanimous ready commit waits for the wall deadline
+  (busy-spin the last 250ms so llvmpipe frames cannot overshoot), then a final
+  `marque-pickup-go-*` rendezvous so the early arriver waits for the peer
+  before either fires `request_pickup` (not `push_input`, which only reaches
+  the session on a later frame under software GL). Do **not** schedule via
   `TickClock.start_usec_of(aim_tick)` — even a frozen per-process usec still
   diverges under GLES re-anchors and was landing intents 5–15 server ticks
   apart. `DEMO sync`'s second field is the shared `fire_unix_msec` (harness
