@@ -62,7 +62,3 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-quest`: three PNGs,
 - **Talk then re-talk for give.** Accept closes dialog. Give UI opens on a later
   talk while the quest is `active` (ARM-191). Give itself is immediate and
   range-gated (`GiveRange` == `TalkRange`); the first talk walks the player in.
-- **Cite.** Pattern matches `scripts/equip_demo.ps1` / `gather_craft_demo.ps1`
-  and ARM-143 seed style (`scripts/seed_class_kits_demo.ps1`,
-  `features/seed-class-kits.md`): flag seed, DEMO lines, GAMELOG asserts, last-line
-  marker.

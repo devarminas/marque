@@ -87,7 +87,8 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
   plus fireball cast-bar resolve/interrupt (`CRAFT CAST DEMO OK`).
 - [Right-click a tree, chop it or be told why not](./gather-refusal.md) — ARM-147
   gather gate refusal.
-- [Seed class kits on the ground](./seed-class-kits.md) — M7g `-seed-class-kits`.
+- [Admin give class kits](./admin-give-class-kits.md) — `/give` via `-admin`
+  (retired `-seed-class-kits`).
 
 ## Combat
 

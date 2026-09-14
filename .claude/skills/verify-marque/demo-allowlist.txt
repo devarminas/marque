@@ -15,7 +15,7 @@ scripts/gather_craft_demo.ps1
 scripts/gather_error_demo.ps1
 scripts/craft_cast_demo.ps1
 scripts/quest_demo.ps1
-scripts/seed_class_kits_demo.ps1
+scripts/admin_give_class_kits_demo.ps1
 scripts/tab_combat_demo.ps1
 scripts/two_client_demo.ps1
 scripts/wasd_demo.ps1

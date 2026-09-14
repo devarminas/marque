@@ -39,6 +39,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/combat_demo.ps1` | **retired** (ARM-203 stub). Exits 0 with no marker. Drive `dummy_attack_demo.ps1` / `tab_combat_demo.ps1` instead. |
 | `scripts/quest_demo.ps1` | `QUEST DEMO OK` |
 | `scripts/enemy_quest_demo.ps1` | `ENEMY QUEST DEMO OK` |
+| `scripts/admin_give_class_kits_demo.ps1` | `ADMIN GIVE CLASS KITS DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
 | each scripted client | `DEMO done` on its stdout |
