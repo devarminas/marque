@@ -192,6 +192,11 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			want: `{"party_invite_notice":{"from":2}}`,
 		},
 		{
+			name: "admin_reply",
+			msg:  mnet.AdminReply{Text: "ok: noop ran"},
+			want: `{"admin_reply":{"text":"ok: noop ran"}}`,
+		},
+		{
 			name: "error with nothing to attribute it to",
 			msg:  mnet.Error{Msg: "text frames only"},
 			want: `{"error":{"msg":"text frames only"}}`,

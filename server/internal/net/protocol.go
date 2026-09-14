@@ -53,6 +53,7 @@ const (
 	MsgPartyLeave   = "party_leave"
 	MsgPartyKick    = "party_kick"
 	MsgAdmin        = "admin"
+	MsgAdminReply   = "admin_reply"
 
 	OptionAcceptQuest = "accept_quest"
 	OptionTurnInQuest = "turn_in_quest"
@@ -257,6 +258,10 @@ type PartyInviteNotice struct {
 	From PlayerID `json:"from"`
 }
 
+type AdminReply struct {
+	Text string `json:"text"`
+}
+
 func (Welcome) isServerMessage()           {}
 func (Spawn) isServerMessage()             {}
 func (Despawn) isServerMessage()           {}
@@ -281,6 +286,7 @@ func (Dialog) isServerMessage()            {}
 func (QuestLog) isServerMessage()          {}
 func (Party) isServerMessage()             {}
 func (PartyInviteNotice) isServerMessage() {}
+func (AdminReply) isServerMessage()        {}
 
 type ClientMessage interface {
 	isClientMessage()
@@ -433,6 +439,7 @@ type serverEnvelope struct {
 	QuestLog          *QuestLog          `json:"quest_log,omitempty"`
 	Party             *Party             `json:"party,omitempty"`
 	PartyInviteNotice *PartyInviteNotice `json:"party_invite_notice,omitempty"`
+	AdminReply        *AdminReply        `json:"admin_reply,omitempty"`
 }
 
 func Encode(m ServerMessage) ([]byte, error) {
@@ -486,6 +493,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.Party = &v
 	case PartyInviteNotice:
 		env.PartyInviteNotice = &v
+	case AdminReply:
+		env.AdminReply = &v
 	default:
 		return nil, fmt.Errorf("net: encode: unhandled server message %T", m)
 	}

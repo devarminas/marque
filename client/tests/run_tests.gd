@@ -18,6 +18,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "dialog protocol", "script": preload("res://tests/test_dialog_protocol.gd")},
 	{"name": "quest log protocol", "script": preload("res://tests/test_quest_log_protocol.gd")},
 	{"name": "party protocol", "script": preload("res://tests/test_party_protocol.gd")},
+	{"name": "admin protocol", "script": preload("res://tests/test_admin_protocol.gd")},
 	{"name": "give protocol", "script": preload("res://tests/test_give_protocol.gd")},
 	{"name": "ability defs", "script": preload("res://tests/test_ability_defs.gd")},
 	{"name": "casting protocol", "script": preload("res://tests/test_casting.gd")},

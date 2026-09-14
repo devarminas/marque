@@ -1,8 +1,12 @@
 package game
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/coder/websocket"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
@@ -197,4 +201,100 @@ func TestAdminAllowlistIgnoresOtherPlayers(t *testing.T) {
 	if ran != 1 {
 		t.Fatalf("alice ran=%d, want 1", ran)
 	}
+}
+
+func TestAdminReplyPrivateToInvoker(t *testing.T) {
+	pw := newProbeWorld(t)
+	alicePeer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)
+	bobPeer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)
+	drainJoin(t, alicePeer.ws)
+	drainJoin(t, bobPeer.ws)
+	alice := pw.w.byConn[alicePeer.conn]
+	if alice == nil {
+		t.Fatal("alice missing from byConn")
+	}
+
+	pw.w.SetAdminACL(AdminACL{Players: map[mnet.PlayerID]struct{}{alice.id: {}}})
+	reg := NewAdminRegistry()
+	reg.Register("noop", func(w *World, p *player, args []string) (string, *mnet.RejectError) {
+		return "noop ran", nil
+	})
+	pw.w.SetAdminRegistry(reg)
+
+	pw.w.handleFrame(mnet.Event{
+		Kind: mnet.EventFrame,
+		Conn: alice.conn,
+		Msg:  mnet.Admin{Line: "/noop"},
+		Seq:  1,
+	})
+
+	got := awaitAdminReply(t, alicePeer.ws, 2*time.Second)
+	if got != "ok: noop ran" {
+		t.Fatalf("alice admin_reply=%q, want %q", got, "ok: noop ran")
+	}
+	if text, ok := tryAdminReply(t, bobPeer.ws, 200*time.Millisecond); ok {
+		t.Fatalf("bob received admin_reply %q; replies are private to the invoker", text)
+	}
+}
+
+func TestAdminReplyPrefixesDistinguishDenyAndUsage(t *testing.T) {
+	pw := newProbeWorld(t)
+	alicePeer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)
+	drainJoin(t, alicePeer.ws)
+	alice := pw.w.byConn[alicePeer.conn]
+
+	pw.w.handleFrame(mnet.Event{
+		Kind: mnet.EventFrame,
+		Conn: alice.conn,
+		Msg:  mnet.Admin{Line: "/noop"},
+		Seq:  1,
+	})
+	if got := awaitAdminReply(t, alicePeer.ws, 2*time.Second); got != "deny: unauthorized" {
+		t.Fatalf("deny reply=%q, want %q", got, "deny: unauthorized")
+	}
+
+	pw.w.SetAdminACL(AdminACL{DevAdmin: true})
+	pw.w.SetAdminRegistry(NewAdminRegistry())
+	pw.w.handleFrame(mnet.Event{
+		Kind: mnet.EventFrame,
+		Conn: alice.conn,
+		Msg:  mnet.Admin{Line: "/nope"},
+		Seq:  2,
+	})
+	if got := awaitAdminReply(t, alicePeer.ws, 2*time.Second); !strings.HasPrefix(got, "usage: ") {
+		t.Fatalf("usage reply=%q, want usage: prefix", got)
+	}
+}
+
+func awaitAdminReply(t *testing.T, ws *websocket.Conn, within time.Duration) string {
+	t.Helper()
+	body := awaitWireKind(t, ws, mnet.MsgAdminReply, within)
+	var reply mnet.AdminReply
+	if err := json.Unmarshal(body, &reply); err != nil {
+		t.Fatalf("admin_reply: %v: %s", err, body)
+	}
+	if reply.Text == "" {
+		t.Fatalf("admin_reply missing text: %s", body)
+	}
+	return reply.Text
+}
+
+func tryAdminReply(t *testing.T, ws *websocket.Conn, within time.Duration) (string, bool) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		kind, body, ok := readHeartbeatFrame(t, ws, time.Until(deadline))
+		if !ok {
+			return "", false
+		}
+		if kind != mnet.MsgAdminReply {
+			continue
+		}
+		var reply mnet.AdminReply
+		if err := json.Unmarshal(body, &reply); err != nil {
+			t.Fatalf("admin_reply: %v: %s", err, body)
+		}
+		return reply.Text, true
+	}
+	return "", false
 }
