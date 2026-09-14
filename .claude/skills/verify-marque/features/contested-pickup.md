@@ -118,10 +118,8 @@ Preconditions:
 
 - **Core claim is GAMELOG-only.** Pixels cannot prove exactly-one-winner. Assert
   `pickup_resolved` / `pickup_lost` first.
-- **Same-tick pickup clicks use `click_deadline_usec`.** Both clients derive one
-  absolute click moment from the quantized scenario observation (plus a short
-  post-ready pad so capture 1 can finish). Do not schedule from local `now` after
-  capture — that skews intents by a tick or two and turns the contest into a race.
+- **Same-tick pickup clicks use a shared aim-tick barrier** (see below) — not
+  `next_guard(now)` after capture, and not per-process usec quanta alone.
 - **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
   u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
   `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away
@@ -157,20 +155,15 @@ Preconditions:
   `w.order` with a pending pickup and in range takes it. It is reproducible for a given
   connection order and it is *not* reproducible across runs, because the two clients
   race to connect. Both labels have won here. Assert that exactly one won, never which.
-- **The clients agree on a moment through the server's tick clock**, not wall-clock:
-  each reads `estimated_tick()` when it can first see both players and the item, adds a
-  fixed lead, and prints the sum. "The two clients aimed at different ticks" is a
-  distinct failure from "the server did not resolve a contest".
-
-  **The two numbers are not identical, and this bullet used to claim they were observed
-  identical on every run.** Measured over 21 idle runs at M1j, they differ by exactly one
-  tick on 15 of them, by nothing on the other 6, and by more than one on none. The cause
-  is in the client: each anchors its own `TickClock` at its own `welcome` and
-  `estimated_tick()` floors the elapsed time, so two clients anchored at different
-  instants inside one tick cross the floor boundary at different moments and read
-  different numbers for the same instant. A one-tick disagreement is the expected
-  artifact of that, not a fault, so the harness tolerates one tick here and nothing
-  wider.
+- **The clients agree on a moment through a shared aim tick, not wall-clock
+  usec.** Each writes its `estimated_tick` at roster-ready into a barrier file
+  under the `--pickup-shots` directory, takes `max(sync) + CLICK_LEAD`, and
+  fires at that tick's guard via `TickClock.start_usec_of` — not
+  `next_guard(now)` after capture, which desyncs when the 15-frame warm-up
+  finishes at different times. `DEMO sync` prints local sync and the agreed
+  aim; the harness still tolerates one tick of aim skew from anchor flooring.
+  Per-process `Time.get_ticks_usec` quanta are not comparable across two Godot
+  processes, which is why the barrier exists.
 
   **What decides whether a run was a contest is a server-side number, not this one.**
   The check that decides the milestone is same-tick `pickup` intents plus

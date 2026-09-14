@@ -23,9 +23,9 @@ const USEC_PER_MSEC := 1000
 # window only reached 4.56u and never printed DEMO walkaway_arrived). Approach
 # origin→(-5,-5) is ~59 ticks; fail-closed path/move_to stays in the harness.
 const CLICK_LEAD_TICKS := 75
-# Capture 1 starts SHOT_BEFORE before ready; click is CLICK_AFTER_READY after
-# ready. Together they leave ~2.6s for a 15-frame capture so a slow desktop
-# cannot overrun the shared click_deadline_usec and reintroduce click skew.
+# Capture 1 starts SHOT_BEFORE before the shared aim tick so a slow 15-frame
+# warm-up cannot overrun the guard. click_deadline_usec still adds
+# CLICK_AFTER_READY for unit tests that schedule from scenario usec alone.
 const SHOT_BEFORE_LEAD_TICKS := 40
 const CLICK_AFTER_READY_TICKS := 25
 const SHOT_RESOLVED_OFFSET_TICKS := 98
@@ -48,6 +48,10 @@ const WISH_RESEND_MSEC := 100
 const BAG_LAYOUT_DEADLINE_MSEC := 2000
 
 const SPIN_USEC := 20000
+
+# Written under the --pickup-shots directory so both clients share one max sync
+# tick before aiming. Per-process usec quanta are not comparable across Godots.
+const SYNC_BARRIER_PREFIX := "marque-pickup-sync-"
 
 var _tree: SceneTree
 var _root: Node
@@ -90,12 +94,14 @@ func run(
 	if not clock.is_anchored():
 		return _fail("the tick clock is not anchored; there is no shared moment to click on")
 	var tick_usec := clock.tick_ms() * USEC_PER_MSEC
-	var ready_usec := ready_deadline_usec(scenario_usec, clock)
 	var sync_tick := clock.estimated_tick_at(scenario_usec)
-	print("DEMO sync %d %d" % [sync_tick, clock.estimated_tick_at(ready_usec)])
+	var aim_tick: int = await _agree_aim_tick(sync_tick)
+	if aim_tick < 0:
+		return 1
+	print("DEMO sync %d %d" % [sync_tick, aim_tick])
 
-	if not await _await_usec(ready_usec - SHOT_BEFORE_LEAD_TICKS * tick_usec):
-		return _fail("frames stopped before the first capture")
+	if not await _await_tick(aim_tick - SHOT_BEFORE_LEAD_TICKS):
+		return _fail("the clock stalled before the first capture")
 	if not await _capture(1):
 		return _fail("capture 1 failed")
 
@@ -104,12 +110,18 @@ func run(
 		return 1
 	var screen: Vector2 = picked
 
-	# Shared absolute deadline from the scenario observation — not next_guard from
-	# local "now" after capture. Capture duration differs per client; scheduling
-	# from now put intents two ticks apart (e.g. 435 vs 437) and broke same-tick
-	# contest. test_tick_clock expects click_deadline_usec to keep both on one tick.
-	var click_usec := click_deadline_usec(scenario_usec, clock)
+	# Guard of the shared aim tick — not next_guard(now) after capture, which
+	# desyncs when the two clients finish the 15-frame warm-up at different times.
+	var click_usec := clock.next_guard_usec(
+		clock.start_usec_of(aim_tick),
+		click_guard_usec(tick_usec),
+	)
 	var click_tick := clock.estimated_tick_at(click_usec)
+	if Time.get_ticks_usec() >= click_usec:
+		return _fail(
+			"missed the shared click guard at aim tick %d (click tick %d); capture overran the lead"
+			% [aim_tick, click_tick]
+		)
 	if not await _await_usec(click_usec):
 		return _fail("frames stopped before the click")
 	_click_at(screen)
@@ -157,6 +169,51 @@ static func click_deadline_usec(scenario_usec: int, clock: TickClock) -> int:
 		ready_deadline_usec(scenario_usec, clock) + CLICK_AFTER_READY_TICKS * tick_usec,
 		click_guard_usec(tick_usec),
 	)
+
+
+static func aim_tick_from_max_sync(max_sync_tick: int) -> int:
+	return max_sync_tick + CLICK_LEAD_TICKS
+
+
+func _agree_aim_tick(sync_tick: int) -> int:
+	var dir := _prefix.get_base_dir()
+	if dir.is_empty():
+		_fail("pickup shots prefix has no directory for the sync barrier")
+		return -1
+	var path := dir.path_join("%s%d.txt" % [SYNC_BARRIER_PREFIX, _session.own_id()])
+	var out := FileAccess.open(path, FileAccess.WRITE)
+	if out == null:
+		_fail("could not write sync barrier %s: %s" % [path, FileAccess.get_open_error()])
+		return -1
+	out.store_line(str(sync_tick))
+	out.close()
+
+	var max_sync := sync_tick
+	var peers := 0
+	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		peers = 0
+		max_sync = sync_tick
+		var names := DirAccess.get_files_at(dir)
+		for name in names:
+			if not str(name).begins_with(SYNC_BARRIER_PREFIX):
+				continue
+			if not str(name).ends_with(".txt"):
+				continue
+			peers += 1
+			var text := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+			if text.is_valid_int():
+				max_sync = maxi(max_sync, int(text))
+		if peers >= REQUIRED_PLAYERS:
+			var aim := aim_tick_from_max_sync(max_sync)
+			print("DEMO barrier %d %d %d" % [peers, max_sync, aim])
+			return aim
+		await _tree.process_frame
+	_fail(
+		"sync barrier saw %d peer file(s) after %dms, want %d"
+		% [peers, JOIN_TIMEOUT_MSEC, REQUIRED_PLAYERS]
+	)
+	return -1
 
 
 func _walk_away_and_drop(click_tick: int) -> bool:

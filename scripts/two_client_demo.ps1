@@ -85,13 +85,6 @@ function Compare-Frames([string] $left, [string] $right) {
         Add-Type -AssemblyName System.Drawing -ErrorAction Stop
         $a = [System.Drawing.Bitmap]::FromFile($left)
         $b = [System.Drawing.Bitmap]::FromFile($right)
-    } catch {
-        Write-Host "==> Compare-Frames skipped: System.Drawing/GDI+ unavailable ($($_.Exception.Message))"
-        if ($null -ne $a) { $a.Dispose() }
-        if ($null -ne $b) { $b.Dispose() }
-        return $null
-    }
-    try {
         if ($a.Width -ne $b.Width -or $a.Height -ne $b.Height) {
             throw "frames differ in size: $left is $($a.Width)x$($a.Height), $right is $($b.Width)x$($b.Height)"
         }
@@ -147,9 +140,16 @@ function Compare-Frames([string] $left, [string] $right) {
             BandFraction = $bandDiffering / [double]$bandPixels
             BandMaxChannelDelta = $bandMaxChannelDelta
         }
+    } catch {
+        # Size mismatches are real harness failures; Drawing/GDI+ load failures skip.
+        if ($_.Exception.Message -match 'frames differ in size|top quarter holds no pixels') {
+            throw
+        }
+        Write-Host ("==> Compare-Frames skipped: System.Drawing/GDI+ unavailable ({0})" -f $_.Exception.Message)
+        return $null
     } finally {
-        $a.Dispose()
-        $b.Dispose()
+        if ($null -ne $a) { $a.Dispose() }
+        if ($null -ne $b) { $b.Dispose() }
     }
 }
 
@@ -405,7 +405,7 @@ try {
         $stillPair = Compare-Frames $frames[2 * $watching - 1] $frames[2 * $watching]
         $movingPair = Compare-Frames $frames[2 * $client.Phase - 1] $frames[2 * $client.Phase]
         if ($null -eq $stillPair -or $null -eq $movingPair) {
-            Write-Host ("==> client {0} pixels: skipped (no System.Drawing); DEMO/GAMELOG wish+pose asserts still apply" -f $label)
+            Write-Host ("==> client {0} pixels: skipped (System.Drawing/GDI+ off Windows or unavailable); DEMO/GAMELOG wish+pose asserts still apply" -f $label)
             continue
         }
         Write-Host ("==> client {0} pixels: standing still (shots {1}..{2}) {3:P2} differ, top quarter {4}; walking (shots {5}..{6}) {7:P2} differ, top quarter {8}" -f `
