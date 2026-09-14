@@ -93,7 +93,7 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
 ## Combat
 
 - [Kill and respawn](./combat-kill-respawn.md) — M5 death/respawn (Go) plus live
-  NPC melee via `dummy_attack` / `tab_combat`. `combat_demo.ps1` is retired.
+  NPC melee via `dummy_attack` / `tab_combat`. `combat_demo.ps1` is a fail-closed stub (ARM-284).
 - [Tab targeting](./tab-targeting.md) — M6c select with ring chrome; no auto-attack.
 - [Right-click basic attack](./right-click-basic-attack.md) — M6f hostile engage;
   friendly refuse.

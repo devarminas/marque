@@ -289,29 +289,10 @@ func _run_craft_cast_demo(args: Array) -> void:
 	get_tree().quit(code)
 
 
-func _run_combat_demo(args: Array) -> void:
-	var prefix := _argument_after(args, COMBAT_SHOTS_FLAG)
-	if prefix.is_empty():
-		push_error("%s needs an output path prefix after it" % COMBAT_SHOTS_FLAG)
-		get_tree().quit(1)
-		return
-	var role := _argument_after(args, COMBAT_ROLE_FLAG)
-	if role.is_empty():
-		push_error("%s needs attacker or victim after it" % COMBAT_ROLE_FLAG)
-		get_tree().quit(1)
-		return
-
-	var session := get_node_or_null("Session") as SessionScript
-	var death := get_node_or_null("UI/DeathOverlay") as DeathOverlayScript
-	var hp_hud := get_node_or_null("UI/HpHud") as HpHudScript
-	if session == null or death == null or hp_hud == null:
-		push_error("main.tscn is missing Session, UI/DeathOverlay, or UI/HpHud")
-		get_tree().quit(1)
-		return
-
+func _run_combat_demo(_args: Array) -> void:
+	# ARM-284: fail-closed. Do not spin up session/UI for the retired PvP demo.
 	var demo := CombatDemoScript.new()
-	var code: int = await demo.run(self, session, death, hp_hud, prefix, role)
-	get_tree().quit(code)
+	get_tree().quit(demo.run())
 
 
 func _run_wasd_demo(args: Array) -> void:

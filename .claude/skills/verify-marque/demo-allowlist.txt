@@ -5,7 +5,7 @@
 # Helpers (marque-demo-lib.ps1, demo_npc_capture.gd) are not scanned.
 
 # scripts/*_demo.ps1
-scripts/combat_demo.ps1  # retired ARM-203 stub; keep listed so doctor stays green
+scripts/combat_demo.ps1  # fail-closed ARM-284 stub; keep listed so doctor stays green
 scripts/contested_pickup_demo.ps1
 scripts/dummy_attack_demo.ps1
 scripts/dummy_cast_demo.ps1
@@ -22,7 +22,7 @@ scripts/wasd_demo.ps1
 scripts/arena_collision_demo.ps1
 
 # client/scripts/*_demo.gd
-client/scripts/combat_demo.gd
+client/scripts/combat_demo.gd  # fail-closed ARM-284 stub; keep listed so doctor stays green
 client/scripts/dummy_attack_demo.gd
 client/scripts/dummy_cast_demo.gd
 client/scripts/enemy_quest_demo.gd

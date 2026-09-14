@@ -1,4 +1,4 @@
-# ARM-203 retired the two-client PvP combat demo.
+# ARM-284: fail-closed stub. The two-client PvP combat demo is retired (ARM-203).
 # Use scripts/dummy_attack_demo.ps1 or scripts/tab_combat_demo.ps1 instead.
 [CmdletBinding()]
 param(
@@ -9,6 +9,6 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-Write-Host "combat_demo.ps1 retired under ARM-203 (PvP attack is refused)."
+Write-Host "combat_demo.ps1 retired under ARM-284 (PvP attack is refused)."
 Write-Host "Run scripts/dummy_attack_demo.ps1 or scripts/tab_combat_demo.ps1 for Combat-class vs NPC proof."
-exit 0
+exit 1
