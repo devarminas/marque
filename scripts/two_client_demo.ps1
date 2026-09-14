@@ -25,10 +25,8 @@ $BandQuietTolerance = "the tolerance is {0:N4}% of pixels and {1}/255" -f `
 
 $MovingCameraDiffRatio = 8.0
 
-$ExpectedTickMS = 150
+$ExpectedTickMS = 40
 $ExpectedWalkSpeed = 3.0
-
-$MaxWalkTickError = 2
 
 $repo = Split-Path -Parent $PSScriptRoot
 $serverDir = Join-Path $repo "server"
@@ -413,22 +411,37 @@ try {
         $failures.Add("the server wrote no GAMELOG events to $serverOut; this run contains no server-side evidence at all")
     }
 
-    $perTick = $ExpectedWalkSpeed * $ExpectedTickMS / 1000.0
     $started = @($events | Where-Object { $_.ev -eq "server_started" })
     if ($started.Count -ne 1) {
         $failures.Add("the log holds $($started.Count) server_started event(s), want 1")
     } else {
         $boot = $started[0]
         if ([int]$boot.tick_ms -ne $ExpectedTickMS) {
-            $failures.Add("the server ticks every $($boot.tick_ms)ms; this script's walk durations assume $ExpectedTickMS")
+            $failures.Add("the server ticks every $($boot.tick_ms)ms; this script expects $ExpectedTickMS")
         }
         if ([double]$boot.walk_speed -ne $ExpectedWalkSpeed) {
-            $failures.Add("the server walks at $($boot.walk_speed) units/s; this script's walk durations assume $ExpectedWalkSpeed")
+            $failures.Add("the server walks at $($boot.walk_speed) units/s; this script expects $ExpectedWalkSpeed")
         }
-        $perTick = [double]$boot.walk_speed * [int]$boot.tick_ms / 1000.0
     }
 
-    $arrivedAt = @{}
+    $playerPathEvents = 0
+    $moveToEvents = 0
+    foreach ($event in $events) {
+        if ($event.ev -eq "move_to") { $moveToEvents++ }
+        if ($event.ev -eq "path_assigned" -and
+            ($event.PSObject.Properties.Name -contains "player") -and
+            $null -ne $event.player) {
+            $playerPathEvents++
+        }
+    }
+    if ($moveToEvents -gt 0) {
+        $failures.Add("GAMELOG move_to=$moveToEvents, want 0 (player move_to is retired; demos send wish move)")
+    }
+    if ($playerPathEvents -gt 0) {
+        $failures.Add("GAMELOG player path_assigned=$playerPathEvents, want 0 for wish+pose")
+    }
+
+    $endAt = @{}
     foreach ($client in $running) {
         $label = $client.Label
         if ($client.Id -lt 1) { continue }
@@ -439,71 +452,53 @@ try {
         }
         if ([string]::IsNullOrWhiteSpace($client.Click)) { continue }
 
-        $moves = Select-PlayerEvents $events "move_to" $id
-        if ($moves.Count -ne 1) {
-            $failures.Add("the server logged $($moves.Count) move_to intent(s) for player $id (client $label), want exactly 1: the phase walk, and nothing from the ground click")
+        $stdoutText = ""
+        if (Test-Path $client.Stdout) { $stdoutText = Get-Content -Path $client.Stdout -Raw }
+        if ($stdoutText -notmatch "DEMO groundclick_ignored ") {
+            $failures.Add("client $label never proved a bare-ground click was ignored (no DEMO groundclick_ignored)")
+        }
+        if ($stdoutText -notmatch "DEMO walkto ") {
+            $failures.Add("client $label never reported DEMO walkto for its wish steer phase")
+        }
+        if ($stdoutText -notmatch "DEMO move_displacement ") {
+            $failures.Add("client $label never reported DEMO move_displacement for its wish steer phase")
         }
 
-        $assigned = Select-PlayerEvents $events "path_assigned" $id
-        if ($assigned.Count -lt 1) {
-            $failures.Add("the server assigned player $id (client $label) no path; there was nothing for anyone to walk")
-            continue
+        $moves = Select-PlayerEvents $events "move" $id
+        $nonzero = 0
+        foreach ($move in $moves) {
+            $dx = [double]$move.dx
+            $dz = [double]$move.dz
+            if ([math]::Hypot($dx, $dz) -gt 1e-6) { $nonzero++ }
         }
-        $path = $assigned[$assigned.Count - 1]
-        if ($path.points.Count -lt 2) {
-            $failures.Add("player $id's path_assigned carries $($path.points.Count) point(s); a walk needs at least two")
-            continue
-        }
-        $from = $path.points[0]
-        $to = $path.points[$path.points.Count - 1]
-        $span = Get-Distance ([double]$from[0]) ([double]$from[1]) ([double]$to[0]) ([double]$to[1])
-        if ($span -lt $MinDisplacement) {
-            $failures.Add("player $id's assigned path spans only $([math]::Round($span, 3)) units; the server did not plan the walk the client asked for")
+        Write-Host ("==> server: player {0} (client {1}) logged {2} move wish(es), {3} non-zero" -f `
+            $id, $label, $moves.Count, $nonzero)
+        if ($nonzero -lt 1) {
+            $failures.Add("the server logged $nonzero non-zero move wish(es) for player $id (client $label), want >= 1")
         }
 
-        $arrived = $null
-        foreach ($candidate in (Select-PlayerEvents $events "arrived" $id)) {
-            if ($candidate.t -le $path.start_tick) { continue }
-            if ((Get-Distance ([double]$candidate.x) ([double]$candidate.z) ([double]$to[0]) ([double]$to[1])) -gt 1e-6) { continue }
-            $arrived = $candidate
-            break
-        }
-        if ($null -eq $arrived) {
-            $seen = (Select-PlayerEvents $events "arrived" $id).Count
-            $failures.Add(("the server never recorded player $id (client $label) arriving at " +
-                "($([math]::Round([double]$to[0], 3)), $([math]::Round([double]$to[1], 3))), the endpoint of the path it assigned " +
-                "at tick $($path.start_tick); the whole log holds $seen arrived event(s) for that player. " +
-                "The clients walked the polyline they were handed, but the server's world never moved."))
-            continue
-        }
-        $took = [int]$arrived.t - [int]$path.start_tick
-        $expected = [int][math]::Ceiling($span / $perTick)
-        Write-Host ("==> server: player {0} got a {1:N3}-unit path at tick {2} and arrived at ({3:N3}, {4:N3}) on tick {5}, {6} tick(s) later; walking that far takes {7}" -f `
-            $id, $span, $path.start_tick, [double]$arrived.x, [double]$arrived.z, $arrived.t, $took, $expected)
-        if ([math]::Abs($took - $expected) -gt $MaxWalkTickError) {
-            $failures.Add(("player $id (client $label) crossed $([math]::Round($span, 3)) units in $took tick(s), " +
-                "but at $ExpectedWalkSpeed units per second on ${ExpectedTickMS}ms ticks that walk takes $expected. " +
-                "The server's world did not walk the path, it jumped it."))
-        }
-        $arrivedAt[$id] = [double[]] @([double]$arrived.x, [double]$arrived.z)
+        if ($null -eq $client.Positions) { continue }
+        if (-not $client.Positions.ContainsKey(4)) { continue }
+        if (-not $client.Positions[4].ContainsKey($id)) { continue }
+        $endAt[$id] = $client.Positions[4][$id]
     }
 
     $walker1 = $walkerOfPhase[1]
-    if ($null -ne $walker1 -and $arrivedAt.ContainsKey($walker1)) {
-        $end = $arrivedAt[$walker1]
+    if ($null -ne $walker1 -and $endAt.ContainsKey($walker1)) {
+        $end = $endAt[$walker1]
         foreach ($client in $running) {
             if ($null -eq $client.Positions) { continue }
             if (-not $client.Positions.ContainsKey(4)) { continue }
             if (-not $client.Positions[4].ContainsKey($walker1)) { continue }
             $drawn = $client.Positions[4][$walker1]
             $gap = Get-Distance $drawn[0] $drawn[1] $end[0] $end[1]
-            Write-Host ("==> client {0} drew player {1} {2:N4} units from where the server says it stopped" -f `
-                $client.Label, $walker1, $gap)
+            Write-Host ("==> client {0} drew player {1} {2:N4} units from client {3}'s shot-4 pose" -f `
+                $client.Label, $walker1, $gap, ($running | Where-Object { $_.Id -eq $walker1 } | Select-Object -First 1).Label)
             if ($gap -gt $MaxLayerDisagreement) {
                 $failures.Add(("client $($client.Label) drew player $walker1 at " +
-                    "($([math]::Round($drawn[0], 3)), $([math]::Round($drawn[1], 3))) in shot 4, but the server recorded it " +
-                    "arriving at ($([math]::Round($end[0], 3)), $([math]::Round($end[1], 3))): " +
-                    "$([math]::Round($gap, 3)) units apart"))
+                    "($([math]::Round($drawn[0], 3)), $([math]::Round($drawn[1], 3))) in shot 4, but the walker's " +
+                    "own client drew ($([math]::Round($end[0], 3)), $([math]::Round($end[1], 3))): " +
+                    "$([math]::Round($gap, 3)) units apart (server pose must agree on both clients)"))
             }
         }
     }

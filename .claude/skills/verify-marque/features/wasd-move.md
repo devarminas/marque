@@ -28,12 +28,13 @@ powershell -File scripts/wasd_demo.ps1
 ```
 
 Required markers: exit 0, last line `WASD DEMO OK`, client `DEMO done`,
-`DEMO move_displacement` ≥ 1.5, GAMELOG `move` and pose progress (no player
-`path_assigned`).
+`DEMO wish_ok`, `DEMO move_displacement` ≥ 1.5, GAMELOG non-zero `move` wish
+(no player `path_assigned`, no `move_to`).
 
 Proof map:
 
-- Displacement: `DEMO pos` + `DEMO move_displacement` and GAMELOG `move` / pose
+- Displacement: `DEMO pos` + `DEMO move_displacement` / `wish_ok` and GAMELOG
+  `move` (non-zero dx/dz)
 - Authority: Go `TestClientCannotAuthorPositionViaMove`
 - Cancel: Go `TestMoveCancelsPendingAttack`
 - Ownership: Go last-intent move-over-approach (sticky steer)

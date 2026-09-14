@@ -140,6 +140,7 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	if travelled < MIN_DISPLACEMENT:
 		return _fail("displacement %f below %f after steer" % [travelled, MIN_DISPLACEMENT])
 	print("DEMO move_displacement %f" % travelled)
+	print("DEMO wish_ok")
 	await _capture(5)
 
 	print("DEMO done")

@@ -13,8 +13,9 @@ lines and GAMELOG events must agree.
   `-friendly-hp` so heal can raise it.
 - `right-click-attack` — right-click hostile starts pending melee; DEMO
   `attackok` and GAMELOG `attack` / `attack_hit`.
-- `wasd-relocate` — `request_move` steer displaces the avatar; GAMELOG `move`
-  and `path_assigned`.
+- `wasd-relocate` — `request_move` wish displaces the avatar; DEMO
+  `move_displacement` / `wish_ok`; GAMELOG non-zero `move`; **no** player
+  `path_assigned` / `move_to`.
 
 ## How to get to it (user POV)
 
@@ -30,9 +31,9 @@ Preconditions:
 - `DOCTOR OK` or a local Godot that can run the live demo.
 - Live: `powershell -ExecutionPolicy Bypass -File scripts/tab_combat_demo.ps1`.
   Marker: `TAB COMBAT DEMO OK` on the last line; exit 0.
-- Requires DEMO `fireballok`, `healok`, `castfx`, `attackok`, `move_displacement`
-  plus GAMELOG `cast_effect`, `attack_hit`, `move`, `path_assigned`, and
-  `npc_hp_seed`.
+- Requires DEMO `fireballok`, `healok`, `castfx`, `attackok`, `move_displacement`,
+  `wish_ok` plus GAMELOG `cast_effect`, `attack_hit`, non-zero `move`, and
+  `npc_hp_seed`. Fails closed on player `path_assigned` or `move_to`.
 
 Evidence lands in `-OutDir` (default `$env:TEMP\marque-tab-combat`): client
 stdout/stderr, `server.stdout.ndjson`, and optional `tab_combat_*.png`.

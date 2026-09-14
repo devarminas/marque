@@ -54,14 +54,14 @@ marker from the **last line** of the output instead of grepping for it: all thre
 PowerShell harnesses here print theirs last, and a grep matches a forgery buried
 anywhere in the middle.
 
-**Two evidence layers, and a behavioural claim usually needs both.** The client walks
-polylines by itself: the server sends waypoints once and never per-tick positions, so
-after a `path` broadcast the pixels and `DEMO pos` lines prove what the *client
-drew*, while the GAMELOG proves what the *server believes*. A server whose tick loop
-stopped advancing players would still produce moving pixels on every client, because
-each client interpolates the path it was handed. "The player moved" is proven by
-client-side displacement (`DEMO pos`) **and** the server's `arrived` event, not by
-either alone.
+**Two evidence layers, and a behavioural claim usually needs both.** Players move by
+wish samples and server `pose`; remotes follow server pose only. Own-avatar
+`DEMO pos` can include prediction, so after a walk the pixels and `DEMO pos` lines
+prove what the *client drew*, while the GAMELOG `move` wishes prove what the
+*server accepted*. A server whose tick loop stopped integrating would still let a
+predicting local avatar drift; the other client's body for that player would not.
+"The player moved" for a two-client claim is proven by watcher `DEMO pos`
+displacement **and** the server's `move` events, not by either alone.
 
 **A screenshot assertion must name the specific thing that would be missing.** "The
 screenshot shows lighting" was passed in this repo by a build whose sun pointed at
@@ -241,14 +241,14 @@ For the fixed M0 milestone scenario with its assertions already written, run
 
 ### What `scripts/two_client_demo.ps1` proves
 
-Both layers, since M1g. Its client layer is the pixels and the `DEMO pos`
-displacements; its server layer asserts, per player id resolved from that client's
-`DEMO joined` line, a `client_connected`, a `move_to`, a `path_assigned` spanning at
-least 2.0 units, and an **`arrived` after that path's `start_tick` whose coordinates
-match its endpoint** — the one event a server that hands out paths and never moves
-anybody cannot produce. It then ties the layers together: the phase-1 walker's
-`arrived` point must be within 0.05 units of where both clients drew that body in
-shot 4.
+Both layers, since M1g (rewritten for wish+pose on ARM-283). Its client layer is
+the pixels and the `DEMO pos` displacements; its server layer asserts, per player
+id resolved from that client's `DEMO joined` line, a `client_connected`, at least
+one non-zero GAMELOG `move` wish for each walker, `DEMO groundclick_ignored` /
+`DEMO walkto` / `DEMO move_displacement`, and **zero** player `path_assigned` /
+`move_to` for the run. It then ties the layers together: both clients' shot-4
+`DEMO pos` for the phase-1 walker agree within 0.05 (server pose on both sides).
+Watcher displacement proves the server moved — remotes follow pose only.
 
 Until M1g it asserted **nothing** about the server. All twenty-odd of its checks read
 a client's stdout or a client's PNG, and it deleted the server's log at teardown, so
@@ -266,24 +266,21 @@ client gets the item" is a fact about the server's store. Two clients that both 
 empty patch of ground look identical whether the item went to one player, to both, or
 to neither. So the load-bearing assertions are one `pickup_resolved` and one
 `pickup_lost` for the same item id naming different players, two `pickup` intents from
-two distinct players, and no `pickup_rejected` or `pickup_no_room`.
+two distinct players on the same tick, and no `pickup_rejected` or `pickup_no_room`.
 
-**It also asserts every walk is plausible, which the M0 demo does not.** That demo
-proves the server *finished* a walk — it matches an `arrived` against the endpoint of
-the path it assigned — and a tick loop whose per-tick distance is 1000.0 crosses the
-whole polyline in one tick and produces a perfectly formed `arrived`. This one checks
-`arrived.t - start_tick` against `ceil(span / (WalkSpeed * TickDuration))` within two
-ticks. Healthy figures on this machine: 16 ticks for a 7.071-unit walk, 13 for a
-5.567-unit one, both exactly the ideal. That closes the open half of unit M1j at the
-layer that depends on it.
+**Approach and walk-away are wish+pose (ARM-283).** The harness fails closed on any
+player `path_assigned` or `move_to`. The winner must log non-zero GAMELOG `move`
+wishes and print `DEMO wish` / `DEMO walkaway_arrived`; drop `item_spawned`
+coordinates must match that arrived pose (and stay clear of the origin / seed).
 
 **It is the only thing in this repo that asserts `item_spawned`'s coordinates.** For
-the seed, against what `-item` asked for; for the drop, against where the dropper's
-`arrived` says it stood, plus a floor on the distance from the origin and from where
-the item was seeded — so a run whose coordinates were zeroed cannot pass by having the
-walk also end at zero. A verifier logged those coordinates zeroed while the store and
-the wire stayed truthful and all 93 Go tests stayed green; anything that reads the log
-as ground truth, this harness included, was wrong with no way to say so.
+the seed, against what `-item` asked for; for the drop, against the winner's
+`DEMO walkaway_arrived` pose, plus a floor on the distance from the origin and from
+where the item was seeded — so a run whose coordinates were zeroed cannot pass by
+having the walk also end at zero. A verifier logged those coordinates zeroed while
+the store and the wire stayed truthful and all 93 Go tests stayed green; anything
+that reads the log as ground truth, this harness included, was wrong with no way to
+say so.
 
 **There is no `item_despawn` event in the event log.** The despawn is a wire message
 only (`items.go`, `w.broadcast(mnet.ItemDespawn...)`); `EvItemDespawned` does not
@@ -384,11 +381,12 @@ always resolve ids via `DEMO joined`. Shared dump helper:
 
 - Exercise the real user path — a synthesised click through the picker — never an
   internal setter. There are no test-only endpoints here; do not add one for a proof.
-- Capture the action and the resulting state: the GAMELOG `move_to` **and** the
+- Capture the action and the resulting state: the GAMELOG `move` wish **and** the
   displacement it caused, not just a final screen.
 - Assert both layers: what the client drew (`DEMO pos`, pixels) and what the server
   believes (GAMELOG). Movement example: displacement between bracketing shots of at
-  least 2.0 world units **and** an `arrived` event for that player id.
+  least 2.0 world units **and** non-zero GAMELOG `move` for that player id (watcher
+  `DEMO pos` for two-client claims).
 - Name the pixel fact that would be missing if the claim were false: the cast shadow,
   the second body, the frames that must differ where the walker crossed.
 - No mocks. There is no production boundary here that isolates an external system —

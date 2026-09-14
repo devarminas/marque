@@ -442,7 +442,12 @@ func _run_demo(args: Array) -> void:
 	for phase in range(1, DEMO_PHASES + 1):
 		if phase > 1:
 			await _wait_msec(DEMO_PHASE_GAP_MSEC)
-		if phase == my_phase and not click.is_empty():
+		var walk_start := Vector2.ZERO
+		var walking := phase == my_phase and not click.is_empty()
+		if walking:
+			var avatar := session.avatar_for(session.own_id())
+			if avatar != null:
+				walk_start = Vector2(avatar.position.x, avatar.position.z)
 			if not _walk_to_fraction(session, picker, _parse_fraction(click)):
 				get_tree().quit(1)
 				return
@@ -454,6 +459,14 @@ func _run_demo(args: Array) -> void:
 			return
 
 		await _wait_msec(DEMO_WALK_MSEC)
+		if walking:
+			session.request_move(0.0, 0.0)
+			await _wait_msec(DEMO_SETTLE_MSEC)
+			var avatar_end := session.avatar_for(session.own_id())
+			if avatar_end != null:
+				var walk_end := Vector2(avatar_end.position.x, avatar_end.position.z)
+				var travelled := walk_start.distance_to(walk_end)
+				print("DEMO move_displacement %f" % travelled)
 		shot += 1
 		if not await _capture(session, prefix, shot):
 			get_tree().quit(1)

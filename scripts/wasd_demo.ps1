@@ -100,12 +100,14 @@ try {
     $done = $false
     $displacement = $null
     $posLines = 0
+    $wishOk = $false
     if (Test-Path $clientOut) {
         foreach ($line in Get-Content $clientOut) {
             if ($line -match '^DEMO pos ') { $posLines++ }
             if ($line -match '^DEMO move_displacement ([0-9.]+)') {
                 $displacement = [double]$Matches[1]
             }
+            if ($line -match '^DEMO wish_ok\s*$') { $wishOk = $true }
             if ($line -match '^DEMO done\s*$') { $done = $true }
             if ($line -match '^DEMO FAIL ') { Add-Failure $line.Trim() }
         }
@@ -115,20 +117,42 @@ try {
     if ($null -eq $displacement -or $displacement -lt 1.5) {
         Add-Failure "DEMO move_displacement=$displacement, want >= 1.5"
     }
+    if (-not $wishOk) { Add-Failure "missing DEMO wish_ok" }
 
     $moveEvents = 0
-    $pathEvents = 0
+    $nonzeroMoves = 0
+    $playerPathEvents = 0
+    $moveToEvents = 0
     if (Test-Path $serverOut) {
         foreach ($line in Get-Content $serverOut) {
             if ($line -match 'GAMELOG ') {
                 $json = ($line -replace '^GAMELOG ', '') | ConvertFrom-Json
-                if ($json.ev -eq "move") { $moveEvents++ }
-                if ($json.ev -eq "path_assigned") { $pathEvents++ }
+                if ($json.ev -eq "move") {
+                    $moveEvents++
+                    $dx = [double]$json.dx
+                    $dz = [double]$json.dz
+                    if ([math]::Hypot($dx, $dz) -gt 1e-6) { $nonzeroMoves++ }
+                }
+                if ($json.ev -eq "move_to") { $moveToEvents++ }
+                if ($json.ev -eq "path_assigned") {
+                    $hasPlayer = $json.PSObject.Properties.Name -contains "player"
+                    if ($hasPlayer -and $null -ne $json.player) {
+                        $playerPathEvents++
+                    }
+                }
             }
         }
     }
     if ($moveEvents -lt 1) { Add-Failure "GAMELOG move events=$moveEvents, want >= 1" }
-    if ($pathEvents -lt 1) { Add-Failure "GAMELOG path_assigned events=$pathEvents, want >= 1" }
+    if ($nonzeroMoves -lt 1) {
+        Add-Failure "GAMELOG non-zero move wish events=$nonzeroMoves, want >= 1"
+    }
+    if ($moveToEvents -gt 0) {
+        Add-Failure "GAMELOG move_to=$moveToEvents, want 0 (player move_to is retired)"
+    }
+    if ($playerPathEvents -gt 0) {
+        Add-Failure "GAMELOG player path_assigned=$playerPathEvents, want 0 for wish+pose"
+    }
 
     if ($failures.Count -gt 0) {
         Show-File "client stdout" $clientOut

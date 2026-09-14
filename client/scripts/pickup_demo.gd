@@ -169,6 +169,7 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 		return false
 	var here := Vector2(avatar.position.x, avatar.position.z)
 	var wish := (destination - here).normalized()
+	print("DEMO wish %f %f" % [wish.x, wish.y])
 	_session.request_move(wish.x, wish.y)
 
 	if not await _await_arrival(click_tick + WALK_AWAY_DEADLINE_TICKS, destination):
@@ -178,6 +179,8 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 			+ "item under a walker rather than at a destination it reached"
 		)
 		return false
+	var arrived_here := Vector2(avatar.position.x, avatar.position.z)
+	print("DEMO walkaway_arrived %f %f" % [arrived_here.x, arrived_here.y])
 
 	var slot := _first_occupied_slot()
 	if slot < 0:
