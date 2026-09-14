@@ -48,5 +48,3 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-admin-give-class-kits`:
   not from inventing kinds off class Requires alone.
 - **ACL.** Without `-admin` / `-admin-player`, `/give` returns `deny:
   unauthorized` and grants nothing.
-- **No boot seed flag.** Future kit helpers register on the admin CLI, not a
-  new marqued boot flag.
