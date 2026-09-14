@@ -453,14 +453,14 @@ try {
 
     $playerPathEvents = Count-PlayerPathAssigned $events
     $moveToEvents = (Select-Events $events "move_to").Count
-    Write-Host ("==> server: player path_assigned={0}, move_to={1} (want 0 / 0 for wish+pose)" -f `
+    Write-Host ("==> server: player path_assigned={0}, move_to={1} (want 0 / 0)" -f `
         $playerPathEvents, $moveToEvents)
     if ($playerPathEvents -gt 0) {
-        Add-Failure "GAMELOG player path_assigned=$playerPathEvents, want 0 (approach is server steerToward, not polyline)"
+        Add-Failure "GAMELOG player path_assigned=$playerPathEvents, want 0"
     }
     if ($moveToEvents -gt 0) {
         Add-Failure ("GAMELOG move_to=$moveToEvents, want 0 -- item clicks must resolve to pickup, and " +
-            "the winner's walk-away must be wish move samples, not retired move_to")
+            "the winner's walk-away must be wish move samples")
     }
 
     if ($intentTicks.Keys.Count -eq 2) {
@@ -488,7 +488,7 @@ try {
     }
 
     if ($loser -ge 1 -and $lost.Count -eq 1) {
-        Write-Host ("==> server: player {0} lost on tick {1}; halt is clearSteer+pose (no player path_assigned)" -f `
+        Write-Host ("==> server: player {0} lost on tick {1}; halt clears steer (no player path_assigned)" -f `
             $loser, $lost[0].t)
         $loserMovesAfterLoss = 0
         $lossTick = [int]$lost[0].t

@@ -435,10 +435,10 @@ try {
         }
     }
     if ($moveToEvents -gt 0) {
-        $failures.Add("GAMELOG move_to=$moveToEvents, want 0 (player move_to is retired; demos send wish move)")
+        $failures.Add("GAMELOG move_to=$moveToEvents, want 0")
     }
     if ($playerPathEvents -gt 0) {
-        $failures.Add("GAMELOG player path_assigned=$playerPathEvents, want 0 for wish+pose")
+        $failures.Add("GAMELOG player path_assigned=$playerPathEvents, want 0")
     }
 
     $endAt = @{}

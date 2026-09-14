@@ -241,7 +241,7 @@ For the fixed M0 milestone scenario with its assertions already written, run
 
 ### What `scripts/two_client_demo.ps1` proves
 
-Both layers, since M1g (rewritten for wish+pose on ARM-283). Its client layer is
+Both layers, since M1g. Its client layer is
 the pixels and the `DEMO pos` displacements; its server layer asserts, per player
 id resolved from that client's `DEMO joined` line, a `client_connected`, at least
 one non-zero GAMELOG `move` wish for each walker, `DEMO groundclick_ignored` /
@@ -268,7 +268,7 @@ to neither. So the load-bearing assertions are one `pickup_resolved` and one
 `pickup_lost` for the same item id naming different players, two `pickup` intents from
 two distinct players on the same tick, and no `pickup_rejected` or `pickup_no_room`.
 
-**Approach and walk-away are wish+pose (ARM-283).** The harness fails closed on any
+**Approach and walk-away are wish+pose.** The harness fails closed on any
 player `path_assigned` or `move_to`. The winner must log non-zero GAMELOG `move`
 wishes and print `DEMO wish` / `DEMO walkaway_arrived`; drop `item_spawned`
 coordinates must match that arrived pose (and stay clear of the origin / seed).
@@ -340,14 +340,11 @@ remaining explanation and nobody has reproduced the timeout under it.
 
 **GAMELOG vocabulary (M0 + wish+pose):** `server_started`, `server_stopping`,
 `client_connected`, `client_disconnected`, `move`, `move_rejected`, `move_to_rejected`,
-`intent_ignored`, `path_assigned` (NPC only for players' locomotion model), `arrived`
-(NPC path completion; players do not log path `arrived`), `path_replayed`,
-`ticks_dropped`, `frame_dropped`. The constants live in
+`intent_ignored`, `path_assigned` (NPC locomotion / patrol), `arrived` (NPC path
+completion), `path_replayed`, `ticks_dropped`, `frame_dropped`. The constants live in
 `server/internal/game/world.go`; M1 adds new `ev` values rather than changing these.
-`arrived` is shared: players historically set `player`, NPCs set `npc` (ARM-232
-chase/leash/patrol path completion). Player polyline `path_assigned` / player
-`arrived` are retired for locomotion proofs — use `move` + pose/`DEMO pos`.
-`path_assigned` already follows the player/npc field split.
+Player locomotion proofs use `move` + pose/`DEMO pos`, not player `path_assigned`.
+`path_assigned` / `arrived` already follow the player/npc field split.
 
 **`client_disconnected` carries a latched, cause-authoritative `reason` (M1f).** The reason
 names why the connection died, never which component noticed: `closed` for a clean logout,

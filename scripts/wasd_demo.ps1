@@ -148,10 +148,10 @@ try {
         Add-Failure "GAMELOG non-zero move wish events=$nonzeroMoves, want >= 1"
     }
     if ($moveToEvents -gt 0) {
-        Add-Failure "GAMELOG move_to=$moveToEvents, want 0 (player move_to is retired)"
+        Add-Failure "GAMELOG move_to=$moveToEvents, want 0"
     }
     if ($playerPathEvents -gt 0) {
-        Add-Failure "GAMELOG player path_assigned=$playerPathEvents, want 0 for wish+pose"
+        Add-Failure "GAMELOG player path_assigned=$playerPathEvents, want 0"
     }
 
     if ($failures.Count -gt 0) {
