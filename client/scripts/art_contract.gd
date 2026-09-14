@@ -47,6 +47,7 @@ var variants := {}
 var regions := {}
 var slot_regions := {}
 var pieces := {}
+var hand_items := {}
 var clips := {}
 var _routes := {}
 
@@ -82,6 +83,9 @@ func _init(text: String) -> void:
 	_parse_regions(_object(root, "regions", "contract"))
 	_parse_slot_regions(_object(root, "slot_regions", "contract"))
 	_parse_pieces(_object(root, "pieces", "contract"))
+	var items := _object(root, "hand_items", "contract")
+	for item in items:
+		hand_items[item] = _res_path(items, item, "hand_items")
 	_parse_clips(_object(root, "clips", "contract"))
 	_parse_routes(_array(root, "routes", "contract"))
 

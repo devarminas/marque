@@ -10,6 +10,7 @@ import bpy
 from armor import build_pieces, check_pieces
 from body import build_regions, check_shapes
 from clips import build_actions, check_clips
+from items import build_item, check_items
 from contract import load, res_to_path
 from rig import build_rig
 
@@ -54,6 +55,7 @@ def main() -> None:
     check_shapes(contract)
     check_clips(contract)
     check_pieces(contract)
+    check_items(contract)
     for name in sorted(contract.variants):
         variant = contract.variants[name]
         reset(contract.fps)
@@ -66,6 +68,9 @@ def main() -> None:
     rig = build_rig(contract, contract.variants[contract.clip_rig])
     build_actions(contract, rig)
     export(res_to_path(contract.clips_glb), [rig], animations=True)
+    for item in sorted(contract.hand_items):
+        reset(contract.fps)
+        export(res_to_path(contract.hand_items[item]), [build_item(item)], animations=False)
 
 
 main()

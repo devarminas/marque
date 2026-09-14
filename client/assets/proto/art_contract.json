@@ -112,6 +112,14 @@
     "forester_shirt": {"slot": "chest", "hides": ["torso", "upper_arms", "forearms"]},
     "forester_trousers": {"slot": "trousers", "hides": ["hips", "thighs", "shins"]}
   },
+  "hand_items": {
+    "sword": "res://assets/proto/items/sword.glb",
+    "shield": "res://assets/proto/items/shield.glb",
+    "staff": "res://assets/proto/items/staff.glb",
+    "bow": "res://assets/proto/items/bow.glb",
+    "lumberjack_axe": "res://assets/proto/items/lumberjack_axe.glb",
+    "pickaxe": "res://assets/proto/items/pickaxe.glb"
+  },
   "clips": {"idle": {"frames": 60, "loop": true}, "walk": {"frames": 30, "loop": true}, "swing": {"frames": 12, "loop": false}},
   "routes": [
     {"action": "idle", "key": "", "clip": "idle"},

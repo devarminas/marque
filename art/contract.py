@@ -57,6 +57,7 @@ class Contract:
     regions: dict[str, tuple[str, ...]]
     slot_regions: dict[str, tuple[str, ...]]
     pieces: dict[str, Piece]
+    hand_items: dict[str, str]
     clips: dict[str, Clip]
 
     def bone(self, name: str) -> Bone:
@@ -120,6 +121,7 @@ def load(path: Path = CONTRACT_PATH) -> Contract:
             if region not in regions:
                 raise ContractError(f"slot {slot!r} owns unknown region {region!r}")
     pieces = {item: _piece(item, row, slot_regions) for item, row in _field(raw, "pieces", dict).items()}
+    hand_items = {item: _res(path, f"hand_items.{item}") for item, path in _field(raw, "hand_items", dict).items()}
     variants = {
         name: Variant(
             name,
@@ -149,6 +151,7 @@ def load(path: Path = CONTRACT_PATH) -> Contract:
         regions=regions,
         slot_regions=slot_regions,
         pieces=pieces,
+        hand_items=hand_items,
         clips=clips,
     )
 
@@ -203,3 +206,10 @@ def _positive(value: float, where: str) -> float:
     if value <= 0:
         raise ContractError(f"{where} must be positive, got {value!r}")
     return value
+
+
+def _res(value: object, where: str) -> str:
+    path = _typed(value, str, where)
+    if not path.startswith("res://"):
+        raise ContractError(f"{where} must be a res:// path, got {path!r}")
+    return path
