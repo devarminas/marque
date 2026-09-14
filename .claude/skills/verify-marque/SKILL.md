@@ -298,13 +298,15 @@ pickup(s)", and both clients reported holding an acorn.
 
 ### Raw protocol probes
 
-For a wire-level claim the flag path cannot reach (malformed frames, out-of-bounds
-intents), write a throwaway WebSocket client in a scratch directory **outside the
-repo** (Go with its own `go.mod` works; the module proxy is reachable) and speak
-one-key JSON at a running server, asserting on the reply frames and on the GAMELOG.
-The headless suites already prove the client's *handling* of `error`, `despawn`, and
-halt paths against scripted frames; a probe is for the server's side of the same
-contract.
+For a wire-level claim the flag path cannot reach (malformed frames, retired
+`move_to`, admin bus checks), use the in-repo thin helper
+[`server/internal/wsprobe`](../../../server/internal/wsprobe) /
+[`server/cmd/wsprobe`](../../../server/cmd/wsprobe) — see
+[features/wsprobe-admin-move-to.md](./features/wsprobe-admin-move-to.md). Do not
+reinvent ad-hoc sockets outside the repo for verify. Speak one-key JSON at a
+running server, asserting on reply frames and on the GAMELOG. The headless suites
+already prove the client's *handling* of `error`, `despawn`, and halt paths
+against scripted frames; a probe is for the server's side of the same contract.
 
 ## Evidence
 

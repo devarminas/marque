@@ -10,10 +10,9 @@ distinguishable from packet loss.
 
 ## Sub-features
 
-- `reject-oob` — a `move_to` outside `[-128, 128]²` is rejected, not clamped:
-  `error` with `"re":"move_to"`, GAMELOG `move_to_rejected`, no broadcast.
-- `reject-degenerate` — a stationary `move_to` to the player's current point yields
-  `"already there"` and no path (wire / probe only after ARM-145).
+- `reject-move-to-retired` — any `move_to` is refused at the protocol boundary:
+  `error` with `"re":"move_to"` / `illegal_sample`, GAMELOG `move_to_rejected`,
+  no path broadcast. Prefer [wsprobe-admin-move-to.md](./wsprobe-admin-move-to.md).
 - `reject-malformed` — a frame with zero or several top-level keys, or a binary
   frame, is a protocol error: `error` then close.
 - `reject-nonjson` — a text frame that is not JSON, or JSON that is not an object
@@ -40,11 +39,13 @@ Preconditions:
   includes the suites that feed scripted `error`, halt-path, and unknown-key frames
   into the real decode path and assert the client logs-and-drops rather than
   closing.
-- **Server-side rejection, live.** Write a throwaway WebSocket client in a scratch
-  directory outside the repo (Go with its own `go.mod`; the module proxy is
-  reachable). Send `{"move_to":{"x":1000.0,"z":0.0}}`. Assert the reply frame is
-  `{"error":{"re":"move_to",...}}`, the GAMELOG gains `move_to_rejected`, and a
-  second connected probe receives **no** `path` broadcast for it.
+- **Server-side rejection, live.** Use the in-repo thin helper (see
+  [wsprobe-admin-move-to.md](./wsprobe-admin-move-to.md)), not a scratch-directory
+  socket. From `server/`:
+  `go run ./cmd/wsprobe -addr HOST:PORT -raw '{"move_to":{"x":1000.0,"z":0.0,"seq":1}}' -expect-error-re move_to`.
+  Assert the reply is `{"error":{"re":"move_to",...}}` with `illegal_sample`, the
+  GAMELOG gains `move_to_rejected`, and a second connected probe receives **no**
+  `path` broadcast for it.
 - **Malformed frame.** Send `{"a":1,"b":2}` (two top-level keys). Assert an `error`
   frame arrives and the socket then closes, and that a well-formed probe on another
   connection is undisturbed.
