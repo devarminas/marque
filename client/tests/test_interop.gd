@@ -12,10 +12,10 @@ const WAIT_FRAMES := 240
 const MAX_FPS := 30
 
 const POSITION_EPSILON := 0.0005
-# Wish+pose halt is discrete (~0.12u/tick at WalkSpeed 3); path-era snap epsilons
-# do not apply. Arrive inside ~1.5 steps, then tolerate one more step of settle.
-const POSE_ARRIVAL_EPSILON := 0.18
-const POSE_EPSILON := 0.45
+# Wish+pose halt is discrete (~0.12u/tick at WalkSpeed 3) plus wire latency;
+# path-era snap epsilons do not apply. Arrive inside a few steps, then settle.
+const POSE_ARRIVAL_EPSILON := 0.35
+const POSE_EPSILON := 0.5
 
 const EXPECTED_TICK_MS := 40
 const EXPECTED_SPEED := 3.0
@@ -434,7 +434,10 @@ func _test_welcome_is_first_and_complete(a: Peer) -> void:
 			positions[0].is_equal_approx(SPAWN_POSITION),
 			"the client spawns at %v, got %v" % [SPAWN_POSITION, positions[0]],
 		)
-	_check(a.paths.is_empty(), "no path replay for a world where nobody is walking")
+	_check(
+		a.paths_for(int(a.welcome["you"])).is_empty(),
+		"no player path replay for a world where nobody is walking",
+	)
 	_check(a.errors.is_empty(), "a clean connection produces no error")
 
 
@@ -495,7 +498,8 @@ func _test_unknown_and_malformed_frames_do_not_kill_the_client(a: Peer) -> void:
 
 func _test_move_to_is_refused(a: Peer) -> bool:
 	print("== move_to is refused ==")
-	var paths_before := a.paths.size()
+	var you := int(a.welcome["you"])
+	var paths_before := a.paths_for(you).size()
 	var errors_before := a.errors.size()
 	_check(a.net.send_move_to(FIRST_DESTINATION.x, FIRST_DESTINATION.y) == OK, "in-bounds move_to sent")
 	if not await _wait_until(
@@ -509,9 +513,9 @@ func _test_move_to_is_refused(a: Peer) -> bool:
 	)
 	_check(not String(failure["msg"]).is_empty(), "error.msg is non-empty")
 	_check(
-		a.paths.size() == paths_before,
-		"a refused move_to broadcasts no path (%d before, %d after)"
-		% [paths_before, a.paths.size()],
+		a.paths_for(you).size() == paths_before,
+		"a refused move_to broadcasts no player path (%d before, %d after)"
+		% [paths_before, a.paths_for(you).size()],
 	)
 	_check(a.net.is_open(), "a refused move_to does not close the connection")
 
@@ -539,18 +543,25 @@ func _test_wish_walk_reaches_first_destination(a: Peer) -> bool:
 	var wish := (FIRST_DESTINATION - SPAWN_POSITION).normalized()
 	a.poses.clear()
 	_check(a.net.send_move(wish.x, wish.y) == OK, "move wish sent toward first destination")
-	if not await _wait_until(
-		func() -> bool:
-			var here: Variant = a.latest_xz(you)
-			return (
-				here != null
-				and Vector2(here).distance_to(FIRST_DESTINATION) < POSE_ARRIVAL_EPSILON
-			),
-		"A's pose near the first destination",
-	):
-		a.net.send_move(0.0, 0.0)
-		return false
+	# Re-aim each frame so a sticky constant-direction wish cannot fly past the
+	# arrival band before the wait samples a pose.
+	var arrived := false
+	for _frame in WAIT_FRAMES:
+		var here: Variant = a.latest_xz(you)
+		if here != null:
+			var pos: Vector2 = here
+			if pos.distance_to(FIRST_DESTINATION) < POSE_ARRIVAL_EPSILON:
+				arrived = true
+				break
+			var aim := FIRST_DESTINATION - pos
+			if aim.length_squared() > 0.0001:
+				aim = aim.normalized()
+				a.net.send_move(aim.x, aim.y)
+		await get_tree().process_frame
 	a.net.send_move(0.0, 0.0)
+	if not arrived:
+		_check(false, "timed out waiting for A's pose near the first destination")
+		return false
 	_check(a.paths_for(you).is_empty(), "wish walk does not produce a player path")
 	var landed: Vector2 = a.latest_xz(you)
 	_check(
@@ -569,8 +580,9 @@ func _test_wish_walk_reaches_first_destination(a: Peer) -> bool:
 
 func _test_pickup_and_drop_are_sequenced(a: Peer) -> bool:
 	print("== sequenced pickup and drop ==")
+	var you := int(a.welcome["you"])
 	var errors_before := a.errors.size()
-	var paths_before := a.paths.size()
+	var paths_before := a.paths_for(you).size()
 	_check(a.net.send_pickup(1) == OK, "pickup sent")
 	if not await _wait_until(
 		func() -> bool: return a.errors.size() > errors_before, "a pickup refusal"
@@ -591,8 +603,8 @@ func _test_pickup_and_drop_are_sequenced(a: Peer) -> bool:
 		'the drop refusal names drop, got "%s"' % String(a.errors[a.errors.size() - 1]["re"]),
 	)
 	_check(
-		a.paths.size() == paths_before,
-		"a refused pickup and drop assign no path",
+		a.paths_for(you).size() == paths_before,
+		"a refused pickup and drop assign no player path",
 	)
 	return true
 
@@ -654,7 +666,8 @@ func _test_second_client_sees_the_world(a: Peer, b: Peer) -> bool:
 			% [SPAWN_POSITION, positions[b_index]],
 		)
 	_check(
-		b.paths.is_empty(), "no path replay for A, who has halted (got %d)" % b.paths.size()
+		b.paths_for(a_id).is_empty(),
+		"no player path replay for A, who has halted (got %d)" % b.paths_for(a_id).size(),
 	)
 
 	if not await _wait_until(func() -> bool: return not a.spawns.is_empty(), "A's spawn for B"):

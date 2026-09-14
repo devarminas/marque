@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
-    [int] $QuitAfter = 2800,
+    [int] $QuitAfter = 6000,
     [int] $ReadyTimeoutSeconds = 20
 )
 

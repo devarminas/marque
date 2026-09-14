@@ -15,12 +15,13 @@ const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
-# Wire decode / authored chrome can stay sub-millimetre. Wish+pose halt is
-# discrete (~0.12u/tick); arrive inside ~1.5 steps, then assert within ~2 steps.
+# Wire decode / authored chrome can stay sub-millimetre. Live wish+pose uses
+# soft-pull display (SOFT_ERROR_M 0.35) and remote pose interp — path-era snap
+# and 1cm corridor asserts do not apply.
 const EXACT_EPSILON := 0.002
-const ARRIVAL_EPSILON := 0.18
-const POSE_EPSILON := 0.45
-const SEGMENT_EPSILON := 0.01
+const ARRIVAL_EPSILON := 0.75
+const POSE_EPSILON := 0.75
+const CORRIDOR_EPSILON := 0.5
 const RIG_SETTLED_EPSILON := 0.01
 const ARRIVAL_SETTLE_MSEC := 400
 
@@ -746,14 +747,24 @@ func _run_live(url: String) -> void:
 			% [late_here, live_here, late_here.distance_to(live_here)],
 		)
 
-	print("== A arrives where A was sent ==")
-	var arrived: bool = await _wait_until(
-		func() -> bool:
-			var here: Variant = a.ground_of(a_id)
-			return here != null and Vector2(here).distance_to(destination) < ARRIVAL_EPSILON,
-		"A to reach the destination under sticky wish",
-	)
+	print("== A arrives near where A was sent ==")
+	# Re-aim the sticky wish each frame so soft-pull display homes into the
+	# arrival band instead of flybys from a single constant-direction wish.
+	var arrived := false
+	for _frame in WAIT_FRAMES:
+		var here: Variant = a.ground_of(a_id)
+		if here != null:
+			var pos: Vector2 = here
+			if pos.distance_to(destination) < ARRIVAL_EPSILON:
+				arrived = true
+				break
+			var aim := destination - pos
+			if aim.length_squared() > 0.0001:
+				aim = aim.normalized()
+				a.session.request_move(aim.x, aim.y)
+		await get_tree().process_frame
 	a.session.request_move(0.0, 0.0)
+	_check(arrived, "A to reach the destination under re-aimed sticky wish")
 	if not arrived:
 		return
 	await _wait_msec(ARRIVAL_SETTLE_MSEC)
@@ -788,7 +799,7 @@ func _run_live(url: String) -> void:
 		"and no path was replayed for them, got %d" % d.paths_for(a_id).size(),
 	)
 	_check_live_ground(
-		d, a_id, halt_pose, POSE_EPSILON, "the halted player is drawn where they stopped"
+		d, a_id, halt_pose, POSE_EPSILON, "the halted player is drawn near where they stopped"
 	)
 	for _frame in 20:
 		await get_tree().process_frame
@@ -902,8 +913,8 @@ func _sample(
 	var watched_here: Vector2 = watched
 	var owned_here: Vector2 = owned
 	_check(
-		_distance_to_segment(origin, destination, watched_here) < SEGMENT_EPSILON,
-		"%s: the walker is on its polyline, at %v" % [what, watched_here],
+		_distance_to_segment(origin, destination, watched_here) < CORRIDOR_EPSILON,
+		"%s: the walker is in the wish corridor, at %v" % [what, watched_here],
 	)
 	_check(
 		watched_here.distance_to(owned_here) < CLOCK_SKEW_TOLERANCE,

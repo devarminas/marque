@@ -446,6 +446,10 @@ func request_move(dx: float, dz: float, jump: bool = false) -> void:
 		push_warning("session: move (%f, %f) dropped, the socket is not open" % [dx, dz])
 		return
 	_net.send_move(dx, dz, 0, jump)
+	# Predict locally for callers that skip the WASD chord path (demos / live tests).
+	if _local_mover != null:
+		_local_mover.apply_wish(dx, dz)
+		_local_mover.apply_jump(jump)
 
 
 func request_pickup(item_id: int) -> void:
