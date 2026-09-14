@@ -64,20 +64,36 @@ REST = pose()
 BREATH = pose((0.0, 0.0, -0.012), spine_02=((X, 3.0),), spine_03=((X, 2.0),),
               upperarm_l=((Y, 69.0),), upperarm_r=((Y, -69.0),))
 WINDUP = pose(
-    (0.0, 0.0, 0.0),
-    upperarm_r=((Y, 90.0), (X, -25.0)),
-    lowerarm_r=((Z, 70.0),),
+    (0.0, 0.03, -0.01),
+    upperarm_r=((Y, 30.0), (Z, -18.0)),
+    lowerarm_r=((Y, 56.0), (Z, -39.0)),
+    upperarm_l=((Y, 60.0), (X, -25.0)),
     spine_02=((Z, -14.0),),
-    spine_03=((Z, -10.0), (X, -6.0)),
+    spine_03=((Z, -12.0), (X, -5.0)),
+    thigh_l=((X, -6.0),),
+    thigh_r=((X, 6.0),),
 )
 CONTACT = pose(
-    (0.0, 0.0, -0.035),
-    upperarm_r=((Y, 90.0), (X, 112.0)),
-    lowerarm_r=((Z, 8.0),),
-    spine_02=((Z, 12.0), (X, 10.0)),
-    spine_03=((Z, 10.0), (X, 8.0)),
-    thigh_l=((X, -14.0),),
-    calf_l=((X, 12.0),),
+    (0.0, -0.04, -0.04),
+    upperarm_r=((Y, -29.0), (Z, 82.0)),
+    lowerarm_r=((Y, -6.0), (Z, 9.0)),
+    upperarm_l=((Y, 72.0), (X, 25.0)),
+    spine_02=((Z, 12.0), (X, 6.0)),
+    spine_03=((Z, 10.0), (X, 4.0)),
+    thigh_l=((X, -18.0),),
+    calf_l=((X, 14.0),),
+    thigh_r=((X, 10.0),),
+)
+FOLLOW = pose(
+    (0.0, -0.05, -0.045),
+    upperarm_r=((Y, -45.0), (Z, 66.0)),
+    lowerarm_r=((Y, -35.0), (Z, 60.0)),
+    upperarm_l=((Y, 72.0), (X, 30.0)),
+    spine_02=((Z, 22.0), (X, 10.0)),
+    spine_03=((Z, 12.0), (X, 6.0)),
+    thigh_l=((X, -18.0),),
+    calf_l=((X, 14.0),),
+    thigh_r=((X, 10.0),),
 )
 
 SPECS: dict[str, tuple[tuple[int, Pose], ...]] = {
@@ -89,7 +105,7 @@ SPECS: dict[str, tuple[tuple[int, Pose], ...]] = {
         (23, passing("l", "r", 0.012)),
         (30, stride("l", "r", "r", "l", -0.03)),
     ),
-    "swing": ((0, REST), (4, WINDUP), (7, CONTACT), (12, REST)),
+    "swing": ((0, REST), (4, WINDUP), (7, CONTACT), (9, FOLLOW), (12, REST)),
 }
 
 
