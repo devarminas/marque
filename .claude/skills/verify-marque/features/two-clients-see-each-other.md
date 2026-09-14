@@ -81,6 +81,9 @@ Preconditions:
 - **Both layers or it is half-proven.** Own-avatar `DEMO pos` can include prediction;
   the watcher's `DEMO pos` for the walker is server pose. Movement claims need both
   plus GAMELOG `move`.
+- **System.Drawing is Windows-centric.** `Compare-Frames` needs that assembly. Linux
+  pwsh often lacks it; the harness then skips pixel bands and still asserts
+  DEMO/GAMELOG wish+pose (fail-closed on player `path_assigned` / `move_to`).
 - **The sky-band flake waiver is retired (ARM-183).** The still-camera control no
   longer demands byte-exactness, so the GPU noise that used to trip it is inside the
   tolerance. A top-quarter failure is a finding, not something to rerun away. See

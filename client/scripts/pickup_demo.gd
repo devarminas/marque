@@ -18,8 +18,10 @@ const JOIN_TIMEOUT_MSEC := 20000
 
 const USEC_PER_MSEC := 1000
 
-# Tick budgets were authored against ~150ms ticks. At 40ms (WalkSpeed 3), keep the
-# same wall-clock windows so wish-steer walk-away can still cover the drop click.
+# Tick budgets were authored against ~150ms ticks. At 40ms / 3.0 u/s (0.12 u/tick),
+# wall-scale them so wish walk-away covers the ~5.57u drop click (old 38-tick
+# window only reached 4.56u and never printed DEMO walkaway_arrived). Approach
+# origin→(-5,-5) is ~59 ticks; fail-closed path/move_to stays in the harness.
 const CLICK_LEAD_TICKS := 75
 
 const SHOT_BEFORE_LEAD_TICKS := 23

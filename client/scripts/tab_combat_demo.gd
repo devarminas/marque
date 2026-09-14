@@ -208,17 +208,23 @@ func _close_in_for_cast(npc_id: int, max_dist: float) -> bool:
 
 
 func _equip_mage_kit() -> bool:
+	# Join-kit inventory can land after welcome/npcs; wait for the full mage set.
+	const KIT_PIECES := 4
+	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	var indices: PackedInt32Array = _session.get("_bag_indices")
-	if indices.is_empty():
-		_fail("mage join kit never arrived in the bag")
+	while indices.size() < KIT_PIECES and Time.get_ticks_msec() < deadline:
+		await _tree.process_frame
+		indices = _session.get("_bag_indices")
+	if indices.size() < KIT_PIECES:
+		_fail("mage join kit incomplete in the bag (%d/%d)" % [indices.size(), KIT_PIECES])
 		return false
 	for slot: int in indices:
 		_session.request_equip(slot)
 		await _tree.process_frame
-	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
 		if _session.active_class_id() == "mage":
 			print("DEMO class mage")
+			await _wait_msec(SETTLE_MSEC)
 			return true
 		await _tree.process_frame
 	_fail("worn set never activated mage")

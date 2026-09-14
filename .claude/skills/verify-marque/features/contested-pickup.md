@@ -116,6 +116,11 @@ Preconditions:
 
 - **Core claim is GAMELOG-only.** Pixels cannot prove exactly-one-winner. Assert
   `pickup_resolved` / `pickup_lost` first.
+- **40ms wish walk-away budgets.** Server `TickDuration` is 40ms (3.0 u/s → 0.12
+  u/tick). The drop-walk span is ≈5.57u (≈47 ticks). Client offsets in
+  `pickup_demo.gd` are wall-scaled from the old 150ms schedule so the walk-away
+  window covers that span; a 38-tick budget only reaches 4.56u and never prints
+  `DEMO walkaway_arrived`. Do not reintroduce path-span tick asserts.
 - **There is no `item_despawn` event in the server's event log.** The despawn is a wire
   message only (`server/internal/game/items.go`, `w.broadcast(mnet.ItemDespawn...)`);
   no `EvItemDespawned` exists. A recipe that greps the GAMELOG for it finds nothing and

@@ -43,6 +43,11 @@ stdout/stderr, `server.stdout.ndjson`, and optional `tab_combat_*.png`.
 
 - **Friendly must be wounded.** Heal on MaxHP spends mana but does not raise HP.
   The demo passes `-friendly-hp 50` to marqued.
+- **Wish before cast.** Relocate runs first so `wish_ok` / non-zero `move` stay
+  reachable if a later fireball mana/range gate flakes. Spawn-to-hostile is 3.0
+  with fireball range 8; the driver also closes in before cast. A remaining
+  "did not spend mana" with in-range poses is usually kit/class or env, not
+  wish+pose.
 - **One Godot driver.** Do not run a second `--*-shots` client against the same
   server while this milestone demo is proving AC1–AC5.
 - **Left-click is not attack.** The attack phase must right-click.

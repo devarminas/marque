@@ -68,7 +68,14 @@ function Read-Positions([string] $path) {
 }
 
 function Compare-Frames([string] $left, [string] $right) {
-    Add-Type -AssemblyName System.Drawing
+    # System.Drawing is Windows-centric; Linux pwsh often lacks it. Wish+pose
+    # claims are proven from DEMO/GAMELOG below; skip pixel bands when unavailable.
+    try {
+        Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+    } catch {
+        Write-Host "==> Compare-Frames skipped: System.Drawing unavailable ($($_.Exception.Message))"
+        return $null
+    }
     $a = [System.Drawing.Bitmap]::FromFile($left)
     $b = [System.Drawing.Bitmap]::FromFile($right)
     try {
@@ -384,6 +391,10 @@ try {
         $watching = 3 - $client.Phase
         $stillPair = Compare-Frames $frames[2 * $watching - 1] $frames[2 * $watching]
         $movingPair = Compare-Frames $frames[2 * $client.Phase - 1] $frames[2 * $client.Phase]
+        if ($null -eq $stillPair -or $null -eq $movingPair) {
+            Write-Host ("==> client {0} pixels: skipped (no System.Drawing); DEMO/GAMELOG wish+pose asserts still apply" -f $label)
+            continue
+        }
         Write-Host ("==> client {0} pixels: standing still (shots {1}..{2}) {3:P2} differ, top quarter {4}; walking (shots {5}..{6}) {7:P2} differ, top quarter {8}" -f `
             $label, (2 * $watching - 1), (2 * $watching), $stillPair.Fraction, (Format-Band $stillPair),
             (2 * $client.Phase - 1), (2 * $client.Phase), $movingPair.Fraction, (Format-Band $movingPair))
