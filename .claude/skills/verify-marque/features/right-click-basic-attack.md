@@ -29,8 +29,9 @@ Preconditions:
   (friendly refuse / hostile request_attack).
 - Live dummies: `powershell -ExecutionPolicy Bypass -File scripts/dummy_attack_demo.ps1`.
   Marker: `DUMMY ATTACK DEMO OK` on the last line; exit 0.
-- Live combat loop (attack among cast/WASD): `scripts/tab_combat_demo.ps1`
-  (`TAB COMBAT DEMO OK`). Do not drive `scripts/combat_demo.ps1` (ARM-284 fail-closed stub).
+- Live combat loop (attack among cast/WASD): `scripts/dummy_attack_demo.ps1`
+  (`DUMMY ATTACK DEMO OK`) plus `wasd` / `dummy_cast` / `heal_wounded`. Do not
+  drive `scripts/combat_demo.ps1` (ARM-284) or `scripts/tab_combat_demo.ps1` (ARM-290).
 - Player death/respawn store rules: Go (`combat_test.go`), not a windowed PvP demo.
 
 Evidence for the dummy demo lands in `-OutDir` (default
@@ -38,7 +39,7 @@ Evidence for the dummy demo lands in `-OutDir` (default
 
 ## Gotchas
 
-- **Mage kit is admin `/give`.** `dummy_attack_demo.ps1` / `tab_combat_demo.ps1`
+- **Mage kit is admin `/give`.** `dummy_attack_demo.ps1` / `heal_wounded_demo.ps1`
   start with `-admin` and grant cloth + staff after join. Do not rebuild a
   `-join-kit` forest for class gear.
 - **Left-click is not attack.** After M6c, combat demos must right-click (or call

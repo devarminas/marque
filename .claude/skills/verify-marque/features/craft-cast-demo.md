@@ -1,24 +1,21 @@
-# Mine, smelt, craft sword, cast bar (M12)
+# Mine, smelt, craft sword + cast bar (M12, ARM-290 split)
 
-One client wears a miner kit, mines the starter rock for `copper_ore`, smelts it at
-the starter smelter into `copper_bar`, crafts `copper_bar` + seeded `sticks` into
-`sword`, then swaps to mage and proves fireball cast-bar resolve plus one walk
-interrupt outside grace.
+M12 live proof is two focused demos. The kitchen-sink `craft_cast_demo` is
+**retired** (ARM-290 fail-closed stub).
 
 ## Sub-features
 
 - `mine-copper` — GAMELOG `gather_resolved` kind `copper_ore`; DEMO shot 2 bag holds
-  ore; rock at (2, 3).
+  ore; rock at (2, 3). Driver: `mine_smelt_craft_demo.ps1`.
 - `smelt-bar` — GAMELOG `use` from `copper_ore` to `copper_bar` with `station`; DEMO
   shot 3 bag holds bar and no ore.
 - `craft-sword` — GAMELOG `use` to `sword`; DEMO shot 4 bag holds sword and no bar /
   sticks.
 - `cast-resolve` — GAMELOG `cast_begin` then `cast` / `cast_effect` for fireball;
-  DEMO `castbar visible=1` then `visible=0` and `castok`.
+  DEMO `castbar visible=1` then `visible=0` and `castok`. Driver: `cast_bar_demo.ps1`.
 - `cast-interrupt` — GAMELOG `cast_cancelled` with cause `move`; DEMO
   `castcancel` and no success effect for that cast.
-- `demo-pass` — harness exits 0 with `CRAFT CAST DEMO OK` as its last line, and the
-  client prints `DEMO done`.
+- `demo-pass` — each harness exits 0 with its OK marker last; client prints `DEMO done`.
 
 ## How to get to it (user POV)
 
@@ -28,34 +25,28 @@ interrupt outside grace.
   dummy, cast fireball and stand still for the cast bar; cast again and WASD-walk
   early to interrupt outside the last-two-tick grace.
 
-## Driving it with scripts/craft_cast_demo.ps1
+## Driving it with the ARM-290 demos
 
 Preconditions:
 
 - `DOCTOR OK`; a real desktop session; nothing else importing `client/.godot`.
-- Run `powershell -ExecutionPolicy Bypass -File scripts/craft_cast_demo.ps1`.
-- Marker: `CRAFT CAST DEMO OK` on the **last line** of stdout. Exit code must also
-  be 0.
+- Mine/smelt/craft: `powershell -ExecutionPolicy Bypass -File scripts/mine_smelt_craft_demo.ps1`.
+  Marker: `MINE SMELT CRAFT DEMO OK` on the last line. Exit 0.
+- Cast bar: `powershell -ExecutionPolicy Bypass -File scripts/cast_bar_demo.ps1`.
+  Marker: `CAST BAR DEMO OK` on the last line. Exit 0.
+- Do **not** drive `scripts/craft_cast_demo.ps1` — fail-closed stub (ARM-290).
 
-The script builds marqued with `-admin` (empty join kit), warms Godot,
-starts the server on a free port, launches one windowed client with
-`--craft-cast-shots`. The client `/give`s miner + sticks + mage kinds via the
-admin bus, then asserts both DEMO inventory/cast lines and GAMELOG
-gather / use / cast_begin / cast / cast_effect / cast_cancelled.
-
-Evidence lands in `-OutDir`, default `$env:TEMP\marque-craft-cast`: optional PNG
-artifacts, client stdout/stderr, and `server.stdout.ndjson`. Default proof is
-DEMO + GAMELOG (ARM-289).
+Both harnesses build marqued with `-admin` (empty join kit), warm Godot, and
+`/give` the needed kinds via the admin bus. Default proof is DEMO + GAMELOG
+(ARM-289). PNGs are artifacts only.
 
 ## Gotchas
 
-- **Sticks come from admin `/give`.** The milestone proves mine→smelt→sword, not tree
-  chop. Without `/give sticks` (under `-admin`) the sword recipe cannot start.
-  Do not rebuild a `-join-kit` forest for this kit.
+- **Sticks come from admin `/give`.** The mine→smelt→sword unit proves crafting, not
+  tree chop. Without `/give sticks` (under `-admin`) the sword recipe cannot start.
 - **Station range is 0.5.** After mining at (2, 3) the client must walk to the
   smelter before use-on; a same-spot smelt refuses out of range.
-- **Interrupt uses `cause=move` only.** The demo steers with `request_move`
-  (wish+pose); GAMELOG cancel cause is `move`, never `move_to`. Grace is the
-  last two ticks of an 8-tick fireball; walk earlier.
-- **Class swap mid-run.** Unequip the miner set before wearing mage gear or fireball
-  is refused with `needs_class`.
+- **Interrupt uses `cause=move` only.** The cast-bar demo steers with `request_move`
+  (wish+pose); GAMELOG cancel cause is `move`, never `move_to`.
+- **Split units are the green path.** Agents must not treat the retired kitchen-sink
+  marker as required for green.
