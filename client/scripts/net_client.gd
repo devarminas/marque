@@ -104,6 +104,8 @@ signal party_changed(party_id: int, leader_id: int, members: PackedInt32Array)
 
 signal party_invite_notice_changed(from_player: int)
 
+signal admin_reply_received(text: String)
+
 signal server_error(re: String, message: String)
 
 signal unknown_message(key: String)
@@ -253,6 +255,10 @@ func send_party_leave(seq: int = 0) -> Error:
 	return _send(party_leave_frame(_intent_seq(seq)))
 
 
+func send_admin(line: String, seq: int = 0) -> Error:
+	return _send(admin_frame(line, _intent_seq(seq)))
+
+
 func next_seq() -> int:
 	return _next_seq
 
@@ -339,6 +345,10 @@ static func party_decline_frame(seq: int = 0) -> Dictionary:
 
 static func party_leave_frame(seq: int = 0) -> Dictionary:
 	return {"party_leave": _intent_body({}, seq)}
+
+
+static func admin_frame(line: String, seq: int = 0) -> Dictionary:
+	return {"admin": _intent_body({"line": line}, seq)}
 
 
 static func _intent_body(body: Dictionary, seq: int) -> Dictionary:
@@ -476,6 +486,8 @@ func ingest_text_frame(text: String) -> void:
 			_on_party(body, text)
 		"party_invite_notice":
 			_on_party_invite_notice(body, text)
+		"admin_reply":
+			_on_admin_reply(body, text)
 		"tick":
 			_on_tick(body, text)
 		"error":
@@ -1238,6 +1250,13 @@ func _on_tick(body: Dictionary, text: String) -> void:
 	if not _has_numbers(body, ["t"], text):
 		return
 	tick_received.emit(int(body["t"]))
+
+
+func _on_admin_reply(body: Dictionary, text: String) -> void:
+	if typeof(body.get("text")) != TYPE_STRING:
+		push_error("net_client: admin_reply.text is missing or not a string: %s" % text)
+		return
+	admin_reply_received.emit(body["text"])
 
 
 func _on_error(body: Dictionary, text: String) -> void:
