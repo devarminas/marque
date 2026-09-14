@@ -13,9 +13,9 @@ func TestFreshPlayerHasMaxMana(t *testing.T) {
 	if alice.mana != MaxMana {
 		t.Fatalf("mana=%d, want %d", alice.mana, MaxMana)
 	}
-	state := alice.wireState()
+	state := pw.w.playerState(alice)
 	if state.Mana != MaxMana || state.MaxMana != MaxMana {
-		t.Fatalf("wireState=%+v, want mana and max_mana %d", state, MaxMana)
+		t.Fatalf("playerState=%+v, want mana and max_mana %d", state, MaxMana)
 	}
 }
 

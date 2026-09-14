@@ -67,6 +67,7 @@ type PlayerState struct {
 	MaxHP   int             `json:"max_hp"`
 	Mana    int             `json:"mana"`
 	MaxMana int             `json:"max_mana"`
+	Worn    []EquipmentSlot `json:"worn"`
 }
 
 type ItemState struct {
@@ -249,6 +250,11 @@ type GatherStarted struct {
 	Node NodeID   `json:"node"`
 }
 
+type Worn struct {
+	ID    PlayerID        `json:"id"`
+	Slots []EquipmentSlot `json:"slots"`
+}
+
 type DialogOption struct {
 	ID string `json:"id"`
 }
@@ -309,6 +315,7 @@ func (PartyInviteNotice) isServerMessage() {}
 func (Swing) isServerMessage()             {}
 func (CastPhase) isServerMessage()         {}
 func (GatherStarted) isServerMessage()     {}
+func (Worn) isServerMessage()              {}
 
 type ClientMessage interface {
 	isClientMessage()
@@ -454,6 +461,7 @@ type serverEnvelope struct {
 	Swing             *Swing             `json:"swing,omitempty"`
 	CastPhase         *CastPhase         `json:"cast_phase,omitempty"`
 	Gather            *GatherStarted     `json:"gather,omitempty"`
+	Worn              *Worn              `json:"worn,omitempty"`
 	Dialog            *Dialog            `json:"dialog,omitempty"`
 	QuestLog          *QuestLog          `json:"quest_log,omitempty"`
 	Party             *Party             `json:"party,omitempty"`
@@ -509,6 +517,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.CastPhase = &v
 	case GatherStarted:
 		env.Gather = &v
+	case Worn:
+		env.Worn = &v
 	case Dialog:
 		env.Dialog = &v
 	case QuestLog:

@@ -25,14 +25,14 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 				Tick:    142,
 				Map:     "village",
 				Players: []mnet.PlayerState{
-					{ID: 1, X: 0, Y: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100},
-					{ID: 2, X: 5, Y: 0, Z: 5, HP: 70, MaxHP: 100, Mana: 40, MaxMana: 100},
+					{ID: 1, X: 0, Y: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100, Worn: []mnet.EquipmentSlot{{Slot: "right hand", Kind: "sword"}}},
+					{ID: 2, X: 5, Y: 0, Z: 5, HP: 70, MaxHP: 100, Mana: 40, MaxMana: 100, Worn: []mnet.EquipmentSlot{}},
 				},
 				Items: []mnet.ItemState{{ID: 7, Kind: "acorn", X: 3, Z: -2}},
 				Nodes: []mnet.NodeState{},
 				Npcs:  []mnet.NpcState{},
 			},
-			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":40,"tick":142,"map":"village","players":[{"id":1,"x":0,"y":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100},{"id":2,"x":5,"y":0,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[],"npcs":[]}}`,
+			want: `{"welcome":{"you":1,"session":"9f2c1ab7d0e4485fa6c3b81d27e05934","last_seq":7,"tick_ms":40,"tick":142,"map":"village","players":[{"id":1,"x":0,"y":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100,"worn":[{"slot":"right hand","kind":"sword"}]},{"id":2,"x":5,"y":0,"z":5,"hp":70,"max_hp":100,"mana":40,"max_mana":100,"worn":[]}],"items":[{"id":7,"kind":"acorn","x":3,"z":-2}],"nodes":[],"npcs":[]}}`,
 		},
 		{
 			name: "welcome with an empty world",
@@ -100,8 +100,8 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 		},
 		{
 			name: "spawn",
-			msg:  mnet.Spawn{ID: 2, X: 0, Y: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100},
-			want: `{"spawn":{"id":2,"x":0,"y":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100}}`,
+			msg:  mnet.Spawn{ID: 2, X: 0, Y: 0, Z: 0, HP: 100, MaxHP: 100, Mana: 100, MaxMana: 100, Worn: []mnet.EquipmentSlot{}},
+			want: `{"spawn":{"id":2,"x":0,"y":0,"z":0,"hp":100,"max_hp":100,"mana":100,"max_mana":100,"worn":[]}}`,
 		},
 		{
 			name: "swing",
@@ -117,6 +117,11 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			name: "gather",
 			msg:  mnet.GatherStarted{ID: 1, Node: 3},
 			want: `{"gather":{"id":1,"node":3}}`,
+		},
+		{
+			name: "worn",
+			msg:  mnet.Worn{ID: 1, Slots: []mnet.EquipmentSlot{{Slot: "right hand", Kind: "sword"}}},
+			want: `{"worn":{"id":1,"slots":[{"slot":"right hand","kind":"sword"}]}}`,
 		},
 		{
 			name: "pose",

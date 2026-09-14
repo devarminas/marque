@@ -394,6 +394,7 @@ type frame struct {
 	Swing       *mnet.Swing         `json:"swing"`
 	CastPhase   *mnet.CastPhase     `json:"cast_phase"`
 	Gather      *mnet.GatherStarted `json:"gather"`
+	Worn        *mnet.Worn          `json:"worn"`
 
 	raw string
 	bad string
@@ -449,6 +450,8 @@ func (f frame) kind() string {
 		return "cast_phase"
 	case f.Gather != nil:
 		return "gather"
+	case f.Worn != nil:
+		return "worn"
 	default:
 		return "none"
 	}

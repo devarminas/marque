@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -399,5 +400,49 @@ func TestGatherBroadcastsOnceWhenTheChannelStarts(t *testing.T) {
 	pw.stepN(GatherDurationTicks)
 	if got := decodeFrames[mnet.GatherStarted](t, obs.flush(), "gather"); len(got) != 0 {
 		t.Fatalf("gather frames=%+v after the start, want none", got)
+	}
+}
+
+func TestWornBroadcastsEveryChangeAndReachesLateJoiners(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinBare()
+	obs := pw.observe()
+	slot, err := pw.w.items.SpawnInventoryItem(alice.id, KindSword)
+	if err != nil {
+		t.Fatalf("seed sword: %v", err)
+	}
+	sword := []mnet.EquipmentSlot{{Slot: SlotRightHand, Kind: KindSword}}
+	bare := []mnet.EquipmentSlot{}
+	obs.flush()
+
+	pw.w.equip(alice, mnet.Equip{Slot: slot.Index}, 0)
+	pw.w.unequip(alice, mnet.Unequip{Worn: SlotRightHand}, 0)
+	pw.w.equip(alice, mnet.Equip{Slot: slot.Index}, 0)
+
+	want := []mnet.Worn{
+		{ID: alice.id, Slots: sword},
+		{ID: alice.id, Slots: bare},
+		{ID: alice.id, Slots: sword},
+	}
+	if got := decodeFrames[mnet.Worn](t, obs.flush(), "worn"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("worn frames=%+v, want %+v", got, want)
+	}
+
+	late := pw.observe()
+	welcome := drainJoin(t, late.ws)
+	worn := make(map[mnet.PlayerID][]mnet.EquipmentSlot, len(welcome.Players))
+	for _, state := range welcome.Players {
+		worn[state.ID] = state.Worn
+	}
+	if !reflect.DeepEqual(worn[alice.id], sword) {
+		t.Fatalf("welcome worn for alice=%+v, want %+v", worn[alice.id], sword)
+	}
+	if got, ok := worn[late.p.id]; !ok || got == nil || len(got) != 0 {
+		t.Fatalf("welcome worn for the joiner=%+v present=%v, want an empty list", got, ok)
+	}
+
+	spawns := decodeFrames[mnet.Spawn](t, obs.flush(), "spawn")
+	if len(spawns) != 1 || spawns[0].ID != late.p.id || spawns[0].Worn == nil || len(spawns[0].Worn) != 0 {
+		t.Fatalf("spawn frames=%+v, want one for %d with an empty worn list", spawns, late.p.id)
 	}
 }

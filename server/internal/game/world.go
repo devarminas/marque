@@ -508,13 +508,13 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 
 	w.seedJoinKit(p)
 	w.sendJoinStep(p)
-	w.broadcast(mnet.Spawn(p.wireState()), p)
+	w.broadcast(mnet.Spawn(w.playerState(p)), p)
 }
 
 func (w *World) sendJoinStep(p *player) {
 	states := make([]mnet.PlayerState, 0, len(w.order))
 	for _, other := range w.order {
-		states = append(states, other.wireState())
+		states = append(states, w.playerState(other))
 	}
 	w.send(p, mnet.Welcome{
 		You:            p.id,

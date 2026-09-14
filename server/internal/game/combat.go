@@ -41,7 +41,7 @@ func (p *player) clearCombat() {
 	p.combatExpiresTick = 0
 }
 
-func (p *player) wireState() mnet.PlayerState {
+func (w *World) playerState(p *player) mnet.PlayerState {
 	return mnet.PlayerState{
 		ID:      p.id,
 		X:       p.pos.X,
@@ -51,6 +51,7 @@ func (p *player) wireState() mnet.PlayerState {
 		MaxHP:   MaxHP,
 		Mana:    p.mana,
 		MaxMana: MaxMana,
+		Worn:    w.wornSlots(p),
 	}
 }
 
