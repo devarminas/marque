@@ -131,7 +131,7 @@ try {
                     $moveEvents++
                     $dx = [double]$json.dx
                     $dz = [double]$json.dz
-                    if ([math]::Hypot($dx, $dz) -gt 1e-6) { $nonzeroMoves++ }
+                    if ([math]::Sqrt(($dx)*($dx) + ($dz)*($dz)) -gt 1e-6) { $nonzeroMoves++ }
                 }
                 if ($json.ev -eq "move_to") { $moveToEvents++ }
                 if ($json.ev -eq "path_assigned") {

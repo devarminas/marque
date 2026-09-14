@@ -170,7 +170,7 @@ try {
                 $moveEvents++
                 $dx = [double]$ev.dx
                 $dz = [double]$ev.dz
-                if ([math]::Hypot($dx, $dz) -gt 1e-6) { $nonzeroMoves++ }
+                if ([math]::Sqrt(($dx)*($dx) + ($dz)*($dz)) -gt 1e-6) { $nonzeroMoves++ }
             }
             if ($ev.ev -eq "move_to") { $moveToEvents++ }
             if ($ev.ev -eq "path_assigned") {

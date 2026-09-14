@@ -469,7 +469,7 @@ try {
         foreach ($move in $moves) {
             $dx = [double]$move.dx
             $dz = [double]$move.dz
-            if ([math]::Hypot($dx, $dz) -gt 1e-6) { $nonzero++ }
+            if ([math]::Sqrt(($dx)*($dx) + ($dz)*($dz)) -gt 1e-6) { $nonzero++ }
         }
         Write-Host ("==> server: player {0} (client {1}) logged {2} move wish(es), {3} non-zero" -f `
             $id, $label, $moves.Count, $nonzero)

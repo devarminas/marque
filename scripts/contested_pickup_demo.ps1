@@ -178,7 +178,7 @@ function Count-NonzeroMoves($events, [int] $player = -1) {
     foreach ($event in (Select-Events $events "move" $player)) {
         $dx = [double]$event.dx
         $dz = [double]$event.dz
-        if ([math]::Hypot($dx, $dz) -gt 1e-6) { $count++ }
+        if ([math]::Sqrt(($dx)*($dx) + ($dz)*($dz)) -gt 1e-6) { $count++ }
     }
     return $count
 }
@@ -496,7 +496,7 @@ try {
             if ([int]$move.t -lt $lossTick) { continue }
             $dx = [double]$move.dx
             $dz = [double]$move.dz
-            if ([math]::Hypot($dx, $dz) -gt 1e-6) { $loserMovesAfterLoss++ }
+            if ([math]::Sqrt(($dx)*($dx) + ($dz)*($dz)) -gt 1e-6) { $loserMovesAfterLoss++ }
         }
         if ($loserMovesAfterLoss -gt 0) {
             Add-Failure ("player $loser sent $loserMovesAfterLoss non-zero move wish(es) after losing on " +
@@ -616,7 +616,7 @@ try {
             }
             if ($null -eq $report.Wish) {
                 Add-Failure "client $label won but never reported DEMO wish for the walk-away"
-            } elseif ([math]::Hypot([double]$report.Wish[0], [double]$report.Wish[1]) -lt 1e-6) {
+            } elseif ([math]::Sqrt(([double]$report.Wish[0])*([double]$report.Wish[0]) + ([double]$report.Wish[1])*([double]$report.Wish[1])) -lt 1e-6) {
                 Add-Failure "client $label's DEMO wish was zero; the walk-away must steer"
             }
             if ($null -eq $report.WalkAwayArrived) {
