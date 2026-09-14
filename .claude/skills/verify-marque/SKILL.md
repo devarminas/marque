@@ -59,8 +59,9 @@ stdout (`DEMO pos`, `DEMO joined`, inventory/cast lines, …) proves what the *c
 drew or reported*; the GAMELOG proves what the *server believes*. A server whose tick
 loop stopped advancing players can still look fine on the client if the client is
 interpolating or predicting from a stale handoff. "The player moved" is proven by
-client-side displacement (`DEMO pos`) **and** the matching GAMELOG event (`arrived`,
-`move`, …), never by pixels alone and never by a PNG that merely exists.
+non-zero GAMELOG `move` wishes **and** pose/`DEMO pos` displacement. `arrived` is
+NPC path completion only; player `path_assigned` / `move_to` fail closed. Never by
+pixels alone and never by a PNG that merely exists.
 
 **PNG is optional and named-pixel only.** A screenshot assertion must name the
 specific pixel fact that would be missing if the claim were false — the cast shadow,
@@ -336,10 +337,11 @@ two separate arms of one `select`, so a server that has stopped stepping still a
 players and still broadcasts their spawns; both clients reach two known ids and the join
 wait in `main.gd` returns long before its 20-second deadline. Two independent runs of the
 sabotage agree with the mechanism, the original writer's and M1j's verifier's, the latter
-failing cleanly on `0 arrived event(s)` with both client stderr files empty and no
-timeout at all. What a frozen server actually does is pass every client-layer assertion
-and lose on the event log, which is the reason the GAMELOG layer exists. Load is the
-remaining explanation and nobody has reproduced the timeout under it.
+failing cleanly when the GAMELOG showed no player locomotion (no non-zero `move`
+wishes) with both client stderr files empty and no timeout at all. What a frozen
+server actually does is pass every client-layer assertion and lose on the event log,
+which is the reason the GAMELOG layer exists. Load is the remaining explanation and
+nobody has reproduced the timeout under it.
 
 **GAMELOG vocabulary (M0 + wish+pose):** `server_started`, `server_stopping`,
 `client_connected`, `client_disconnected`, `move`, `move_rejected`, `move_to_rejected`,
