@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "fps": 30,
+  "armature": "Rig",
+  "rest_source": "res://assets/quaternius/animations/UAL2_Standard.glb",
+  "clips_glb": "res://assets/proto/anim/clips.glb",
+  "clip_rig": "human",
+  "bones": [
+    {"name": "root", "parent": null, "head": [0.0, 0.0, 0.0], "tail": [0.0, 0.91807, 0.0], "roll": 0.0},
+    {"name": "pelvis", "parent": "root", "head": [0.0, 0.0501, 0.9167], "tail": [0.0, 0.02414, 1.01738], "roll": 0.0},
+    {"name": "spine_01", "parent": "pelvis", "head": [0.0, 0.0156, 1.0505], "tail": [0.0, 0.0004, 1.1736], "roll": 0.0},
+    {"name": "spine_02", "parent": "spine_01", "head": [0.0, 0.0004, 1.1736], "tail": [0.0, 0.0049, 1.3148], "roll": 0.0},
+    {"name": "spine_03", "parent": "spine_02", "head": [0.0, 0.0049, 1.3148], "tail": [0.0, 0.01019, 1.47797], "roll": 0.0},
+    {"name": "neck_01", "parent": "spine_03", "head": [0.0, 0.0105, 1.4876], "tail": [0.0, -0.0051, 1.5687], "roll": 0.0},
+    {"name": "Head", "parent": "neck_01", "head": [0.0, -0.0051, 1.5687], "tail": [0.0, -0.00779, 1.65124], "roll": 0.0},
+    {
+      "name": "clavicle_l",
+      "parent": "spine_03",
+      "head": [0.0188, -0.0714, 1.4579],
+      "tail": [0.2095, 0.04086, 1.45777],
+      "roll": 0.0004
+    },
+    {
+      "name": "upperarm_l",
+      "parent": "clavicle_l",
+      "head": [0.1919, 0.0654, 1.4408],
+      "tail": [0.4663, 0.0701, 1.4408],
+      "roll": 1.570837
+    },
+    {
+      "name": "lowerarm_l",
+      "parent": "upperarm_l",
+      "head": [0.4663, 0.0701, 1.4408],
+      "tail": [0.7389, 0.0654, 1.4408],
+      "roll": 1.570797
+    },
+    {
+      "name": "hand_l",
+      "parent": "lowerarm_l",
+      "head": [0.7389, 0.0654, 1.4408],
+      "tail": [0.78783, 0.0654, 1.4408],
+      "roll": 1.570796
+    },
+    {
+      "name": "clavicle_r",
+      "parent": "spine_03",
+      "head": [-0.0188, -0.0714, 1.4579],
+      "tail": [-0.2095, 0.04086, 1.45777],
+      "roll": -0.0004
+    },
+    {
+      "name": "upperarm_r",
+      "parent": "clavicle_r",
+      "head": [-0.1919, 0.0654, 1.4408],
+      "tail": [-0.4663, 0.0701, 1.4408],
+      "roll": -1.570837
+    },
+    {
+      "name": "lowerarm_r",
+      "parent": "upperarm_r",
+      "head": [-0.4663, 0.0701, 1.4408],
+      "tail": [-0.7389, 0.0654, 1.4408],
+      "roll": -1.570797
+    },
+    {
+      "name": "hand_r",
+      "parent": "lowerarm_r",
+      "head": [-0.7389, 0.0654, 1.4408],
+      "tail": [-0.78783, 0.0654, 1.4408],
+      "roll": -1.570796
+    },
+    {"name": "thigh_l", "parent": "pelvis", "head": [0.089, -0.0014, 0.9321], "tail": [0.089, 0.0014, 0.5318], "roll": 0.0},
+    {"name": "calf_l", "parent": "thigh_l", "head": [0.089, 0.0014, 0.5318], "tail": [0.089, 0.0358, 0.1037], "roll": -0.000263},
+    {"name": "foot_l", "parent": "calf_l", "head": [0.089, 0.0358, 0.1037], "tail": [0.089, -0.1132, 0.0152], "roll": -0.001036},
+    {"name": "ball_l", "parent": "foot_l", "head": [0.089, -0.1132, 0.0152], "tail": [0.089, -0.1921, 0.0152], "roll": 0.0},
+    {"name": "thigh_r", "parent": "pelvis", "head": [-0.089, -0.0014, 0.9321], "tail": [-0.089, 0.0014, 0.5318], "roll": 0.0},
+    {"name": "calf_r", "parent": "thigh_r", "head": [-0.089, 0.0014, 0.5318], "tail": [-0.089, 0.0358, 0.1037], "roll": -0.000263},
+    {"name": "foot_r", "parent": "calf_r", "head": [-0.089, 0.0358, 0.1037], "tail": [-0.089, -0.1132, 0.0152], "roll": -0.001036},
+    {"name": "ball_r", "parent": "foot_r", "head": [-0.089, -0.1132, 0.0152], "tail": [-0.089, -0.1921, 0.0152], "roll": 0.0}
+  ],
+  "variants": {
+    "human": {"scale": 1.0, "glb": "res://assets/proto/characters/humanoid.glb"},
+    "imp": {"scale": 0.676, "glb": "res://assets/proto/characters/imp.glb"}
+  },
+  "regions": {
+    "head": ["neck_01", "Head"],
+    "torso": ["spine_01", "spine_02", "spine_03", "clavicle_l", "clavicle_r"],
+    "hips": ["pelvis"],
+    "upper_arms": ["upperarm_l", "upperarm_r"],
+    "forearms": ["lowerarm_l", "lowerarm_r"],
+    "hands": ["hand_l", "hand_r"],
+    "thighs": ["thigh_l", "thigh_r"],
+    "shins": ["calf_l", "calf_r"],
+    "feet": ["foot_l", "foot_r", "ball_l", "ball_r"]
+  },
+  "slot_regions": {"helmet": ["head"], "chest": ["torso", "upper_arms", "forearms"], "trousers": ["hips", "thighs", "shins"], "feet": ["feet"]},
+  "clips": {"idle": {"frames": 60, "loop": true}, "walk": {"frames": 30, "loop": true}, "swing": {"frames": 12, "loop": false}},
+  "routes": [
+    {"action": "idle", "key": "", "clip": "idle"},
+    {"action": "walk", "key": "", "clip": "walk"},
+    {"action": "swing", "key": "", "clip": "swing"}
+  ]
+}
