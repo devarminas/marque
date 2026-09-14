@@ -128,9 +128,13 @@ func run(
 	if not await _await_unix_msec(fire_unix_msec):
 		return _fail("frames stopped before the shared wall-clock click")
 	# Final go-file gate: the early arriver waits briefly for the peer so both
-	# click after the slower wake, not one frame-overshoot apart.
+	# fire after the slower wake, not one frame-overshoot apart.
 	await _final_go_rendezvous(fire_generation, fire_unix_msec)
-	_click_at(screen)
+	# Wire the pickup now. push_input/_click_at only reaches the session on a
+	# later frame under software GL and was splitting server intent ticks even
+	# when both processes woke on the same wall deadline. Screen projection
+	# above already proved the item is clickable.
+	_session.request_pickup(item_id)
 	var click_tick := clock.estimated_tick()
 	print("DEMO pickupclick %d %d %f %f" % [click_tick, item_id, screen.x, screen.y])
 
