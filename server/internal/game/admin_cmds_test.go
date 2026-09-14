@@ -122,6 +122,7 @@ func TestAdminTPToPlayer(t *testing.T) {
 	alice := pw.join()
 	bob := pw.join()
 	bob.pos = Point{X: 7, Z: -3}
+	bob.y = 2.5
 	pw.w.SetAdminACL(AdminACL{DevAdmin: true})
 	pw.w.SetAdminRegistry(NewDefaultAdminRegistry())
 
@@ -132,8 +133,8 @@ func TestAdminTPToPlayer(t *testing.T) {
 		Seq:  1,
 	})
 
-	if alice.pos != bob.pos {
-		t.Fatalf("alice pose=%v, want bob %v", alice.pos, bob.pos)
+	if alice.pos != bob.pos || alice.y != bob.y {
+		t.Fatalf("alice pose=%v y=%v, want bob %v y=%v", alice.pos, alice.y, bob.pos, bob.y)
 	}
 }
 
@@ -208,6 +209,9 @@ func TestAdminSpawnAndHeal(t *testing.T) {
 	}
 	if imp.pos.X != 3 || imp.pos.Z != 2 {
 		t.Fatalf("imp pose=%v, want near admin (3,2)", imp.pos)
+	}
+	if imp.home != imp.pos {
+		t.Fatalf("imp home=%v, want spawn pose %v", imp.home, imp.pos)
 	}
 
 	pw.w.handleFrame(mnet.Event{

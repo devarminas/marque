@@ -172,6 +172,7 @@ func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp st
 		faction: faction,
 		weapon:  npcArchetypeWeapon(kind),
 		pos:     Point{X: x, Z: z},
+		home:    Point{X: x, Z: z},
 		hp:      maxHP,
 		maxHP:   maxHP,
 		camp:    camp,

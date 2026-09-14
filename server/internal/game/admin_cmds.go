@@ -75,7 +75,7 @@ func adminTP(w *World, p *player, args []string) (string, *mnet.RejectError) {
 		if rerr != nil {
 			return "", rerr
 		}
-		w.adminSetPose(p, target.pos.X, target.pos.Z)
+		w.adminCopyPose(p, target)
 		return fmt.Sprintf("teleported to %d", target.id), nil
 	case 2:
 		x, errX := strconv.ParseFloat(args[0], 64)
@@ -148,6 +148,14 @@ func (w *World) adminSetPose(p *player, x, z float64) {
 	p.y = w.groundYAt(x, z, p.y)
 	p.vy = 0
 	w.broadcastPose(p)
+}
+
+func (w *World) adminCopyPose(dst, src *player) {
+	dst.clearSteer()
+	dst.pos = src.pos
+	dst.y = src.y
+	dst.vy = 0
+	w.broadcastPose(dst)
 }
 
 func (w *World) adminPlayer(raw string) (*player, *mnet.RejectError) {
