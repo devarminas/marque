@@ -75,6 +75,14 @@ signal equipment_changed(
 	worn_names: PackedStringArray, slot_names: PackedStringArray, slot_kinds: PackedStringArray
 )
 
+signal worn_changed(id: int, slot_names: PackedStringArray, slot_kinds: PackedStringArray)
+
+signal swing_observed(id: int, target: int, weapon: String)
+
+signal cast_phase_observed(id: int, ability: String, target: int, phase: String)
+
+signal gather_observed(id: int, node: int)
+
 signal class_changed(
 	player: int,
 	class_id: String,
@@ -111,6 +119,8 @@ signal server_error(re: String, message: String)
 signal unknown_message(key: String)
 
 const CONNECT_TIMEOUT_MSEC := 5000
+
+const CAST_PHASES := ["begin", "resolve", "cancel"]
 
 var _peer: WebSocketPeer = null
 var _opened := false
@@ -468,6 +478,14 @@ func ingest_text_frame(text: String) -> void:
 			_on_inventory(body, text)
 		"equipment":
 			_on_equipment(body, text)
+		"worn":
+			_on_worn(body, text)
+		"swing":
+			_on_swing(body, text)
+		"cast_phase":
+			_on_cast_phase(body, text)
+		"gather":
+			_on_gather(body, text)
 		"class":
 			_on_class(body, text)
 		"skills":
@@ -512,6 +530,8 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 	var mana_ids := PackedInt64Array()
 	var manas := PackedInt32Array()
 	var max_manas := PackedInt32Array()
+	var worn_ids := PackedInt64Array()
+	var worn_slots: Array = []
 	for entry: Variant in body["players"] as Array:
 		if typeof(entry) != TYPE_DICTIONARY:
 			push_error("net_client: welcome.players entry is not an object: %s" % text)
@@ -521,6 +541,12 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 			return
 		ids.append(int(state["id"]))
 		positions.append(Vector2(state["x"], state["z"]))
+		if state.has("worn"):
+			var worn := _worn_pairs(state["worn"], "welcome.players worn", text)
+			if worn.is_empty():
+				return
+			worn_ids.append(int(state["id"]))
+			worn_slots.append(worn)
 		var pair: Array = []
 		var hp_status := _read_hit_points(state, text, pair)
 		if hp_status == ERR_INVALID_DATA:
@@ -616,6 +642,8 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 		ids,
 		positions,
 	)
+	for index in worn_ids.size():
+		worn_changed.emit(int(worn_ids[index]), worn_slots[index][0], worn_slots[index][1])
 	for index in hp_ids.size():
 		hp_changed.emit(int(hp_ids[index]), hps[index], max_hps[index])
 	for index in mana_ids.size():
@@ -678,6 +706,11 @@ func _on_spawn(body: Dictionary, text: String) -> void:
 		return
 	var id := int(body["id"])
 	spawned.emit(id, Vector2(body["x"], body["z"]))
+	if body.has("worn"):
+		var worn := _worn_pairs(body["worn"], "spawn.worn", text)
+		if worn.is_empty():
+			return
+		worn_changed.emit(id, worn[0], worn[1])
 	var pair: Array = []
 	var hp_status := _read_hit_points(body, text, pair)
 	if hp_status == ERR_INVALID_DATA:
@@ -873,6 +906,60 @@ func _on_equipment(body: Dictionary, text: String) -> void:
 		slot_kinds.append(occupied["kind"])
 
 	equipment_changed.emit(worn_names, slot_names, slot_kinds)
+
+
+func _on_worn(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["id"], text):
+		return
+	var worn := _worn_pairs(body.get("slots"), "worn.slots", text)
+	if worn.is_empty():
+		return
+	worn_changed.emit(int(body["id"]), worn[0], worn[1])
+
+
+func _on_swing(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["id", "target"], text):
+		return
+	if typeof(body.get("weapon")) != TYPE_STRING:
+		push_error("net_client: swing has no weapon string: %s" % text)
+		return
+	swing_observed.emit(int(body["id"]), int(body["target"]), body["weapon"])
+
+
+func _on_cast_phase(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["id", "target"], text):
+		return
+	if typeof(body.get("ability")) != TYPE_STRING or not CAST_PHASES.has(body.get("phase")):
+		push_error("net_client: cast_phase needs an ability string and a phase in %s: %s" % [CAST_PHASES, text])
+		return
+	cast_phase_observed.emit(int(body["id"]), body["ability"], int(body["target"]), body["phase"])
+
+
+func _on_gather(body: Dictionary, text: String) -> void:
+	if not _has_numbers(body, ["id", "node"], text):
+		return
+	gather_observed.emit(int(body["id"]), int(body["node"]))
+
+
+func _worn_pairs(raw: Variant, where: String, text: String) -> Array:
+	if _is_null_list(raw, where, text):
+		return [PackedStringArray(), PackedStringArray()]
+	if typeof(raw) != TYPE_ARRAY:
+		push_error("net_client: %s is not an array: %s" % [where, text])
+		return []
+	var names := PackedStringArray()
+	var kinds := PackedStringArray()
+	for entry: Variant in raw as Array:
+		if (
+			typeof(entry) != TYPE_DICTIONARY
+			or typeof(entry.get("slot")) != TYPE_STRING
+			or typeof(entry.get("kind")) != TYPE_STRING
+		):
+			push_error("net_client: %s entry needs slot and kind strings: %s" % [where, text])
+			return []
+		names.append(entry["slot"])
+		kinds.append(entry["kind"])
+	return [names, kinds]
 
 
 func _on_class(body: Dictionary, text: String) -> void:

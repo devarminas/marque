@@ -13,6 +13,7 @@ const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const NpcDummyScene := preload("res://scenes/npc_dummy.tscn")
 const NpcQuestGiverScene := preload("res://scenes/npc_quest_giver.tscn")
 const NpcImpScene := preload("res://scenes/npc_imp.tscn")
+const NpcImpQuestGiverScene := preload("res://scenes/npc_imp_quest_giver.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const DialogPanelScript := preload("res://scripts/dialog_panel.gd")
 const GivePanelScript := preload("res://scripts/give_panel.gd")
@@ -242,6 +243,8 @@ func _ready() -> void:
 	_net.party_invite_notice_changed.connect(_on_party_invite_notice_changed)
 	_net.admin_reply_received.connect(_on_admin_reply_received)
 	_net.equipment_changed.connect(_on_equipment_changed)
+	_net.worn_changed.connect(_on_worn_changed)
+	_net.swing_observed.connect(_on_swing_observed)
 	_net.class_changed.connect(_on_class_changed)
 	_net.skills_changed.connect(_on_skills_changed)
 	_net.hp_changed.connect(_on_hp_changed)
@@ -884,7 +887,7 @@ func _on_welcomed(
 	_forget_everyone()
 	_clear_hit_points()
 	_clear_class_state()
-	_clear_grip()
+	_clear_look()
 	_casts_awaiting_mana.clear()
 	if _panel != null:
 		_panel.clear()
@@ -1635,12 +1638,30 @@ func _give_should_open() -> bool:
 func _on_equipment_changed(
 	worn_names: PackedStringArray, slot_names: PackedStringArray, slot_kinds: PackedStringArray
 ) -> void:
-	if _local != null:
-		_local.apply_equipment(worn_names, slot_names, slot_kinds)
 	if _equipment == null:
 		push_error("session: equipment arrived with no panel to draw it")
 		return
 	_equipment.apply(worn_names, slot_names, slot_kinds)
+
+
+func _on_worn_changed(id: int, slot_names: PackedStringArray, slot_kinds: PackedStringArray) -> void:
+	var avatar: PlayerAvatarScript = _avatars.get(id)
+	if avatar == null:
+		push_warning("session: worn for unknown player %d; ignoring" % id)
+		return
+	avatar.apply_equipment(slot_names, slot_kinds)
+
+
+func _on_swing_observed(id: int, _target: int, weapon: String) -> void:
+	var avatar: PlayerAvatarScript = _avatars.get(id)
+	if avatar != null:
+		avatar.swing(weapon)
+		return
+	var npc: NpcDummyScript = _npcs.get(id)
+	if npc != null:
+		npc.swing(weapon)
+		return
+	push_warning("session: swing for unknown actor %d; ignoring" % id)
 
 
 func _on_class_changed(
@@ -1820,6 +1841,8 @@ func _ensure_npc(id: int, kind: String, faction: String, display_name: String) -
 		scene = NpcQuestGiverScene
 	elif kind == NpcDummyScript.KindImp:
 		scene = NpcImpScene
+	elif kind == NpcDummyScript.KindImpQuestGiver:
+		scene = NpcImpQuestGiverScene
 	var body := scene.instantiate() as NpcDummyScript
 	if body == null:
 		push_error("session: npc scene did not instantiate as an NpcDummy")
@@ -1986,16 +2009,14 @@ func _clear_hit_points() -> void:
 		_death_overlay.visible = false
 
 
-func _clear_grip() -> void:
+func _clear_look() -> void:
 	if _local != null:
-		_local.clear_grip()
+		_local.apply_equipment(PackedStringArray(), PackedStringArray())
 
 
 func _clear_class_state() -> void:
 	_active_class_id = ""
 	_skill_levels.clear()
-	if _local != null:
-		_local.apply_class("")
 	if _class_hud != null:
 		_class_hud.clear()
 	_refresh_class_debug()
@@ -2008,8 +2029,6 @@ func _apply_class(
 	missing_tools: PackedStringArray,
 ) -> void:
 	_active_class_id = class_id
-	if _local != null:
-		_local.apply_class(class_id)
 	if _class_hud == null:
 		push_error("session: class arrived with no hud to draw it")
 		return

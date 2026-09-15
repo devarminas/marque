@@ -15,7 +15,6 @@ func run(assertions: Assertions) -> void:
 	_test_wire_order_does_not_change_the_plan(assertions)
 	_test_slots_that_are_not_hands_are_ignored(assertions)
 	_test_ragged_arrays_yield_an_empty_plan(assertions)
-	_test_names_the_hands_reads_the_worn_slot_list(assertions)
 	assertions.finish()
 
 
@@ -132,27 +131,4 @@ func _test_ragged_arrays_yield_an_empty_plan(assertions: Assertions) -> void:
 	assertions.check(
 		plan[GripDefs.OFF_HAND] == "" and plan[GripDefs.GRIP_HAND] == "",
 		"ragged slot arrays grip nothing rather than guessing, got %s" % [plan],
-	)
-
-
-func _test_names_the_hands_reads_the_worn_slot_list(assertions: Assertions) -> void:
-	assertions.check(
-		GripDefs.names_the_hands(
-			PackedStringArray(
-				["helmet", GripDefs.OFF_HAND, "chest", GripDefs.GRIP_HAND, "feet", "trousers"]
-			)
-		),
-		"the shipped six worn slots name both hands",
-	)
-	assertions.check(
-		not GripDefs.names_the_hands(PackedStringArray(["helmet", "chest", "feet", "trousers"])),
-		"a worn list with no hands is refused, so a server slot rename fails loudly",
-	)
-	assertions.check(
-		not GripDefs.names_the_hands(PackedStringArray([GripDefs.OFF_HAND])),
-		"and one hand alone is not enough",
-	)
-	assertions.check(
-		not GripDefs.names_the_hands(PackedStringArray()),
-		"and an empty worn list is refused",
 	)

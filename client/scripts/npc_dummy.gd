@@ -4,6 +4,7 @@ extends Node3D
 const PolylineWalker := preload("res://scripts/polyline_walker.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 const DummyMeterScript := preload("res://scripts/dummy_meter.gd")
+const CharacterVisual := preload("res://scripts/character_visual.gd")
 
 const FactionFriendly := "friendly"
 const FactionHostile := "hostile"
@@ -14,9 +15,6 @@ const KindQuestGiver := "quest_giver"
 const KindImpQuestGiver := "imp_quest_giver"
 const KindImp := "imp"
 
-const IDLE_ANIM := "ual2/Idle_FoldArms"
-const WALK_ANIM := "ual2/Walk_Carry"
-const WALK_CLIP_SPEED := 0.65
 const OVERHEAD_PROXIMITY := 12.0
 const OVERHEAD_CLICK_LAYER := 4
 
@@ -41,8 +39,7 @@ var _overhead_near := false
 var _walker: PolylineWalker = null
 var _tick_ms := 0
 var _desired_yaw := 0.0
-var _animation: AnimationPlayer = null
-var _missing_animation_reported := false
+var _missing_visual_reported := false
 
 @onready var _selection_ring: MeshInstance3D = $SelectionRing
 @onready var _hp_label: Label3D = $HpLabel
@@ -57,11 +54,8 @@ func _ready() -> void:
 	if body is MeshInstance3D:
 		_body_mesh = body as MeshInstance3D
 	var missing := get_node_or_null("MissingBody") as MeshInstance3D
-	if missing != null and get_node_or_null("Body/Armature/Skeleton3D") == null:
+	if missing != null and visual() != null and get_node_or_null("Body/Rig/Skeleton3D") == null:
 		missing.visible = true
-	_animation = get_node_or_null("AnimationPlayer") as AnimationPlayer
-	if _animation != null and _animation.has_animation(IDLE_ANIM):
-		_animation.play(IDLE_ANIM)
 	_apply_faction_color()
 	if kind == KindDummy:
 		_meter = DummyMeterScript.new()
@@ -141,22 +135,35 @@ func is_walking() -> bool:
 
 
 func current_anim_clip() -> String:
-	if _animation == null:
+	var animation := get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if animation == null:
 		return "none"
-	var clip := _animation.current_animation
+	var clip := animation.current_animation
 	if clip.is_empty():
 		return "none"
 	return clip
 
 
+func visual() -> CharacterVisual:
+	return get_node_or_null("Visual") as CharacterVisual
+
+
+func swing(weapon: String) -> void:
+	var character := visual()
+	if character == null:
+		push_error("NpcDummy '%s' (kind=%s): a swing arrived for an NPC with no CharacterVisual" % [name, kind])
+		return
+	character.swing(weapon, _tick_ms)
+
+
 func update_to_tick(tick: int) -> void:
 	if _walker == null or not _walker.has_path():
-		_set_walking(false)
+		_locomote(0.0)
 		return
 
 	var ground := _walker.position_at_tick(tick)
 	position = Vector3(ground.x, ground_y, ground.y)
-	_set_walking(not _walker.is_finished_at_tick(tick))
+	_locomote(0.0 if _walker.is_finished_at_tick(tick) else _walker.speed())
 
 	if not face_travel_direction:
 		return
@@ -273,24 +280,17 @@ func _apply_faction_color() -> void:
 	_body_mesh.material_override = mat
 
 
-func _set_walking(walking: bool) -> void:
-	if _animation == null:
-		if not static_mesh and not _missing_animation_reported:
-			_missing_animation_reported = true
+func _locomote(ground_speed: float) -> void:
+	var character := visual()
+	if character == null:
+		if not static_mesh and not _missing_visual_reported:
+			_missing_visual_reported = true
 			push_error(
-				"NpcDummy '%s' (kind=%s): mobile NPC lacks AnimationPlayer; walk/idle will no-op"
+				"NpcDummy '%s' (kind=%s): mobile NPC lacks a CharacterVisual; walk and idle will no-op"
 				% [name, kind]
 			)
 		return
-	if walking:
-		if _animation.has_animation(WALK_ANIM) and _animation.current_animation != WALK_ANIM:
-			_animation.play(WALK_ANIM)
-		if _animation.has_animation(WALK_ANIM) and _walker != null:
-			_animation.speed_scale = _walker.speed() / WALK_CLIP_SPEED
-		return
-	if _animation.has_animation(IDLE_ANIM) and _animation.current_animation != IDLE_ANIM:
-		_animation.play(IDLE_ANIM)
-	_animation.speed_scale = 1.0
+	character.locomote(ground_speed)
 
 
 func _turn_toward_desired_yaw(delta: float) -> void:

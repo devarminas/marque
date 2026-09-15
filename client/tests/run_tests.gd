@@ -28,13 +28,15 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "dummy meter", "script": preload("res://tests/test_dummy_meter.gd")},
 	{"name": "play map", "script": preload("res://tests/test_play_map.gd")},
 	{"name": "art contract", "script": preload("res://tests/test_art_contract.gd")},
+	{"name": "gear look", "script": preload("res://tests/test_gear_look.gd")},
+	{"name": "clip director", "script": preload("res://tests/test_clip_director.gd")},
+	{"name": "presentation protocol", "script": preload("res://tests/test_presentation_protocol.gd")},
 ]
 
 const SCENE_SUITES: Array = [
 	{"name": "world and camera", "scene": "res://tests/test_world.tscn"},
 	{"name": "move chord", "scene": "res://tests/test_move_chord.tscn"},
 	{"name": "player avatar", "scene": "res://tests/test_avatar.tscn"},
-	{"name": "outfit", "scene": "res://tests/test_outfit.tscn"},
 	{"name": "grip", "scene": "res://tests/test_grip.tscn"},
 	{"name": "ground items", "scene": "res://tests/test_items.tscn"},
 	{"name": "resource nodes", "scene": "res://tests/test_nodes.tscn"},

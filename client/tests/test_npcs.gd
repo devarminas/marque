@@ -7,13 +7,12 @@ const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const NpcDummyScene := preload("res://scenes/npc_dummy.tscn")
 const NpcQuestGiverScene := preload("res://scenes/npc_quest_giver.tscn")
 const NpcImpScene := preload("res://scenes/npc_imp.tscn")
+const NpcImpQuestGiverScene := preload("res://scenes/npc_imp_quest_giver.tscn")
+const CharacterVisual := preload("res://scripts/character_visual.gd")
 const DemoNpcCapture := preload("res://scripts/demo_npc_capture.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
-const QUEST_GIVER_BODY_SKIN := "Superhero_Female"
-const IMP_BODY_SKIN := "Imp_Body"
-const PLAYER_HEIGHT_BAND_MIN := 1.6
-const PLAYER_HEIGHT_BAND_MAX := 1.8
+const LABEL_CLEARANCE := 0.15
 const MAGENTA := Color(0.95, 0.08, 0.85, 1)
 
 @onready var _world: Node3D = $World
@@ -43,9 +42,9 @@ func get_assertion_count() -> int:
 func _ready() -> void:
 	print("== npcs: welcome, select, cast faction targets, attack refuse ==")
 
-	_test_quest_giver_scene_is_female_rig()
+	_test_quest_giver_scene_wears_its_cloth_loadout()
 	_test_dummy_scene_stays_capsule()
-	_test_imp_scene_uses_bestiary_mesh()
+	_test_imp_scenes_use_the_prototype_imp()
 	_test_imp_authors_animation_player()
 	_test_mobile_npc_without_animation_player_reports_once()
 	_test_imp_missing_body_draws_magenta()
@@ -81,6 +80,7 @@ func _ready() -> void:
 	_test_attack_targets()
 	_test_despawn_forgets_npc()
 	_test_npc_spawn_after_despawn()
+	_test_imp_quest_giver_spawns_and_a_swing_reaches_the_imp()
 	_test_npc_spawn_missing_name_is_empty()
 	_test_hostile_overhead_proximity_and_name()
 	_test_overhead_click_resolves_like_body()
@@ -88,24 +88,51 @@ func _ready() -> void:
 	_finished = true
 
 
-func _test_quest_giver_scene_is_female_rig() -> void:
+func _test_quest_giver_scene_wears_its_cloth_loadout() -> void:
+	var contract := CharacterVisual.contract()
 	var giver := NpcQuestGiverScene.instantiate() as NpcDummyScript
 	_check(giver != null, "npc_quest_giver.tscn instantiates as NpcDummy")
 	if giver == null:
 		return
 	_world.add_child(giver)
-	var skeleton := giver.get_node_or_null("Body/Armature/Skeleton3D") as Skeleton3D
-	_check(skeleton != null, "quest giver Body/Armature/Skeleton3D exists")
-	var skin_names := PackedStringArray()
-	if skeleton != null:
-		for node in skeleton.get_children():
-			if node is MeshInstance3D:
-				skin_names.append(String(node.name))
+	var body := giver.get_node_or_null("Body") as Node3D
 	_check(
-		skin_names.has(QUEST_GIVER_BODY_SKIN),
-		"quest giver skins include %s, got [%s]" % [QUEST_GIVER_BODY_SKIN, ", ".join(skin_names)],
+		body != null and body.scene_file_path == contract.variants["human"].glb,
+		"quest giver Body instances %s, got %s" % [contract.variants["human"].glb, "null" if body == null else body.scene_file_path],
 	)
-	_check(not (giver.get_node("Body") is MeshInstance3D), "quest giver Body is not a capsule mesh")
+	var skeleton := giver.get_node_or_null("Body/Rig/Skeleton3D") as Skeleton3D
+	_check(skeleton != null, "quest giver carries Body/Rig/Skeleton3D")
+	if skeleton == null:
+		giver.queue_free()
+		return
+	var visual := giver.visual()
+	_check(visual != null and visual.variant == "human", "quest giver drives a human CharacterVisual")
+	_check(
+		visual != null and visual.shown_pieces() == PackedStringArray(["cloth_hood", "cloth_robe", "cloth_skirt"]),
+		"quest giver wears its authored hood, robe, and skirt, got %s" % ([] if visual == null else visual.shown_pieces()),
+	)
+	_check(
+		visual != null and visual.hidden_regions() == PackedStringArray(["forearms", "hips", "thighs", "torso", "upper_arms"]),
+		"and hides the regions the robe and skirt cover, got %s" % ([] if visual == null else visual.hidden_regions()),
+	)
+	var top := 0.0
+	for child in skeleton.get_children():
+		var mesh := child as MeshInstance3D
+		if mesh == null:
+			continue
+		var worn := visual != null and visual.shown_pieces().has(String(mesh.name))
+		var hidden_region := visual != null and visual.hidden_regions().has(String(mesh.name).trim_prefix("region_"))
+		var expected := worn if not String(mesh.name).begins_with("region_") else not hidden_region
+		_check(mesh.visible == expected, "quest giver draws %s %s" % [mesh.name, "on" if expected else "off"])
+		if mesh.visible:
+			top = maxf(top, mesh.get_aabb().end.y)
+	var hp_y := (giver.get_node("HpLabel") as Node3D).position.y
+	_check(hp_y >= top + 0.05, "quest giver HpLabel at %.2f clears the %.3f m hood" % [hp_y, top])
+	_check(not (giver.get_node("MissingBody") as Node3D).visible, "quest giver keeps the magenta fallback hidden")
+	_check(
+		giver.current_anim_clip() == "proto/" + contract.clip_for("idle", ""),
+		"quest giver idles on the shared clip, got %s" % giver.current_anim_clip(),
+	)
 	giver.queue_free()
 
 
@@ -117,62 +144,84 @@ func _test_dummy_scene_stays_capsule() -> void:
 	_world.add_child(dummy)
 	_check(dummy.get_node("Body") is MeshInstance3D, "practice dummy Body stays a MeshInstance3D capsule")
 	_check(
-		dummy.get_node_or_null("Body/Armature/Skeleton3D") == null,
-		"practice dummy has no female Armature",
+		dummy.get_node_or_null("Body/Rig/Skeleton3D") == null,
+		"practice dummy has no prototype rig",
 	)
 	_check(dummy.static_mesh, "practice dummy is flagged static_mesh (no AnimationPlayer required)")
 	dummy.queue_free()
 
 
-func _test_imp_scene_uses_bestiary_mesh() -> void:
-	var imp := NpcImpScene.instantiate() as NpcDummyScript
-	_check(imp != null, "npc_imp.tscn instantiates as NpcDummy")
-	if imp == null:
-		return
-	_world.add_child(imp)
-	var skeleton := imp.get_node_or_null("Body/Armature/Skeleton3D") as Skeleton3D
-	_check(skeleton != null, "imp Body/Armature/Skeleton3D exists")
-	var skin_names := PackedStringArray()
-	if skeleton != null:
-		for node in skeleton.get_children():
-			if node is MeshInstance3D:
-				skin_names.append(String(node.name))
-	_check(
-		skin_names.has(IMP_BODY_SKIN),
-		"imp skins include %s, got [%s]" % [IMP_BODY_SKIN, ", ".join(skin_names)],
-	)
-	_check(not (imp.get_node("Body") is MeshInstance3D), "imp Body is not a capsule mesh")
-	var missing := imp.get_node_or_null("MissingBody") as MeshInstance3D
-	_check(missing != null and not missing.visible, "healthy imp keeps magenta fallback hidden")
-	var body_mesh := imp.get_node_or_null("Body/Armature/Skeleton3D/Imp_Body") as MeshInstance3D
-	_check(body_mesh != null, "Imp_Body mesh instance exists")
-	if body_mesh != null:
-		var height := body_mesh.get_aabb().size.y
+func _test_imp_scenes_use_the_prototype_imp() -> void:
+	var contract := CharacterVisual.contract()
+	for scene: PackedScene in [NpcImpScene, NpcImpQuestGiverScene]:
+		var where := scene.resource_path.get_file()
+		var imp := scene.instantiate() as NpcDummyScript
+		_check(imp != null, "%s instantiates as NpcDummy" % where)
+		if imp == null:
+			continue
+		_world.add_child(imp)
+		var body := imp.get_node_or_null("Body") as Node3D
 		_check(
-			height >= PLAYER_HEIGHT_BAND_MIN and height <= PLAYER_HEIGHT_BAND_MAX,
-			"imp mesh height sits in the ~1.7u player band, got %f" % height,
+			body != null and body.scene_file_path == contract.variants["imp"].glb,
+			"%s Body instances %s, got %s" % [where, contract.variants["imp"].glb, "null" if body == null else body.scene_file_path],
 		)
-	imp.queue_free()
+		var skeleton := imp.get_node_or_null("Body/Rig/Skeleton3D") as Skeleton3D
+		_check(skeleton != null, "%s carries Body/Rig/Skeleton3D" % where)
+		if skeleton == null:
+			imp.queue_free()
+			continue
+		_check(
+			absf(skeleton.motion_scale - contract.motion_scale("imp")) < 1.0e-4,
+			"%s sets motion_scale %.3f, got %.3f" % [where, contract.motion_scale("imp"), skeleton.motion_scale],
+		)
+		_check(imp.visual() != null and imp.visual().variant == "imp", "%s drives an imp CharacterVisual" % where)
+		_check(not (imp.get_node("MissingBody") as Node3D).visible, "%s keeps the magenta fallback hidden" % where)
+		var top := 0.0
+		for child in skeleton.get_children():
+			if child is MeshInstance3D:
+				top = maxf(top, (child as MeshInstance3D).get_aabb().end.y)
+		var hp_y := (imp.get_node("HpLabel") as Node3D).position.y
+		var overhead_y := (imp.get_node("OverheadClick/CollisionShape3D") as Node3D).position.y
+		var name_y := (imp.get_node("NameLabel") as Node3D).position.y
+		_check(top > 1.0 and top < 1.5, "%s stands %.3f m tall, inside the 1.2 m imp band with horns" % [where, top])
+		_check(
+			hp_y >= top + LABEL_CLEARANCE and hp_y <= top + 0.4,
+			"%s HpLabel at %.2f sits just above the %.3f m imp, not the 2.0 m player height" % [where, hp_y, top],
+		)
+		_check(
+			overhead_y > hp_y and name_y > overhead_y,
+			"%s stacks OverheadClick %.2f above HpLabel and NameLabel %.2f above that" % [where, overhead_y, name_y],
+		)
+		imp.queue_free()
 
 
 func _test_imp_authors_animation_player() -> void:
 	var imp := NpcImpScene.instantiate() as NpcDummyScript
-	_check(imp != null, "imp AnimationPlayer check instantiates npc_imp")
+	_check(imp != null, "imp animation check instantiates npc_imp")
 	if imp == null:
 		return
 	_world.add_child(imp)
+	imp.configure_motion(40)
+	var contract := CharacterVisual.contract()
 	_check(not imp.static_mesh, "imp is a mobile NPC (static_mesh off)")
 	var animation := imp.get_node_or_null("AnimationPlayer") as AnimationPlayer
-	_check(animation != null, "npc_imp.tscn authors an AnimationPlayer")
 	_check(
-		imp.get("_animation") == animation,
-		"imp _ready binds the authored AnimationPlayer",
+		animation != null and animation.has_animation("proto/" + contract.clip_for("walk", "")),
+		"npc_imp.tscn authors the proto clip library",
 	)
-	imp.call("_set_walking", true)
+	_check(imp.current_anim_clip() == "proto/" + contract.clip_for("idle", ""), "a resting imp idles, got %s" % imp.current_anim_clip())
+	imp.call("_locomote", 3.0)
+	_check(imp.current_anim_clip() == "proto/" + contract.clip_for("walk", ""), "a moving imp walks, got %s" % imp.current_anim_clip())
 	_check(
-		not imp.get("_missing_animation_reported"),
-		"imp with AnimationPlayer does not take the missing-player loud path",
+		animation != null and absf(animation.speed_scale - 1.0 / contract.motion_scale("imp")) < 1.0e-3,
+		"at player speed the imp strides faster by its motion scale, got %.3f" % (0.0 if animation == null else animation.speed_scale),
 	)
+	imp.swing("imp_claw")
+	_check(
+		imp.current_anim_clip() == "proto/" + contract.clip_for("swing", ""),
+		"a claw swing plays the shared swing clip, got %s" % imp.current_anim_clip(),
+	)
+	_check(not imp.get("_missing_visual_reported"), "an imp with a visual does not take the missing-visual loud path")
 	imp.queue_free()
 
 
@@ -182,17 +231,17 @@ func _test_mobile_npc_without_animation_player_reports_once() -> void:
 	body.kind = NpcDummyScript.KindImp
 	body.static_mesh = false
 	_world.add_child(body)
-	_check(body.get_node_or_null("AnimationPlayer") == null, "sabotage body has no AnimationPlayer")
-	_check(not body.get("_missing_animation_reported"), "loud path starts unset")
-	body.call("_set_walking", true)
+	_check(body.get_node_or_null("AnimationPlayer") == null, "sabotage body has no CharacterVisual")
+	_check(not body.get("_missing_visual_reported"), "loud path starts unset")
+	body.call("_locomote", 3.0)
 	_check(
-		body.get("_missing_animation_reported"),
+		body.get("_missing_visual_reported"),
 		"mobile NPC without AnimationPlayer latches the loud missing-player path",
 	)
-	body.call("_set_walking", true)
+	body.call("_locomote", 3.0)
 	_check(
-		body.get("_missing_animation_reported"),
-		"a second _set_walking keeps the missing-player latch set",
+		body.get("_missing_visual_reported"),
+		"a second _locomote keeps the missing-visual latch set",
 	)
 	body.queue_free()
 
@@ -266,8 +315,8 @@ func _test_quest_giver_spawns_from_welcome() -> void:
 		return
 	_check(giver.kind == NpcDummyScript.KindQuestGiver, "id 1000003 kind is quest_giver")
 	_check(
-		giver.get_node_or_null("Body/Armature/Skeleton3D") != null,
-		"welcome quest giver uses the female rig scene",
+		giver.get_node_or_null("Body/Rig/Skeleton3D") != null,
+		"welcome quest giver uses the prototype humanoid scene",
 	)
 	_check(not (giver.get_node("Body") is MeshInstance3D), "welcome quest giver is not a capsule")
 
@@ -282,8 +331,8 @@ func _test_imp_spawns_from_welcome() -> void:
 	_check(imp.faction == NpcDummyScript.FactionHostile, "welcome imp is hostile")
 	_check(imp.display_name == "Imp", "welcome imp caches display name Imp")
 	_check(
-		imp.get_node_or_null("Body/Armature/Skeleton3D") != null,
-		"welcome imp uses the bestiary Imp scene",
+		imp.get_node_or_null("Body/Rig/Skeleton3D") != null,
+		"welcome imp uses the prototype imp scene",
 	)
 	_check(not (imp.get_node("Body") is MeshInstance3D), "welcome imp is not a capsule")
 	_check(
@@ -422,8 +471,8 @@ func _test_npc_spawn_after_despawn() -> void:
 	_check(imp.faction == NpcDummyScript.FactionHostile, "npc_spawn faction is hostile")
 	_check(imp.display_name == "Imp", "npc_spawn caches display name Imp")
 	_check(
-		imp.get_node_or_null("Body/Armature/Skeleton3D") != null,
-		"npc_spawn imp uses the bestiary Imp scene",
+		imp.get_node_or_null("Body/Rig/Skeleton3D") != null,
+		"npc_spawn imp uses the prototype imp scene",
 	)
 	_check(is_equal_approx(imp.global_position.x, 13.0), "npc_spawn places x")
 	_check(is_equal_approx(imp.global_position.z, 7.5), "npc_spawn places z")
@@ -510,6 +559,28 @@ func _test_overhead_click_resolves_like_body() -> void:
 	_check(overhead.collision_layer == 0, "far hostile disables overhead pick")
 	dummy.queue_free()
 	picker.free()
+
+
+func _test_imp_quest_giver_spawns_and_a_swing_reaches_the_imp() -> void:
+	_net.ingest_text_frame(
+		'{"npc_spawn":{"id":1000017,"kind":"imp_quest_giver","faction":"friendly","name":"","x":-6.0,"z":-6.0,"hp":50,"max_hp":50}}'
+	)
+	var npcs: Dictionary = _session.get("_npcs")
+	var giver: NpcDummyScript = npcs.get(1000017)
+	_check(
+		giver != null and giver.scene_file_path == NpcImpQuestGiverScene.resource_path,
+		"an imp_quest_giver spawn builds npc_imp_quest_giver.tscn, got %s" % ("null" if giver == null else giver.scene_file_path),
+	)
+	_check(giver != null and giver.is_talkable(), "and the imp quest giver is talkable")
+	var imp: NpcDummyScript = npcs.get(1000006)
+	_check(imp != null, "the respawned imp is present for the swing frame")
+	if imp == null:
+		return
+	_net.ingest_text_frame('{"swing":{"id":1000006,"target":3,"weapon":"imp_claw"}}')
+	_check(
+		imp.visual().current_clip() == CharacterVisual.contract().clip_for("swing", ""),
+		"a swing frame naming the imp swings its visual, got %s" % imp.visual().current_clip(),
+	)
 
 
 func _test_npc_spawn_missing_name_is_empty() -> void:

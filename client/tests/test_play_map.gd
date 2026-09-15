@@ -4,6 +4,7 @@ extends RefCounted
 const PlayMap := preload("res://scripts/play_map.gd")
 const Assertions := preload("res://tests/assertions.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
+const PlayerAvatarScene := preload("res://scenes/player_avatar.tscn")
 
 
 func run(assertions: Assertions) -> void:
@@ -82,7 +83,7 @@ func _test_avatar_stands_on_arena_floor(assertions: Assertions) -> void:
 		map != null and map.scene_file_path == PlayMap.ARENA_PATH,
 		"play host WorldMap is the Ring of Trials scene",
 	)
-	var avatar := PlayerAvatarScript.new()
+	var avatar := PlayerAvatarScene.instantiate() as PlayerAvatarScript
 	host.add_child(avatar)
 	avatar.ground_y = 0.0
 	avatar.present_at(0.0, 0.0, false, 0.0)
