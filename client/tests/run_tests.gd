@@ -28,6 +28,8 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "dummy meter", "script": preload("res://tests/test_dummy_meter.gd")},
 	{"name": "play map", "script": preload("res://tests/test_play_map.gd")},
 	{"name": "art contract", "script": preload("res://tests/test_art_contract.gd")},
+	{"name": "gear look", "script": preload("res://tests/test_gear_look.gd")},
+	{"name": "clip director", "script": preload("res://tests/test_clip_director.gd")},
 ]
 
 const SCENE_SUITES: Array = [
