@@ -51,6 +51,8 @@ stdout/stderr, `server.stdout.ndjson`, and optional `tab_combat_*.png`.
 - **Practice dummy, not last hostile.** Join worlds also spawn imps. Target
   selection filters `kind == dummy` so a later hostile imp cannot overwrite the
   practice dummy and pull close-in into the camp.
+- **Mage kit is admin `/give`.** Harness starts marqued with `-admin`; the client
+  grants cloth + staff after join. Do not pass a `-join-kit` mage forest.
 - **One Godot driver.** Do not run a second `--*-shots` client against the same
   server while this milestone demo is proving AC1–AC5.
 - **Left-click is not attack.** The attack phase must right-click.

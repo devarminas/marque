@@ -9,6 +9,7 @@ const ResourceNodeScript := preload("res://scripts/resource_node.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const CastBarScript := preload("res://scripts/cast_bar.gd")
+const DemoAdminGive := preload("res://scripts/demo_admin_give.gd")
 
 const ROCK_KIND := "rock"
 const SMELTER_KIND := "smelter"
@@ -28,6 +29,18 @@ const MINER_KINDS: Array[String] = [
 	"pickaxe",
 ]
 const MAGE_KINDS: Array[String] = [
+	"cloth_hood",
+	"cloth_robe",
+	"cloth_skirt",
+	"staff",
+]
+const ADMIN_GIVE_KINDS: Array[String] = [
+	"prospector_helm",
+	"prospector_jacket",
+	"prospector_legs",
+	"prospector_boots",
+	"pickaxe",
+	"sticks",
 	"cloth_hood",
 	"cloth_robe",
 	"cloth_skirt",
@@ -98,11 +111,16 @@ func run(
 	if net != null and net.has_signal("casting_changed"):
 		net.casting_changed.connect(_on_casting_changed)
 
-	if not await _wait_until(_scenario_ready, JOIN_TIMEOUT_MSEC):
-		return _fail(
-			"join, rock, smelter, sticks, or miner/mage kit missing after %dms" % JOIN_TIMEOUT_MSEC
-		)
+	if not await _wait_until(_world_ready, JOIN_TIMEOUT_MSEC):
+		return _fail("join, rock, or smelter missing after %dms" % JOIN_TIMEOUT_MSEC)
 	print("DEMO joined %d" % _session.own_id())
+
+	var giver := DemoAdminGive.new()
+	var give_err: String = await giver.grant(
+		_session, _tree, ADMIN_GIVE_KINDS, JOIN_TIMEOUT_MSEC
+	)
+	if not give_err.is_empty():
+		return _fail(give_err)
 
 	var rock_id := _node_id_at(ROCK_KIND, SEED_ROCK_X, SEED_ROCK_Z)
 	var smelter_id := _node_id_at(SMELTER_KIND, SEED_SMELTER_X, SEED_SMELTER_Z)
@@ -169,21 +187,13 @@ func run(
 	return 0
 
 
-func _scenario_ready() -> bool:
+func _world_ready() -> bool:
 	if _session.own_id() <= 0:
 		return false
 	if _node_id_at(ROCK_KIND, SEED_ROCK_X, SEED_ROCK_Z) == 0:
 		return false
 	if _node_id_at(SMELTER_KIND, SEED_SMELTER_X, SEED_SMELTER_Z) == 0:
 		return false
-	if _find_bag_kind(STICKS_KIND) < 0:
-		return false
-	for kind: String in MINER_KINDS:
-		if _find_bag_kind(kind) < 0:
-			return false
-	for kind: String in MAGE_KINDS:
-		if _find_bag_kind(kind) < 0:
-			return false
 	return true
 
 

@@ -9,6 +9,7 @@ const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const DemoNpcCapture := preload("res://scripts/demo_npc_capture.gd")
+const DemoAdminGive := preload("res://scripts/demo_admin_give.gd")
 
 const QUEST_ID := "slay_imps"
 const QUEST_TITLE := "Imp Patrol"
@@ -25,6 +26,14 @@ const STEP_TIMEOUT_MSEC := 45000
 const KILL_TIMEOUT_MSEC := 150000
 const HOLD_MSEC := 800
 const CLASS_ID := "knight"
+
+const KNIGHT_KIT := [
+	"plate_helm",
+	"plate_chest",
+	"plate_legs",
+	"sword",
+	"shield",
+]
 
 const REWARD_KINDS := [
 	"plate_helm",
@@ -70,11 +79,18 @@ func run(
 
 	if not await _wait_for_join():
 		return _fail(
-			"need %d players, %d imps, imp_quest_giver, and sword kit after %dms"
+			"need %d players, %d imps, and imp_quest_giver after %dms"
 			% [REQUIRED_PLAYERS, REQUIRED_IMPS, JOIN_TIMEOUT_MSEC]
 		)
 	print("DEMO joined %d" % _session.own_id())
 	print("DEMO role %s" % _role)
+
+	var giver := DemoAdminGive.new()
+	var give_err: String = await giver.grant(
+		_session, _tree, KNIGHT_KIT, JOIN_TIMEOUT_MSEC
+	)
+	if not give_err.is_empty():
+		return _fail(give_err)
 
 	if not await _equip_knight_kit():
 		return 1
@@ -150,7 +166,6 @@ func _wait_for_join() -> bool:
 			and _session.known_ids().size() >= REQUIRED_PLAYERS
 			and _count_imps() >= REQUIRED_IMPS
 			and _find_imp_quest_giver() > 0
-			and _find_bag_kind("sword") >= 0
 		):
 			return true
 		await _tree.process_frame
@@ -160,7 +175,7 @@ func _wait_for_join() -> bool:
 func _equip_knight_kit() -> bool:
 	var indices: PackedInt32Array = _session.get("_bag_indices")
 	if indices.is_empty():
-		_fail("knight join kit never arrived in the bag")
+		_fail("knight kit never arrived in the bag after /give")
 		return false
 	for slot: int in indices:
 		_session.request_equip(slot)
