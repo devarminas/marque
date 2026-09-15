@@ -27,6 +27,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "scene files", "script": preload("res://tests/test_scene_files.gd")},
 	{"name": "dummy meter", "script": preload("res://tests/test_dummy_meter.gd")},
 	{"name": "play map", "script": preload("res://tests/test_play_map.gd")},
+	{"name": "art contract", "script": preload("res://tests/test_art_contract.gd")},
 ]
 
 const SCENE_SUITES: Array = [
@@ -62,6 +63,7 @@ const SCENE_SUITES: Array = [
 	{"name": "wiring", "scene": "res://tests/test_wiring.tscn"},
 	{"name": "world map", "scene": "res://tests/test_world_map.tscn"},
 	{"name": "player character prop", "scene": "res://tests/test_player_character_prop.tscn"},
+	{"name": "art assets", "scene": "res://tests/test_art_assets.tscn"},
 ]
 
 const Assertions := preload("res://tests/assertions.gd")
