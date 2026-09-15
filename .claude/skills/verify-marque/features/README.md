@@ -32,11 +32,13 @@ doctor, drive, evidence, and cleanup live in [../SKILL.md](../SKILL.md).
 ## Proof and skip reporting
 
 - Capture the user action and the resulting state, not only the final screen.
-- Assert both evidence layers when the claim spans them: what the client drew
-  (`DEMO` lines, PNGs) and what the server believes (GAMELOG). Name the minimum
-  set inside Sub-features, Driving, or Gotchas. Do not invent a fifth H2.
-- Every screenshot assertion names the pixel fact that would be missing if the
-  claim were false.
+- **Default proof is DEMO + GAMELOG.** Assert both layers when the claim spans them:
+  what the client reported (`DEMO` lines) and what the server believes (GAMELOG).
+  Name the minimum set inside Sub-features, Driving, or Gotchas. Do not invent a
+  fifth H2.
+- **PNG is named-pixel only.** A screenshot assertion must name the pixel fact that
+  would be missing if the claim were false. File existence or `>4KB` is never proof
+  (ARM-289). Leave Pixel empty/`optional` when DEMO + GAMELOG already kill the claim.
 - Record the feature ID and the entry point used with every artifact.
 - Report an unreachable path with the attempted command and the unmet
   precondition. Do not report a skipped entry point as verified through a
@@ -53,7 +55,8 @@ behaviour, then exactly four H2 sections in order:
 4. `Gotchas`
 
 Sub-features stay `id: observable end state`. Encode rung choice and minimum
-evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
+evidence (GAMELOG / DEMO / named-pixel) inside those four H2s only. Default
+minimum is DEMO + GAMELOG; pixel cells are named contracts or `optional`.
 
 ## Join & leave
 
@@ -68,7 +71,7 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
 - [Move-to walk](./move-to-walk.md) — **retired** (ARM-239). Player polyline walk
   is gone; see [Polish](./polish/README.md) for graduated action-movement e2e.
 - [Two clients see each other walk](./two-clients-see-each-other.md) — M0 both
-  directions, still-camera pixel control, server pose.
+  directions, named-pixel still-camera band, server pose (DEMO + GAMELOG default).
 - [WASD direction move](./wasd-move.md) — wish samples + server pose. WASD is the
   only movement gesture (ARM-145 / ARM-239).
 - [Arena collision and height](./arena-collision-height.md) — Ring of Trials
@@ -81,10 +84,10 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
 - [Two clients race for one item](./contested-pickup.md) — M1: one winner, drop,
   `item_spawned` coordinates.
 - [Equip the join-kit weapon](./equip-weapon.md) — M3 equip / unequip.
-- [Gather then craft](./gather-craft.md) — M4 equip, contested tree, craft
-  logs→sticks.
-- [Mine, smelt, craft sword, cast bar](./craft-cast-demo.md) — M12 mine→smelt→sword
-  plus fireball cast-bar resolve/interrupt (`CRAFT CAST DEMO OK`).
+- [Gather then craft](./gather-craft.md) — M4 product; `gather_craft_demo.ps1` is
+  a fail-closed stub (ARM-287). Live gather via `gather_error_demo`.
+- [Mine, smelt, craft sword](./craft-cast-demo.md) — M12 split (ARM-290):
+  `mine_smelt_craft_demo` + `cast_bar_demo`. `craft_cast_demo.ps1` is fail-closed.
 - [Right-click a tree, chop it or be told why not](./gather-refusal.md) — ARM-147
   gather gate refusal.
 - [Admin give class kits](./admin-give-class-kits.md) — `/give` via `-admin`
@@ -93,21 +96,21 @@ evidence (GAMELOG / DEMO / pixel) inside those four H2s only.
 ## Combat
 
 - [Kill and respawn](./combat-kill-respawn.md) — M5 death/respawn (Go) plus live
-  NPC melee via `dummy_attack` / `tab_combat`. `combat_demo.ps1` is a fail-closed stub (ARM-284).
+  NPC melee via `dummy_attack` / `heal_wounded`. `combat_demo.ps1` is a fail-closed stub (ARM-284).
 - [Tab targeting](./tab-targeting.md) — M6c select with ring chrome; no auto-attack.
 - [Right-click basic attack](./right-click-basic-attack.md) — M6f hostile engage;
   friendly refuse.
 - [Cast effect on target](./cast-effect-on-target.md) — M6h cast flash / refuse.
-- [Tab combat loop](./tab-combat-loop.md) — M6i fireball, heal, attack, WASD.
+- [Tab combat loop](./tab-combat-loop.md) — M6i split (ARM-290): `wasd` /
+  `dummy_cast` / `dummy_attack` / `heal_wounded`. `tab_combat_demo.ps1` is fail-closed.
 
 ## Quests
 
 - [Quest demo: sticks for miner kit](./quest-demo.md) — M9 deliver sticks
   (`QUEST DEMO OK`).
-- [Enemy quest demo: party, imps, Imp Patrol](./enemy-quest-demo.md) — M11
-  party/kill/quest **outcome** (`ENEMY QUEST DEMO OK`); not Imp chase
-  (outcome-not-chase).
-
+- [Enemy quest demo: party, imps, Imp Patrol](./enemy-quest-demo.md) — M11 split
+  (ARM-290): `enemy_party` / `enemy_midchase` / `enemy_quest_turnin`. Kitchen-sink
+  `enemy_quest_demo.ps1` is fail-closed.
 ## Polish (M13 action movement)
 
 Graduated e2e home. Prop presentation is **mock-first** (no marqued). Wire and

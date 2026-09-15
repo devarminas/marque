@@ -30,23 +30,24 @@ powershell -File scripts/arena_collision_demo.ps1
 
 Required markers: exit 0, last line `ARENA COLLISION DEMO OK`, client
 `DEMO done`, `DEMO wall_blocked`, `DEMO ramp_rise` ≥ 0.35, jump peak above
-land by ≥ 0.2, five `DEMO shot` PNGs >4KB, GAMELOG `map=arena_ring_of_trials`,
+land by ≥ 0.2, five `DEMO shot` / `DEMO pos` lines, GAMELOG `map=arena_ring_of_trials`,
 `move` with `jump: true`, and no player `path_assigned` (NPC patrol paths may log).
+PNG self-captures are artifacts only — not a soft-pass (ARM-289).
 
 Jump uses a synthesised `jump` Input action (same path as Space), so local
 prediction applies; bare `request_move(..., jump=true)` alone under-samples the peak.
 
 Proof map:
 
-- Wall / ramp / jump: client `DEMO` lines + PNGs under the harness `-OutDir`
+- Wall / ramp / jump: client `DEMO` lines (+ optional PNGs under `-OutDir`)
 - Authority: GAMELOG `move` (wish + jump edge); Go `TestNavSteerBlockedOffMesh`,
   `TestNavRampWalkChangesY`, `TestNavJumpLandsAtLocalGround`
 - Prediction mirror: headless `test_local_mover_nav.gd`
 
 ## Gotchas
 
-- Headless Godot does not prove pixels; the PS1 still needs a display for the
-  five screenshots.
+- Headless Godot does not prove pixels; live DEMO + GAMELOG is the default proof.
+  PNGs need a display only when a named-pixel contract is asserted.
 - Village / nil-nav is a different map; this recipe is arena-only.
 - Do not pipe the harness; redirect only.
 - Fresh worktrees need `godot --headless --path client --editor --quit` once.

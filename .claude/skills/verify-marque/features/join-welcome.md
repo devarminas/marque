@@ -43,11 +43,13 @@ Preconditions:
   `join_seeded` on a stock server with an empty kit.
 - **Both drawn, both screens.** Every `DEMO pos <shot>` group in both client logs
   lists exactly two player ids — each client draws itself and the other, in all four
-  shots.
-- **Pixels.** In `a_1.png`, name what must be there: two player avatars on the
-  world-map ground, each with a cast shadow. Two bodies at the origin overlap at
-  spawn; the demo path delays its first capture until after the first click, so the
-  frame shows two separated bodies.
+  shots. That DEMO layer plus `client_connected` GAMELOG is the default proof
+  (ARM-289).
+- **Pixels (named-pixel only).** If asserting screenshots: in `a_1.png`, name what
+  must be there — two player avatars on the world-map ground, each with a cast
+  shadow. Two bodies at the origin overlap at spawn; the demo path delays its first
+  capture until after the first click, so the frame shows two separated bodies.
+  File existence alone is never proof.
 - **Late-join half.** `join-late-paths` needs a player mid-walk when another
   connects; the scripted demo path joins both before anyone walks, so it cannot
   reach this. It is proven headless by the wiring suite's welcome/replay assertions

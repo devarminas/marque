@@ -34,6 +34,9 @@ func run(assertions: Assertions) -> void:
 	_test_phase_is_the_remainder_into_the_tick(assertions)
 	_test_a_half_tick_lead_still_splits_a_server_edge(assertions)
 	_test_nearby_scenario_observations_share_a_deadline(assertions)
+	_test_start_usec_of_names_the_tick_edge(assertions)
+	_test_wall_fire_deadline_is_max_ready_plus_lead(assertions)
+	_test_barrier_aim_uses_the_later_sync(assertions)
 	_test_a_next_guard_click_keeps_two_receipts_on_one_server_tick(assertions)
 	_test_a_next_guard_click_waits_out_of_a_late_interior(assertions)
 	_test_a_next_guard_click_survives_a_late_edge_and_an_overshoot(assertions)
@@ -296,6 +299,95 @@ func _test_nearby_scenario_observations_share_a_deadline(assertions: Assertions)
 			"a quantized next-guard deadline keeps 10ms-apart observations on one server tick, got %d and %d"
 			% [_server_tick(recv_a, tick_usec), _server_tick(recv_b, tick_usec)]
 		),
+	)
+
+
+func _test_start_usec_of_names_the_tick_edge(assertions: Assertions) -> void:
+	var fake := FakeMonotonicClock.new()
+	var clock := TickClock.new(fake.read)
+	fake.now_usec = 5 * USEC_PER_MSEC
+	clock.anchor(100, TICK_MS)
+	var tick_usec := TICK_MS * USEC_PER_MSEC
+	assertions.check(
+		clock.start_usec_of(100) == fake.now_usec,
+		"the anchor tick starts at the anchor usec",
+	)
+	assertions.check(
+		clock.start_usec_of(103) == fake.now_usec + 3 * tick_usec,
+		"three ticks later is three tick lengths ahead",
+	)
+	assertions.check(
+		clock.estimated_tick_at(clock.start_usec_of(110)) == 110,
+		"start_usec_of round-trips through estimated_tick_at",
+	)
+
+
+
+func _test_wall_fire_deadline_is_max_ready_plus_lead(assertions: Assertions) -> void:
+	assertions.check(
+		PickupDemo.fire_unix_msec_from_max_ready(1_700_000_000_000)
+			== 1_700_000_000_000 + PickupDemo.POST_CAPTURE_LEAD_MSEC,
+		"wall fire is max ready plus the post-capture msec lead",
+	)
+	assertions.check(
+		PickupDemo.fire_unix_msec_from_max_ready(100)
+			== 100 + PickupDemo.POST_CAPTURE_LEAD_MSEC,
+		"a single ready still gets the full lead",
+	)
+
+
+func _test_barrier_aim_uses_the_later_sync(assertions: Assertions) -> void:
+	assertions.check(
+		PickupDemo.aim_tick_from_max_sync(250)
+			== 250 + PickupDemo.POST_CAPTURE_LEAD_TICKS,
+		"aim is max sync plus the post-capture lead",
+	)
+	assertions.check(
+		PickupDemo.POST_CAPTURE_LEAD_TICKS >= 100,
+		"post-capture lead must leave room for propose+commit under llvmpipe",
+	)
+	assertions.check(
+		PickupDemo.BARRIER_MIN_SLACK_MSEC >= 50,
+		"wall commit ready requires slack before the shared fire deadline",
+	)
+	assertions.check(
+		PickupDemo.POST_CAPTURE_LEAD_MSEC >= 1000,
+		"wall fire lead must cover barrier settle under software GL",
+	)
+	assertions.check(
+		PickupDemo.BARRIER_MAX_ROUNDS >= 12,
+		"enough barrier rounds to recover from go_miss under dual llvmpipe",
+	)
+	assertions.check(
+		PickupDemo.GO_PEER_WAIT_MSEC >= 500,
+		"go rendezvous must wait long enough for a late llvmpipe wake",
+	)
+	assertions.check(
+		PickupDemo.WALL_SPIN_REMAINING_MSEC >= 250,
+		"wall busy-spin window must cover a worst-case software GL frame",
+	)
+	var pair := _run18_clocks()
+	var clock_a: TickClock = pair["clock_a"]
+	var clock_b: TickClock = pair["clock_b"]
+	var sync_a := 250
+	var sync_b := 265
+	var aim := PickupDemo.aim_tick_from_max_sync(maxi(sync_a, sync_b))
+	var guard := PickupDemo.click_guard_usec(TICK_MS * USEC_PER_MSEC)
+	var click_a := clock_a.next_guard_usec(clock_a.start_usec_of(aim), guard)
+	var click_b := clock_b.next_guard_usec(clock_b.start_usec_of(aim), guard)
+	var recv_a: int = click_a + int(pair["send_a"])
+	var recv_b: int = click_b + int(pair["overshoot"]) + int(pair["send_b"])
+	var tick_usec := TICK_MS * USEC_PER_MSEC
+	assertions.check(
+		_server_tick(recv_a, tick_usec) == _server_tick(recv_b, tick_usec),
+		(
+			"shared aim tick + start_usec_of guard keeps skewed syncs on one server tick, got %d and %d"
+			% [_server_tick(recv_a, tick_usec), _server_tick(recv_b, tick_usec)]
+		),
+	)
+	assertions.check(
+		clock_a.estimated_tick_at(click_a) == clock_b.estimated_tick_at(click_b),
+		"both clocks name the same click tick from one aim",
 	)
 
 

@@ -68,7 +68,10 @@ const Assertions := preload("res://tests/assertions.gd")
 
 const STARTUP_GRACE_FRAMES := 10
 
-const WATCHDOG_FRAMES := 1250
+# Per scene-suite budget. Live interop/wiring hold sockets and wait on wish
+# walks; a whole-run counter falsely trips on later suites after healthy
+# earlier suites burned the shared pool.
+const WATCHDOG_FRAMES := 2500
 
 var _frames := 0
 var _suite_frames := 0
@@ -150,10 +153,10 @@ func _on_process_frame() -> void:
 		_report_and_quit()
 		return
 
-	if _frames >= WATCHDOG_FRAMES:
+	if _suite_frames >= WATCHDOG_FRAMES:
 		_fail(
-			"tests did not finish within %d frames (stuck in '%s')"
-			% [WATCHDOG_FRAMES, suite["name"]]
+			"suite '%s' did not finish within %d frames"
+			% [suite["name"], WATCHDOG_FRAMES]
 		)
 		_report_and_quit()
 		return

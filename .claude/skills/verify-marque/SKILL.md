@@ -1,6 +1,6 @@
 ---
 name: verify-marque
-description: Drive Project Marque the way a player does — the real marqued Go server plus real Godot 4.7 clients — and prove behavioural claims from self-captured screenshots, the clients' DEMO lines, and the server's NDJSON event log. Use whenever a claim about client or server behaviour needs evidence stronger than a passing unit test.
+description: Drive Project Marque the way a player does — the real marqued Go server plus real Godot 4.7 clients — and prove behavioural claims from the clients' DEMO lines and the server's NDJSON GAMELOG. PNG checks are named-pixel contracts only; screenshot presence is never proof. Use whenever a claim about client or server behaviour needs evidence stronger than a passing unit test.
 ---
 
 # Verify Marque
@@ -28,17 +28,23 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/two_client_demo.ps1` | `TWO CLIENT DEMO OK` |
 | `scripts/contested_pickup_demo.ps1` | `CONTESTED PICKUP DEMO OK` |
 | `scripts/equip_demo.ps1` | `EQUIP DEMO OK` |
-| `scripts/gather_craft_demo.ps1` | `GATHER CRAFT DEMO OK` |
-| `scripts/craft_cast_demo.ps1` | `CRAFT CAST DEMO OK` |
+| `scripts/gather_craft_demo.ps1` | **retired** (ARM-287 fail-closed stub). Exits non-zero with a clear message. Drive `gather_error_demo.ps1` for live gather proof. |
+| `scripts/craft_cast_demo.ps1` | **retired** (ARM-290 fail-closed stub). Drive `mine_smelt_craft_demo.ps1` / `cast_bar_demo.ps1`. |
+| `scripts/mine_smelt_craft_demo.ps1` | `MINE SMELT CRAFT DEMO OK` |
+| `scripts/cast_bar_demo.ps1` | `CAST BAR DEMO OK` |
 | `scripts/gather_error_demo.ps1` | `GATHER ERROR DEMO OK` |
 | `scripts/dummy_cast_demo.ps1` | `DUMMY CAST DEMO OK` |
 | `scripts/dummy_attack_demo.ps1` | `DUMMY ATTACK DEMO OK` |
 | `scripts/wasd_demo.ps1` | `WASD DEMO OK` |
 | `scripts/arena_collision_demo.ps1` | `ARENA COLLISION DEMO OK` |
-| `scripts/tab_combat_demo.ps1` | `TAB COMBAT DEMO OK` |
-| `scripts/combat_demo.ps1` | **retired** (ARM-284 fail-closed stub). Exits non-zero with a clear message. Drive `dummy_attack_demo.ps1` / `tab_combat_demo.ps1` instead. |
+| `scripts/tab_combat_demo.ps1` | **retired** (ARM-290 fail-closed stub). Drive `wasd_demo.ps1` / `dummy_cast_demo.ps1` / `dummy_attack_demo.ps1` / `heal_wounded_demo.ps1`. |
+| `scripts/heal_wounded_demo.ps1` | `HEAL WOUNDED DEMO OK` |
+| `scripts/combat_demo.ps1` | **retired** (ARM-284 fail-closed stub). Exits non-zero with a clear message. Drive `dummy_attack_demo.ps1` / `heal_wounded_demo.ps1` instead. |
 | `scripts/quest_demo.ps1` | `QUEST DEMO OK` |
-| `scripts/enemy_quest_demo.ps1` | `ENEMY QUEST DEMO OK` |
+| `scripts/enemy_quest_demo.ps1` | **retired** (ARM-290 fail-closed stub). Drive `enemy_party_demo.ps1` / `enemy_midchase_demo.ps1` / `enemy_quest_turnin_demo.ps1`. |
+| `scripts/enemy_party_demo.ps1` | `ENEMY PARTY DEMO OK` |
+| `scripts/enemy_midchase_demo.ps1` | `ENEMY MIDCHASE DEMO OK` |
+| `scripts/enemy_quest_turnin_demo.ps1` | `ENEMY QUEST TURNIN DEMO OK` |
 | `scripts/admin_give_class_kits_demo.ps1` | `ADMIN GIVE CLASS KITS DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
@@ -54,20 +60,21 @@ marker from the **last line** of the output instead of grepping for it: all thre
 PowerShell harnesses here print theirs last, and a grep matches a forgery buried
 anywhere in the middle.
 
-**Two evidence layers, and a behavioural claim usually needs both.** The client walks
-polylines by itself: the server sends waypoints once and never per-tick positions, so
-after a `path` broadcast the pixels and `DEMO pos` lines prove what the *client
-drew*, while the GAMELOG proves what the *server believes*. A server whose tick loop
-stopped advancing players would still produce moving pixels on every client, because
-each client interpolates the path it was handed. "The player moved" is proven by
-client-side displacement (`DEMO pos`) **and** the server's `arrived` event, not by
-either alone.
+**Default proof is DEMO lines + GAMELOG. Both layers, not either alone.** Client
+stdout (`DEMO pos`, `DEMO joined`, inventory/cast lines, …) proves what the *client
+drew or reported*; the GAMELOG proves what the *server believes*. A server whose tick
+loop stopped advancing players can still look fine on the client if the client is
+interpolating or predicting from a stale handoff. "The player moved" is proven by
+non-zero GAMELOG `move` wishes **and** pose/`DEMO pos` displacement. `arrived` is
+NPC path completion only; player `path_assigned` / `move_to` fail closed. Never by
+pixels alone and never by a PNG that merely exists.
 
-**A screenshot assertion must name the specific thing that would be missing.** "The
-screenshot shows lighting" was passed in this repo by a build whose sun pointed at
-the sky, lit by ambient alone; "the avatar casts a shadow on the ground" would have
-failed it instantly. Assert the shadow, the second body, the displacement between two
-named frames — never the vibe.
+**PNG is optional and named-pixel only.** A screenshot assertion must name the
+specific pixel fact that would be missing if the claim were false — the cast shadow,
+the second body, the still-camera quiet band, the label-band differing pixels.
+"`a_1.png` exists and is over 4KB" is never proof (ARM-289). Do not steer a recipe
+toward soft visual-only passes. If the claim does not need a named-pixel contract,
+leave the Pixel column empty or `optional` and prove it with DEMO + GAMELOG.
 
 ## Proof ladder
 
@@ -80,20 +87,25 @@ split into a client skill and a server skill.
 | Go unit | Store, tick, intent rejection, GAMELOG shape | From `server/`: `CGO_ENABLED=1 go test -race ./...` (C toolchain on PATH) |
 | Headless Godot | Client frame handling, suites, signals (no pixels) | `godot --headless --path client --script res://tests/run_tests.gd`; full stack via `scripts/interop_test.ps1` |
 | Thin WS probe | Wire replies the flag path cannot reach | Throwaway WebSocket client outside the repo (see *Raw protocol probes*) |
-| Live windowed demo | DEMO lines, pixels, two-client choreography | Existing `scripts/*_demo.ps1` only |
+| Live windowed demo | DEMO lines + GAMELOG; named-pixel only when a recipe names one | Existing `scripts/*_demo.ps1` only |
 
 **No new windowed demo per quest id.** New quest coverage extends Go, headless, or
 thin WS. Do not add `*_demo.ps1`, `*_demo.gd`, or a new `--*-shots` flag for a
 quest string. Existing demos stay; they do not multiply with content.
+**Exception (ARM-290):** splitting an already-allowlisted kitchen-sink demo into
+smaller allowlisted units with one claim each is required when the sink is too
+long; update `demo-allowlist.txt` in the same change.
 
-**Evidence kinds** fold into feature recipes (GAMELOG / DEMO / pixel), never a fifth
-H2. Feature files keep Atlas's four H2s only. Name the default driver rung in
-`Driving` when the recipe has one.
+**Evidence kinds** fold into feature recipes (GAMELOG / DEMO / named-pixel), never a
+fifth H2. Feature files keep Atlas's four H2s only. Default minimum evidence is
+DEMO + GAMELOG; name a pixel contract only when the claim is visual. Name the
+default driver rung in `Driving` when the recipe has one.
 
-**outcome-not-chase.** `ENEMY QUEST DEMO OK` proves party, camp kills, and quest
+**outcome-not-chase.** `ENEMY QUEST TURNIN DEMO OK` proves party, camp kills, and quest
 complete. It does not prove Imp chase or walk-anim. Chase timing is Go/GAMELOG:
 `arrived` with `npc` after a chase path (`TestImpChasePathLogsArrived`). Live
-mid-chase remains DEMO npc/anim (`features/enemy-quest-demo.md`).
+mid-chase remains DEMO npc/anim via `enemy_midchase_demo.ps1`
+(`features/enemy-quest-demo.md`).
 
 ## Launch
 
@@ -167,9 +179,11 @@ first whenever anything looks off.
 
 **Hard rule: do not mint a new windowed demo for quest (or other) content.** New
 quest coverage extends the Go server and thin WebSocket / headless proof paths; it
-does not add `*_demo.ps1`, `*_demo.gd`, or a new `--*-shots` flag. If an existing
-allowed demo must change, update `demo-allowlist.txt` in the same change. Doctor
-enforces the allowlist; the skill text alone is not enough.
+does not add `*_demo.ps1`, `*_demo.gd`, or a new `--*-shots` flag. **ARM-290
+exception:** when splitting an oversized allowlisted demo into bounded single-claim
+units, add the new files/flags to `demo-allowlist.txt` in the same change and
+fail-close the kitchen sink. Doctor enforces the allowlist; the skill text alone
+is not enough.
 
 ## Drive
 
@@ -184,19 +198,27 @@ enforces the allowlist; the skill text alone is not enough.
 | `--pickup-shots <abs-prefix>` | Enter the contested-pickup demo mode (`pickup_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M1e.** Both clients run this with identical arguments; neither is told who wins. Absolute host path required, for `--shots`' reason. |
 | `--drop-click fx,fy` | Where the winner of that contest clicks the ground before dropping, as viewport fractions. Required alongside `--pickup-shots`, and refused rather than defaulted if it will not parse. |
 | `--equip-shots <abs-prefix>` | Enter the equip milestone demo mode (`equip_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M3d.** Single client; the demo starts marqued with `-join-kit sword`. Absolute host path required. |
-| `--gather-craft-shots <abs-prefix>` | Enter the gather-then-craft milestone demo mode (`gather_craft_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M4e.** Two clients; both equip then race the primary seeded tree at (5, 0). Absolute host path required. |
-| `--craft-cast-shots <abs-prefix>` | Enter the M12 craft+cast milestone demo (`craft_cast_demo.gd`); write `<prefix>_1.png` … `<prefix>_6.png`. Single client: mine→smelt→craft sword, then fireball cast-bar resolve and walk interrupt. Absolute host path required. |
+| `--gather-craft-shots <abs-prefix>` | **Fail-closed** (ARM-287). `gather_craft_demo.gd` / `scripts/gather_craft_demo.ps1` exit non-zero; do not drive for proof. Use `--gather-error-shots` for live gather. |
+| `--craft-cast-shots <abs-prefix>` | **Fail-closed** (ARM-290). Drive `--mine-smelt-craft-shots` / `--cast-bar-shots`. |
+| `--mine-smelt-craft-shots <abs-prefix>` | Mine→smelt→craft sword demo (`mine_smelt_craft_demo.gd`). Single client; marqued `-admin`; client `/give`s miner+sticks. Absolute host path required. |
+| `--cast-bar-shots <abs-prefix>` | Fireball cast-bar resolve + walk interrupt (`cast_bar_demo.gd`). Absolute host path required. |
 | `--gather-error-shots <abs-prefix>` | Enter the refused-gather demo mode (`gather_error_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **ARM-147.** One client; right-clicks the tree unarmed, reads the refusal, wears a ground-seeded lumberjack set, chops. Absolute host path required. |
-| `--combat-shots <abs-prefix>` | **Fail-closed** (ARM-284). `combat_demo.gd` / `scripts/combat_demo.ps1` exit non-zero; do not drive for proof. Use `--dummy-attack` / `--tab-combat-shots`. |
+| `--combat-shots <abs-prefix>` | **Fail-closed** (ARM-284). `combat_demo.gd` / `scripts/combat_demo.ps1` exit non-zero; do not drive for proof. Use `--dummy-attack` / `--heal-wounded-shots`. |
 | `--combat-role attacker\|victim` | Legacy companion to `--combat-shots`. Same fail-closed rule; ignored by the stub. |
 | `--dummy-cast <abs-prefix>` | Dummy cast demo (`dummy_cast_demo.gd`). Absolute host path required. |
 | `--dummy-attack <abs-prefix>` | Hostile-dummy melee demo (`dummy_attack_demo.gd`). Absolute host path required. |
 | `--wasd-shots <abs-prefix>` | WASD move demo (`wasd_demo.gd`). Absolute host path required. |
 | `--arena-collision-shots <abs-prefix>` | Ring of Trials wall/ramp/jump demo (`arena_collision_demo.gd`). Absolute host path required. **M14g / ARM-259.** |
-| `--tab-combat-shots <abs-prefix>` | Tab combat loop demo (`tab_combat_demo.gd`). Absolute host path required. |
+| `--tab-combat-shots <abs-prefix>` | **Fail-closed** (ARM-290). Drive `--wasd-shots` / `--dummy-cast` / `--dummy-attack` / `--heal-wounded-shots`. |
+| `--heal-wounded-shots <abs-prefix>` | Heal raises wounded friendly dummy HP (`heal_wounded_demo.gd`). Absolute host path required. |
 | `--quest-shots <abs-prefix>` | Quest demo (`quest_demo.gd`). Absolute host path required. |
-| `--enemy-quest-shots <abs-prefix>` | Enter the M11 enemy/party/kill-quest demo (`enemy_quest_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. Requires `--enemy-quest-role leader\|member`. Absolute host path required. |
-| `--enemy-quest-role leader\|member` | Which side of the enemy quest demo this client plays. Required alongside `--enemy-quest-shots`. |
+| `--enemy-quest-shots <abs-prefix>` | **Fail-closed** (ARM-290). Drive `--enemy-party-shots` / `--enemy-midchase-shots` / `--enemy-quest-turnin-shots`. |
+| `--enemy-quest-role leader\|member` | Legacy companion to `--enemy-quest-shots`. Same fail-closed rule; ignored by the stub. |
+| `--enemy-party-shots <abs-prefix>` | Party + accept `slay_imps` (`enemy_party_demo.gd`). Requires `--enemy-party-role leader\|member`. Absolute host path required. |
+| `--enemy-party-role leader\|member` | Which side of the enemy party demo this client plays. |
+| `--enemy-midchase-shots <abs-prefix>` | Mid-chase Imp visibility (`enemy_midchase_demo.gd`). Absolute host path required. |
+| `--enemy-quest-turnin-shots <abs-prefix>` | Camp kills + party credit + turn-in (`enemy_quest_turnin_demo.gd`). Requires `--enemy-quest-turnin-role leader\|member`. Absolute host path required. |
+| `--enemy-quest-turnin-role leader\|member` | Which side of the turn-in demo this client plays. |
 | `--screenshot` | No server needed: render `main.tscn`, save one frame to `user://shot.png`, print its absolute path, quit. The single-client visual baseline. |
 
 Scripted demo mode waits for **two** players (`DEMO_MIN_PLAYERS` in `main.gd`), so a
@@ -217,10 +239,10 @@ It builds marqued, warms the caches, starts the server on a free port, runs clie
 leaves the evidence directory behind — the path is printed, defaulting under
 `$env:TEMP\marque-verify\`.
 
-**All three harnesses empty their output directory before they run**, because the only
-checks any of them makes on a frame are that it exists and is over 4KB, and a stale PNG
-from a previous run satisfies both. `run.ps1`'s default path is fresh every run, so
-this bites only a reused `-EvidenceDir`; `two_client_demo.ps1`'s default is the fixed
+**All three harnesses empty their output directory before they run**, so a reused
+`-EvidenceDir` cannot leave stale `DEMO` logs, GAMELOG, or PNG artifacts from a prior
+run. `run.ps1`'s default path is fresh every run, so this bites only a reused
+`-EvidenceDir`; `two_client_demo.ps1`'s default is the fixed
 `$env:TEMP\marque-two-client` and `contested_pickup_demo.ps1`'s the fixed
 `$env:TEMP\marque-contested-pickup`, both reused forever. Each drops a
 `.marque-evidence` marker into the directories it owns and **refuses to run into a
@@ -229,27 +251,29 @@ not point any of them at a directory you care about, and do not treat files in a
 evidence directory as belonging to the run you are reading unless that run's own output
 printed them.
 
-`VERIFY HARNESS OK` asserts only structure: the server announced itself, outlived the
-clients, and wrote nothing to stderr; both clients joined, printed `DEMO done`,
-exited 0, and wrote four >4KB frames each. **It deliberately asserts nothing
-behavioural.** Your claim is proven by your own assertions against the evidence
-files — and per the two-layer rule above, a movement claim needs the GAMELOG as well
-as the pixels, because a frozen server still earns `VERIFY HARNESS OK`.
+`VERIFY HARNESS OK` asserts only structure on the default proof layers: the server
+announced itself (`server_started` GAMELOG), outlived the clients, and wrote nothing
+to stderr; both clients joined (`DEMO joined`), printed `DEMO done`, and exited 0.
+PNG self-captures may still land in the evidence directory as artifacts; **their
+presence or byte size is not a harness pass** (ARM-289). **It deliberately asserts
+nothing behavioural.** Your claim is proven by your own assertions against the
+evidence files — DEMO + GAMELOG by default; named-pixel only when you name the
+contract. A frozen server still earns `VERIFY HARNESS OK` on structure alone.
 
 For the fixed M0 milestone scenario with its assertions already written, run
 `scripts/two_client_demo.ps1` instead; this harness exists for every other scenario.
 
 ### What `scripts/two_client_demo.ps1` proves
 
-Both layers, since M1g. Its client layer is the pixels and the `DEMO pos`
-displacements; its server layer asserts, per player id resolved from that client's
-`DEMO joined` line, a `client_connected`, a `move_to`, a `path_assigned` spanning at
-least 2.0 units, and an **`arrived` after that path's `start_tick` whose coordinates
-match its endpoint** — the one event a server that hands out paths and never moves
-anybody cannot produce. It then ties the layers together: the phase-1 walker's
-`arrived` point must be within 0.05 units of where both clients drew that body in
-shot 4.
-
+Both layers, since M1g. Its client layer is
+the pixels and the `DEMO pos` displacements; its server layer asserts, per player
+id resolved from that client's `DEMO joined` line, a `client_connected`, at least
+one non-zero GAMELOG `move` wish for each walker, `DEMO groundclick_ignored` /
+`DEMO walkto` / `DEMO move_displacement`, and **zero** player `path_assigned` /
+`move_to` for the run. It then ties the layers together: both clients' shot-4
+`DEMO pos` for the phase-1 walker agree within 0.05 (server pose on both sides).
+Watcher displacement proves the server moved — remotes follow pose only.
+Soft PNG size / existence checks are not part of the pass (ARM-289).
 Until M1g it asserted **nothing** about the server. All twenty-odd of its checks read
 a client's stdout or a client's PNG, and it deleted the server's log at teardown, so
 `game.World.step` losing its movement line earned `TWO CLIENT DEMO OK` with
@@ -266,24 +290,21 @@ client gets the item" is a fact about the server's store. Two clients that both 
 empty patch of ground look identical whether the item went to one player, to both, or
 to neither. So the load-bearing assertions are one `pickup_resolved` and one
 `pickup_lost` for the same item id naming different players, two `pickup` intents from
-two distinct players, and no `pickup_rejected` or `pickup_no_room`.
+two distinct players on the same tick, and no `pickup_rejected` or `pickup_no_room`.
 
-**It also asserts every walk is plausible, which the M0 demo does not.** That demo
-proves the server *finished* a walk — it matches an `arrived` against the endpoint of
-the path it assigned — and a tick loop whose per-tick distance is 1000.0 crosses the
-whole polyline in one tick and produces a perfectly formed `arrived`. This one checks
-`arrived.t - start_tick` against `ceil(span / (WalkSpeed * TickDuration))` within two
-ticks. Healthy figures on this machine: 16 ticks for a 7.071-unit walk, 13 for a
-5.567-unit one, both exactly the ideal. That closes the open half of unit M1j at the
-layer that depends on it.
+**Approach and walk-away are wish+pose.** The harness fails closed on any
+player `path_assigned` or `move_to`. The winner must log non-zero GAMELOG `move`
+wishes and print `DEMO wish` / `DEMO walkaway_arrived`; drop `item_spawned`
+coordinates must match that arrived pose (and stay clear of the origin / seed).
 
 **It is the only thing in this repo that asserts `item_spawned`'s coordinates.** For
-the seed, against what `-item` asked for; for the drop, against where the dropper's
-`arrived` says it stood, plus a floor on the distance from the origin and from where
-the item was seeded — so a run whose coordinates were zeroed cannot pass by having the
-walk also end at zero. A verifier logged those coordinates zeroed while the store and
-the wire stayed truthful and all 93 Go tests stayed green; anything that reads the log
-as ground truth, this harness included, was wrong with no way to say so.
+the seed, against what `-item` asked for; for the drop, against the winner's
+`DEMO walkaway_arrived` pose, plus a floor on the distance from the origin and from
+where the item was seeded — so a run whose coordinates were zeroed cannot pass by
+having the walk also end at zero. A verifier logged those coordinates zeroed while
+the store and the wire stayed truthful and all 93 Go tests stayed green; anything
+that reads the log as ground truth, this harness included, was wrong with no way to
+say so.
 
 **There is no `item_despawn` event in the event log.** The despawn is a wire message
 only (`items.go`, `w.broadcast(mnet.ItemDespawn...)`); `EvItemDespawned` does not
@@ -318,7 +339,7 @@ Everything a `run.ps1` drive can prove lands in its evidence directory:
 | `server.stderr.log` | Empty on a healthy run. Anything here is a panic or a fatal. |
 | `client-a.stdout.log`, `client-b.stdout.log` | The `DEMO` lines (grammar below), plus anything the client logged loudly. |
 | `client-a.stderr.log`, `client-b.stderr.log` | **Where a client failure actually lands.** `push_error` and `printerr` go here, not to stdout. |
-| `a_1.png` … `a_4.png`, `b_1.png` … `b_4.png` | Self-captures. Shots 1–2 bracket phase 1 (a's walk), shots 3–4 bracket phase 2 (b's walk). |
+| `a_1.png` … `a_4.png`, `b_1.png` … `b_4.png` | Self-captures (artifacts). Not soft-pass proof: assert only via a named-pixel contract, or ignore them and prove with DEMO + GAMELOG. Shots 1–2 bracket phase 1 (a's walk), shots 3–4 bracket phase 2 (b's walk). |
 | `.marque-evidence` | The harness's claim on the directory. Its presence is what lets the next run empty it. |
 
 `scripts/two_client_demo.ps1` writes the same set, under its `-OutDir`, with the
@@ -336,17 +357,19 @@ two separate arms of one `select`, so a server that has stopped stepping still a
 players and still broadcasts their spawns; both clients reach two known ids and the join
 wait in `main.gd` returns long before its 20-second deadline. Two independent runs of the
 sabotage agree with the mechanism, the original writer's and M1j's verifier's, the latter
-failing cleanly on `0 arrived event(s)` with both client stderr files empty and no
-timeout at all. What a frozen server actually does is pass every client-layer assertion
-and lose on the event log, which is the reason the GAMELOG layer exists. Load is the
-remaining explanation and nobody has reproduced the timeout under it.
+failing cleanly when the GAMELOG showed no player locomotion (no non-zero `move`
+wishes) with both client stderr files empty and no timeout at all. What a frozen
+server actually does is pass every client-layer assertion and lose on the event log,
+which is the reason the GAMELOG layer exists. Load is the remaining explanation and
+nobody has reproduced the timeout under it.
 
-**GAMELOG vocabulary (M0):** `server_started`, `server_stopping`, `client_connected`,
-`client_disconnected`, `move_to`, `move_to_rejected`, `intent_ignored`, `path_assigned`,
-`arrived`, `path_replayed`, `ticks_dropped`, `frame_dropped`. The constants live in
+**GAMELOG vocabulary (M0 + wish+pose):** `server_started`, `server_stopping`,
+`client_connected`, `client_disconnected`, `move`, `move_rejected`, `move_to_rejected`,
+`intent_ignored`, `path_assigned` (NPC locomotion / patrol), `arrived` (NPC path
+completion), `path_replayed`, `ticks_dropped`, `frame_dropped`. The constants live in
 `server/internal/game/world.go`; M1 adds new `ev` values rather than changing these.
-`arrived` is shared: players set `player`, NPCs set `npc` (ARM-232 chase/leash/patrol
-path completion). `path_assigned` already follows the same field split.
+Player locomotion proofs use `move` + pose/`DEMO pos`, not player `path_assigned`.
+`path_assigned` / `arrived` already follow the player/npc field split.
 
 **`client_disconnected` carries a latched, cause-authoritative `reason` (M1f).** The reason
 names why the connection died, never which component noticed: `closed` for a clean logout,
@@ -384,13 +407,17 @@ always resolve ids via `DEMO joined`. Shared dump helper:
 
 - Exercise the real user path — a synthesised click through the picker — never an
   internal setter. There are no test-only endpoints here; do not add one for a proof.
-- Capture the action and the resulting state: the GAMELOG `move_to` **and** the
-  displacement it caused, not just a final screen.
-- Assert both layers: what the client drew (`DEMO pos`, pixels) and what the server
+- **Default:** assert DEMO + GAMELOG for the claim. Capture the action and the
+  resulting state (e.g. GAMELOG `move` **and** `DEMO pos` displacement),
+  not just a final screen.
+- Assert both layers: what the client reported (`DEMO …`) and what the server
   believes (GAMELOG). Movement example: displacement between bracketing shots of at
-  least 2.0 world units **and** an `arrived` event for that player id.
-- Name the pixel fact that would be missing if the claim were false: the cast shadow,
-  the second body, the frames that must differ where the walker crossed.
+  least 2.0 world units **and** non-zero GAMELOG `move` for that player id (watcher
+  `DEMO pos` for two-client claims).
+- **PNG only with a named-pixel contract.** Name the pixel fact that would be missing
+  if the claim were false: the cast shadow, the second body, the still-camera quiet
+  band, the frames that must differ where the walker crossed. File existence or
+  `>4KB` is never enough.
 - No mocks. There is no production boundary here that isolates an external system —
   both binaries are real or the run proves nothing.
 - A comparison over zero input passes vacuously. Before trusting any "identical" or
@@ -442,11 +469,11 @@ number and report what you got rather than comparing against a figure written he
   paths.
 - **A starved display fails every visual assertion at once.** Each capture waits 15
   rendered frames; measured under load on this machine, one took about 4.4 seconds,
-  longer than the 2.07-second walk it brackets, so both frames of a phase showed the
-  walker already arrived and every displacement read 0. Six client-side failures
+  longer than the walk window it brackets, so both frames of a phase showed the
+  walker already far along and every displacement read wrong. Six client-side failures
   together with a healthy GAMELOG is that, not a broken build. Confirm it from the
-  server's clock — the two `move_to` events sit ~23 ticks apart on a healthy run and
-  sat 81 apart here — and free the display before believing anything visual.
+  server's clock — the walkers' first non-zero `move` wishes should sit about one
+  phase gap apart — and free the display before believing anything visual.
 
 ## The still-camera control
 

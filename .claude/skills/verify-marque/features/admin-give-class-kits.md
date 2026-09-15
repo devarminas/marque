@@ -4,7 +4,11 @@ Class-kit wardrobe for playtest and verify harnesses goes through the admin
 bus: start marqued with `-admin` (or `-admin-player`), connect, and send
 `{"admin":{"line":"/give <kind>"}}` for each sets-derived wearable. Ground
 grid seeding via `-seed-class-kits` is retired. `DefaultJoinKit` stays empty.
-The thin shared probe is `server/internal/wsprobe` (see
+Windowed demos that need a class wardrobe (craft/cast, mage dummy/tab combat,
+enemy quest) start with `-admin` and `/give` via `demo_admin_give.gd` — do not
+rebuild `-join-kit` forests. Thin single-kind `-join-kit` remains only where a
+demo still uses it (equip sword, quest sticks). The thin shared probe is
+`server/internal/wsprobe` (see
 [wsprobe-admin-move-to.md](./wsprobe-admin-move-to.md)); `admin_give_kits`
 wraps it for the class-kit loop.
 

@@ -13,14 +13,20 @@ const EquipDemoScript := preload("res://scripts/equip_demo.gd")
 const GatherCraftDemoScript := preload("res://scripts/gather_craft_demo.gd")
 const GatherErrorDemoScript := preload("res://scripts/gather_error_demo.gd")
 const CraftCastDemoScript := preload("res://scripts/craft_cast_demo.gd")
+const MineSmeltCraftDemoScript := preload("res://scripts/mine_smelt_craft_demo.gd")
+const CastBarDemoScript := preload("res://scripts/cast_bar_demo.gd")
 const CombatDemoScript := preload("res://scripts/combat_demo.gd")
 const DummyCastDemoScript := preload("res://scripts/dummy_cast_demo.gd")
 const DummyAttackDemoScript := preload("res://scripts/dummy_attack_demo.gd")
+const HealWoundedDemoScript := preload("res://scripts/heal_wounded_demo.gd")
 const WasdDemoScript := preload("res://scripts/wasd_demo.gd")
 const ArenaCollisionDemoScript := preload("res://scripts/arena_collision_demo.gd")
 const TabCombatDemoScript := preload("res://scripts/tab_combat_demo.gd")
 const QuestDemoScript := preload("res://scripts/quest_demo.gd")
 const EnemyQuestDemoScript := preload("res://scripts/enemy_quest_demo.gd")
+const EnemyPartyDemoScript := preload("res://scripts/enemy_party_demo.gd")
+const EnemyMidchaseDemoScript := preload("res://scripts/enemy_midchase_demo.gd")
+const EnemyQuestTurninDemoScript := preload("res://scripts/enemy_quest_turnin_demo.gd")
 const DialogPanelScript := preload("res://scripts/dialog_panel.gd")
 const GivePanelScript := preload("res://scripts/give_panel.gd")
 const QuestLogPanelScript := preload("res://scripts/quest_log_panel.gd")
@@ -46,16 +52,24 @@ const GATHER_CRAFT_SHOTS_FLAG := "--gather-craft-shots"
 
 const GATHER_ERROR_SHOTS_FLAG := "--gather-error-shots"
 const CRAFT_CAST_SHOTS_FLAG := "--craft-cast-shots"
+const MINE_SMELT_CRAFT_SHOTS_FLAG := "--mine-smelt-craft-shots"
+const CAST_BAR_SHOTS_FLAG := "--cast-bar-shots"
 
 const COMBAT_SHOTS_FLAG := "--combat-shots"
 const DUMMY_CAST_FLAG := "--dummy-cast"
 const DUMMY_ATTACK_FLAG := "--dummy-attack"
+const HEAL_WOUNDED_SHOTS_FLAG := "--heal-wounded-shots"
 const WASD_SHOTS_FLAG := "--wasd-shots"
 const ARENA_COLLISION_SHOTS_FLAG := "--arena-collision-shots"
 const TAB_COMBAT_SHOTS_FLAG := "--tab-combat-shots"
 const QUEST_SHOTS_FLAG := "--quest-shots"
 const ENEMY_QUEST_SHOTS_FLAG := "--enemy-quest-shots"
 const ENEMY_QUEST_ROLE_FLAG := "--enemy-quest-role"
+const ENEMY_PARTY_SHOTS_FLAG := "--enemy-party-shots"
+const ENEMY_PARTY_ROLE_FLAG := "--enemy-party-role"
+const ENEMY_MIDCHASE_SHOTS_FLAG := "--enemy-midchase-shots"
+const ENEMY_QUEST_TURNIN_SHOTS_FLAG := "--enemy-quest-turnin-shots"
+const ENEMY_QUEST_TURNIN_ROLE_FLAG := "--enemy-quest-turnin-role"
 
 const DEMO_PHASES := 2
 
@@ -101,6 +115,12 @@ func _ready() -> void:
 	if CRAFT_CAST_SHOTS_FLAG in args:
 		await _run_craft_cast_demo(args)
 		return
+	if MINE_SMELT_CRAFT_SHOTS_FLAG in args:
+		await _run_mine_smelt_craft_demo(args)
+		return
+	if CAST_BAR_SHOTS_FLAG in args:
+		await _run_cast_bar_demo(args)
+		return
 	if COMBAT_SHOTS_FLAG in args:
 		await _run_combat_demo(args)
 		return
@@ -109,6 +129,9 @@ func _ready() -> void:
 		return
 	if DUMMY_ATTACK_FLAG in args:
 		await _run_dummy_attack_demo()
+		return
+	if HEAL_WOUNDED_SHOTS_FLAG in args:
+		await _run_heal_wounded_demo(args)
 		return
 	if TAB_COMBAT_SHOTS_FLAG in args:
 		await _run_tab_combat_demo(args)
@@ -124,6 +147,15 @@ func _ready() -> void:
 		return
 	if ENEMY_QUEST_SHOTS_FLAG in args:
 		await _run_enemy_quest_demo(args)
+		return
+	if ENEMY_PARTY_SHOTS_FLAG in args:
+		await _run_enemy_party_demo(args)
+		return
+	if ENEMY_MIDCHASE_SHOTS_FLAG in args:
+		await _run_enemy_midchase_demo(args)
+		return
+	if ENEMY_QUEST_TURNIN_SHOTS_FLAG in args:
+		await _run_enemy_quest_turnin_demo(args)
 		return
 	if SHOTS_FLAG in args:
 		await _run_demo(args)
@@ -224,24 +256,9 @@ func _run_equip_demo(args: Array) -> void:
 	get_tree().quit(code)
 
 
-func _run_gather_craft_demo(args: Array) -> void:
-	var prefix := _argument_after(args, GATHER_CRAFT_SHOTS_FLAG)
-	if prefix.is_empty():
-		push_error("%s needs an output path prefix after it" % GATHER_CRAFT_SHOTS_FLAG)
-		get_tree().quit(1)
-		return
-
-	var session := get_node_or_null("Session") as SessionScript
-	var inventory := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
-	var equipment := get_node_or_null("UI/RightDock") as EquipmentPanelScript
-	if session == null or inventory == null or equipment == null:
-		push_error("main.tscn is missing Session or UI/RightDock")
-		get_tree().quit(1)
-		return
-
+func _run_gather_craft_demo(_args: Array) -> void:
 	var demo := GatherCraftDemoScript.new()
-	var code: int = await demo.run(self, session, inventory, equipment, prefix)
-	get_tree().quit(code)
+	get_tree().quit(demo.run())
 
 
 func _run_gather_error_demo(args: Array) -> void:
@@ -265,24 +282,47 @@ func _run_gather_error_demo(args: Array) -> void:
 	get_tree().quit(code)
 
 
-func _run_craft_cast_demo(args: Array) -> void:
-	var prefix := _argument_after(args, CRAFT_CAST_SHOTS_FLAG)
+func _run_craft_cast_demo(_args: Array) -> void:
+	var demo := CraftCastDemoScript.new()
+	get_tree().quit(demo.run())
+
+
+func _run_mine_smelt_craft_demo(args: Array) -> void:
+	var prefix := _argument_after(args, MINE_SMELT_CRAFT_SHOTS_FLAG)
 	if prefix.is_empty():
-		push_error("%s needs an output path prefix after it" % CRAFT_CAST_SHOTS_FLAG)
+		push_error("%s needs an output path prefix after it" % MINE_SMELT_CRAFT_SHOTS_FLAG)
 		get_tree().quit(1)
 		return
 
 	var session := get_node_or_null("Session") as SessionScript
 	var inventory := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
 	var equipment := get_node_or_null("UI/RightDock") as EquipmentPanelScript
-	var cast_bar := get_node_or_null("UI/CastBar") as CastBarScript
-	if session == null or inventory == null or equipment == null or cast_bar == null:
-		push_error("main.tscn is missing Session, UI/RightDock, or UI/CastBar")
+	if session == null or inventory == null or equipment == null:
+		push_error("main.tscn is missing Session or UI/RightDock")
 		get_tree().quit(1)
 		return
 
-	var demo := CraftCastDemoScript.new()
-	var code: int = await demo.run(self, session, inventory, equipment, cast_bar, prefix)
+	var demo := MineSmeltCraftDemoScript.new()
+	var code: int = await demo.run(self, session, inventory, equipment, prefix)
+	get_tree().quit(code)
+
+
+func _run_cast_bar_demo(args: Array) -> void:
+	var prefix := _argument_after(args, CAST_BAR_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % CAST_BAR_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+
+	var session := get_node_or_null("Session") as SessionScript
+	var cast_bar := get_node_or_null("UI/CastBar") as CastBarScript
+	if session == null or cast_bar == null:
+		push_error("main.tscn is missing Session or UI/CastBar")
+		get_tree().quit(1)
+		return
+
+	var demo := CastBarDemoScript.new()
+	var code: int = await demo.run(self, session, cast_bar, prefix)
 	get_tree().quit(code)
 
 
@@ -345,10 +385,10 @@ func _run_dummy_attack_demo() -> void:
 	get_tree().quit(code)
 
 
-func _run_tab_combat_demo(args: Array) -> void:
-	var prefix := _argument_after(args, TAB_COMBAT_SHOTS_FLAG)
+func _run_heal_wounded_demo(args: Array) -> void:
+	var prefix := _argument_after(args, HEAL_WOUNDED_SHOTS_FLAG)
 	if prefix.is_empty():
-		push_error("%s needs an output path prefix after it" % TAB_COMBAT_SHOTS_FLAG)
+		push_error("%s needs an output path prefix after it" % HEAL_WOUNDED_SHOTS_FLAG)
 		get_tree().quit(1)
 		return
 	var session := get_node_or_null("Session") as SessionScript
@@ -356,20 +396,30 @@ func _run_tab_combat_demo(args: Array) -> void:
 		push_error("main.tscn is missing Session")
 		get_tree().quit(1)
 		return
-	var demo := TabCombatDemoScript.new()
+	var demo := HealWoundedDemoScript.new()
 	var code: int = await demo.run(self, session, prefix)
 	get_tree().quit(code)
 
 
-func _run_enemy_quest_demo(args: Array) -> void:
-	var prefix := _argument_after(args, ENEMY_QUEST_SHOTS_FLAG)
+func _run_tab_combat_demo(_args: Array) -> void:
+	var demo := TabCombatDemoScript.new()
+	get_tree().quit(demo.run())
+
+
+func _run_enemy_quest_demo(_args: Array) -> void:
+	var demo := EnemyQuestDemoScript.new()
+	get_tree().quit(demo.run())
+
+
+func _run_enemy_party_demo(args: Array) -> void:
+	var prefix := _argument_after(args, ENEMY_PARTY_SHOTS_FLAG)
 	if prefix.is_empty():
-		push_error("%s needs an output path prefix after it" % ENEMY_QUEST_SHOTS_FLAG)
+		push_error("%s needs an output path prefix after it" % ENEMY_PARTY_SHOTS_FLAG)
 		get_tree().quit(1)
 		return
-	var role := _argument_after(args, ENEMY_QUEST_ROLE_FLAG)
+	var role := _argument_after(args, ENEMY_PARTY_ROLE_FLAG)
 	if role.is_empty():
-		push_error("%s needs leader or member after it" % ENEMY_QUEST_ROLE_FLAG)
+		push_error("%s needs leader or member after it" % ENEMY_PARTY_ROLE_FLAG)
 		get_tree().quit(1)
 		return
 
@@ -382,7 +432,49 @@ func _run_enemy_quest_demo(args: Array) -> void:
 		get_tree().quit(1)
 		return
 
-	var demo := EnemyQuestDemoScript.new()
+	var demo := EnemyPartyDemoScript.new()
+	var code: int = await demo.run(self, session, inventory, dialog, party, prefix, role)
+	get_tree().quit(code)
+
+
+func _run_enemy_midchase_demo(args: Array) -> void:
+	var prefix := _argument_after(args, ENEMY_MIDCHASE_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % ENEMY_MIDCHASE_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+	var session := get_node_or_null("Session") as SessionScript
+	if session == null:
+		push_error("main.tscn is missing Session")
+		get_tree().quit(1)
+		return
+	var demo := EnemyMidchaseDemoScript.new()
+	var code: int = await demo.run(self, session, prefix)
+	get_tree().quit(code)
+
+
+func _run_enemy_quest_turnin_demo(args: Array) -> void:
+	var prefix := _argument_after(args, ENEMY_QUEST_TURNIN_SHOTS_FLAG)
+	if prefix.is_empty():
+		push_error("%s needs an output path prefix after it" % ENEMY_QUEST_TURNIN_SHOTS_FLAG)
+		get_tree().quit(1)
+		return
+	var role := _argument_after(args, ENEMY_QUEST_TURNIN_ROLE_FLAG)
+	if role.is_empty():
+		push_error("%s needs leader or member after it" % ENEMY_QUEST_TURNIN_ROLE_FLAG)
+		get_tree().quit(1)
+		return
+
+	var session := get_node_or_null("Session") as SessionScript
+	var inventory := get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
+	var dialog := get_node_or_null("UI/DialogPanel") as DialogPanelScript
+	var party := get_node_or_null("UI/PartyPanel")
+	if session == null or inventory == null or dialog == null or party == null:
+		push_error("main.tscn is missing Session, inventory, DialogPanel, or PartyPanel")
+		get_tree().quit(1)
+		return
+
+	var demo := EnemyQuestTurninDemoScript.new()
 	var code: int = await demo.run(self, session, inventory, dialog, party, prefix, role)
 	get_tree().quit(code)
 
@@ -442,7 +534,12 @@ func _run_demo(args: Array) -> void:
 	for phase in range(1, DEMO_PHASES + 1):
 		if phase > 1:
 			await _wait_msec(DEMO_PHASE_GAP_MSEC)
-		if phase == my_phase and not click.is_empty():
+		var walk_start := Vector2.ZERO
+		var walking := phase == my_phase and not click.is_empty()
+		if walking:
+			var avatar := session.avatar_for(session.own_id())
+			if avatar != null:
+				walk_start = Vector2(avatar.position.x, avatar.position.z)
 			if not _walk_to_fraction(session, picker, _parse_fraction(click)):
 				get_tree().quit(1)
 				return
@@ -454,6 +551,14 @@ func _run_demo(args: Array) -> void:
 			return
 
 		await _wait_msec(DEMO_WALK_MSEC)
+		if walking:
+			session.request_move(0.0, 0.0)
+			await _wait_msec(DEMO_SETTLE_MSEC)
+			var avatar_end := session.avatar_for(session.own_id())
+			if avatar_end != null:
+				var walk_end := Vector2(avatar_end.position.x, avatar_end.position.z)
+				var travelled := walk_start.distance_to(walk_end)
+				print("DEMO move_displacement %f" % travelled)
 		shot += 1
 		if not await _capture(session, prefix, shot):
 			get_tree().quit(1)

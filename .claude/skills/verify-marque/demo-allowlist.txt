@@ -2,7 +2,7 @@
 # scripts/*_demo.ps1, client/scripts/*_demo.gd, or main.gd --*-shots flag is
 # absent from this file. Paths are repo-relative with forward slashes.
 # Lines starting with # are comments. Trailing # comments on entry lines are ok.
-# Helpers (marque-demo-lib.ps1, demo_npc_capture.gd) are not scanned.
+# Helpers (marque-demo-lib.ps1, demo_npc_capture.gd, demo_admin_give.gd) are not scanned.
 
 # scripts/*_demo.ps1
 scripts/combat_demo.ps1
@@ -10,13 +10,19 @@ scripts/contested_pickup_demo.ps1
 scripts/dummy_attack_demo.ps1
 scripts/dummy_cast_demo.ps1
 scripts/enemy_quest_demo.ps1
+scripts/enemy_party_demo.ps1
+scripts/enemy_midchase_demo.ps1
+scripts/enemy_quest_turnin_demo.ps1
 scripts/equip_demo.ps1
 scripts/gather_craft_demo.ps1
 scripts/gather_error_demo.ps1
 scripts/craft_cast_demo.ps1
+scripts/mine_smelt_craft_demo.ps1
+scripts/cast_bar_demo.ps1
 scripts/quest_demo.ps1
 scripts/admin_give_class_kits_demo.ps1
 scripts/tab_combat_demo.ps1
+scripts/heal_wounded_demo.ps1
 scripts/two_client_demo.ps1
 scripts/wasd_demo.ps1
 scripts/arena_collision_demo.ps1
@@ -26,10 +32,16 @@ client/scripts/combat_demo.gd
 client/scripts/dummy_attack_demo.gd
 client/scripts/dummy_cast_demo.gd
 client/scripts/enemy_quest_demo.gd
+client/scripts/enemy_party_demo.gd
+client/scripts/enemy_midchase_demo.gd
+client/scripts/enemy_quest_turnin_demo.gd
 client/scripts/equip_demo.gd
 client/scripts/gather_craft_demo.gd
 client/scripts/gather_error_demo.gd
 client/scripts/craft_cast_demo.gd
+client/scripts/mine_smelt_craft_demo.gd
+client/scripts/cast_bar_demo.gd
+client/scripts/heal_wounded_demo.gd
 client/scripts/pickup_demo.gd
 client/scripts/quest_demo.gd
 client/scripts/tab_combat_demo.gd
@@ -44,9 +56,15 @@ client/scripts/arena_collision_demo.gd
 --gather-craft-shots
 --gather-error-shots
 --craft-cast-shots
+--mine-smelt-craft-shots
+--cast-bar-shots
 --combat-shots
 --wasd-shots
 --arena-collision-shots
 --tab-combat-shots
+--heal-wounded-shots
 --quest-shots
 --enemy-quest-shots
+--enemy-party-shots
+--enemy-midchase-shots
+--enemy-quest-turnin-shots
