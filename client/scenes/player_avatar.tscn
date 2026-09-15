@@ -1,25 +1,16 @@
-[gd_scene load_steps=26 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/player_avatar.gd" id="1_avatar"]
-[ext_resource type="Script" path="res://scripts/grip_socket.gd" id="14_grip_socket"]
-[ext_resource type="PackedScene" path="res://assets/weapons/Sword_1_A.glb" id="15_sword"]
-[ext_resource type="PackedScene" path="res://assets/weapons/Shield_1_A.glb" id="16_shield"]
-[ext_resource type="PackedScene" path="res://assets/weapons/DruidStaff_1_1_A.glb" id="17_staff"]
-[ext_resource type="PackedScene" path="res://assets/weapons/Bow_1_1_A_001.glb" id="18_bow"]
-[ext_resource type="Mesh" path="res://assets/tools/pickaxe.obj" id="19_pickaxe"]
-[ext_resource type="Mesh" path="res://assets/tools/axe.obj" id="20_axe"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/base_characters/Superhero_Male_FullBody.gltf" id="2_body"]
-[ext_resource type="AnimationLibrary" path="res://assets/quaternius/animations/locomotion_library.tres" id="3_locomotion"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Peasant_Body.gltf" id="4_peasant_body"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Peasant_Arms.gltf" id="5_peasant_arms"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Peasant_Legs.gltf" id="6_peasant_legs"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Peasant_Feet.gltf" id="7_peasant_feet"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Body.gltf" id="8_ranger_body"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Arms.gltf" id="9_ranger_arms"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Legs.gltf" id="10_ranger_legs"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Feet_Boots.gltf" id="11_ranger_feet"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Head_Hood.gltf" id="12_ranger_hood"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/outfits_fantasy/Male_Ranger_Acc_Pauldron.gltf" id="13_ranger_pauldron"]
+[ext_resource type="Script" path="res://scripts/character_visual.gd" id="2_visual"]
+[ext_resource type="Script" path="res://scripts/grip_socket.gd" id="3_grip_socket"]
+[ext_resource type="PackedScene" path="res://assets/proto/characters/humanoid.glb" id="4_body"]
+[ext_resource type="AnimationLibrary" path="res://assets/proto/anim/clips.glb" id="5_clips"]
+[ext_resource type="PackedScene" path="res://assets/proto/items/sword.glb" id="6_sword"]
+[ext_resource type="PackedScene" path="res://assets/proto/items/shield.glb" id="7_shield"]
+[ext_resource type="PackedScene" path="res://assets/proto/items/staff.glb" id="8_staff"]
+[ext_resource type="PackedScene" path="res://assets/proto/items/bow.glb" id="9_bow"]
+[ext_resource type="PackedScene" path="res://assets/proto/items/pickaxe.glb" id="10_pickaxe"]
+[ext_resource type="PackedScene" path="res://assets/proto/items/lumberjack_axe.glb" id="11_axe"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_click"]
 radius = 0.4
@@ -49,129 +40,90 @@ ground_y = 0.0
 face_travel_direction = true
 turn_degrees_per_second = 540.0
 
-[node name="Body" parent="." instance=ExtResource("2_body")]
+[node name="Body" parent="." instance=ExtResource("4_body")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
 
-[node name="Outfit" type="Node3D" parent="."]
-
-[node name="PeasantBody" parent="Outfit" instance=ExtResource("4_peasant_body")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
-visible = false
-
-[node name="PeasantArms" parent="Outfit" instance=ExtResource("5_peasant_arms")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
-visible = false
-
-[node name="PeasantLegs" parent="Outfit" instance=ExtResource("6_peasant_legs")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
-visible = false
-
-[node name="PeasantFeet" parent="Outfit" instance=ExtResource("7_peasant_feet")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
-visible = false
-
-[node name="RangerBody" parent="Outfit" instance=ExtResource("8_ranger_body")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
-visible = false
-
-[node name="RangerArms" parent="Outfit" instance=ExtResource("9_ranger_arms")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
-visible = false
-
-[node name="RangerLegs" parent="Outfit" instance=ExtResource("10_ranger_legs")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
-visible = false
-
-[node name="RangerFeet" parent="Outfit" instance=ExtResource("11_ranger_feet")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
-visible = false
-
-[node name="RangerHood" parent="Outfit" instance=ExtResource("12_ranger_hood")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
-visible = false
-
-[node name="RangerPauldron" parent="Outfit" instance=ExtResource("13_ranger_pauldron")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
-visible = false
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("../Body")
+libraries = {
+&"proto": ExtResource("5_clips")
+}
 
 [node name="Grip" type="Node3D" parent="."]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
 
 [node name="left hand" type="Node3D" parent="Grip"]
-script = ExtResource("14_grip_socket")
+script = ExtResource("3_grip_socket")
 bone_name = "hand_l"
 body_path = NodePath("../../Body")
-skeleton_path = NodePath("../../Body/Armature/Skeleton3D")
+skeleton_path = NodePath("../../Body/Rig/Skeleton3D")
 
-[node name="sword" parent="Grip/left hand" instance=ExtResource("15_sword")]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)
+[node name="sword" parent="Grip/left hand" instance=ExtResource("6_sword")]
+transform = Transform3D(-1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0.08, 0)
 visible = false
 
-[node name="shield" parent="Grip/left hand" instance=ExtResource("16_shield")]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)
+[node name="shield" parent="Grip/left hand" instance=ExtResource("7_shield")]
+transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0.08, 0)
 visible = false
 
-[node name="staff" parent="Grip/left hand" instance=ExtResource("17_staff")]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)
+[node name="staff" parent="Grip/left hand" instance=ExtResource("8_staff")]
+transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0.08, 0)
 visible = false
 
-[node name="bow" parent="Grip/left hand" instance=ExtResource("18_bow")]
-transform = Transform3D(1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0)
+[node name="bow" parent="Grip/left hand" instance=ExtResource("9_bow")]
+transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0.08, 0)
 visible = false
 
-[node name="pickaxe" type="MeshInstance3D" parent="Grip/left hand"]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0.5586)
+[node name="pickaxe" parent="Grip/left hand" instance=ExtResource("10_pickaxe")]
+transform = Transform3D(-1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0.08, 0)
 visible = false
-mesh = ExtResource("19_pickaxe")
 
-[node name="lumberjack_axe" type="MeshInstance3D" parent="Grip/left hand"]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0.4071)
+[node name="lumberjack_axe" parent="Grip/left hand" instance=ExtResource("11_axe")]
+transform = Transform3D(-1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0.08, 0)
 visible = false
-mesh = ExtResource("20_axe")
 
 [node name="right hand" type="Node3D" parent="Grip"]
-script = ExtResource("14_grip_socket")
+script = ExtResource("3_grip_socket")
 bone_name = "hand_r"
 body_path = NodePath("../../Body")
-skeleton_path = NodePath("../../Body/Armature/Skeleton3D")
+skeleton_path = NodePath("../../Body/Rig/Skeleton3D")
 
-[node name="sword" parent="Grip/right hand" instance=ExtResource("15_sword")]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)
+[node name="sword" parent="Grip/right hand" instance=ExtResource("6_sword")]
+transform = Transform3D(-1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0.08, 0)
 visible = false
 
-[node name="shield" parent="Grip/right hand" instance=ExtResource("16_shield")]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)
+[node name="shield" parent="Grip/right hand" instance=ExtResource("7_shield")]
+transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0.08, 0)
 visible = false
 
-[node name="staff" parent="Grip/right hand" instance=ExtResource("17_staff")]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)
+[node name="staff" parent="Grip/right hand" instance=ExtResource("8_staff")]
+transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0.08, 0)
 visible = false
 
-[node name="bow" parent="Grip/right hand" instance=ExtResource("18_bow")]
-transform = Transform3D(1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0)
+[node name="bow" parent="Grip/right hand" instance=ExtResource("9_bow")]
+transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0.08, 0)
 visible = false
 
-[node name="pickaxe" type="MeshInstance3D" parent="Grip/right hand"]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0.5586)
+[node name="pickaxe" parent="Grip/right hand" instance=ExtResource("10_pickaxe")]
+transform = Transform3D(-1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0.08, 0)
 visible = false
-mesh = ExtResource("19_pickaxe")
 
-[node name="lumberjack_axe" type="MeshInstance3D" parent="Grip/right hand"]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0.4071)
+[node name="lumberjack_axe" parent="Grip/right hand" instance=ExtResource("11_axe")]
+transform = Transform3D(-1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0.08, 0)
 visible = false
-mesh = ExtResource("20_axe")
+
+[node name="Visual" type="Node" parent="." node_paths=PackedStringArray("body", "animation_player", "grip")]
+script = ExtResource("2_visual")
+variant = "human"
+body = NodePath("../Body")
+animation_player = NodePath("../AnimationPlayer")
+grip = NodePath("../Grip")
 
 [node name="MissingBody" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
 visible = false
 mesh = SubResource("CapsuleMesh_missing")
 surface_material_override/0 = SubResource("Mat_missing")
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-root_node = NodePath("../Body")
-libraries = {
-&"ual2": ExtResource("3_locomotion")
-}
 
 [node name="ClickBody" type="StaticBody3D" parent="."]
 collision_layer = 4

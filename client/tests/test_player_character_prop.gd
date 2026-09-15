@@ -4,6 +4,7 @@ extends Node3D
 const PlayerCharacterScript := preload("res://scripts/player_character.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
+const CharacterVisualScript := preload("res://scripts/character_visual.gd")
 const LocalMover := preload("res://scripts/local_mover.gd")
 const SteerIntegrate := preload("res://scripts/steer_integrate.gd")
 const Assertions := preload("res://tests/assertions.gd")
@@ -57,6 +58,10 @@ func _rig() -> CameraRigScript:
 	return _prop.camera_rig as CameraRigScript
 
 
+func _clip(action: String) -> String:
+	return "proto/" + CharacterVisualScript.contract().clip_for(action, "")
+
+
 func _animation() -> AnimationPlayer:
 	return _avatar().get_node_or_null("AnimationPlayer") as AnimationPlayer
 
@@ -96,7 +101,7 @@ func _test_wish_walk_plays_walk_anim_and_camera_follows() -> void:
 	var animation := _animation()
 	_assertions.check(mover.moving(), "wish LocalMover reports moving")
 	_assertions.check(
-		animation != null and animation.current_animation == PlayerAvatarScript.WALK_ANIM,
+		animation != null and animation.current_animation == _clip("walk"),
 		"wish present_at plays walk anim, got \"%s\""
 		% ("" if animation == null else animation.current_animation),
 	)
@@ -137,7 +142,7 @@ func _test_approach_pose_stream_walks_then_idles() -> void:
 		avatar.present_at(ground.x, ground.y, mover.moving(), mover.display_height())
 		await get_tree().process_frame
 		var animation := _animation()
-		if animation != null and animation.current_animation == PlayerAvatarScript.WALK_ANIM:
+		if animation != null and animation.current_animation == _clip("walk"):
 			saw_walk = true
 	_assertions.check(saw_walk, "approach pose stream plays walk anim")
 	_assertions.check(mover.moving(), "approach poses keep LocalMover moving mid-stream")
@@ -149,7 +154,7 @@ func _test_approach_pose_stream_walks_then_idles() -> void:
 	_assertions.check(not mover.moving(), "identical approach pose clears moving")
 	var animation := _animation()
 	_assertions.check(
-		animation != null and animation.current_animation == PlayerAvatarScript.IDLE_ANIM,
+		animation != null and animation.current_animation == _clip("idle"),
 		"approach settle plays idle anim, got \"%s\""
 		% ("" if animation == null else animation.current_animation),
 	)
@@ -201,7 +206,7 @@ func _test_settle_idle() -> void:
 	_assertions.check(not mover.moving(), "zero wish is not moving")
 	var animation := _animation()
 	_assertions.check(
-		animation != null and animation.current_animation == PlayerAvatarScript.IDLE_ANIM,
+		animation != null and animation.current_animation == _clip("idle"),
 		"settle idle plays idle anim, got \"%s\""
 		% ("" if animation == null else animation.current_animation),
 	)

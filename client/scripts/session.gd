@@ -884,7 +884,7 @@ func _on_welcomed(
 	_forget_everyone()
 	_clear_hit_points()
 	_clear_class_state()
-	_clear_grip()
+	_clear_look()
 	_casts_awaiting_mana.clear()
 	if _panel != null:
 		_panel.clear()
@@ -1636,7 +1636,7 @@ func _on_equipment_changed(
 	worn_names: PackedStringArray, slot_names: PackedStringArray, slot_kinds: PackedStringArray
 ) -> void:
 	if _local != null:
-		_local.apply_equipment(worn_names, slot_names, slot_kinds)
+		_local.apply_equipment(slot_names, slot_kinds)
 	if _equipment == null:
 		push_error("session: equipment arrived with no panel to draw it")
 		return
@@ -1986,16 +1986,14 @@ func _clear_hit_points() -> void:
 		_death_overlay.visible = false
 
 
-func _clear_grip() -> void:
+func _clear_look() -> void:
 	if _local != null:
-		_local.clear_grip()
+		_local.apply_equipment(PackedStringArray(), PackedStringArray())
 
 
 func _clear_class_state() -> void:
 	_active_class_id = ""
 	_skill_levels.clear()
-	if _local != null:
-		_local.apply_class("")
 	if _class_hud != null:
 		_class_hud.clear()
 	_refresh_class_debug()
@@ -2008,8 +2006,6 @@ func _apply_class(
 	missing_tools: PackedStringArray,
 ) -> void:
 	_active_class_id = class_id
-	if _local != null:
-		_local.apply_class(class_id)
 	if _class_hud == null:
 		push_error("session: class arrived with no hud to draw it")
 		return

@@ -24,9 +24,5 @@ static func grip_plan(
 	return plan
 
 
-static func names_the_hands(worn_names: PackedStringArray) -> bool:
-	return worn_names.has(OFF_HAND) and worn_names.has(GRIP_HAND)
-
-
 static func hands() -> PackedStringArray:
 	return PackedStringArray([OFF_HAND, GRIP_HAND])
