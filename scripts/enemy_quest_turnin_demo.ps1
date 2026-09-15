@@ -3,7 +3,7 @@ param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
     [string] $OutDir = (Join-Path ([System.IO.Path]::GetTempPath()) "marque-enemy-quest-turnin"),
     [int] $ReadyTimeoutSeconds = 20,
-    [int] $ClientTimeoutSeconds = 180
+    [int] $ClientTimeoutSeconds = 300
 )
 
 Set-StrictMode -Version Latest

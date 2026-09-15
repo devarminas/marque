@@ -22,9 +22,13 @@ const CLICK_HEIGHT := 0.8
 const SCREENSHOT_WARMUP_FRAMES := 15
 const JOIN_TIMEOUT_MSEC := 25000
 const STEP_TIMEOUT_MSEC := 45000
+const TURNIN_TIMEOUT_MSEC := 120000
+const TURNIN_ATTEMPT_MSEC := 12000
 const KILL_TIMEOUT_MSEC := 150000
 const HOLD_MSEC := 800
 const CLASS_ID := "knight"
+# Walk closer than TalkRange (0.5) so request_talk resolves without a long steer.
+const TALK_NEAR := 1.25
 
 const KNIGHT_KIT := [
 	"plate_helm",
@@ -146,21 +150,32 @@ func run(
 
 
 func _turn_in_quest(giver_id: int) -> bool:
-	# Combat can kill during the walk-to-NPC / dialog window; retry after respawn.
-	var deadline := Time.get_ticks_msec() + STEP_TIMEOUT_MSEC
+	# After killsready, lingering imps still kill during the walk-to-NPC / dialog
+	# window. Death clears pending talk, so a single long wait cannot recover —
+	# approach, talk, and turn in in short attempts with respawn retries.
+	var deadline := Time.get_ticks_msec() + TURNIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		if _session.hit_points_for(_session.own_id()).x == 0:
-			if not await _maybe_respawn():
-				return false
+		if not await _ensure_alive():
+			return false
+		if not await _approach_npc(giver_id, deadline):
+			continue
+		if not await _ensure_alive():
+			return false
 		_session.request_talk(giver_id)
 		print("DEMO talkturnin %d" % giver_id)
-		if not await _wait_dialog_option(giver_id, DialogPanelScript.OPTION_TURN_IN):
+		var saw := await _wait_dialog_option_attempt(
+			giver_id, DialogPanelScript.OPTION_TURN_IN, TURNIN_ATTEMPT_MSEC
+		)
+		if saw == "dead":
+			continue
+		if saw != "ok":
+			_print_dialog_state(giver_id)
 			continue
 		if _session.hit_points_for(_session.own_id()).x == 0:
 			continue
 		_session.request_dialog_option(giver_id, DialogPanelScript.OPTION_TURN_IN)
 		print("DEMO turnin %d" % giver_id)
-		var complete_deadline := Time.get_ticks_msec() + 8000
+		var complete_deadline := Time.get_ticks_msec() + TURNIN_ATTEMPT_MSEC
 		while Time.get_ticks_msec() < complete_deadline:
 			if _quest_status_for(QUEST_ID) == "complete":
 				return true
@@ -168,6 +183,68 @@ func _turn_in_quest(giver_id: int) -> bool:
 				break
 			await _tree.process_frame
 	return _fail_bool("quest never turned in on npc %d" % giver_id)
+
+
+func _ensure_alive() -> bool:
+	if _session.hit_points_for(_session.own_id()).x != 0:
+		return true
+	return await _maybe_respawn()
+
+
+func _approach_npc(npc_id: int, overall_deadline: int) -> bool:
+	var attempt_deadline := mini(
+		overall_deadline, Time.get_ticks_msec() + TURNIN_ATTEMPT_MSEC
+	)
+	print("DEMO approach %d" % npc_id)
+	while Time.get_ticks_msec() < attempt_deadline:
+		if _session.hit_points_for(_session.own_id()).x == 0:
+			_session.request_move(0.0, 0.0)
+			if not await _maybe_respawn():
+				return false
+			continue
+		var avatar: PlayerAvatarScript = _session.avatar_for(_session.own_id())
+		var npcs: Dictionary = _session.get("_npcs")
+		var body: NpcDummyScript = npcs.get(npc_id) as NpcDummyScript
+		if avatar == null or body == null:
+			await _tree.process_frame
+			continue
+		var here := Vector2(avatar.position.x, avatar.position.z)
+		var there := Vector2(body.position.x, body.position.z)
+		var dist := here.distance_to(there)
+		if dist <= TALK_NEAR:
+			_session.request_move(0.0, 0.0)
+			await _wait_msec(200)
+			return true
+		var wish := (there - here).normalized()
+		_session.request_move(wish.x, wish.y)
+		await _wait_msec(100)
+	_session.request_move(0.0, 0.0)
+	return false
+
+
+func _wait_dialog_option_attempt(npc_id: int, option_id: String, timeout_msec: int) -> String:
+	var deadline := Time.get_ticks_msec() + timeout_msec
+	while Time.get_ticks_msec() < deadline:
+		if _session.hit_points_for(_session.own_id()).x == 0:
+			return "dead"
+		if _dialog.visible and _dialog.npc_id() == npc_id and _dialog.has_option(option_id):
+			return "ok"
+		await _tree.process_frame
+	return "timeout"
+
+
+func _print_dialog_state(npc_id: int) -> void:
+	if not _dialog.visible or _dialog.npc_id() != npc_id:
+		print("DEMO dialogmiss %d" % npc_id)
+		return
+	var bits: PackedStringArray = PackedStringArray()
+	if _dialog.has_option(DialogPanelScript.OPTION_ACCEPT):
+		bits.append(DialogPanelScript.OPTION_ACCEPT)
+	if _dialog.has_option(DialogPanelScript.OPTION_TURN_IN):
+		bits.append(DialogPanelScript.OPTION_TURN_IN)
+	if _dialog.has_option(DialogPanelScript.OPTION_STOP):
+		bits.append(DialogPanelScript.OPTION_STOP)
+	print("DEMO dialogopts %d %s" % [npc_id, ",".join(bits)])
 
 
 func _wait_for_join() -> bool:
