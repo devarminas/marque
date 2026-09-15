@@ -192,6 +192,11 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			want: `{"party_invite_notice":{"from":2}}`,
 		},
 		{
+			name: "admin_reply",
+			msg:  mnet.AdminReply{Text: "ok: noop ran"},
+			want: `{"admin_reply":{"text":"ok: noop ran"}}`,
+		},
+		{
 			name: "error with nothing to attribute it to",
 			msg:  mnet.Error{Msg: "text frames only"},
 			want: `{"error":{"msg":"text frames only"}}`,
@@ -372,6 +377,7 @@ func TestDecodeNamesEveryMessageAfterItsWireKey(t *testing.T) {
 		{mnet.MsgPartyDecline, `{"party_decline":{}}`},
 		{mnet.MsgPartyLeave, `{"party_leave":{}}`},
 		{mnet.MsgPartyKick, `{"party_kick":{"player":3}}`},
+		{mnet.MsgAdmin, `{"admin":{"line":"/help"}}`},
 	}
 
 	for _, tc := range cases {
@@ -453,6 +459,8 @@ func TestDecodeRejections(t *testing.T) {
 		{"a gather naming no node", `{"gather":{}}`, mnet.ReasonMissingField, mnet.ReplyError, "gather"},
 		{"a gather whose node is not a number", `{"gather":{"node":"tree"}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "gather"},
 		{"jump not bool", `{"move":{"dx":1,"dz":0,"jump":1}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "move"},
+		{"admin missing line", `{"admin":{}}`, mnet.ReasonMissingField, mnet.ReplyError, "admin"},
+		{"admin line wrong type", `{"admin":{"line":1}}`, mnet.ReasonMalformedJSON, mnet.ReplyError, "admin"},
 	}
 
 	for _, tc := range cases {

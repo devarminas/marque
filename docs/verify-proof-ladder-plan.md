@@ -155,7 +155,7 @@ Each live lane runs in its own remote worktree at the PR head. Drive through `co
 - [ ] Lane 5. Confirm quest_demo.ps1 remains allowlisted. Save `arm-227-lane-5-quest-ok.png`. Pass when path is in manifest.
 - [ ] Lane 6. Confirm enemy_quest_demo.ps1 remains allowlisted. Save `arm-227-lane-6-enemy-ok.png`. Pass when path is in manifest.
 - [ ] Lane 7. Open SKILL.md hard rule section. Save `arm-227-lane-7-skill-rule.png`. Pass when no new demo per quest id is stated.
-- [ ] Lane 8. Confirm seed_class_kits_demo.ps1 allowlisted. Save `arm-227-lane-8-seed-kits.png`. Pass when path is in manifest.
+- [ ] Lane 8. Confirm admin_give_class_kits_demo.ps1 allowlisted. Save `arm-227-lane-8-seed-kits.png`. Pass when path is in manifest.
 - [ ] Lane 9. Decide combat_demo.ps1 stub stay or leave allowlist. Save `arm-227-lane-9-combat-stub.png`. Pass when manifest matches the decision in skill.
 - [ ] Lane 10. Remove fakes and rerun doctor. Save `arm-227-lane-10-clean-restore.png`. Pass when DOCTOR OK.
 

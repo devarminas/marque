@@ -14,7 +14,6 @@ const (
 	AttackDamage       = 10
 	AttackRange        = 1.5
 	CombatTimeoutTicks = int64(6 * time.Second / TickDuration)
-	CauseMoveTo        = "move_to"
 	CauseMove          = "move"
 	CausePickup        = "pickup"
 	CauseGather        = "gather"

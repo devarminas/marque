@@ -145,15 +145,12 @@ try {
     if ($posLines -lt 5) { Add-Failure "DEMO pos lines=$posLines, want >= 5" }
     if ($shots -lt 5) { Add-Failure "DEMO shot lines=$shots, want >= 5" }
 
+    # PNG artifacts only (ARM-289); DEMO shot/pos + GAMELOG are the proof.
     for ($i = 1; $i -le 5; $i++) {
         $shotPath = "${shotsPrefix}_${i}.png"
-        if (-not (Test-Path $shotPath)) {
-            Add-Failure "missing shot $shotPath"
-            continue
-        }
-        $len = (Get-Item $shotPath).Length
-        if ($len -lt 4096) {
-            Add-Failure "shot $shotPath is ${len}B, want >4KB"
+        if (Test-Path $shotPath) {
+            $len = (Get-Item $shotPath).Length
+            Write-Host "==> $shotPath ($len bytes, artifact)"
         }
     }
 

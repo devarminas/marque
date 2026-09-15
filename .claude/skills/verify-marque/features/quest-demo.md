@@ -25,7 +25,7 @@ Minimum evidence:
 | Join kit sticks | `join_seeded` / `server_started` join kit | shot 1 bag holds `sticks` | optional |
 | Accept | `quest_accepted` | `DEMO accepted bring_a_stick active` | optional |
 | Give + rewards | `quest_completed` consume=`sticks`, five rewards | invslots miner kinds, no sticks | optional |
-| Quest log | (via complete) | shot 3 `DEMO questlog` `bring_a_stick complete` | PNG >4KB |
+| Quest log | (via complete) | shot 3 `DEMO questlog` `bring_a_stick complete` | optional |
 
 ## How to get to it (user POV)
 
@@ -50,8 +50,9 @@ The script builds marqued, warms Godot once, starts the server on a free port wi
 DefaultJoinKit), launches one windowed client with `--quest-shots`, and asserts
 the minimum evidence table above plus no talk/dialog/give rejects and `DEMO done`.
 
-Evidence lands in `-OutDir`, default `$env:TEMP\marque-quest`: three PNGs,
-`client.stdout.log`, `client.stderr.log`, and `server.stdout.ndjson`.
+Evidence lands in `-OutDir`, default `$env:TEMP\marque-quest`: optional PNG
+artifacts, `client.stdout.log`, `client.stderr.log`, and `server.stdout.ndjson`.
+Default proof is DEMO + GAMELOG (ARM-289).
 
 ## Gotchas
 
@@ -62,7 +63,3 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-quest`: three PNGs,
 - **Talk then re-talk for give.** Accept closes dialog. Give UI opens on a later
   talk while the quest is `active` (ARM-191). Give itself is immediate and
   range-gated (`GiveRange` == `TalkRange`); the first talk walks the player in.
-- **Cite.** Pattern matches `scripts/equip_demo.ps1` / `gather_craft_demo.ps1`
-  and ARM-143 seed style (`scripts/seed_class_kits_demo.ps1`,
-  `features/seed-class-kits.md`): flag seed, DEMO lines, GAMELOG asserts, last-line
-  marker.
