@@ -112,6 +112,7 @@ try {
     $fireFx = $false
     $healFx = $false
     $attackOk = $false
+    $wishOk = $false
     $displacement = $null
     $posLines = 0
     $npcCount = 0
@@ -127,6 +128,7 @@ try {
             if ($line -match '^DEMO move_displacement ([0-9.]+)') {
                 $displacement = [double]$Matches[1]
             }
+            if ($line -match '^DEMO wish_ok\s*$') { $wishOk = $true }
             if ($line -match '^DEMO done\s*$') { $done = $true }
             if ($line -match '^DEMO FAIL ') { Add-Failure $line.Trim() }
         }
@@ -141,6 +143,7 @@ try {
     if ($null -eq $displacement -or $displacement -lt 1.5) {
         Add-Failure "DEMO move_displacement=$displacement, want >= 1.5"
     }
+    if (-not $wishOk) { Add-Failure "missing DEMO wish_ok" }
     if (-not $done) { Add-Failure "missing DEMO done" }
 
     $healEffect = 0
@@ -149,7 +152,9 @@ try {
     $hits = 0
     $spawned = 0
     $moveEvents = 0
-    $pathEvents = 0
+    $nonzeroMoves = 0
+    $playerPathEvents = 0
+    $moveToEvents = 0
     $hpSeed = 0
     if (Test-Path $serverOut) {
         foreach ($line in Get-Content $serverOut) {
@@ -161,8 +166,19 @@ try {
             if ($ev.ev -eq "cast_effect" -and $ev.ability -eq "fireball") { $fireEffect++ }
             if ($ev.ev -eq "attack") { $attacks++ }
             if ($ev.ev -eq "attack_hit") { $hits++ }
-            if ($ev.ev -eq "move") { $moveEvents++ }
-            if ($ev.ev -eq "path_assigned") { $pathEvents++ }
+            if ($ev.ev -eq "move") {
+                $moveEvents++
+                $dx = [double]$ev.dx
+                $dz = [double]$ev.dz
+                if ([math]::Sqrt(($dx)*($dx) + ($dz)*($dz)) -gt 1e-6) { $nonzeroMoves++ }
+            }
+            if ($ev.ev -eq "move_to") { $moveToEvents++ }
+            if ($ev.ev -eq "path_assigned") {
+                $hasPlayer = $ev.PSObject.Properties.Name -contains "player"
+                if ($hasPlayer -and $null -ne $ev.player) {
+                    $playerPathEvents++
+                }
+            }
             if ($ev.ev -eq "attack_rejected") {
                 Add-Failure "unexpected attack_rejected on the happy path: $line"
             }
@@ -175,7 +191,15 @@ try {
     if ($attacks -lt 1) { Add-Failure "attack=$attacks, want >= 1" }
     if ($hits -lt 1) { Add-Failure "attack_hit=$hits, want >= 1" }
     if ($moveEvents -lt 1) { Add-Failure "GAMELOG move=$moveEvents, want >= 1" }
-    if ($pathEvents -lt 1) { Add-Failure "GAMELOG path_assigned=$pathEvents, want >= 1" }
+    if ($nonzeroMoves -lt 1) {
+        Add-Failure "GAMELOG non-zero move wish=$nonzeroMoves, want >= 1"
+    }
+    if ($moveToEvents -gt 0) {
+        Add-Failure "GAMELOG move_to=$moveToEvents, want 0"
+    }
+    if ($playerPathEvents -gt 0) {
+        Add-Failure "GAMELOG player path_assigned=$playerPathEvents, want 0"
+    }
 
     Show-File "client stdout" $clientOut
     Show-File "client stderr" $clientErr

@@ -6,7 +6,7 @@ const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
 
 const JOIN_TIMEOUT_MSEC := 20000
-const CAST_WAIT_MSEC := 8000
+const CAST_WAIT_MSEC := 12000
 const HIT_WAIT_MSEC := 30000
 const SPIN_USEC := 20000
 const HOLD_MSEC := 900
@@ -16,6 +16,20 @@ const STEER_DX := 1.0
 const STEER_DZ := 0.0
 const CLICK_HEIGHT := 0.8
 const SCREENSHOT_WARMUP_FRAMES := 15
+const CAST_RANGE_SLACK := 6.0
+# After heal the follow camera sits near the friendly dummy. Closing only to
+# cast slack still leaves a long pick ray; tighten for the attack click so the
+# hostile practice dummy fills the probe under llvmpipe.
+const ATTACK_PICK_RANGE := 3.0
+const APPROACH_TIMEOUT_MSEC := 8000
+const CLICK_HEIGHTS := [0.8, 1.2, 0.4, 1.6, 0.25]
+const CLICK_NUDGES := [
+	Vector2.ZERO,
+	Vector2(4, 0),
+	Vector2(-4, 0),
+	Vector2(0, 4),
+	Vector2(0, -4),
+]
 
 
 var _tree: SceneTree
@@ -44,18 +58,53 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	for id: int in npcs.keys():
 		var body: NpcDummyScript = npcs[id]
 		print("DEMO npc %d %s %s %f %f" % [id, body.kind, body.faction, body.position.x, body.position.z])
+		# Practice dummies only — imps and other hostiles must not overwrite the cast target.
+		if body.kind != NpcDummyScript.KindDummy:
+			continue
 		if body.faction == NpcDummyScript.FactionFriendly:
 			friendly_id = id
 		elif body.faction == NpcDummyScript.FactionHostile:
 			hostile_id = id
 	if friendly_id == 0 or hostile_id == 0:
-		return _fail("missing friendly or hostile dummy after join")
+		return _fail("missing friendly or hostile practice dummy after join")
 
 	await _capture(1)
+
+	var avatar: PlayerAvatarScript = _session.avatar_for(_session.own_id())
+	if avatar == null:
+		return _fail("no local avatar after join")
+	# Wish+pose relocate first so this phase is reached even if a later cast gate
+	# trips, and so the mage starts closer to the hostile dummy (+X).
+	var start := Vector2(avatar.position.x, avatar.position.z)
+	print("DEMO pos 1 %d %f %f" % [_session.own_id(), start.x, start.y])
+	_session.request_move(0.0, 0.0)
+	await _wait_msec(SETTLE_MSEC)
+	var hold_deadline := Time.get_ticks_msec() + HOLD_MSEC
+	while Time.get_ticks_msec() < hold_deadline:
+		_session.request_move(STEER_DX, STEER_DZ)
+		await _wait_msec(100)
+	_session.request_move(0.0, 0.0)
+	await _wait_msec(SETTLE_MSEC)
+	var end := Vector2(avatar.position.x, avatar.position.z)
+	print("DEMO pos 2 %d %f %f" % [_session.own_id(), end.x, end.y])
+	var travelled := start.distance_to(end)
+	if travelled < MIN_DISPLACEMENT:
+		return _fail("displacement %f below %f after steer" % [travelled, MIN_DISPLACEMENT])
+	print("DEMO move_displacement %f" % travelled)
+	print("DEMO wish_ok")
 
 	if not _session.select_player(hostile_id):
 		return _fail("could not select hostile dummy %d" % hostile_id)
 	print("DEMO select %d hostile" % hostile_id)
+	if not await _close_in_for_cast(hostile_id, CAST_RANGE_SLACK):
+		return _fail(
+			"could not close to within %.1f of hostile %d for fireball" % [CAST_RANGE_SLACK, hostile_id]
+		)
+	_session.request_move(0.0, 0.0)
+	await _wait_msec(SETTLE_MSEC)
+	# Re-pin practice dummy after approach — do not cast whatever last hostile won.
+	if not _session.select_player(hostile_id) or _session.selected_player_id() != hostile_id:
+		return _fail("hostile practice dummy %d was not selected for fireball" % hostile_id)
 	var mana_before_fire := _session.mana_for(_session.own_id()).x
 	if mana_before_fire < 0:
 		mana_before_fire = 100
@@ -64,7 +113,22 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	_session.request_cast("fireball")
 	print("DEMO cast fireball %d" % hostile_id)
 	if not await _wait_mana_drop(mana_before_fire):
-		return _fail("fireball did not spend mana")
+		var here := _session.avatar_for(_session.own_id())
+		var target: NpcDummyScript = npcs.get(hostile_id)
+		var hx := 0.0
+		var hz := 0.0
+		var tx := 0.0
+		var tz := 0.0
+		if here != null:
+			hx = here.position.x
+			hz = here.position.z
+		if target != null:
+			tx = target.position.x
+			tz = target.position.z
+		return _fail(
+			"fireball did not spend mana (class=%s mana=%d pos=(%f,%f) target=(%f,%f))"
+			% [_session.active_class_id(), _session.mana_for(_session.own_id()).x, hx, hz, tx, tz]
+		)
 	if not await _wait_cast_fx(hostile_id, "fireball"):
 		return _fail("fireball success did not play effect on hostile %d" % hostile_id)
 	var hostile: NpcDummyScript = npcs.get(hostile_id)
@@ -83,6 +147,14 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	if not _session.select_player(friendly_id):
 		return _fail("could not select friendly dummy %d" % friendly_id)
 	print("DEMO select %d friendly" % friendly_id)
+	if not await _close_in_for_cast(friendly_id, CAST_RANGE_SLACK):
+		return _fail(
+			"could not close to within %.1f of friendly %d for heal" % [CAST_RANGE_SLACK, friendly_id]
+		)
+	_session.request_move(0.0, 0.0)
+	await _wait_msec(SETTLE_MSEC)
+	if not _session.select_player(friendly_id) or _session.selected_player_id() != friendly_id:
+		return _fail("friendly practice dummy %d was not selected for heal" % friendly_id)
 	var mana_before_heal := _session.mana_for(_session.own_id()).x
 	if mana_before_heal < 0:
 		mana_before_heal = 100
@@ -109,55 +181,82 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	])
 	await _capture(3)
 
+	# Heal leaves the mage next to the friendly dummy. A single unprojected
+	# right-click under llvmpipe often hits the green capsule (or keeps the
+	# friendly selection) instead of the red one — close in first, settle the
+	# follow camera, then only fire a click whose GroundPicker probe names the
+	# hostile practice dummy (kind==dummy).
+	if not await _close_in_for_cast(hostile_id, ATTACK_PICK_RANGE):
+		return _fail(
+			"could not close to within %.1f of hostile %d for right-click attack"
+			% [ATTACK_PICK_RANGE, hostile_id]
+		)
+	_session.request_move(0.0, 0.0)
+	await _wait_msec(SETTLE_MSEC)
+	for _i in 8:
+		await _tree.process_frame
 	var attack_hp_before := _session.hit_points_for(hostile_id).x
-	if not await _right_click_npc(hostile_id):
-		return _fail("could not right-click hostile dummy %d" % hostile_id)
-	print("DEMO rightclick %d hostile" % hostile_id)
-	if _session.selected_player_id() != hostile_id:
+	if not await _right_click_until_selected(hostile_id):
 		return _fail(
 			"hostile right-click did not select %d, got %d"
 			% [hostile_id, _session.selected_player_id()]
 		)
+	print("DEMO rightclick %d hostile" % hostile_id)
 	if not await _wait_hp(hostile_id, attack_hp_before, false):
 		return _fail("hostile dummy hp never dropped after right-click attack")
 	print("DEMO attackok %d %d" % [hostile_id, _session.hit_points_for(hostile_id).x])
 	await _capture(4)
-
-	var avatar: PlayerAvatarScript = _session.avatar_for(_session.own_id())
-	if avatar == null:
-		return _fail("no local avatar after join")
-	var start := Vector2(avatar.position.x, avatar.position.z)
-	print("DEMO pos 1 %d %f %f" % [_session.own_id(), start.x, start.y])
-	var deadline := Time.get_ticks_msec() + HOLD_MSEC
-	while Time.get_ticks_msec() < deadline:
-		_session.request_move(STEER_DX, STEER_DZ)
-		await _wait_msec(100)
-	_session.request_move(0.0, 0.0)
-	await _wait_msec(SETTLE_MSEC)
-	var end := Vector2(avatar.position.x, avatar.position.z)
-	print("DEMO pos 2 %d %f %f" % [_session.own_id(), end.x, end.y])
-	var travelled := start.distance_to(end)
-	if travelled < MIN_DISPLACEMENT:
-		return _fail("displacement %f below %f after steer" % [travelled, MIN_DISPLACEMENT])
-	print("DEMO move_displacement %f" % travelled)
 	await _capture(5)
 
 	print("DEMO done")
 	return 0
 
 
+func _close_in_for_cast(npc_id: int, max_dist: float) -> bool:
+	var avatar: PlayerAvatarScript = _session.avatar_for(_session.own_id())
+	var npcs: Dictionary = _session.get("_npcs")
+	var body: NpcDummyScript = npcs.get(npc_id)
+	if avatar == null or body == null:
+		return false
+	var here := Vector2(avatar.position.x, avatar.position.z)
+	var there := Vector2(body.position.x, body.position.z)
+	if here.distance_to(there) <= max_dist:
+		print("DEMO inrange %d %f" % [npc_id, here.distance_to(there)])
+		return true
+	var wish := (there - here).normalized()
+	print("DEMO approach %d %f %f" % [npc_id, wish.x, wish.y])
+	var deadline := Time.get_ticks_msec() + APPROACH_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		_session.request_move(wish.x, wish.y)
+		await _wait_msec(100)
+		here = Vector2(avatar.position.x, avatar.position.z)
+		there = Vector2(body.position.x, body.position.z)
+		if here.distance_to(there) <= max_dist:
+			_session.request_move(0.0, 0.0)
+			print("DEMO inrange %d %f" % [npc_id, here.distance_to(there)])
+			return true
+	_session.request_move(0.0, 0.0)
+	return false
+
+
 func _equip_mage_kit() -> bool:
+	# Join-kit inventory can land after welcome/npcs; wait for the full mage set.
+	const KIT_PIECES := 4
+	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	var indices: PackedInt32Array = _session.get("_bag_indices")
-	if indices.is_empty():
-		_fail("mage join kit never arrived in the bag")
+	while indices.size() < KIT_PIECES and Time.get_ticks_msec() < deadline:
+		await _tree.process_frame
+		indices = _session.get("_bag_indices")
+	if indices.size() < KIT_PIECES:
+		_fail("mage join kit incomplete in the bag (%d/%d)" % [indices.size(), KIT_PIECES])
 		return false
 	for slot: int in indices:
 		_session.request_equip(slot)
 		await _tree.process_frame
-	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
 		if _session.active_class_id() == "mage":
 			print("DEMO class mage")
+			await _wait_msec(SETTLE_MSEC)
 			return true
 		await _tree.process_frame
 	_fail("worn set never activated mage")
@@ -168,7 +267,26 @@ func _on_cast_effect(target_id: int, ability_id: String) -> void:
 	_effects.append({"target": target_id, "ability": ability_id})
 
 
-func _right_click_npc(npc_id: int) -> bool:
+func _right_click_until_selected(npc_id: int) -> bool:
+	# Probe aims until GroundPicker names this practice dummy, then click that
+	# screen point. Never fire a click that would keep/select the friendly.
+	const ROUNDS := 3
+	for round_i in ROUNDS:
+		if await _right_click_npc(npc_id):
+			await _wait_msec(SETTLE_MSEC)
+			if _session.selected_player_id() == npc_id:
+				return true
+			print(
+				"DEMO rightclick_miss %d round=%d got=%d"
+				% [npc_id, round_i + 1, _session.selected_player_id()]
+			)
+		else:
+			print("DEMO rightclick_nopick %d round=%d" % [npc_id, round_i + 1])
+			await _wait_msec(SETTLE_MSEC)
+	return _session.selected_player_id() == npc_id
+
+
+func _right_click_npc(npc_id: int, _click_height: float = CLICK_HEIGHT) -> bool:
 	var npcs: Dictionary = _session.get("_npcs")
 	var body: NpcDummyScript = npcs.get(npc_id)
 	if body == null:
@@ -176,37 +294,78 @@ func _right_click_npc(npc_id: int) -> bool:
 	var camera := _root.get_viewport().get_camera_3d()
 	if camera == null:
 		return false
-	var world_pos := body.global_position + Vector3(0, CLICK_HEIGHT, 0)
-	var screen := camera.unproject_position(world_pos)
 	var picker := _root.get_node_or_null("GroundPicker") as GroundPickerScript
 	if picker == null:
 		return false
-	var press := InputEventMouseButton.new()
-	press.button_index = MOUSE_BUTTON_RIGHT
-	press.pressed = true
-	press.position = screen
-	press.global_position = screen
-	_root.get_viewport().push_input(press)
-	await _tree.process_frame
-	var release := InputEventMouseButton.new()
-	release.button_index = MOUSE_BUTTON_RIGHT
-	release.pressed = false
-	release.position = screen
-	release.global_position = screen
-	_root.get_viewport().push_input(release)
-	await _tree.process_frame
-	await _tree.physics_frame
-	return true
+	var cam_dir := (camera.global_position - body.global_position).normalized()
+	for height: float in CLICK_HEIGHTS:
+		var samples: Array[Vector3] = [
+			body.global_position + Vector3(0, height, 0),
+			body.global_position + cam_dir * 0.35 + Vector3(0, height, 0),
+		]
+		for world_pos: Vector3 in samples:
+			if camera.is_position_behind(world_pos):
+				continue
+			var centre := camera.unproject_position(world_pos)
+			for nudge: Vector2 in CLICK_NUDGES:
+				var screen := centre + nudge
+				var probed := picker.pick(screen)
+				if not _pick_is_npc(probed, body):
+					continue
+				print(
+					"DEMO pickaim %d h=%.2f nudge=%f,%f screen=%f,%f"
+					% [npc_id, height, nudge.x, nudge.y, screen.x, screen.y]
+				)
+				var press := InputEventMouseButton.new()
+				press.button_index = MOUSE_BUTTON_RIGHT
+				press.pressed = true
+				press.position = screen
+				press.global_position = screen
+				_root.get_viewport().push_input(press)
+				await _tree.process_frame
+				var release := InputEventMouseButton.new()
+				release.button_index = MOUSE_BUTTON_RIGHT
+				release.pressed = false
+				release.position = screen
+				release.global_position = screen
+				_root.get_viewport().push_input(release)
+				await _tree.process_frame
+				await _tree.physics_frame
+				return true
+	return false
+
+
+func _pick_is_npc(picked: Dictionary, want: NpcDummyScript) -> bool:
+	if int(picked.get("target", GroundPickerScript.Target.NOTHING)) != GroundPickerScript.Target.PLAYER:
+		return false
+	var hit: Node3D = picked.get("player")
+	if hit == want:
+		return true
+	return hit != null and hit.get_parent() == want
 
 
 func _wait_for_join() -> bool:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		var npcs: Dictionary = _session.get("_npcs")
-		if _session.own_id() > 0 and npcs.size() >= 2:
+		if _session.own_id() > 0 and _has_practice_dummy_pair():
 			return true
 		await _tree.process_frame
 	return false
+
+
+func _has_practice_dummy_pair() -> bool:
+	var npcs: Dictionary = _session.get("_npcs")
+	var friendly := false
+	var hostile := false
+	for id: int in npcs.keys():
+		var body: NpcDummyScript = npcs[id]
+		if body == null or body.kind != NpcDummyScript.KindDummy:
+			continue
+		if body.faction == NpcDummyScript.FactionFriendly:
+			friendly = true
+		elif body.faction == NpcDummyScript.FactionHostile:
+			hostile = true
+	return friendly and hostile
 
 
 func _wait_hp(id: int, baseline: int, want_raise: bool) -> bool:

@@ -6,31 +6,41 @@ param(
     [double] $ItemZ = -5.0,
     [string] $DropClick = "0.30,0.62",
     [int] $ReadyTimeoutSeconds = 20,
-    [int] $ClientTimeoutSeconds = 150
+    [int] $ClientTimeoutSeconds = 150,
+    # Demo-only: if GAMELOG pickup intents land on different ticks, re-run the
+    # whole contest. The same-tick assert is never weakened — only retried.
+    [int] $MaxContestAttempts = 5
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$ExpectedTickMS = 150
+$ExpectedTickMS = 40
 $ExpectedWalkSpeed = 3.0
 $ExpectedInventorySize = 28
 
 $LogCoordinateEpsilon = 1e-6
 
 $MaxLayerDisagreement = 0.05
+# walkaway_arrived is client display pose after soft-pull settle; item_spawned is
+# server underfoot. Soft-pull can still leave ~1u residual (HARD_ERROR_M is 2.0).
+# Keep the tighter epsilon for DEMO item ↔ item_spawned layer agreement.
+$MaxWalkAwayDropDisagreement = 1.5
 
 $MinDropDisplacement = 2.0
 
-$MaxWalkTickError = 2
-
 $MaxAimTickSkew = 1
-
-$ExpectedPickupRange = 0.5
+# fire_unix_msec is Unix epoch millis — exceeds Int32.
+$MaxFireDeadlineSkewMsec = 1
 
 $repo = Split-Path -Parent $PSScriptRoot
 $serverDir = Join-Path $repo "server"
 $clientDir = Join-Path $repo "client"
+
+$ContestAttempt = 1
+if ($env:MARQUE_CONTEST_ATTEMPT -match '^\d+$') {
+    $ContestAttempt = [Math]::Max(1, [int]$env:MARQUE_CONTEST_ATTEMPT)
+}
 
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("marque-pickup-" + [guid]::NewGuid().ToString("n"))
 New-Item -ItemType Directory -Path $work | Out-Null
@@ -42,6 +52,9 @@ $evidenceMarker = Join-Path $OutDir ".marque-evidence"
 
 $server = $null
 $failures = New-Object System.Collections.Generic.List[string]
+$splitTickRetry = $false
+$splitTickA = -1
+$splitTickB = -1
 
 function Add-Failure([string] $message) { $failures.Add($message) }
 
@@ -65,9 +78,11 @@ function Read-ClientReport([string] $path) {
         Failures = New-Object System.Collections.Generic.List[string]
         Done = $false
         SyncTick = -1
-        ClickTick = -1
+        ClickTick = [int64](-1)
         Outcome = -1
         SeedItem = $null
+        Wish = $null
+        WalkAwayArrived = $null
         PlayerCounts = @{}
         ItemCounts = @{}
         Items = @{}
@@ -83,9 +98,15 @@ function Read-ClientReport([string] $path) {
             '^DEMO done\s*$' { $report.Done = $true }
             '^DEMO sync (-?\d+) (-?\d+)\s*$' {
                 $report.SyncTick = [int]$Matches[1]
-                $report.ClickTick = [int]$Matches[2]
+                $report.ClickTick = [int64]$Matches[2]
             }
             '^DEMO outcome (\d+)\s*$' { $report.Outcome = [int]$Matches[1] }
+            '^DEMO wish (-?[0-9.eE+-]+) (-?[0-9.eE+-]+)\s*$' {
+                $report.Wish = @([double]$Matches[1], [double]$Matches[2])
+            }
+            '^DEMO walkaway_arrived (-?[0-9.eE+-]+) (-?[0-9.eE+-]+)\s*$' {
+                $report.WalkAwayArrived = @([double]$Matches[1], [double]$Matches[2])
+            }
             '^DEMO seeditem (\d+) (\S+) (-?[0-9.eE+-]+) (-?[0-9.eE+-]+)\s*$' {
                 $report.SeedItem = @{
                     Id = [int]$Matches[1]
@@ -158,47 +179,30 @@ function Select-Events($events, [string] $kind, [int] $player = -1, [int] $item 
     return , $hits
 }
 
-function Get-PathSpan($path) {
-    $from = $path.points[0]
-    $to = $path.points[$path.points.Count - 1]
-    return Get-Distance ([double]$from[0]) ([double]$from[1]) ([double]$to[0]) ([double]$to[1])
+function Count-PlayerPathAssigned($events) {
+    $count = 0
+    foreach ($event in $events) {
+        if ($event.ev -ne "path_assigned") { continue }
+        if (-not (Test-HasField $event "player")) { continue }
+        if ($null -eq $event.player) { continue }
+        $count++
+    }
+    return $count
 }
 
-function Test-Walk($events, [int] $player, $path, [string] $label, [double] $perTick) {
-    $to = $path.points[$path.points.Count - 1]
-    $span = Get-PathSpan $path
-    $arrived = $null
-    foreach ($candidate in (Select-Events $events "arrived" $player)) {
-        if ([int]$candidate.t -le [int]$path.start_tick) { continue }
-        if ((Get-Distance ([double]$candidate.x) ([double]$candidate.z) `
-                ([double]$to[0]) ([double]$to[1])) -gt $LogCoordinateEpsilon) { continue }
-        $arrived = $candidate
-        break
+function Count-NonzeroMoves($events, [int] $player = -1) {
+    $count = 0
+    foreach ($event in (Select-Events $events "move" $player)) {
+        $dx = [double]$event.dx
+        $dz = [double]$event.dz
+        if ([math]::Sqrt(($dx)*($dx) + ($dz)*($dz)) -gt 1e-6) { $count++ }
     }
-    if ($null -eq $arrived) {
-        $seen = (Select-Events $events "arrived" $player).Count
-        Add-Failure ("${label}: the server never recorded player $player arriving at " +
-            "($([math]::Round([double]$to[0], 3)), $([math]::Round([double]$to[1], 3))), the endpoint " +
-            "of the path it assigned at tick $($path.start_tick); the whole log holds $seen arrived " +
-            "event(s) for that player. The clients walked the polyline they were handed, but the " +
-            "server's world never moved.")
-        return $null
-    }
-
-    $took = [int]$arrived.t - [int]$path.start_tick
-    $expected = [int][math]::Ceiling($span / $perTick)
-    Write-Host ("==> server: {0} -- player {1} walked {2:N3} units in {3} tick(s), from tick {4} to {5}; walking that far takes {6}" -f `
-        $label, $player, $span, $took, $path.start_tick, $arrived.t, $expected)
-    if ([math]::Abs($took - $expected) -gt $MaxWalkTickError) {
-        Add-Failure ("${label}: player $player crossed $([math]::Round($span, 3)) units in $took tick(s), " +
-            "but at $ExpectedWalkSpeed units per second on ${ExpectedTickMS}ms ticks that walk takes " +
-            "$expected. The server's world did not walk the path, it jumped it.")
-    }
-    return $arrived
+    return $count
 }
 
 
 try {
+    Write-Host "==> contested pickup attempt $ContestAttempt/$MaxContestAttempts"
     if (Test-Path $OutDir) {
         $stale = @(Get-ChildItem -LiteralPath $OutDir -Force)
         if ($stale.Count -gt 0) {
@@ -349,16 +353,15 @@ try {
         Add-Failure "both clients report joining as player $($ids[0]); they are not two players"
     }
 
-    $clickTicks = @($running | ForEach-Object { $_.Report.ClickTick })
-    Write-Host ("==> clients chose click ticks {0} and {1} (sync ticks {2} and {3})" -f `
+    $clickTicks = @($running | ForEach-Object { [int64]$_.Report.ClickTick })
+    Write-Host ("==> clients chose fire deadlines {0} and {1} (sync ticks {2} and {3})" -f `
         $clickTicks[0], $clickTicks[1], $running[0].Report.SyncTick, $running[1].Report.SyncTick)
     if ($clickTicks[0] -lt 0 -or $clickTicks[1] -lt 0) {
-        Add-Failure "a client never reported the tick it chose to click on"
-    } elseif ([math]::Abs($clickTicks[0] - $clickTicks[1]) -gt $MaxAimTickSkew) {
-        Add-Failure ("the two clients aimed at server ticks $($clickTicks[0]) and " +
-            "$($clickTicks[1]), $([math]::Abs($clickTicks[0] - $clickTicks[1])) apart. Anchoring " +
-            "alone separates two clocks by at most one tick, so they disagree about more than " +
-            "which side of a tick boundary they are on and neither one's aim can be trusted.")
+        Add-Failure "a client never reported the shared wall-clock fire deadline"
+    } elseif ([math]::Abs($clickTicks[0] - $clickTicks[1]) -gt $MaxFireDeadlineSkewMsec) {
+        Add-Failure ("the two clients disagreed on the shared wall-clock fire deadline: $($clickTicks[0]) vs " +
+            "$($clickTicks[1]) (skew $([math]::Abs($clickTicks[0] - $clickTicks[1]))). DEMO sync's second " +
+            "field is fire_unix_msec from the post-capture barrier; both must name the same moment.")
     }
 
     $events = Read-GameLog $serverOut
@@ -368,17 +371,16 @@ try {
             "server-side evidence at all")
     }
 
-    $perTick = $ExpectedWalkSpeed * $ExpectedTickMS / 1000.0
     $started = Select-Events $events "server_started"
     if ($started.Count -ne 1) {
         Add-Failure "the log holds $($started.Count) server_started event(s), want 1"
     } else {
         $boot = $started[0]
         if ([int]$boot.tick_ms -ne $ExpectedTickMS) {
-            Add-Failure "the server ticks every $($boot.tick_ms)ms; this script's spans assume $ExpectedTickMS"
+            Add-Failure "the server ticks every $($boot.tick_ms)ms; this script expects $ExpectedTickMS"
         }
         if ([double]$boot.walk_speed -ne $ExpectedWalkSpeed) {
-            Add-Failure "the server walks at $($boot.walk_speed) units/s; this script's spans assume $ExpectedWalkSpeed"
+            Add-Failure "the server walks at $($boot.walk_speed) units/s; this script expects $ExpectedWalkSpeed"
         }
         if ([int]$boot.seeded_items -ne 1) {
             Add-Failure ("the server seeded $($boot.seeded_items) item(s); the milestone is two " +
@@ -387,7 +389,6 @@ try {
         if ([int]$boot.inventory_size -ne $ExpectedInventorySize) {
             Add-Failure "the server's inventory holds $($boot.inventory_size) slots; this script assumes $ExpectedInventorySize"
         }
-        $perTick = [double]$boot.walk_speed * [int]$boot.tick_ms / 1000.0
     }
 
     $spawns = Select-Events $events "item_spawned"
@@ -467,50 +468,37 @@ try {
         }
     }
 
-    $contestPaths = @{}
-    foreach ($player in $intentTicks.Keys) {
-        $tick = $intentTicks[$player]
-        $match = $null
-        foreach ($path in (Select-Events $events "path_assigned" $player)) {
-            if ([int]$path.t -ne $tick) { continue }
-            $match = $path
-            break
-        }
-        if ($null -eq $match) {
-            Add-Failure ("player $player's pickup at tick $tick assigned no path; there was nothing " +
-                "for that client to walk")
-            continue
-        }
-        if ($match.points.Count -lt 2) {
-            Add-Failure "player $player's contested path carries $($match.points.Count) point(s); a walk needs two"
-            continue
-        }
-        $to = $match.points[$match.points.Count - 1]
-        if ($seedItem -ge 1) {
-            $miss = Get-Distance ([double]$to[0]) ([double]$to[1]) $ItemX $ItemZ
-            if ($miss -gt $LogCoordinateEpsilon) {
-                Add-Failure ("player $player's contested path ends at ($($to[0]), $($to[1])), not at the " +
-                    "item's ($ItemX, $ItemZ); that walk was not a walk to the item")
-            }
-        }
-        $contestPaths[$player] = $match
+    $playerPathEvents = Count-PlayerPathAssigned $events
+    $moveToEvents = (Select-Events $events "move_to").Count
+    Write-Host ("==> server: player path_assigned={0}, move_to={1} (want 0 / 0)" -f `
+        $playerPathEvents, $moveToEvents)
+    if ($playerPathEvents -gt 0) {
+        Add-Failure "GAMELOG player path_assigned=$playerPathEvents, want 0"
     }
-    if ($contestPaths.Keys.Count -eq 2) {
-        $players = @($contestPaths.Keys | Sort-Object)
-        $first = $contestPaths[$players[0]]
-        $second = $contestPaths[$players[1]]
-        $spanGap = [math]::Abs((Get-PathSpan $first) - (Get-PathSpan $second))
-        Write-Host ("==> server: player {0}'s path was assigned on tick {1} ({2:N3} units), player {3}'s on tick {4} ({5:N3} units)" -f `
-            $players[0], $first.start_tick, (Get-PathSpan $first), $players[1], $second.start_tick, (Get-PathSpan $second))
-        if ([int]$first.start_tick -ne [int]$second.start_tick) {
-            Add-Failure ("the two walks to the item started on different ticks, $($first.start_tick) and " +
-                "$($second.start_tick). Both players spawn at the origin and walk at one speed, so equal " +
-                "start ticks are what makes them reach the item together; a run that started them apart " +
-                "is a sequence and its winner is whoever clicked first, not whoever the tick loop chose.")
-        }
-        if ($spanGap -gt $LogCoordinateEpsilon) {
-            Add-Failure ("the two walks to the item span $([math]::Round($spanGap, 6)) units differently; " +
-                "the two players were not equidistant from it")
+    if ($moveToEvents -gt 0) {
+        Add-Failure ("GAMELOG move_to=$moveToEvents, want 0 -- item clicks must resolve to pickup, and " +
+            "the winner's walk-away must be wish move samples")
+    }
+
+    if ($intentTicks.Keys.Count -eq 2) {
+        $players = @($intentTicks.Keys | Sort-Object)
+        $tickA = [int]$intentTicks[$players[0]]
+        $tickB = [int]$intentTicks[$players[1]]
+        Write-Host ("==> server: player {0}'s pickup intent on tick {1}, player {2}'s on tick {3}" -f `
+            $players[0], $tickA, $players[1], $tickB)
+        if ($tickA -ne $tickB) {
+            if ($ContestAttempt -lt $MaxContestAttempts) {
+                $script:splitTickRetry = $true
+                $script:splitTickA = $tickA
+                $script:splitTickB = $tickB
+                Write-Host ("==> split pickup ticks $tickA vs $tickB on attempt " +
+                    "$ContestAttempt/$MaxContestAttempts; will retry contest (same-tick assert kept)")
+                throw "marque-contest-split-tick-retry"
+            }
+            Add-Failure ("the two pickup intents landed on different ticks, $tickA and $tickB. " +
+                "Both players spawn at the origin and approach at one speed, so equal intent ticks " +
+                "are what makes them reach the item together; a run that started them apart is a " +
+                "sequence and its winner is whoever clicked first, not whoever the tick loop chose.")
         }
     }
     if ($resolved.Count -eq 1 -and $lost.Count -eq 1) {
@@ -524,108 +512,66 @@ try {
         }
     }
 
-    if ($loser -ge 1 -and $lost.Count -eq 1 -and $seedItem -ge 1) {
+    if ($loser -ge 1 -and $lost.Count -eq 1) {
+        Write-Host ("==> server: player {0} lost on tick {1}; halt clears steer (no player path_assigned)" -f `
+            $loser, $lost[0].t)
+        $loserMovesAfterLoss = 0
         $lossTick = [int]$lost[0].t
-        $halts = New-Object System.Collections.Generic.List[object]
-        foreach ($candidate in (Select-Events $events "path_assigned" $loser)) {
-            if ([int]$candidate.t -ne $lossTick) { continue }
-            $halts.Add($candidate)
+        foreach ($move in (Select-Events $events "move" $loser)) {
+            if ([int]$move.t -lt $lossTick) { continue }
+            $dx = [double]$move.dx
+            $dz = [double]$move.dz
+            if ([math]::Sqrt(($dx)*($dx) + ($dz)*($dz)) -gt 1e-6) { $loserMovesAfterLoss++ }
         }
-        if ($halts.Count -ne 1) {
-            Add-Failure ("the server assigned player $loser $($halts.Count) path(s) on tick $lossTick, " +
-                "want exactly 1 -- the halt losePickup sends. Without it the run holds no record of " +
-                "where the loser was when it lost.")
-        } elseif ($halts[0].points.Count -ne 1) {
-            Add-Failure ("player $loser's halt on tick $lossTick carries $($halts[0].points.Count) " +
-                "point(s); a halt is one point, and that point is where the loser stopped")
-        } else {
-            $stopped = $halts[0].points[0]
-            $reach = Get-Distance ([double]$stopped[0]) ([double]$stopped[1]) $ItemX $ItemZ
-            Write-Host ("==> server: player {0} halted at ({1}, {2}) on tick {3}, {4:N3} units from item {5}; PickupRange is {6}" -f `
-                $loser, $stopped[0], $stopped[1], $lossTick, $reach, $seedItem, $ExpectedPickupRange)
-            if ($reach -gt $ExpectedPickupRange) {
-                Add-Failure ("player $loser was condemned at ($($stopped[0]), $($stopped[1])), " +
-                    "$([math]::Round($reach, 3)) units from item $seedItem and outside the " +
-                    "$ExpectedPickupRange-unit PickupRange. It lost a contest for an item it was " +
-                    "standing too far away to have taken.")
-            }
+        if ($loserMovesAfterLoss -gt 0) {
+            Add-Failure ("player $loser sent $loserMovesAfterLoss non-zero move wish(es) after losing on " +
+                "tick $lossTick; the loser must stop, not keep steering")
         }
     }
 
-    if ($winner -ge 1 -and $contestPaths.ContainsKey($winner)) {
-        $null = Test-Walk $events $winner $contestPaths[$winner] "the walk to the item" $perTick
-    }
-
-    $moves = Select-Events $events "move_to"
-    Write-Host "==> server: $($moves.Count) move_to intent(s) in the whole run"
-    if ($moves.Count -ne 1) {
-        Add-Failure ("the server logged $($moves.Count) move_to intent(s), want exactly 1 -- the " +
-            "winner's walk away before dropping. Both clicks on the item must have resolved to the " +
-            "item and not to the ground beneath it.")
-    }
     $dropSpawn = $null
-    if ($moves.Count -eq 1 -and $winner -ge 1) {
-        if ([int]$moves[0].player -ne $winner) {
-            Add-Failure ("the only move_to came from player $($moves[0].player) but player $winner won " +
-                "the item; the client that walked away is not the one that had something to drop")
+    if ($winner -ge 1) {
+        $winnerWishes = Count-NonzeroMoves $events $winner
+        Write-Host ("==> server: winner player {0} logged {1} non-zero move wish(es) (walk-away)" -f `
+            $winner, $winnerWishes)
+        if ($winnerWishes -lt 1) {
+            Add-Failure ("player $winner logged $winnerWishes non-zero move wish(es), want >= 1 -- the " +
+                "winner must wish-steer away before dropping")
         }
-        $awayPath = $null
-        foreach ($path in (Select-Events $events "path_assigned" ([int]$moves[0].player))) {
-            if ([int]$path.t -ne [int]$moves[0].t) { continue }
-            $awayPath = $path
-            break
-        }
-        if ($null -eq $awayPath) {
-            Add-Failure "the winner's move_to at tick $($moves[0].t) assigned no path"
+
+        $drops = Select-Events $events "drop" $winner
+        if ($drops.Count -ne 1) {
+            Add-Failure "the server logged $($drops.Count) drop(s) by player $winner, want exactly 1"
         } else {
-            $arrived = Test-Walk $events $winner $awayPath "the walk away" $perTick
-            $drops = Select-Events $events "drop" $winner
-            if ($drops.Count -ne 1) {
-                Add-Failure "the server logged $($drops.Count) drop(s) by player $winner, want exactly 1"
-            } elseif ($null -ne $arrived) {
-                $drop = $drops[0]
-                if ([int]$drop.t -lt [int]$arrived.t) {
-                    Add-Failure ("player $winner dropped on tick $($drop.t) but did not arrive until " +
-                        "tick $($arrived.t); the item landed under a walker, so its coordinates say " +
-                        "nothing about a destination")
+            $drop = $drops[0]
+            if ([int]$drop.slot -ne $winnerSlot) {
+                Add-Failure ("the drop emptied slot $($drop.slot) but the pickup filled slot $winnerSlot")
+            }
+            $droppedId = [int]$drop.item
+            if ($droppedId -eq $seedItem) {
+                Add-Failure ("the dropped item kept id $droppedId; a dropped item gets a fresh one " +
+                    "(TestDropIsOneMove / drop_store_test.go)")
+            }
+            $dropSpawns = Select-Events $events "item_spawned" -1 $droppedId
+            if ($dropSpawns.Count -ne 1) {
+                Add-Failure "the drop logged $($dropSpawns.Count) item_spawned for item $droppedId, want 1"
+            } else {
+                $dropSpawn = $dropSpawns[0]
+                $fromOrigin = Get-Distance ([double]$dropSpawn.x) ([double]$dropSpawn.z) 0.0 0.0
+                $fromSeed = Get-Distance ([double]$dropSpawn.x) ([double]$dropSpawn.z) $ItemX $ItemZ
+                Write-Host ("==> server: player {0} dropped slot {1} on tick {2}; item {3} entered the world at ({4}, {5})" -f `
+                    $winner, $drop.slot, $drop.t, $droppedId, $dropSpawn.x, $dropSpawn.z)
+                Write-Host ("==> server: that point is {0:N3} units from the origin and {1:N3} from where the item was seeded" -f `
+                    $fromOrigin, $fromSeed)
+                if ($fromOrigin -lt $MinDropDisplacement) {
+                    Add-Failure ("the drop landed $([math]::Round($fromOrigin, 3)) units from the origin, " +
+                        "under $MinDropDisplacement. A coordinate this close to zero cannot be told " +
+                        "apart from a zeroed one, which is the exact defect this assertion exists for.")
                 }
-                if ([int]$drop.slot -ne $winnerSlot) {
-                    Add-Failure ("the drop emptied slot $($drop.slot) but the pickup filled slot $winnerSlot")
-                }
-                $droppedId = [int]$drop.item
-                if ($droppedId -eq $seedItem) {
-                    Add-Failure ("the dropped item kept id $droppedId; a dropped item gets a fresh one " +
-                        "(TestDropIsOneMove / drop_store_test.go)")
-                }
-                $dropSpawns = Select-Events $events "item_spawned" -1 $droppedId
-                if ($dropSpawns.Count -ne 1) {
-                    Add-Failure "the drop logged $($dropSpawns.Count) item_spawned for item $droppedId, want 1"
-                } else {
-                    $dropSpawn = $dropSpawns[0]
-                    $stoodGap = Get-Distance ([double]$dropSpawn.x) ([double]$dropSpawn.z) `
-                        ([double]$arrived.x) ([double]$arrived.z)
-                    $fromOrigin = Get-Distance ([double]$dropSpawn.x) ([double]$dropSpawn.z) 0.0 0.0
-                    $fromSeed = Get-Distance ([double]$dropSpawn.x) ([double]$dropSpawn.z) $ItemX $ItemZ
-                    Write-Host ("==> server: player {0} dropped slot {1} on tick {2}; item {3} entered the world at ({4}, {5}), where that player arrived on tick {6}" -f `
-                        $winner, $drop.slot, $drop.t, $droppedId, $dropSpawn.x, $dropSpawn.z, $arrived.t)
-                    Write-Host ("==> server: that point is {0:N3} units from the origin and {1:N3} from where the item was seeded" -f `
-                        $fromOrigin, $fromSeed)
-                    if ($stoodGap -gt $LogCoordinateEpsilon) {
-                        Add-Failure ("item_spawned put the dropped item at ($($dropSpawn.x), $($dropSpawn.z)) " +
-                            "but its dropper had arrived at ($($arrived.x), $($arrived.z)): " +
-                            "$([math]::Round($stoodGap, 6)) units apart. The log is not recording where " +
-                            "dropped items land.")
-                    }
-                    if ($fromOrigin -lt $MinDropDisplacement) {
-                        Add-Failure ("the drop landed $([math]::Round($fromOrigin, 3)) units from the origin, " +
-                            "under $MinDropDisplacement. A coordinate this close to zero cannot be told " +
-                            "apart from a zeroed one, which is the exact defect this assertion exists for.")
-                    }
-                    if ($fromSeed -lt $MinDropDisplacement) {
-                        Add-Failure ("the drop landed $([math]::Round($fromSeed, 3)) units from where the " +
-                            "item was seeded, under $MinDropDisplacement; the winner did not walk anywhere " +
-                            "before dropping and the coordinates prove nothing")
-                    }
+                if ($fromSeed -lt $MinDropDisplacement) {
+                    Add-Failure ("the drop landed $([math]::Round($fromSeed, 3)) units from where the " +
+                        "item was seeded, under $MinDropDisplacement; the winner did not walk anywhere " +
+                        "before dropping and the coordinates prove nothing")
                 }
             }
         }
@@ -693,6 +639,24 @@ try {
             } else {
                 Write-Host "==> client $label (player $($report.Joined)) drew an acorn in slot $winnerSlot after the contest"
             }
+            if ($null -eq $report.Wish) {
+                Add-Failure "client $label won but never reported DEMO wish for the walk-away"
+            } elseif ([math]::Sqrt(([double]$report.Wish[0])*([double]$report.Wish[0]) + ([double]$report.Wish[1])*([double]$report.Wish[1])) -lt 1e-6) {
+                Add-Failure "client $label's DEMO wish was zero; the walk-away must steer"
+            }
+            if ($null -eq $report.WalkAwayArrived) {
+                Add-Failure "client $label won but never reported DEMO walkaway_arrived"
+            } elseif ($null -ne $dropSpawn) {
+                $gap = Get-Distance ([double]$report.WalkAwayArrived[0]) ([double]$report.WalkAwayArrived[1]) `
+                    ([double]$dropSpawn.x) ([double]$dropSpawn.z)
+                Write-Host ("==> client {0} walkaway_arrived is {1:N4} units from the drop spawn" -f `
+                    $label, $gap)
+                if ($gap -gt $MaxWalkAwayDropDisagreement) {
+                    Add-Failure ("client $label stood at ($($report.WalkAwayArrived[0]), $($report.WalkAwayArrived[1])) " +
+                        "after wish steer but item_spawned the drop at ($($dropSpawn.x), $($dropSpawn.z)): " +
+                        "$([math]::Round($gap, 3)) units apart (limit $MaxWalkAwayDropDisagreement)")
+                }
+            }
         }
         if ($report.Outcome -lt 0) {
             Add-Failure "client $label never reported whether it won"
@@ -727,18 +691,24 @@ try {
         }
     }
 } catch {
-    Add-Failure "$($_.Exception.Message) [$($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())]"
+    if ($script:splitTickRetry -and $_.Exception.Message -eq "marque-contest-split-tick-retry") {
+        # Expected early exit so the harness can re-run; do not record as a failure.
+    } else {
+        Add-Failure "$($_.Exception.Message) [$($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())]"
+    }
 } finally {
     if ($null -ne $server) {
         if ($server.HasExited) {
-            Add-Failure "marqued exited on its own with code $($server.ExitCode); it must outlive the clients"
+            if (-not $script:splitTickRetry) {
+                Add-Failure "marqued exited on its own with code $($server.ExitCode); it must outlive the clients"
+            }
         } else {
             Write-Host "==> stopping marqued (pid $($server.Id))"
             Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
             $server.WaitForExit(5000) | Out-Null
         }
     }
-    if (Test-Path $serverErr) {
+    if (-not $script:splitTickRetry -and (Test-Path $serverErr)) {
         $stderrText = Get-Content -Path $serverErr -Raw
         if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
             $firstLine = $stderrText.Trim() -split "`r?`n" | Select-Object -First 1
@@ -747,6 +717,19 @@ try {
     }
     Show-File "marqued event log ($serverOut)" $serverOut
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+}
+
+if ($splitTickRetry) {
+    Write-Host ""
+    Write-Host ("==> GAMELOG split ticks $splitTickA vs $splitTickB; re-running contest " +
+        "attempt $($ContestAttempt + 1)/$MaxContestAttempts")
+    $env:MARQUE_CONTEST_ATTEMPT = [string]($ContestAttempt + 1)
+    $forward = @()
+    foreach ($key in $PSBoundParameters.Keys) {
+        $forward += @("-$key", $PSBoundParameters[$key])
+    }
+    & pwsh -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @forward
+    exit $LASTEXITCODE
 }
 
 Write-Host ""

@@ -66,6 +66,15 @@ func next_guard_usec(from_usec: int, guard_usec: int) -> int:
 	return from_usec + (_tick_usec - phase) + guard_usec
 
 
+# Local usec of the first instant whose estimated_tick is [param tick]. Two
+# clients that share an aim tick convert through their own anchors and still
+# name the same server-side moment.
+func start_usec_of(tick: int) -> int:
+	if not is_anchored() or _tick_usec <= 0:
+		return 0
+	return _anchor_usec + (tick - _anchor_tick) * _tick_usec
+
+
 func tick_ms() -> int:
 	if not is_anchored():
 		return 0
