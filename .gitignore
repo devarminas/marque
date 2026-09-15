@@ -32,6 +32,3 @@ export_presets.cfg
 # so every worker's `git status` grew two or three untracked files it must not
 # commit and must not delete either, because the ledger quotes their tail lines.
 out-*.txt
-
-# Python bytecode from the art/ generator
-__pycache__/
