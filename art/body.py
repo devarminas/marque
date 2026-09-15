@@ -303,7 +303,7 @@ IMP_SHAPES["hips"] = (*IMP_SHAPES["hips"], *IMP_TAIL)
 SHAPES: dict[str, dict[str, tuple[Shape, ...]]] = {"human": HUMAN_SHAPES, "imp": IMP_SHAPES}
 
 PALETTES: dict[str, dict[Paint, Vec3]] = {
-    "human": {"body": (0.86, 0.47, 0.2), "joint": (0.4, 0.3, 0.52)},
+    "human": {"body": (0.815, 0.361, 0.044), "joint": (0.332, 0.198, 0.672)},
     "imp": {"body": (0.66, 0.18, 0.13), "joint": (0.1, 0.05, 0.12), "horn": (0.86, 0.8, 0.62)},
 }
 
