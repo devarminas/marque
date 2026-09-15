@@ -242,6 +242,8 @@ func _ready() -> void:
 	_net.party_invite_notice_changed.connect(_on_party_invite_notice_changed)
 	_net.admin_reply_received.connect(_on_admin_reply_received)
 	_net.equipment_changed.connect(_on_equipment_changed)
+	_net.worn_changed.connect(_on_worn_changed)
+	_net.swing_observed.connect(_on_swing_observed)
 	_net.class_changed.connect(_on_class_changed)
 	_net.skills_changed.connect(_on_skills_changed)
 	_net.hp_changed.connect(_on_hp_changed)
@@ -1635,12 +1637,28 @@ func _give_should_open() -> bool:
 func _on_equipment_changed(
 	worn_names: PackedStringArray, slot_names: PackedStringArray, slot_kinds: PackedStringArray
 ) -> void:
-	if _local != null:
-		_local.apply_equipment(slot_names, slot_kinds)
 	if _equipment == null:
 		push_error("session: equipment arrived with no panel to draw it")
 		return
 	_equipment.apply(worn_names, slot_names, slot_kinds)
+
+
+func _on_worn_changed(id: int, slot_names: PackedStringArray, slot_kinds: PackedStringArray) -> void:
+	var avatar: PlayerAvatarScript = _avatars.get(id)
+	if avatar == null:
+		push_warning("session: worn for unknown player %d; ignoring" % id)
+		return
+	avatar.apply_equipment(slot_names, slot_kinds)
+
+
+func _on_swing_observed(id: int, _target: int, weapon: String) -> void:
+	var avatar: PlayerAvatarScript = _avatars.get(id)
+	if avatar != null:
+		avatar.swing(weapon)
+		return
+	if _npcs.has(id):
+		return
+	push_warning("session: swing for unknown actor %d; ignoring" % id)
 
 
 func _on_class_changed(

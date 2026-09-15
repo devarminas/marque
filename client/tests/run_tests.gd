@@ -30,6 +30,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "art contract", "script": preload("res://tests/test_art_contract.gd")},
 	{"name": "gear look", "script": preload("res://tests/test_gear_look.gd")},
 	{"name": "clip director", "script": preload("res://tests/test_clip_director.gd")},
+	{"name": "presentation protocol", "script": preload("res://tests/test_presentation_protocol.gd")},
 ]
 
 const SCENE_SUITES: Array = [

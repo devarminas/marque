@@ -27,6 +27,13 @@ const WELCOME_FRAME := (
 	+ '"players":[{"id":1,"x":0,"z":0,"hp":100,"max_hp":100}]}}'
 )
 
+const WELCOME_TWO_FRAME := (
+	'{"welcome":{"you":1,"tick_ms":150,"tick":1,"heartbeat_ticks":10,"players":['
+	+ '{"id":1,"x":0,"z":0,"hp":100,"max_hp":100,"worn":[]},'
+	+ '{"id":2,"x":3,"z":0,"hp":100,"max_hp":100,"worn":[{"slot":"helmet","kind":"plate_helm"},{"slot":"right hand","kind":"sword"}]}'
+	+ "]}}"
+)
+
 @onready var _avatars: Node3D = $Avatars
 @onready var _world: Node3D = $World
 
@@ -59,7 +66,7 @@ func _ready() -> void:
 	_test_a_knight_kit_shows_its_pieces_and_hides_the_regions_they_cover()
 	_test_every_tool_reads_against_a_player_sized_avatar()
 	await _test_a_detached_body_leaves_the_socket_where_it_was()
-	await _test_an_equipment_frame_arms_the_local_avatar()
+	await _test_worn_frames_dress_local_and_remote_avatars()
 
 	_finished = true
 
@@ -267,7 +274,7 @@ func _test_a_detached_body_leaves_the_socket_where_it_was() -> void:
 	avatar.queue_free()
 
 
-func _test_an_equipment_frame_arms_the_local_avatar() -> void:
+func _test_worn_frames_dress_local_and_remote_avatars() -> void:
 	var root := MainScene.instantiate() as Node3D
 	root.name = "GripClient"
 	_world.add_child(root)
@@ -276,35 +283,68 @@ func _test_an_equipment_frame_arms_the_local_avatar() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	net.ingest_text_frame(WELCOME_FRAME)
+	net.ingest_text_frame(WELCOME_TWO_FRAME)
 	await get_tree().process_frame
 	var local := session.avatar_for(1) as PlayerAvatar
-	_assertions.check(local != null, "the session hands back the local avatar after welcome")
-	if local == null:
+	var remote := session.avatar_for(2) as PlayerAvatar
+	_assertions.check(local != null and remote != null, "welcome builds the local and the remote avatar")
+	if local == null or remote == null:
 		root.queue_free()
 		return
-	_assertions.check(_visible_grip_nodes(local).is_empty(), "welcome leaves the local avatar empty-handed")
-
-	net.ingest_text_frame(_equipment_frame([GripDefs.GRIP_HAND, "helmet"], ["sword", "plate_helm"]))
-	await get_tree().process_frame
 	_assertions.check(
-		_visible_grip_nodes(local) == PackedStringArray(["right hand/sword"]),
-		"an equipment frame arms the local avatar with exactly the sword, got [%s]" % ", ".join(_visible_grip_nodes(local)),
+		_visible_grip_nodes(local).is_empty() and local.visual().shown_pieces().is_empty(),
+		"welcome worn [] leaves the local avatar bare",
 	)
-	_assertions.check(local.visual().shown_pieces() == PackedStringArray(["plate_helm"]), "and draws the helm")
+	_assertions.check(
+		remote.visual().shown_pieces() == PackedStringArray(["plate_helm"])
+		and _visible_grip_nodes(remote) == PackedStringArray(["right hand/sword"]),
+		"welcome worn dresses the remote avatar in its helm and sword, got %s [%s]"
+		% [remote.visual().shown_pieces(), ", ".join(_visible_grip_nodes(remote))],
+	)
 
-	net.ingest_text_frame(_equipment_frame([GripDefs.OFF_HAND, GripDefs.GRIP_HAND], ["lumberjack_axe", "lumberjack_axe"]))
+	net.ingest_text_frame(_equipment_frame([GripDefs.GRIP_HAND], ["sword"]))
+	await get_tree().process_frame
+	_assertions.check(_visible_grip_nodes(local).is_empty(), "the owner-only equipment frame feeds the panel, not the avatar")
+
+	net.ingest_text_frame('{"worn":{"id":1,"slots":[{"slot":"right hand","kind":"sword"},{"slot":"helmet","kind":"plate_helm"}]}}')
 	await get_tree().process_frame
 	_assertions.check(
-		_visible_grip_nodes(local) == PackedStringArray(["right hand/lumberjack_axe"]) and local.visual().shown_pieces().is_empty(),
-		"a two-handed frame draws one axe and drops the helm, got [%s]" % ", ".join(_visible_grip_nodes(local)),
+		_visible_grip_nodes(local) == PackedStringArray(["right hand/sword"])
+		and local.visual().shown_pieces() == PackedStringArray(["plate_helm"]),
+		"a worn frame for our own id dresses the local avatar, got [%s]" % ", ".join(_visible_grip_nodes(local)),
+	)
+
+	net.ingest_text_frame(
+		'{"worn":{"id":2,"slots":[{"slot":"left hand","kind":"lumberjack_axe"},{"slot":"right hand","kind":"lumberjack_axe"}]}}'
+	)
+	await get_tree().process_frame
+	_assertions.check(
+		_visible_grip_nodes(remote) == PackedStringArray(["right hand/lumberjack_axe"])
+		and remote.visual().shown_pieces().is_empty(),
+		"a worn frame restates the remote avatar wholesale, got [%s]" % ", ".join(_visible_grip_nodes(remote)),
+	)
+
+	var swing := CharacterVisual.contract().clip_for("swing", "")
+	net.ingest_text_frame('{"swing":{"id":2,"target":1,"weapon":"unarmed"}}')
+	_assertions.check(
+		remote.visual().current_clip() == swing and local.visual().current_clip() != swing,
+		"a swing frame swings only the attacker's visual, got %s and %s"
+		% [remote.visual().current_clip(), local.visual().current_clip()],
+	)
+
+	net.ingest_text_frame('{"spawn":{"id":3,"x":2,"z":2,"worn":[{"slot":"feet","kind":"prospector_boots"}]}}')
+	await get_tree().process_frame
+	var late := session.avatar_for(3) as PlayerAvatar
+	_assertions.check(
+		late != null and late.visual().shown_pieces() == PackedStringArray(["prospector_boots"]),
+		"a spawn carries the joiner's gear",
 	)
 
 	net.ingest_text_frame(WELCOME_FRAME)
 	await get_tree().process_frame
 	_assertions.check(
-		_visible_grip_nodes(local).is_empty(),
-		"a fresh welcome drops it, so a rejoin cannot show the last session's tool, got [%s]" % ", ".join(_visible_grip_nodes(local)),
+		_visible_grip_nodes(local).is_empty() and local.visual().shown_pieces().is_empty(),
+		"a fresh welcome drops the last session's gear, got [%s]" % ", ".join(_visible_grip_nodes(local)),
 	)
 	root.queue_free()
 
