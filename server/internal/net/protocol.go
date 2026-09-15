@@ -52,6 +52,8 @@ const (
 	MsgPartyDecline = "party_decline"
 	MsgPartyLeave   = "party_leave"
 	MsgPartyKick    = "party_kick"
+	MsgAdmin        = "admin"
+	MsgAdminReply   = "admin_reply"
 
 	OptionAcceptQuest = "accept_quest"
 	OptionTurnInQuest = "turn_in_quest"
@@ -59,14 +61,15 @@ const (
 )
 
 type PlayerState struct {
-	ID      PlayerID `json:"id"`
-	X       float64  `json:"x"`
-	Y       float64  `json:"y"`
-	Z       float64  `json:"z"`
-	HP      int      `json:"hp"`
-	MaxHP   int      `json:"max_hp"`
-	Mana    int      `json:"mana"`
-	MaxMana int      `json:"max_mana"`
+	ID      PlayerID        `json:"id"`
+	X       float64         `json:"x"`
+	Y       float64         `json:"y"`
+	Z       float64         `json:"z"`
+	HP      int             `json:"hp"`
+	MaxHP   int             `json:"max_hp"`
+	Mana    int             `json:"mana"`
+	MaxMana int             `json:"max_mana"`
+	Worn    []EquipmentSlot `json:"worn"`
 }
 
 type ItemState struct {
@@ -223,6 +226,37 @@ type Casting struct {
 	Total    int    `json:"total"`
 }
 
+type Swing struct {
+	ID     PlayerID `json:"id"`
+	Target PlayerID `json:"target"`
+	Weapon string   `json:"weapon"`
+}
+
+type CastPhaseKind string
+
+const (
+	CastPhaseBegin   CastPhaseKind = "begin"
+	CastPhaseResolve CastPhaseKind = "resolve"
+	CastPhaseCancel  CastPhaseKind = "cancel"
+)
+
+type CastPhase struct {
+	ID      PlayerID      `json:"id"`
+	Ability string        `json:"ability"`
+	Target  PlayerID      `json:"target"`
+	Phase   CastPhaseKind `json:"phase"`
+}
+
+type GatherStarted struct {
+	ID   PlayerID `json:"id"`
+	Node NodeID   `json:"node"`
+}
+
+type Worn struct {
+	ID    PlayerID        `json:"id"`
+	Slots []EquipmentSlot `json:"slots"`
+}
+
 type DialogOption struct {
 	ID string `json:"id"`
 }
@@ -256,6 +290,10 @@ type PartyInviteNotice struct {
 	From PlayerID `json:"from"`
 }
 
+type AdminReply struct {
+	Text string `json:"text"`
+}
+
 func (Welcome) isServerMessage()           {}
 func (Spawn) isServerMessage()             {}
 func (Despawn) isServerMessage()           {}
@@ -280,6 +318,11 @@ func (Dialog) isServerMessage()            {}
 func (QuestLog) isServerMessage()          {}
 func (Party) isServerMessage()             {}
 func (PartyInviteNotice) isServerMessage() {}
+func (Swing) isServerMessage()             {}
+func (CastPhase) isServerMessage()         {}
+func (GatherStarted) isServerMessage()     {}
+func (Worn) isServerMessage()              {}
+func (AdminReply) isServerMessage()        {}
 
 type ClientMessage interface {
 	isClientMessage()
@@ -361,6 +404,10 @@ type PartyKick struct {
 	Player PlayerID `json:"player"`
 }
 
+type Admin struct {
+	Line string `json:"line"`
+}
+
 func (MoveTo) isClientMessage()           {}
 func (Move) isClientMessage()             {}
 func (Pickup) isClientMessage()           {}
@@ -380,6 +427,7 @@ func (PartyAccept) isClientMessage()      {}
 func (PartyDecline) isClientMessage()     {}
 func (PartyLeave) isClientMessage()       {}
 func (PartyKick) isClientMessage()        {}
+func (Admin) isClientMessage()            {}
 
 func (MoveTo) Name() string           { return MsgMoveTo }
 func (Move) Name() string             { return MsgMove }
@@ -400,6 +448,7 @@ func (PartyAccept) Name() string      { return MsgPartyAccept }
 func (PartyDecline) Name() string     { return MsgPartyDecline }
 func (PartyLeave) Name() string       { return MsgPartyLeave }
 func (PartyKick) Name() string        { return MsgPartyKick }
+func (Admin) Name() string            { return MsgAdmin }
 
 type serverEnvelope struct {
 	Welcome           *Welcome           `json:"welcome,omitempty"`
@@ -422,10 +471,15 @@ type serverEnvelope struct {
 	HP                *HP                `json:"hp,omitempty"`
 	Mana              *Mana              `json:"mana,omitempty"`
 	Casting           *Casting           `json:"casting,omitempty"`
+	Swing             *Swing             `json:"swing,omitempty"`
+	CastPhase         *CastPhase         `json:"cast_phase,omitempty"`
+	Gather            *GatherStarted     `json:"gather,omitempty"`
+	Worn              *Worn              `json:"worn,omitempty"`
 	Dialog            *Dialog            `json:"dialog,omitempty"`
 	QuestLog          *QuestLog          `json:"quest_log,omitempty"`
 	Party             *Party             `json:"party,omitempty"`
 	PartyInviteNotice *PartyInviteNotice `json:"party_invite_notice,omitempty"`
+	AdminReply        *AdminReply        `json:"admin_reply,omitempty"`
 }
 
 func Encode(m ServerMessage) ([]byte, error) {
@@ -471,6 +525,14 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.Mana = &v
 	case Casting:
 		env.Casting = &v
+	case Swing:
+		env.Swing = &v
+	case CastPhase:
+		env.CastPhase = &v
+	case GatherStarted:
+		env.Gather = &v
+	case Worn:
+		env.Worn = &v
 	case Dialog:
 		env.Dialog = &v
 	case QuestLog:
@@ -479,6 +541,8 @@ func Encode(m ServerMessage) ([]byte, error) {
 		env.Party = &v
 	case PartyInviteNotice:
 		env.PartyInviteNotice = &v
+	case AdminReply:
+		env.AdminReply = &v
 	default:
 		return nil, fmt.Errorf("net: encode: unhandled server message %T", m)
 	}
@@ -537,6 +601,8 @@ const (
 	ReasonNoInvite         RejectReason = "no_invite"
 	ReasonNotInParty       RejectReason = "not_in_party"
 	ReasonNotSameParty     RejectReason = "not_same_party"
+	ReasonUnauthorized     RejectReason = "unauthorized"
+	ReasonUsage            RejectReason = "usage"
 )
 
 type Disposition int
@@ -645,6 +711,10 @@ type partyKickWire struct {
 	Player *PlayerID `json:"player"`
 }
 
+type adminWire struct {
+	Line *string `json:"line"`
+}
+
 type seqWire struct {
 	Seq *int64 `json:"seq"`
 }
@@ -707,6 +777,8 @@ func Decode(frame []byte) (ClientMessage, Seq, error) {
 			decodeBody = decodePartyLeave
 		case MsgPartyKick:
 			decodeBody = decodePartyKick
+		case MsgAdmin:
+			decodeBody = decodeAdmin
 		default:
 			return nil, 0, &RejectError{
 				Reason:      ReasonUnknownMessage,
@@ -968,6 +1040,17 @@ func decodePartyKick(payload []byte) (ClientMessage, error) {
 		return nil, rejectIntent(ReasonMissingField, MsgPartyKick, "party_kick needs a player id")
 	}
 	return PartyKick{Player: *wire.Player}, nil
+}
+
+func decodeAdmin(payload []byte) (ClientMessage, error) {
+	var wire adminWire
+	if err := json.Unmarshal(payload, &wire); err != nil {
+		return nil, rejectIntent(ReasonMalformedJSON, MsgAdmin, "admin: %v", err)
+	}
+	if wire.Line == nil {
+		return nil, rejectIntent(ReasonMissingField, MsgAdmin, "admin needs a line")
+	}
+	return Admin{Line: *wire.Line}, nil
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }

@@ -12,6 +12,7 @@ func TestEveryClientMessageHasItsOwnRejectionEvent(t *testing.T) {
 		mnet.MoveTo{}, mnet.Pickup{}, mnet.Drop{}, mnet.Equip{}, mnet.Unequip{}, mnet.Gather{}, mnet.Use{},
 		mnet.Attack{}, mnet.Respawn{}, mnet.Talk{}, mnet.DialogOptionPick{}, mnet.Give{},
 		mnet.PartyInvite{}, mnet.PartyAccept{}, mnet.PartyDecline{}, mnet.PartyLeave{}, mnet.PartyKick{},
+		mnet.Admin{},
 	} {
 		ev := rejectionEvent(m.Name())
 		if prior, dup := seen[ev]; dup {

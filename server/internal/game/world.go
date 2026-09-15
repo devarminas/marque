@@ -252,6 +252,9 @@ type World struct {
 	mapCfg MapConfig
 
 	nav *navmesh.Mesh
+
+	adminACL  AdminACL
+	adminCmds *AdminRegistry
 }
 
 func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace int64, joinKit []string) *World {
@@ -508,13 +511,13 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 
 	w.seedJoinKit(p)
 	w.sendJoinStep(p)
-	w.broadcast(mnet.Spawn(p.wireState()), p)
+	w.broadcast(mnet.Spawn(w.playerState(p)), p)
 }
 
 func (w *World) sendJoinStep(p *player) {
 	states := make([]mnet.PlayerState, 0, len(w.order))
 	for _, other := range w.order {
-		states = append(states, other.wireState())
+		states = append(states, w.playerState(other))
 	}
 	w.send(p, mnet.Welcome{
 		You:            p.id,
@@ -717,6 +720,8 @@ func (w *World) handleFrame(ev mnet.Event) {
 		w.partyLeave(p, msg, ev.Seq)
 	case mnet.PartyKick:
 		w.partyKick(p, msg, ev.Seq)
+	case mnet.Admin:
+		w.admin(p, msg, ev.Seq)
 	default:
 		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
 	}
@@ -784,6 +789,8 @@ func rejectionEvent(re string) string {
 		return EvPartyLeaveRejected
 	case mnet.MsgPartyKick:
 		return EvPartyKickRejected
+	case mnet.MsgAdmin:
+		return EvAdminRejected
 	default:
 		panic(fmt.Sprintf("game: no rejection event for %q", re))
 	}

@@ -13,9 +13,9 @@ func TestFreshPlayerHasMaxHP(t *testing.T) {
 	if alice.hp != MaxHP {
 		t.Fatalf("hp=%d, want %d", alice.hp, MaxHP)
 	}
-	state := alice.wireState()
+	state := pw.w.playerState(alice)
 	if state.HP != MaxHP || state.MaxHP != MaxHP {
-		t.Fatalf("wireState=%+v, want hp and max_hp %d", state, MaxHP)
+		t.Fatalf("playerState=%+v, want hp and max_hp %d", state, MaxHP)
 	}
 }
 

@@ -2,11 +2,19 @@ extends RefCounted
 
 const SessionScript := preload("res://scripts/session.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
+const DemoAdminGive := preload("res://scripts/demo_admin_give.gd")
 
 const JOIN_TIMEOUT_MSEC := 20000
 const CAST_WAIT_MSEC := 8000
 const SPIN_USEC := 20000
 const HOLD_MSEC := 1500
+
+const MAGE_KIT := [
+	"cloth_hood",
+	"cloth_robe",
+	"cloth_skirt",
+	"staff",
+]
 
 
 var _tree: SceneTree
@@ -23,6 +31,12 @@ func run(root: Node, session: SessionScript) -> int:
 		return _fail("no welcome with two practice npcs after %dms" % JOIN_TIMEOUT_MSEC)
 
 	print("DEMO joined %d" % _session.own_id())
+	var giver := DemoAdminGive.new()
+	var give_err: String = await giver.grant(
+		_session, _tree, MAGE_KIT, JOIN_TIMEOUT_MSEC
+	)
+	if not give_err.is_empty():
+		return _fail(give_err)
 	if not await _equip_mage_kit():
 		return 1
 	var npcs: Dictionary = _session.get("_npcs")
@@ -31,12 +45,15 @@ func run(root: Node, session: SessionScript) -> int:
 	for id: int in npcs.keys():
 		var body: NpcDummyScript = npcs[id]
 		print("DEMO npc %d %s %s %f %f" % [id, body.kind, body.faction, body.position.x, body.position.z])
+		# Practice dummies only — imps and other hostiles must not become the cast target.
+		if body.kind != NpcDummyScript.KindDummy:
+			continue
 		if body.faction == NpcDummyScript.FactionFriendly:
 			friendly_id = id
 		elif body.faction == NpcDummyScript.FactionHostile:
 			hostile_id = id
 	if friendly_id == 0 or hostile_id == 0:
-		return _fail("missing friendly or hostile dummy after join")
+		return _fail("missing friendly or hostile practice dummy after join")
 
 	if not _session.select_player(friendly_id):
 		return _fail("could not select friendly dummy %d" % friendly_id)
@@ -91,7 +108,7 @@ func run(root: Node, session: SessionScript) -> int:
 func _equip_mage_kit() -> bool:
 	var indices: PackedInt32Array = _session.get("_bag_indices")
 	if indices.is_empty():
-		_fail("mage join kit never arrived in the bag")
+		_fail("mage kit never arrived in the bag after /give")
 		return false
 	for slot: int in indices:
 		_session.request_equip(slot)
@@ -113,11 +130,25 @@ func _on_cast_effect(target_id: int, ability_id: String) -> void:
 func _wait_for_join() -> bool:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		var npcs: Dictionary = _session.get("_npcs")
-		if _session.own_id() > 0 and npcs.size() >= 2:
+		if _session.own_id() > 0 and _has_practice_dummy_pair():
 			return true
 		await _tree.process_frame
 	return false
+
+
+func _has_practice_dummy_pair() -> bool:
+	var npcs: Dictionary = _session.get("_npcs")
+	var friendly := false
+	var hostile := false
+	for id: int in npcs.keys():
+		var body: NpcDummyScript = npcs[id]
+		if body == null or body.kind != NpcDummyScript.KindDummy:
+			continue
+		if body.faction == NpcDummyScript.FactionFriendly:
+			friendly = true
+		elif body.faction == NpcDummyScript.FactionHostile:
+			hostile = true
+	return friendly and hostile
 
 
 func _wait_hp(id: int, baseline: int, want_raise: bool) -> bool:

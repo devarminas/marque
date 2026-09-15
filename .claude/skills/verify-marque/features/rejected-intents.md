@@ -10,10 +10,9 @@ distinguishable from packet loss.
 
 ## Sub-features
 
-- `reject-oob` — a `move_to` outside `[-128, 128]²` is rejected, not clamped:
-  `error` with `"re":"move_to"`, GAMELOG `move_to_rejected`, no broadcast.
-- `reject-degenerate` — a stationary `move_to` to the player's current point yields
-  `"already there"` and no path (wire / probe only after ARM-145).
+- `reject-move-to-retired` — any `move_to` is refused at the protocol boundary:
+  `error` with `"re":"move_to"` / `illegal_sample`, GAMELOG `move_to_rejected`,
+  no path broadcast. Prefer [wsprobe-admin-move-to.md](./wsprobe-admin-move-to.md).
 - `reject-malformed` — a frame with zero or several top-level keys, or a binary
   frame, is a protocol error: `error` then close.
 - `reject-nonjson` — a text frame that is not JSON, or JSON that is not an object
@@ -24,10 +23,9 @@ distinguishable from packet loss.
 
 ## How to get to it (user POV)
 
-- An ordinary player cannot reach most of these: the visible ground lies inside the
-  bounds, so they arrive only from a broken or malicious client. `reject-degenerate`
-  is no longer a UI click (ARM-145 removed ground-click `move_to`); trigger it with a
-  raw `move_to` probe to the player's current coordinates after an `arrived`.
+- An ordinary player cannot reach these: production clients send wish `move`
+  samples, not `move_to`. Retired `move_to` and malformed frames arrive only from
+  a broken probe, harness, or malicious client.
 
 ## Driving it with a raw protocol probe
 
@@ -40,20 +38,20 @@ Preconditions:
   includes the suites that feed scripted `error`, halt-path, and unknown-key frames
   into the real decode path and assert the client logs-and-drops rather than
   closing.
-- **Server-side rejection, live.** Write a throwaway WebSocket client in a scratch
-  directory outside the repo (Go with its own `go.mod`; the module proxy is
-  reachable). Send `{"move_to":{"x":1000.0,"z":0.0}}`. Assert the reply frame is
-  `{"error":{"re":"move_to",...}}`, the GAMELOG gains `move_to_rejected`, and a
-  second connected probe receives **no** `path` broadcast for it.
-- **Malformed frame.** Send `{"a":1,"b":2}` (two top-level keys). Assert an `error`
-  frame arrives and the socket then closes, and that a well-formed probe on another
-  connection is undisturbed.
+- **Server-side rejection, live.** Use the in-repo thin helper (see
+  [wsprobe-admin-move-to.md](./wsprobe-admin-move-to.md)), not a scratch-directory
+  socket. From `server/`:
+  `go run ./cmd/wsprobe -addr HOST:PORT -raw '{"move_to":{"x":1000.0,"z":0.0,"seq":1}}' -expect-error-re move_to`.
+  Assert the reply is `{"error":{"re":"move_to",...}}` with `illegal_sample`, the
+  GAMELOG gains `move_to_rejected`, and a second connected probe receives **no**
+  `path` broadcast for it.
+- **Malformed frame.** Send `{"a":1,"b":2}` (two top-level keys) via
+  `wsprobe.SendRaw`. Assert an `error` frame arrives and the socket then closes,
+  and that a well-formed probe on another connection is undisturbed.
 - **Not-JSON text frame.** Send `not json`. Assert one `error` frame with no `re`
-  and that the socket **stays** open — a well-formed `move_to` on the same
-  connection still earns its `path`. This is `malformed_json`, disposition
-  reply-only; the close is reserved for binary frames and key-count violations.
-- **Degenerate click.** After an `arrived`, resend the same `move_to`. Assert
-  `"already there"` in the `error` and that no `path` reached the other probe.
+  and that the socket **stays** open — a subsequent legal `move` wish on the same
+  connection is still accepted. This is `malformed_json`, disposition reply-only;
+  the close is reserved for binary frames and key-count violations.
 
 ## Gotchas
 
@@ -74,7 +72,7 @@ Preconditions:
 - The close-on-malformed rule is the server's only. The client must never close on a
   bad server frame; it logs and drops the frame. Do not "fix" either side to match
   the other.
-- Rejection is the designed behaviour for unreachable clicks going forward,
-  so `move_to_rejected` in a log is not by itself a defect.
-- JSON cannot carry NaN/Infinity literals; the live hazard is a large finite float
-  like `1e30`, which is exactly what `reject-oob` exists to stop.
+- `move_to_rejected` with `illegal_sample` is the designed retirement signal, not a
+  defect.
+- JSON cannot carry NaN/Infinity literals; illegal finite `move` components are
+  refused as `illegal_sample` on the wish path.

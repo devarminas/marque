@@ -258,15 +258,16 @@ try {
     if ($report.Joined -lt 1) { Add-Failure "the client never reported the id it joined as" }
     if (-not $report.Done) { Add-Failure "the client never reported 'DEMO done'" }
 
+    # Named-pixel contract needs these frames (label-band vs control). Soft size
+    # soft-pass retired (ARM-289); missing file fails because the band assert needs it.
     foreach ($index in 1, 2, 3) {
         $shot = "${prefix}_$index.png"
         if (-not (Test-Path $shot)) {
-            Add-Failure "the client never wrote $shot"
+            Add-Failure "named-pixel input missing: $shot"
             continue
         }
         $size = (Get-Item $shot).Length
         Write-Host "==> $shot ($size bytes)"
-        if ($size -lt 4096) { Add-Failure "$shot is only $size bytes; that is not a frame" }
     }
 
     if ($report.ErrorText -ne $RefusalText) {
