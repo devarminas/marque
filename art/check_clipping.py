@@ -2,6 +2,7 @@
 
 import json
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import bpy
 import numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+from mathutils.geometry import intersect_ray_tri
 
 from armor import LOOKS
 from body import HUMAN_SHAPES, Band, anchor_point
@@ -21,6 +23,10 @@ LIMIT = 0
 WELD_DIGITS = 5
 RAY_STEP = 1.0e-5
 MAX_CROSSINGS = 64
+GRAZING_DEGREES = 30.0
+GRAZING_COSINE = float(np.cos(np.radians(GRAZING_DEGREES)))
+MIN_CUT = 0.001
+SEAM_CUT_LIMIT = 0.06
 RAYS = tuple(Vector(v).normalized() for v in ((0.31, 0.53, 0.79), (-0.67, 0.29, -0.41), (0.23, -0.83, 0.37)))
 FRAMES = {"idle": tuple(range(0, 60, 5)), "walk": tuple(range(30)), "swing": tuple(range(13))}
 ARM_TRUNK = frozenset(("torso", "head", "hips"))
@@ -30,7 +36,7 @@ LIMB_TRUNKS = {
     "thighs": LEG_TRUNK, "shins": LEG_TRUNK, "feet": LEG_TRUNK,
 }
 LIMB_ROOTS = ("upperarm_l", "upperarm_r", "thigh_l", "thigh_r")
-METRICS = ("a", "b", "c")
+METRICS = ("a", "b", "c", "d")
 BODY = "body"
 SETS = REPO / "shared/sets.json"
 BANDS = {shape.bone: shape for shapes in HUMAN_SHAPES.values() for shape in shapes if isinstance(shape, Band)}
@@ -40,6 +46,7 @@ BANDS = {shape.bone: shape for shapes in HUMAN_SHAPES.values() for shape in shap
 class Island:
     owner: str
     bone: str
+    bones: frozenset[str]
     region: str
     vertices: np.ndarray
     triangles: np.ndarray
@@ -53,6 +60,7 @@ class Island:
 class Posed:
     island: Island
     points: np.ndarray
+    faces: np.ndarray
     low: np.ndarray
     high: np.ndarray
     bvh: BVHTree
@@ -116,17 +124,18 @@ def islands(contract: Contract, ob: bpy.types.Object) -> list[Island]:
             parent[find(other)] = root
     labels = np.array([find(node) for node in weld])
     groups = {group.index: group.name for group in ob.vertex_groups}
-    owner = ob.name.removeprefix("region_") if ob.name.startswith("region_") else ob.name
+    weighted = [[groups[g.group] for g in vertex.groups if g.weight > 0.0] for vertex in mesh.vertices]
+    owner = BODY if ob.name.startswith("region_") else ob.name
     result = []
     for label in sorted(set(labels.tolist())):
         vertices = np.nonzero(labels == label)[0]
-        bones = {groups[g.group] for index in vertices.tolist() for g in mesh.vertices[index].groups if g.weight > 0.0}
-        if len(bones) != 1:
-            raise ContractError(f"{ob.name} island at vertex {vertices[0]} is weighted to {sorted(bones)}, expected one bone")
-        bone = bones.pop()
-        mask = np.isin(triangles[:, 0], vertices)
-        result.append(Island(BODY if ob.name.startswith("region_") else owner, bone, bone_region[bone], vertices,
-                             triangles[mask]))
+        counts = Counter(bone for index in vertices.tolist() for bone in weighted[index])
+        regions = {bone_region[bone] for bone in counts}
+        if owner == BODY and len(regions) != 1:
+            raise ContractError(f"{ob.name} island at vertex {vertices[0]} spans regions {sorted(regions)}")
+        bone = min(counts, key=lambda name: (-counts[name], name))
+        faces = triangles[np.isin(triangles[:, 0], vertices)]
+        result.append(Island(owner, bone, frozenset(counts), bone_region[bone], vertices, faces))
     return result
 
 
@@ -152,7 +161,7 @@ def pose(rig: bpy.types.Object, meshes: list[bpy.types.Object], parts: dict[str,
             remap = {vertex: row for row, vertex in enumerate(island.vertices.tolist())}
             local = [[remap[v] for v in triangle] for triangle in island.triangles.tolist()]
             bvh = BVHTree.FromPolygons(points.tolist(), local, all_triangles=True)
-            posed[(ob.name, index)] = Posed(island, points, points.min(axis=0), points.max(axis=0), bvh)
+            posed[(ob.name, index)] = Posed(island, points, np.array(local), points.min(axis=0), points.max(axis=0), bvh)
     heads = {bone.name: np.array(rig.matrix_world @ bone.head) for bone in rig.pose.bones}
     return posed, heads
 
@@ -189,12 +198,72 @@ def overlaps(a: Posed, b: Posed) -> bool:
     return bool(np.all(a.low <= b.high) and np.all(b.low <= a.high))
 
 
+def _edge_hits(edges: list[Vector], triangle: list[Vector]) -> list[Vector]:
+    hits = []
+    for start, end in zip(edges, edges[1:] + edges[:1]):
+        ray = end - start
+        hit = intersect_ray_tri(*triangle, ray, start, True)
+        if hit is not None and (hit - start).dot(ray) <= ray.length_squared:
+            hits.append(hit)
+    return hits
+
+
+def _normal(corners: list[Vector]) -> Vector:
+    return (corners[1] - corners[0]).cross(corners[2] - corners[0]).normalized()
+
+
+def grazing_cut(a: Posed, b: Posed, first: int, second: int) -> tuple[float, Vector] | None:
+    one = [Vector(a.points[vertex]) for vertex in a.faces[first]]
+    two = [Vector(b.points[vertex]) for vertex in b.faces[second]]
+    if abs(_normal(one).dot(_normal(two))) < GRAZING_COSINE:
+        return None
+    hits = _edge_hits(one, two) + _edge_hits(two, one)
+    length = max(((p - q).length for p in hits for q in hits), default=0.0)
+    if length <= MIN_CUT:
+        return None
+    return length, sum(hits, Vector()) / len(hits)
+
+
+def touching(a: Posed, first: int, second: int) -> bool:
+    corners = [{tuple(row) for row in np.round(a.points[a.faces[face]], WELD_DIGITS).tolist()} for face in (first, second)]
+    return bool(corners[0] & corners[1])
+
+
+def covered(point: Vector, part: Posed) -> bool:
+    return part.bvh.find_nearest(point)[3] > TOLERANCE and inside(part, point)
+
+
 class Frame:
     def __init__(self, number: int, posed: dict, heads: dict[str, np.ndarray]):
         self.number = number
         self.posed = posed
         self.heads = heads
         self._cache: dict[tuple, dict[int, float]] = {}
+        self._cuts: dict[tuple, list[tuple[float, frozenset]]] = {}
+        self._keys = list(posed)
+        self._lows = np.array([posed[key].low for key in self._keys])
+        self._highs = np.array([posed[key].high for key in self._keys])
+
+    def cuts(self, first, second) -> list[tuple[float, frozenset]]:
+        if (first, second) not in self._cuts:
+            a, b = self.posed[first], self.posed[second]
+            candidates = a.bvh.overlap(b.bvh) if overlaps(a, b) else []
+            if first == second:
+                candidates = [(i, j) for i, j in candidates if i < j and not touching(a, i, j)]
+            found = [grazing_cut(a, b, i, j) for i, j in candidates]
+            lines = [line for line in found if line is not None]
+            points = np.array([np.array(point) for _, point in lines]).reshape(-1, 3)
+            boxed = np.all((points[:, None] > self._lows[None]) & (points[:, None] < self._highs[None]), axis=2)
+            self._cuts[(first, second)] = [
+                (length, frozenset(self._keys[part] for part in np.nonzero(boxed[row])[0].tolist()
+                                   if self._keys[part] not in (first, second)
+                                   and covered(point, self.posed[self._keys[part]])))
+                for row, (length, point) in enumerate(lines)
+            ]
+        return self._cuts[(first, second)]
+
+    def visible(self, first, second, shown) -> list[float]:
+        return [length for length, covers in self.cuts(first, second) if covers.isdisjoint(shown)]
 
     def clashes(self, first, second) -> list[tuple[tuple, tuple, int, float]]:
         result = []
@@ -273,13 +342,17 @@ def measure(contract: Contract, frame: Frame, config: Config, reaches: dict[str,
     roots = seams(contract, config, reaches, LIMB_ROOTS)
     pairs: dict[str, list] = {metric: [] for metric in METRICS}
     for i, first in enumerate(shown):
+        if len(frame.posed[first].island.bones) > 1:
+            pairs["d"].append((first, first))
         for second in shown[i + 1:]:
             a, b = frame.posed[first].island, frame.posed[second].island
             if a.owner != b.owner:
                 pairs["a" if BODY in (a.owner, b.owner) else "b"].append((first, second, joints))
             if b.region in LIMB_TRUNKS.get(a.region, ()) or a.region in LIMB_TRUNKS.get(b.region, ()):
                 pairs["c"].append((first, second, roots))
-    result = {}
+            if a.owner == b.owner and (a.owner != BODY or a.region == b.region):
+                pairs["d"].append((first, second))
+    result = {"d": seam_cuts(frame, shown, pairs.pop("d"))}
     for metric, metric_pairs in pairs.items():
         offenders: dict[tuple, tuple[float, str]] = {}
         for first, second, allowed in metric_pairs:
@@ -293,6 +366,17 @@ def measure(contract: Contract, frame: Frame, config: Config, reaches: dict[str,
     return result
 
 
+def seam_cuts(frame: Frame, shown: list, pairs: list[tuple]) -> Worst:
+    count, length, worst = 0, 0.0, (0.0, "")
+    shown_set = set(shown)
+    for first, second in pairs:
+        visible = frame.visible(first, second, shown_set)
+        count += len(visible)
+        length += sum(visible)
+        worst = max(worst, (sum(visible), f"{frame.posed[first].island.name} x {frame.posed[second].island.name}"))
+    return Worst(count, length, frame.number, worst[1])
+
+
 def exposed(contract: Contract, frame: Frame) -> dict[str, int]:
     result = {}
     for item, piece in sorted(contract.pieces.items()):
@@ -301,13 +385,21 @@ def exposed(contract: Contract, frame: Frame) -> dict[str, int]:
         for posed in frame.posed.values():
             if posed.island.owner != BODY or posed.island.region not in piece.hides:
                 continue
-            around = [shell for shell in shells if shell.island.bone == posed.island.bone]
+            around = [shell for shell in shells if shell.island.bones & posed.island.bones]
             for row in posed.points:
                 point = Vector(row)
                 if not any(shell.bvh.find_nearest(point)[3] <= TOLERANCE or inside(shell, point) for shell in around):
                     count += 1
         result[item] = count
     return result
+
+
+def rank(metric: str, worst: Worst) -> tuple[float, float]:
+    return (worst.depth, worst.count) if metric == "d" else (worst.count, worst.depth)
+
+
+def over(metric: str, worst: Worst) -> bool:
+    return worst.depth > SEAM_CUT_LIMIT if metric == "d" else worst.count > LIMIT
 
 
 def main() -> None:
@@ -326,30 +418,34 @@ def main() -> None:
             for config in kits:
                 row = worst.setdefault((config.name, clip), {metric: Worst() for metric in METRICS})
                 for metric, found in measure(contract, frame, config, reaches).items():
-                    held = row[metric]
-                    if found.count > held.count or (found.count == held.count and found.depth > held.depth):
+                    if rank(metric, found) > rank(metric, row[metric]):
                         row[metric] = found
 
     print(f"clipping: worst frame per kit and clip; vertices buried deeper than {TOLERANCE * 1000:.0f} mm,"
           " seams and limb roots exempt within the band rim reach grown by the piece pad")
     print("band reach: " + ", ".join(f"{bone} {reach.grown(0.0) * 1000:.0f} mm" for bone, reach in reaches.items()))
-    print(f"{'kit':<20}{'clip':<7}{'(a) body/piece':>18}{'(b) piece/piece':>18}{'(c) limb/trunk':>18}")
+    print(f"(d) seam cut: visible triangle pairs within one body region or one piece that cross at under"
+          f" {GRAZING_DEGREES:.0f} degrees along more than {MIN_CUT * 1000:.0f} mm; fails above"
+          f" {SEAM_CUT_LIMIT * 1000:.0f} mm of cut line")
+    print(f"{'kit':<20}{'clip':<7}{'(a) body/piece':>18}{'(b) piece/piece':>18}{'(c) limb/trunk':>18}"
+          f"{'(d) seam cut':>18}")
     failures = []
     for (name, clip), row in worst.items():
         cells = []
         for metric in METRICS:
             found = row[metric]
-            if found.count > LIMIT:
-                failures.append(f"  {name} {clip} ({metric}) f{found.frame}: {found.count} vertices, deepest"
+            unit = "triangle pairs, line" if metric == "d" else "vertices, deepest"
+            if over(metric, found):
+                failures.append(f"  {name} {clip} ({metric}) f{found.frame}: {found.count} {unit}"
                                 f" {found.depth * 1000:.0f} mm, {found.pair}")
             cells.append(f"{found.count} {found.depth * 1000:.0f}mm f{found.frame}" if found.count else "0")
         print(f"{name:<20}{clip:<7}" + "".join(f"{cell:>18}" for cell in cells))
-    print("enclosure: hidden body vertices outside a same-bone part of their piece, " +
+    print("enclosure: hidden body vertices outside every part of their piece that shares a bone, " +
           ", ".join(f"{item} {count}" for item, count in enclosure.items()))
     failures.extend(f"  {item} leaves {count} hidden body vertices outside its shell" for item, count in enclosure.items() if count)
     if failures:
         print("\n".join(failures))
-        raise RuntimeError(f"{len(failures)} rows exceed the limit of {LIMIT}")
+        raise RuntimeError(f"{len(failures)} rows exceed their limits")
     print("clipping: every kit stays within the limit")
 
 

@@ -15,9 +15,12 @@ BAND_ROUNDNESS = 6.0
 SPHERE_ROUNDNESS = 2.0
 LOFT_SPACING = 0.025
 COVER_SPACING = 0.04
-TUCK = 0.035
-TUCK_SCALE = 0.88
-TUCK_RINGS = 2
+BLEND = 0.08
+HIPS = ("pelvis", "thigh_l", "thigh_r")
+SPINE = ("spine_01", "spine_02", "spine_03")
+HIP_TOP = 0.03
+HIP_DROP = 0.08
+HIP_SPLIT = 0.04
 DIGITS = 6
 
 Paint = Literal["body", "joint", "horn"]
@@ -66,6 +69,9 @@ class Capsule:
     end: Anchor
     start_radii: Radii
     end_radii: Radii
+    chain: tuple[str, ...] = ()
+    rings: tuple[float, ...] = ()
+    bend: Anchor | None = None
 
 
 @dataclass(frozen=True)
@@ -83,7 +89,7 @@ class Band:
 @dataclass(frozen=True)
 class Socket:
     resolution: ClassVar[Resolution] = Resolution(16, 6)
-    cover: ClassVar[Resolution] = Resolution(12, 3)
+    cover: ClassVar[Resolution] = Resolution(14, 5)
     paint: ClassVar[Paint] = "body"
 
     bone: str
@@ -99,8 +105,8 @@ class Loft:
     bone: str
     profile: Profile
     span: tuple[float, float]
-    tucks: tuple[float, float] = (0.0, 0.0)
     sides: int = 24
+    chain: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -154,15 +160,6 @@ def _right(shape: Shape) -> Shape:
 
 def both_sides(shapes: tuple) -> tuple:
     return (*shapes, *(_right(shape) for shape in shapes))
-
-
-def chain(profile: Profile, cuts: tuple[tuple[str, float, float], ...]) -> tuple[Loft, ...]:
-    ends = (cuts[0][1], cuts[-1][2])
-    return tuple(
-        Loft(bone, profile, (low - (0.0 if low == ends[0] else TUCK), high + (0.0 if high == ends[1] else TUCK)),
-             (0.0 if low == ends[0] else TUCK, 0.0 if high == ends[1] else TUCK))
-        for bone, low, high in cuts
-    )
 
 
 FOOT = Profile((0.0, -1.0, 0.0), (0.0, 0.0, 1.0), (
@@ -221,8 +218,7 @@ HUMAN_SHAPES: dict[str, tuple[Shape, ...]] = {
         HEAD,
     ),
     "hips": (
-        *chain(PELVIS, (("pelvis", 0.86, 1.05),)),
-        *both_sides((Socket("pelvis", "thigh_l", 0.096),)),
+        Loft("pelvis", PELVIS, (0.86, 1.05)),
     ),
     "shins": both_sides((
         Band("calf_l", Anchor(0.03), Anchor(0.13), Radii(0.064, 0.065)),
@@ -233,8 +229,8 @@ HUMAN_SHAPES: dict[str, tuple[Shape, ...]] = {
         Capsule("thigh_l", Anchor(0.0), Anchor(1.0), Radii(0.086, 0.088), Radii(0.063, 0.065)),
     )),
     "torso": (
-        Band("spine_01", Anchor(-0.18), Anchor(0.18), Radii(0.137, 0.097)),
-        *chain(TORSO, (("spine_01", 1.02, 1.1736), ("spine_02", 1.1736, 1.3148), ("spine_03", 1.3148, 1.525))),
+        Band("spine_01", Anchor(-0.18), Anchor(0.18), Radii(0.137, 0.106)),
+        Loft("spine_01", TORSO, (1.02, 1.525), chain=SPINE),
         *both_sides((Socket("clavicle_l", "upperarm_l", 0.07),)),
     ),
     "upper_arms": both_sides((
@@ -332,7 +328,7 @@ def build_regions(contract: Contract, rig: bpy.types.Object, variant: Variant) -
     return [
         skinned(f"region_{region}", rig, [
             (*solid(contract, variant, shape),
-             material(f"{variant.name}_{shape.paint}", palette[shape.paint], materials), shape.bone)
+             material(f"{variant.name}_{shape.paint}", palette[shape.paint], materials), skin(shape))
             for shape in SHAPES[variant.name][region]
         ])
         for region in sorted(SHAPES[variant.name])
@@ -343,14 +339,14 @@ def skinned(name: str, rig: bpy.types.Object, chunks: list[Chunk]) -> bpy.types.
     verts: list[Vec3] = []
     faces: list[tuple[int, ...]] = []
     face_materials: list[str] = []
-    vertex_bones: list[str] = []
+    vertex_weights: list[tuple[tuple[str, float], ...]] = []
     by_name: dict[str, bpy.types.Material] = {}
     for chunk_verts, chunk_faces, chunk_material, bone in chunks:
         base = len(verts)
         verts.extend(chunk_verts)
         faces.extend(tuple(base + i for i in face) for face in chunk_faces)
         face_materials.extend([chunk_material.name] * len(chunk_faces))
-        vertex_bones.extend([bone] * len(chunk_verts))
+        vertex_weights.extend(blend(rig, bone, vertex) for vertex in chunk_verts)
         by_name[chunk_material.name] = chunk_material
 
     mesh = bpy.data.meshes.new(name)
@@ -366,10 +362,49 @@ def skinned(name: str, rig: bpy.types.Object, chunks: list[Chunk]) -> bpy.types.
     bpy.context.scene.collection.objects.link(ob)
     ob.parent = rig
     ob.modifiers.new("Armature", "ARMATURE").object = rig
-    groups = {bone: ob.vertex_groups.new(name=bone) for bone in sorted(set(vertex_bones))}
-    for index, bone in enumerate(vertex_bones):
-        groups[bone].add([index], 1.0, "REPLACE")
+    names = sorted({name for weights in vertex_weights for name, _ in weights})
+    groups = {name: ob.vertex_groups.new(name=name) for name in names}
+    for index, weights in enumerate(vertex_weights):
+        for name, weight in weights:
+            groups[name].add([index], weight, "REPLACE")
     return ob
+
+
+def skin(shape: Shape) -> str | tuple[str, ...]:
+    return getattr(shape, "chain", ()) or shape.bone
+
+
+def _smooth(value: float) -> float:
+    value = min(max(value, 0.0), 1.0)
+    return value * value * (3.0 - 2.0 * value)
+
+
+def _hips(rig: bpy.types.Object, point: Vector) -> tuple[tuple[str, float], ...]:
+    hip = rig.data.bones["thigh_l"].head_local
+    leg = round(_smooth((hip.z - HIP_TOP - point.z) / HIP_DROP) * _smooth(abs(point.x) / HIP_SPLIT), 4)
+    thigh = "thigh_l" if point.x > 0.0 else "thigh_r"
+    if leg <= 0.0:
+        return (("pelvis", 1.0),)
+    if leg >= 1.0:
+        return ((thigh, 1.0),)
+    return (("pelvis", 1.0 - leg), (thigh, leg))
+
+
+def blend(rig: bpy.types.Object, bones: str | tuple[str, ...], point: Vec3) -> tuple[tuple[str, float], ...]:
+    if isinstance(bones, str):
+        return ((bones, 1.0),)
+    if bones == HIPS:
+        return _hips(rig, Vector(point))
+    reach = [1.0]
+    for child in bones[1:]:
+        bone = rig.data.bones[child]
+        axis = (bone.tail_local - bone.head_local).normalized()
+        reach.append(_smooth(((Vector(point) - bone.head_local).dot(axis) + BLEND) / (2.0 * BLEND)))
+    reach.append(0.0)
+    kept = [(name, round(reach[i] - reach[i + 1], 4)) for i, name in enumerate(bones)]
+    kept = [(name, weight) for name, weight in kept if weight > 0.0]
+    total = sum(weight for _, weight in kept)
+    return tuple((name, weight / total) for name, weight in kept)
 
 
 Ends = tuple[Vector, Vector, Radii, Radii]
@@ -390,7 +425,8 @@ def solid(contract: Contract, variant: Variant, shape: Shape, grow: float = 0.0,
         case Capsule():
             return capsule(anchor_point(head, tail, shape.start, variant), anchor_point(head, tail, shape.end, variant),
                            _plus(shape.start_radii, grow), _plus(shape.end_radii, grow),
-                           shape.cover if cover else shape.resolution, variant.scale)
+                           shape.cover if cover else shape.resolution, variant.scale, shape.rings,
+                           None if shape.bend is None else anchor_point(head, tail, shape.bend, variant))
         case Band():
             ends = grown((anchor_point(head, tail, shape.start, variant), anchor_point(head, tail, shape.end, variant),
                           shape.radii, shape.radii), grow, variant.scale)
@@ -461,8 +497,18 @@ def sweep(start: Vector, end: Vector, start_radii: Radii, end_radii: Radii, roun
     return tube(start, layers, end)
 
 
+def _polyline(start: Vector, bend: Vector | None, end: Vector, fraction: float) -> Vector:
+    if bend is None:
+        return start.lerp(end, fraction)
+    first = (bend - start).length
+    reach = fraction * (first + (end - bend).length)
+    if reach <= first:
+        return start.lerp(bend, reach / first)
+    return bend.lerp(end, (reach - first) / (end - bend).length)
+
+
 def capsule(start: Vector, end: Vector, start_radii: Radii, end_radii: Radii, resolution: Resolution,
-            scale: float) -> Mesh:
+            scale: float, rings: tuple[float, ...] = (), bend: Vector | None = None) -> Mesh:
     sides, cap_rings = resolution
     axis = (end - start).normalized()
     across, deep = frame(axis)
@@ -471,6 +517,10 @@ def capsule(start: Vector, end: Vector, start_radii: Radii, end_radii: Radii, re
     layers = [_ellipse(start - axis * (reaches[0] * math.cos(a)), across, deep,
                        Radii(start_radii.across * math.sin(a), start_radii.deep * math.sin(a)), sides, scale)
               for a in angles]
+    layers.extend(_ellipse(_polyline(start, bend, end, f), across, deep,
+                           Radii(start_radii.across + (end_radii.across - start_radii.across) * f,
+                                 start_radii.deep + (end_radii.deep - start_radii.deep) * f), sides, scale)
+                  for f in rings)
     layers.extend(_ellipse(end + axis * (reaches[1] * math.cos(a)), across, deep,
                            Radii(end_radii.across * math.sin(a), end_radii.deep * math.sin(a)), sides, scale)
                   for a in reversed(angles))
@@ -505,19 +555,8 @@ def loft(shape: Loft, grow: float, scale: float, sides: int, spacing: float) -> 
     deep = axis.cross(side)
     keys = [Vector(station.centre).dot(axis) for station in profile.stations]
     low, high = shape.span[0] - grow, shape.span[1] + grow
-    tuck_low, tuck_high = shape.tucks
-    full_low, full_high = low + tuck_low, high - tuck_high
-    count = max(1, round((full_high - full_low) / spacing))
-    samples = [full_low + (full_high - full_low) * index / count for index in range(count + 1)]
-    if tuck_low:
-        samples = [full_low - tuck_low * index / TUCK_RINGS for index in range(TUCK_RINGS, 0, -1)] + samples
-    if tuck_high:
-        samples += [full_high + tuck_high * index / TUCK_RINGS for index in range(1, TUCK_RINGS + 1)]
-
-    def shrink(s: float) -> float:
-        depth = max(full_low - s, s - full_high, 0.0)
-        zone = tuck_low if s < full_low else tuck_high
-        return 1.0 - (1.0 - TUCK_SCALE) * ((depth / zone) ** 2 if zone else 0.0)
+    count = max(1, round((high - low) / spacing))
+    samples = [low + (high - low) * index / count for index in range(count + 1)]
 
     centres: list[Vector] = []
     layers: list[list[Vector]] = []
@@ -525,14 +564,13 @@ def loft(shape: Loft, grow: float, scale: float, sides: int, spacing: float) -> 
         station = _hermite(profile.stations, keys, s)
         centre = Vector(station.centre)
         centre = (centre + axis * (s - centre.dot(axis))) * scale
-        factor = shrink(s)
         exponent = 2.0 / station.squareness
         points = []
         for index in range(sides):
             angle = 2.0 * math.pi * index / sides
             c, n = math.cos(angle), math.sin(angle)
-            x = math.copysign(abs(c) ** exponent, c) * (station.across + grow) * factor
-            y = math.copysign(abs(n) ** exponent, n) * ((station.back if n > 0.0 else station.front) + grow) * factor
+            x = math.copysign(abs(c) ** exponent, c) * (station.across + grow)
+            y = math.copysign(abs(n) ** exponent, n) * ((station.back if n > 0.0 else station.front) + grow)
             points.append(centre + (side * x + deep * y) * scale)
         centres.append(centre)
         layers.append(points)

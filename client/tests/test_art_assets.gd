@@ -19,6 +19,7 @@ const PIECE_TRIANGLES_MIN := 300
 const PIECE_TRIANGLES_MAX := 2000
 const ITEM_TRIANGLES_MIN := 200
 const ITEM_TRIANGLES_MAX := 2000
+const WEIGHT_SUM_TOLERANCE := 0.002
 
 var _assertions: Assertions = null
 var _finished := false
@@ -98,7 +99,7 @@ func _test_each_piece_is_a_skinned_mesh_weighted_to_its_slot_bones(rig: Node3D) 
 		var strays := _vertices_off_region(mesh, skeleton, bones)
 		_assertions.check(
 			strays.is_empty(),
-			"piece %s weights every vertex fully to one bone of slot %s, strays %s"
+			"piece %s weights every vertex only to bones of slot %s, summing to 1, strays %s"
 			% [item, _contract.pieces[item].slot, strays],
 		)
 		var triangles := _triangles(mesh.mesh)
@@ -214,7 +215,7 @@ func _test_each_region_is_a_skinned_mesh_weighted_to_its_own_bones(rigs: Diction
 			var strays := _vertices_off_region(mesh, skeleton, _contract.regions[region])
 			_assertions.check(
 				strays.is_empty(),
-				"%s %s weights every vertex fully to one of %s, strays %s"
+				"%s %s weights every vertex only to %s, summing to 1, strays %s"
 				% [name, mesh.name, _contract.regions[region], strays],
 			)
 
@@ -372,12 +373,17 @@ func _vertices_off_region(mesh: MeshInstance3D, skeleton: Skeleton3D, bones: Pac
 		var influences := joints.size() / vertex_count
 		for vertex in vertex_count:
 			var base := vertex * influences
-			var bone := _bind_bone_name(mesh.skin, skeleton, joints[base])
-			var single := is_equal_approx(weights[base], 1.0)
-			for extra in range(1, influences):
-				single = single and is_zero_approx(weights[base + extra])
-			if not single or not bones.has(bone):
-				strays.append("surface %d vertex %d -> %s" % [surface, vertex, bone])
+			var total := 0.0
+			var off := PackedStringArray()
+			for slot in influences:
+				if is_zero_approx(weights[base + slot]):
+					continue
+				total += weights[base + slot]
+				var bone := _bind_bone_name(mesh.skin, skeleton, joints[base + slot])
+				if not bones.has(bone):
+					off.append(bone)
+			if not off.is_empty() or absf(total - 1.0) > WEIGHT_SUM_TOLERANCE:
+				strays.append("surface %d vertex %d -> %s total %.3f" % [surface, vertex, off, total])
 				if strays.size() >= 3:
 					return strays
 	return strays
