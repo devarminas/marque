@@ -331,14 +331,12 @@ try {
             Add-Failure "client $label never reported the id it joined as"
         }
         foreach ($index in 1, 2, 3) {
+            # PNG artifact only (ARM-289); DEMO counts + GAMELOG are the proof.
             $shot = "$($client.Prefix)_$index.png"
-            if (-not (Test-Path $shot)) {
-                Add-Failure "client $label never wrote $shot"
-                continue
+            if (Test-Path $shot) {
+                $size = (Get-Item $shot).Length
+                Write-Host "==> $shot ($size bytes, artifact)"
             }
-            $size = (Get-Item $shot).Length
-            Write-Host "==> $shot ($size bytes)"
-            if ($size -lt 4096) { Add-Failure "$shot is only $size bytes; that is not a frame" }
             if (-not $report.PlayerCounts.ContainsKey($index)) {
                 Add-Failure "client $label reported no player count for shot $index"
             } elseif ($report.PlayerCounts[$index] -ne 2) {

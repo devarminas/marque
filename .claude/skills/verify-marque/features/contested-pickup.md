@@ -106,9 +106,10 @@ Preconditions:
   server underfoot); both clients draw the dropped item within 0.05 of the spawn.
 
 - **The evidence survives the run.** Everything lands in `-OutDir`, default
-  `$env:TEMP\marque-contested-pickup`: six PNGs, `client-a.stdout.log` and
+  `$env:TEMP\marque-contested-pickup`: optional PNG artifacts, `client-a.stdout.log` and
   `client-b.stdout.log` with their stderr companions, and `server.stdout.ndjson`, the
-  GAMELOG every server-layer assertion reads. Emptied at the start of each run and
+  GAMELOG every server-layer assertion reads. Soft PNG existence checks are not proof
+  (ARM-289). Emptied at the start of each run and
   refused outright if something else wrote it.
 
 - **Variant scenarios.** `-ItemX`/`-ItemZ` move the item and `-DropClick` moves the

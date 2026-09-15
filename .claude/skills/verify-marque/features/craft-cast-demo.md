@@ -43,8 +43,9 @@ starts the server on a free port, launches one windowed client with
 admin bus, then asserts both DEMO inventory/cast lines and GAMELOG
 gather / use / cast_begin / cast / cast_effect / cast_cancelled.
 
-Evidence lands in `-OutDir`, default `$env:TEMP\marque-craft-cast`: six PNGs, client
-stdout/stderr, and `server.stdout.ndjson`.
+Evidence lands in `-OutDir`, default `$env:TEMP\marque-craft-cast`: optional PNG
+artifacts, client stdout/stderr, and `server.stdout.ndjson`. Default proof is
+DEMO + GAMELOG (ARM-289).
 
 ## Gotchas
 

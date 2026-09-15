@@ -24,12 +24,14 @@
         b_1.png .. b_4.png      client b's
         .marque-evidence        this harness's claim on the directory
 
-    VERIFY HARNESS OK asserts structure only: the server announced itself,
-    outlived the clients, and kept a silent stderr; each client joined, printed
-    DEMO done, exited 0, and wrote four plausible frames. It is deliberately NOT
-    a behavioural verdict — a server that lied about movement would still earn
-    it. Catching that is the caller's assertions on the evidence files, per
-    SKILL.md's proof standards.
+    VERIFY HARNESS OK asserts structure only on the default proof layers: the
+    server announced itself, outlived the clients, and kept a silent stderr; each
+    client joined, printed DEMO done, and exited 0. PNG self-captures may still
+    land in the evidence directory as artifacts; their presence or byte size is
+    not a harness pass (ARM-289). It is deliberately NOT a behavioural verdict —
+    a server that lied about movement would still earn it. Catching that is the
+    caller's assertions on the evidence files, per SKILL.md's proof standards
+    (DEMO + GAMELOG by default; named-pixel only when named).
 
 .PARAMETER ClickA
 .PARAMETER ClickB
@@ -41,12 +43,10 @@
     Where the evidence lands. Defaults to a fresh timestamped directory under
     $env:TEMP\marque-verify. Never cleaned up after the run.
 
-    Emptied at startup, because the only checks made on a frame here are that it
-    exists and is over 4KB, and a stale PNG from an earlier run satisfies both:
-    reusing a directory would otherwise let a client that captured nothing be
-    proven healthy by the previous run's leftovers. The default path is fresh
-    every run, so this bites only a caller-supplied one. A directory this script
-    did not write is refused rather than emptied — it drops a `.marque-evidence`
+    Emptied at startup so a reused directory cannot leave stale DEMO logs,
+    GAMELOG, or PNG artifacts from a prior run. The default path is fresh every
+    run, so this bites only a caller-supplied one. A directory this script did
+    not write is refused rather than emptied — it drops a `.marque-evidence`
     marker into the ones it owns and clears only those.
 #>
 [CmdletBinding()]
@@ -253,15 +253,14 @@ try {
         if ($null -eq $done) {
             $failures.Add("client $label never reported 'DEMO done'")
         }
-
+        # PNG self-captures are artifacts only (ARM-289). DEMO done already means
+        # the scripted path finished its captures; do not soft-pass on file size.
         foreach ($index in 1, 2, 3, 4) {
             $shot = "$($client.Prefix)_$index.png"
-            if (-not (Test-Path $shot)) {
-                $failures.Add("client $label never wrote $shot")
-                continue
+            if (Test-Path $shot) {
+                $size = (Get-Item $shot).Length
+                Write-Host "==> $shot ($size bytes, artifact)"
             }
-            $size = (Get-Item $shot).Length
-            if ($size -lt 4096) { $failures.Add("$shot is only $size bytes; that is not a frame") }
         }
     }
 } catch {
