@@ -1,26 +1,25 @@
-# Tab combat loop (M6i)
+# Tab combat loop (M6i, ARM-290 split)
 
-One client closes M6 by observation: select hostile and fireball, select
-friendly and heal, right-click basic attack, then WASD relocate. Both DEMO
-lines and GAMELOG events must agree.
+M6i live proof is four focused units. The kitchen-sink `tab_combat_demo` is
+**retired** (ARM-290 fail-closed stub).
 
 ## Sub-features
 
 - `select-fireball` — select hostile dummy; cast fireball; mana and target HP
   drop; `CastHitFx` on the target; GAMELOG `cast_effect` fireball.
+  Driver: `dummy_cast_demo.ps1`.
 - `select-heal` — select wounded friendly dummy; cast heal; HP up and mana
-  down; flash; GAMELOG `cast_effect` heal. The harness seeds friendly HP via
-  `-friendly-hp` so heal can raise it.
+  down; flash; GAMELOG `cast_effect` heal. Harness seeds friendly HP via
+  `-friendly-hp`. Driver: `heal_wounded_demo.ps1`.
 - `right-click-attack` — right-click hostile starts pending melee; DEMO
-  `attackok` and GAMELOG `attack` / `attack_hit`.
+  `attackok` and GAMELOG `attack` / `attack_hit`. Driver: `dummy_attack_demo.ps1`.
 - `wasd-relocate` — `request_move` wish displaces the avatar; DEMO
   `move_displacement` / `wish_ok`; GAMELOG non-zero `move`; **no** player
-  `path_assigned` / `move_to`. The live demo runs this wish phase before casts so
-  range/mana gates cannot skip the wish+pose proof.
+  `path_assigned` / `move_to`. Driver: `wasd_demo.ps1`.
 
 ## How to get to it (user POV)
 
-- Hold W/A/S/D to walk under server authority (demo relocates first).
+- Hold W/A/S/D to walk under server authority.
 - Tab or left-click the red dummy, press hotbar 2 (fireball).
 - Tab or left-click the green dummy, press hotbar 1 (heal).
 - Right-click the red dummy to swing.
@@ -29,35 +28,25 @@ lines and GAMELOG events must agree.
 
 Preconditions:
 
-- `DOCTOR OK` or a local Godot that can run the live demo.
-- Live: `powershell -ExecutionPolicy Bypass -File scripts/tab_combat_demo.ps1`.
-  Marker: `TAB COMBAT DEMO OK` on the last line; exit 0.
-- Requires DEMO `fireballok`, `healok`, `castfx`, `attackok`, `move_displacement`,
-  `wish_ok` plus GAMELOG `cast_effect`, `attack_hit`, non-zero `move`, and
-  `npc_hp_seed`. Fails closed on player `path_assigned` or `move_to`.
+- `DOCTOR OK` or a local Godot that can run the live demos.
+- Live units (each bounded, single claim):
+  - `powershell -ExecutionPolicy Bypass -File scripts/wasd_demo.ps1` → `WASD DEMO OK`
+  - `powershell -ExecutionPolicy Bypass -File scripts/dummy_cast_demo.ps1` → `DUMMY CAST DEMO OK`
+  - `powershell -ExecutionPolicy Bypass -File scripts/dummy_attack_demo.ps1` → `DUMMY ATTACK DEMO OK`
+  - `powershell -ExecutionPolicy Bypass -File scripts/heal_wounded_demo.ps1` → `HEAL WOUNDED DEMO OK`
+- Do **not** drive `scripts/tab_combat_demo.ps1` — fail-closed stub (ARM-290).
 
-Evidence lands in `-OutDir` (default `$env:TEMP\marque-tab-combat`): client
-stdout/stderr, `server.stdout.ndjson`, and optional `tab_combat_*.png`.
+Evidence lands per harness under its `-OutDir`. Default proof is DEMO + GAMELOG;
+PNGs are artifacts only (ARM-289).
 
 ## Gotchas
 
 - **Friendly must be wounded.** Heal on MaxHP spends mana but does not raise HP.
-  The demo passes `-friendly-hp 50` to marqued.
-- **Wish before cast.** Relocate runs first so `wish_ok` / non-zero `move` stay
-  reachable if a later fireball mana/range gate flakes. Spawn-to-hostile is 3.0
-  with fireball range 8; the driver also closes in before cast. A remaining
-  "did not spend mana" with in-range poses is usually kit/class or env, not
-  wish+pose.
-- **Practice dummy, not last hostile.** Join worlds also spawn imps. Target
-  selection filters `kind == dummy` so a later hostile imp cannot overwrite the
-  practice dummy and pull close-in into the camp.
-- **Mage kit is admin `/give`.** Harness starts marqued with `-admin`; the client
+  `heal_wounded_demo.ps1` passes `-friendly-hp 50` to marqued.
+- **Mage kit is admin `/give`.** Harnesses start marqued with `-admin`; the client
   grants cloth + staff after join. Do not pass a `-join-kit` mage forest.
-- **One Godot driver.** Do not run a second `--*-shots` client against the same
-  server while this milestone demo is proving AC1–AC5.
-- **Left-click is not attack.** The attack phase must right-click.
-- **Close in before hostile right-click.** After heal the mage stands next to the
-  friendly dummy; a single unprojected right-click under llvmpipe often picks the
-  green capsule. The driver closes to `ATTACK_PICK_RANGE`, settles the follow
-  camera, then probes height/nudge/camera-facing aims until `GroundPicker` names
-  the hostile practice dummy (`kind==dummy`) before firing the right-click.
+- **Practice dummy, not last hostile.** Join worlds also spawn imps. Target
+  selection filters `kind == dummy`.
+- **Left-click is not attack.** The attack unit must right-click.
+- **Close in before hostile right-click.** Under llvmpipe, probe until
+  `GroundPicker` names the hostile practice dummy before firing.

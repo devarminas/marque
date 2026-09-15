@@ -86,8 +86,8 @@ minimum is DEMO + GAMELOG; pixel cells are named contracts or `optional`.
 - [Equip the join-kit weapon](./equip-weapon.md) — M3 equip / unequip.
 - [Gather then craft](./gather-craft.md) — M4 product; `gather_craft_demo.ps1` is
   a fail-closed stub (ARM-287). Live gather via `gather_error_demo`.
-- [Mine, smelt, craft sword, cast bar](./craft-cast-demo.md) — M12 mine→smelt→sword
-  plus fireball cast-bar resolve/interrupt (`CRAFT CAST DEMO OK`).
+- [Mine, smelt, craft sword](./craft-cast-demo.md) — M12 split (ARM-290):
+  `mine_smelt_craft_demo` + `cast_bar_demo`. `craft_cast_demo.ps1` is fail-closed.
 - [Right-click a tree, chop it or be told why not](./gather-refusal.md) — ARM-147
   gather gate refusal.
 - [Admin give class kits](./admin-give-class-kits.md) — `/give` via `-admin`
@@ -96,21 +96,21 @@ minimum is DEMO + GAMELOG; pixel cells are named contracts or `optional`.
 ## Combat
 
 - [Kill and respawn](./combat-kill-respawn.md) — M5 death/respawn (Go) plus live
-  NPC melee via `dummy_attack` / `tab_combat`. `combat_demo.ps1` is a fail-closed stub (ARM-284).
+  NPC melee via `dummy_attack` / `heal_wounded`. `combat_demo.ps1` is a fail-closed stub (ARM-284).
 - [Tab targeting](./tab-targeting.md) — M6c select with ring chrome; no auto-attack.
 - [Right-click basic attack](./right-click-basic-attack.md) — M6f hostile engage;
   friendly refuse.
 - [Cast effect on target](./cast-effect-on-target.md) — M6h cast flash / refuse.
-- [Tab combat loop](./tab-combat-loop.md) — M6i fireball, heal, attack, WASD.
+- [Tab combat loop](./tab-combat-loop.md) — M6i split (ARM-290): `wasd` /
+  `dummy_cast` / `dummy_attack` / `heal_wounded`. `tab_combat_demo.ps1` is fail-closed.
 
 ## Quests
 
 - [Quest demo: sticks for miner kit](./quest-demo.md) — M9 deliver sticks
   (`QUEST DEMO OK`).
-- [Enemy quest demo: party, imps, Imp Patrol](./enemy-quest-demo.md) — M11
-  party/kill/quest **outcome** (`ENEMY QUEST DEMO OK`); not Imp chase
-  (outcome-not-chase).
-
+- [Enemy quest demo: party, imps, Imp Patrol](./enemy-quest-demo.md) — M11 split
+  (ARM-290): `enemy_party` / `enemy_midchase` / `enemy_quest_turnin`. Kitchen-sink
+  `enemy_quest_demo.ps1` is fail-closed.
 ## Polish (M13 action movement)
 
 Graduated e2e home. Prop presentation is **mock-first** (no marqued). Wire and

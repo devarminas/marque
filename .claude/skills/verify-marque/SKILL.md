@@ -29,16 +29,22 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/contested_pickup_demo.ps1` | `CONTESTED PICKUP DEMO OK` |
 | `scripts/equip_demo.ps1` | `EQUIP DEMO OK` |
 | `scripts/gather_craft_demo.ps1` | **retired** (ARM-287 fail-closed stub). Exits non-zero with a clear message. Drive `gather_error_demo.ps1` for live gather proof. |
-| `scripts/craft_cast_demo.ps1` | `CRAFT CAST DEMO OK` |
+| `scripts/craft_cast_demo.ps1` | **retired** (ARM-290 fail-closed stub). Drive `mine_smelt_craft_demo.ps1` / `cast_bar_demo.ps1`. |
+| `scripts/mine_smelt_craft_demo.ps1` | `MINE SMELT CRAFT DEMO OK` |
+| `scripts/cast_bar_demo.ps1` | `CAST BAR DEMO OK` |
 | `scripts/gather_error_demo.ps1` | `GATHER ERROR DEMO OK` |
 | `scripts/dummy_cast_demo.ps1` | `DUMMY CAST DEMO OK` |
 | `scripts/dummy_attack_demo.ps1` | `DUMMY ATTACK DEMO OK` |
 | `scripts/wasd_demo.ps1` | `WASD DEMO OK` |
 | `scripts/arena_collision_demo.ps1` | `ARENA COLLISION DEMO OK` |
-| `scripts/tab_combat_demo.ps1` | `TAB COMBAT DEMO OK` |
-| `scripts/combat_demo.ps1` | **retired** (ARM-284 fail-closed stub). Exits non-zero with a clear message. Drive `dummy_attack_demo.ps1` / `tab_combat_demo.ps1` instead. |
+| `scripts/tab_combat_demo.ps1` | **retired** (ARM-290 fail-closed stub). Drive `wasd_demo.ps1` / `dummy_cast_demo.ps1` / `dummy_attack_demo.ps1` / `heal_wounded_demo.ps1`. |
+| `scripts/heal_wounded_demo.ps1` | `HEAL WOUNDED DEMO OK` |
+| `scripts/combat_demo.ps1` | **retired** (ARM-284 fail-closed stub). Exits non-zero with a clear message. Drive `dummy_attack_demo.ps1` / `heal_wounded_demo.ps1` instead. |
 | `scripts/quest_demo.ps1` | `QUEST DEMO OK` |
-| `scripts/enemy_quest_demo.ps1` | `ENEMY QUEST DEMO OK` |
+| `scripts/enemy_quest_demo.ps1` | **retired** (ARM-290 fail-closed stub). Drive `enemy_party_demo.ps1` / `enemy_midchase_demo.ps1` / `enemy_quest_turnin_demo.ps1`. |
+| `scripts/enemy_party_demo.ps1` | `ENEMY PARTY DEMO OK` |
+| `scripts/enemy_midchase_demo.ps1` | `ENEMY MIDCHASE DEMO OK` |
+| `scripts/enemy_quest_turnin_demo.ps1` | `ENEMY QUEST TURNIN DEMO OK` |
 | `scripts/admin_give_class_kits_demo.ps1` | `ADMIN GIVE CLASS KITS DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
@@ -86,16 +92,20 @@ split into a client skill and a server skill.
 **No new windowed demo per quest id.** New quest coverage extends Go, headless, or
 thin WS. Do not add `*_demo.ps1`, `*_demo.gd`, or a new `--*-shots` flag for a
 quest string. Existing demos stay; they do not multiply with content.
+**Exception (ARM-290):** splitting an already-allowlisted kitchen-sink demo into
+smaller allowlisted units with one claim each is required when the sink is too
+long; update `demo-allowlist.txt` in the same change.
 
 **Evidence kinds** fold into feature recipes (GAMELOG / DEMO / named-pixel), never a
 fifth H2. Feature files keep Atlas's four H2s only. Default minimum evidence is
 DEMO + GAMELOG; name a pixel contract only when the claim is visual. Name the
 default driver rung in `Driving` when the recipe has one.
 
-**outcome-not-chase.** `ENEMY QUEST DEMO OK` proves party, camp kills, and quest
+**outcome-not-chase.** `ENEMY QUEST TURNIN DEMO OK` proves party, camp kills, and quest
 complete. It does not prove Imp chase or walk-anim. Chase timing is Go/GAMELOG:
 `arrived` with `npc` after a chase path (`TestImpChasePathLogsArrived`). Live
-mid-chase remains DEMO npc/anim (`features/enemy-quest-demo.md`).
+mid-chase remains DEMO npc/anim via `enemy_midchase_demo.ps1`
+(`features/enemy-quest-demo.md`).
 
 ## Launch
 
@@ -169,9 +179,11 @@ first whenever anything looks off.
 
 **Hard rule: do not mint a new windowed demo for quest (or other) content.** New
 quest coverage extends the Go server and thin WebSocket / headless proof paths; it
-does not add `*_demo.ps1`, `*_demo.gd`, or a new `--*-shots` flag. If an existing
-allowed demo must change, update `demo-allowlist.txt` in the same change. Doctor
-enforces the allowlist; the skill text alone is not enough.
+does not add `*_demo.ps1`, `*_demo.gd`, or a new `--*-shots` flag. **ARM-290
+exception:** when splitting an oversized allowlisted demo into bounded single-claim
+units, add the new files/flags to `demo-allowlist.txt` in the same change and
+fail-close the kitchen sink. Doctor enforces the allowlist; the skill text alone
+is not enough.
 
 ## Drive
 
@@ -187,18 +199,26 @@ enforces the allowlist; the skill text alone is not enough.
 | `--drop-click fx,fy` | Where the winner of that contest clicks the ground before dropping, as viewport fractions. Required alongside `--pickup-shots`, and refused rather than defaulted if it will not parse. |
 | `--equip-shots <abs-prefix>` | Enter the equip milestone demo mode (`equip_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M3d.** Single client; the demo starts marqued with `-join-kit sword`. Absolute host path required. |
 | `--gather-craft-shots <abs-prefix>` | **Fail-closed** (ARM-287). `gather_craft_demo.gd` / `scripts/gather_craft_demo.ps1` exit non-zero; do not drive for proof. Use `--gather-error-shots` for live gather. |
-| `--craft-cast-shots <abs-prefix>` | Enter the M12 craft+cast milestone demo (`craft_cast_demo.gd`); write `<prefix>_1.png` … `<prefix>_6.png`. Single client: marqued with `-admin`; client `/give`s miner/sticks/mage kit, then mine→smelt→craft sword, then fireball cast-bar resolve and walk interrupt. Absolute host path required. |
+| `--craft-cast-shots <abs-prefix>` | **Fail-closed** (ARM-290). Drive `--mine-smelt-craft-shots` / `--cast-bar-shots`. |
+| `--mine-smelt-craft-shots <abs-prefix>` | Mine→smelt→craft sword demo (`mine_smelt_craft_demo.gd`). Single client; marqued `-admin`; client `/give`s miner+sticks. Absolute host path required. |
+| `--cast-bar-shots <abs-prefix>` | Fireball cast-bar resolve + walk interrupt (`cast_bar_demo.gd`). Absolute host path required. |
 | `--gather-error-shots <abs-prefix>` | Enter the refused-gather demo mode (`gather_error_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **ARM-147.** One client; right-clicks the tree unarmed, reads the refusal, wears a ground-seeded lumberjack set, chops. Absolute host path required. |
-| `--combat-shots <abs-prefix>` | **Fail-closed** (ARM-284). `combat_demo.gd` / `scripts/combat_demo.ps1` exit non-zero; do not drive for proof. Use `--dummy-attack` / `--tab-combat-shots`. |
+| `--combat-shots <abs-prefix>` | **Fail-closed** (ARM-284). `combat_demo.gd` / `scripts/combat_demo.ps1` exit non-zero; do not drive for proof. Use `--dummy-attack` / `--heal-wounded-shots`. |
 | `--combat-role attacker\|victim` | Legacy companion to `--combat-shots`. Same fail-closed rule; ignored by the stub. |
 | `--dummy-cast <abs-prefix>` | Dummy cast demo (`dummy_cast_demo.gd`). Absolute host path required. |
 | `--dummy-attack <abs-prefix>` | Hostile-dummy melee demo (`dummy_attack_demo.gd`). Absolute host path required. |
 | `--wasd-shots <abs-prefix>` | WASD move demo (`wasd_demo.gd`). Absolute host path required. |
 | `--arena-collision-shots <abs-prefix>` | Ring of Trials wall/ramp/jump demo (`arena_collision_demo.gd`). Absolute host path required. **M14g / ARM-259.** |
-| `--tab-combat-shots <abs-prefix>` | Tab combat loop demo (`tab_combat_demo.gd`). Absolute host path required. |
+| `--tab-combat-shots <abs-prefix>` | **Fail-closed** (ARM-290). Drive `--wasd-shots` / `--dummy-cast` / `--dummy-attack` / `--heal-wounded-shots`. |
+| `--heal-wounded-shots <abs-prefix>` | Heal raises wounded friendly dummy HP (`heal_wounded_demo.gd`). Absolute host path required. |
 | `--quest-shots <abs-prefix>` | Quest demo (`quest_demo.gd`). Absolute host path required. |
-| `--enemy-quest-shots <abs-prefix>` | Enter the M11 enemy/party/kill-quest demo (`enemy_quest_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. Requires `--enemy-quest-role leader\|member`. Absolute host path required. |
-| `--enemy-quest-role leader\|member` | Which side of the enemy quest demo this client plays. Required alongside `--enemy-quest-shots`. |
+| `--enemy-quest-shots <abs-prefix>` | **Fail-closed** (ARM-290). Drive `--enemy-party-shots` / `--enemy-midchase-shots` / `--enemy-quest-turnin-shots`. |
+| `--enemy-quest-role leader\|member` | Legacy companion to `--enemy-quest-shots`. Same fail-closed rule; ignored by the stub. |
+| `--enemy-party-shots <abs-prefix>` | Party + accept `slay_imps` (`enemy_party_demo.gd`). Requires `--enemy-party-role leader\|member`. Absolute host path required. |
+| `--enemy-party-role leader\|member` | Which side of the enemy party demo this client plays. |
+| `--enemy-midchase-shots <abs-prefix>` | Mid-chase Imp visibility (`enemy_midchase_demo.gd`). Absolute host path required. |
+| `--enemy-quest-turnin-shots <abs-prefix>` | Camp kills + party credit + turn-in (`enemy_quest_turnin_demo.gd`). Requires `--enemy-quest-turnin-role leader\|member`. Absolute host path required. |
+| `--enemy-quest-turnin-role leader\|member` | Which side of the turn-in demo this client plays. |
 | `--screenshot` | No server needed: render `main.tscn`, save one frame to `user://shot.png`, print its absolute path, quit. The single-client visual baseline. |
 
 Scripted demo mode waits for **two** players (`DEMO_MIN_PLAYERS` in `main.gd`), so a

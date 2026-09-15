@@ -23,8 +23,8 @@ cd server && CGO_ENABLED=1 go test -race ./internal/abilitydef/ -run 'TestLoadSh
 cd server && CGO_ENABLED=1 go test -race ./internal/game/ -run 'TestFireballWalkInterruptsOutsideGrace|TestFireballGraceSurvivesWalk|TestMovableCastResolvesWhileWalking|TestRootedCastIgnoresWish|TestInstantCastIgnoresWalkInterrupt'
 ```
 
-Existing live cast demos (`craft_cast_demo.ps1`, `dummy_cast_demo.ps1`,
-`tab_combat_demo.ps1`) remain optional evidence; do not add a new demo for this
+Existing live cast demos (`cast_bar_demo.ps1`, `dummy_cast_demo.ps1`,
+`heal_wounded_demo.ps1`) remain optional evidence; do not add a new demo for this
 ADR. Prop mock does not cover locomotion policy.
 
 ## Gotchas

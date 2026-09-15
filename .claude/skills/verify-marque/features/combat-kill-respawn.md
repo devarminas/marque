@@ -15,10 +15,11 @@ NPC demos; player death/respawn store rules stay on the Go rung.
   PvP recipe.
 - `act-after-respawn` — Go: post-respawn intents accepted; refused when not dead
   (`TestLivingRespawnRefused`).
-- `live-melee-loop` — `tab_combat_demo.ps1` covers right-click attack among cast
-  and WASD (`TAB COMBAT DEMO OK`).
-- `demo-pass` — live markers are `DUMMY ATTACK DEMO OK` or `TAB COMBAT DEMO OK`
-  on the last line with exit 0. Never require `COMBAT DEMO OK`.
+- `live-melee-loop` — `dummy_attack_demo.ps1` covers right-click attack; combine
+  with `dummy_cast` / `heal_wounded` / `wasd` for the former tab_combat claims
+  (`DUMMY ATTACK DEMO OK`, `HEAL WOUNDED DEMO OK`, …).
+- `demo-pass` — live markers are the focused-unit OK lines (ARM-290).
+  `TAB COMBAT DEMO OK` / `COMBAT DEMO OK` are retired.
 
 Minimum evidence:
 
@@ -27,7 +28,7 @@ Minimum evidence:
 | Period hits to kill | ten `attack_hit` dmg 10 → HP 0 (`TestTenHitsKillImpFromFull`, `TestAttackOutOfRangePathsInThenHitsOnPeriod`) | n/a | n/a | **Go** |
 | Live NPC melee smoke | ≥1 `attack_hit` | attack DEMO | optional | live `dummy_attack` |
 | Player death/respawn | `death`, `respawn`, HP 100 | n/a (no live PvP) | n/a | **Go** |
-| Tab combat loop | `cast_effect`, `attack_hit`, `move` | fireball/heal/attack/move DEMO | optional | live `tab_combat` |
+| Tab combat claims | `cast_effect`, `attack_hit`, `move` | fireball/heal/attack/move DEMO | optional | live focused units (ARM-290) |
 
 ## How to get to it (user POV)
 
@@ -35,29 +36,28 @@ Minimum evidence:
 - Player death overlay and Respawn are still in the client UI; exercise them via
   Go when proving store rules. Do not run `combat_demo.ps1` for proof.
 
-## Driving it with dummy_attack / tab_combat (not combat_demo)
+## Driving it with focused combat demos (not combat_demo / tab_combat)
 
 Default driver rung by claim: **Go** for period-kill cadence and death/respawn;
 **live** `scripts/dummy_attack_demo.ps1` for NPC melee smoke; **live**
-`scripts/tab_combat_demo.ps1` for the M6i loop.
+`wasd` / `dummy_cast` / `heal_wounded` for the former M6i loop claims (ARM-290).
 
 Preconditions:
 
 - `DOCTOR OK`; desktop for live demos.
 - NPC melee smoke: `powershell -ExecutionPolicy Bypass -File scripts/dummy_attack_demo.ps1`.
   Marker: `DUMMY ATTACK DEMO OK` last line; exit 0.
-- Combat loop: `powershell -ExecutionPolicy Bypass -File scripts/tab_combat_demo.ps1`.
-  Marker: `TAB COMBAT DEMO OK` last line; exit 0.
+- Heal wounded: `powershell -ExecutionPolicy Bypass -File scripts/heal_wounded_demo.ps1`.
+  Marker: `HEAL WOUNDED DEMO OK` last line; exit 0.
 - Period hits + death/respawn store: from `server/`,
   `CGO_ENABLED=1 go test -race ./internal/game/ -run 'TenHitsKillImpFromFull|AttackOutOfRangePathsInThenHitsOnPeriod|DeadRefuses|RespawnRestores|LivingRespawn|GatheringPlayerStillDies'`.
-- **Do not** treat `scripts/combat_demo.ps1` as a proof. It is a fail-closed stub
-  (ARM-284) that exits non-zero with a clear message. `--combat-shots` / `combat_demo.gd`
-  are the same stub path; agents must drive `dummy_attack` / `tab_combat` for markers.
+- **Do not** treat `scripts/combat_demo.ps1` or `scripts/tab_combat_demo.ps1` as
+  proofs. Both are fail-closed stubs (ARM-284 / ARM-290).
 
 ## Gotchas
 
-- **`COMBAT DEMO OK` is gone.** Recipes that still cite it are stale. Point at
-  `DUMMY ATTACK DEMO OK` / `TAB COMBAT DEMO OK` / Go.
+- **`COMBAT DEMO OK` / `TAB COMBAT DEMO OK` are gone.** Recipes that still cite
+  them are stale. Point at focused-unit markers / Go.
 - **Left-click is not attack.** After M6c, demos must right-click (or call
   `request_attack`).
 - **Roles / join order.** Resolve ids from `DEMO joined`, never from window labels.
