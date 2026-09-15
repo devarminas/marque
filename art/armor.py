@@ -4,13 +4,12 @@ from dataclasses import dataclass
 import bpy
 from mathutils import Vector
 
-from body import (HUMAN_SHAPES, SPHERE_ROUNDNESS, Anchor, Detail, Joint, Radii, Resolution, Segment,
-                  anchor_point, both_sides, material, ring, rounded, skinned, sweep)
+from body import (HEAD, HUMAN_SHAPES, Anchor, Ends, Radii, Resolution, Shape, anchor_point, both_sides, grown,
+                  material, ring, rounded, skinned, solid, sweep)
 from contract import Contract, ContractError, Variant, Vec3
 from rig import scaled
 
 SOLID = Resolution(12, 7)
-BALL = Resolution(10, 5)
 WALL = Resolution(16, 6)
 BAND = Resolution(16, 2)
 
@@ -29,11 +28,14 @@ class Solid:
 
 
 @dataclass(frozen=True)
-class Ball:
-    bone: str
-    radius: float
+class Cover:
+    shape: Shape
+    grow: float
     paint: str
-    resolution: Resolution = BALL
+
+    @property
+    def bone(self) -> str:
+        return self.shape.bone
 
 
 @dataclass(frozen=True)
@@ -51,7 +53,7 @@ class Wall:
     resolution: Resolution = WALL
 
 
-Part = Solid | Ball | Wall
+Part = Solid | Cover | Wall
 
 
 @dataclass(frozen=True)
@@ -78,9 +80,6 @@ GEAR_PALETTE: dict[str, Vec3] = {
     "strap": (0.22, 0.13, 0.07),
 }
 
-HEAD = next(shape for shape in HUMAN_SHAPES["head"] if isinstance(shape, Segment) and shape.bone == "Head")
-
-
 def dome(keep: tuple[float, float], paint: str, thickness: float = 0.014, gap: float = 0.012,
          resolution: Resolution = WALL) -> Wall:
     return Wall("Head", HEAD.start, HEAD.end, HEAD.start_radii, HEAD.end_radii, HEAD.roundness, paint,
@@ -94,9 +93,9 @@ LOOKS: dict[str, Look] = {
     )),
     "plate_chest": Look(0.016, "steel", (
         *both_sides((
-            Solid("upperarm_l", Anchor(-0.3), Anchor(0.3), Radii(0.116, 0.116), Radii(0.116, 0.116), 2.0, "steel_dark"),
+            Solid("upperarm_l", Anchor(-0.12), Anchor(0.38), Radii(0.094, 0.094), Radii(0.094, 0.094), 2.0, "steel_dark"),
         )),
-        Wall("spine_01", Anchor(-1.1, (0.0, 0.012, 0.0)), Anchor(1.6), Radii(0.23, 0.18), Radii(0.14, 0.11), 8.0,
+        Wall("spine_01", Anchor(-1.1, (0.0, 0.012, 0.0)), Anchor(1.6), Radii(0.24, 0.19), Radii(0.14, 0.11), 8.0,
              "steel_dark", thickness=0.012, keep=(0.18, 1.0), resolution=Resolution(14, 5)),
     )),
     "plate_legs": Look(0.016, "steel", both_sides((
@@ -174,18 +173,7 @@ LOOKS: dict[str, Look] = {
 
 def covers(region: str, look: Look) -> tuple[Part, ...]:
     paint = dict(look.region_paints).get(region, look.paint)
-    parts: list[Part] = []
-    for shape in HUMAN_SHAPES[region]:
-        match shape:
-            case Joint():
-                parts.append(Ball(shape.bone, shape.radius + look.pad, paint))
-            case Segment():
-                parts.append(Solid(shape.bone, shape.start, shape.end, shape.start_radii, shape.end_radii,
-                                   shape.roundness, paint, look.pad))
-            case Detail():
-                parts.append(Solid(shape.bone, shape.start, shape.end, Radii(shape.start_radius, shape.start_radius),
-                                   Radii(shape.end_radius, shape.end_radius), shape.roundness, paint, look.pad))
-    return tuple(parts)
+    return tuple(Cover(shape, look.pad, paint) for shape in HUMAN_SHAPES[region])
 
 
 def parts(contract: Contract, item: str) -> tuple[Part, ...]:
@@ -218,34 +206,20 @@ def build_pieces(contract: Contract, rig: bpy.types.Object) -> list[bpy.types.Ob
     ]
 
 
-Ends = tuple[Vector, Vector, Radii, Radii]
-
-
 def _geometry(contract: Contract, variant: Variant, part: Part) -> tuple[list[Vec3], list[tuple[int, ...]]]:
+    if isinstance(part, Cover):
+        return solid(contract, variant, part.shape, part.grow, cover=True)
     bone = contract.bone(part.bone)
     head = Vector(scaled(bone.head, variant))
     tail = Vector(scaled(bone.tail, variant))
+    ends = grown((anchor_point(head, tail, part.start, variant), anchor_point(head, tail, part.end, variant),
+                  part.start_radii, part.end_radii), part.grow, variant.scale)
     match part:
-        case Ball():
-            reach = (tail - head).normalized() * (part.radius * variant.scale)
-            sphere = Radii(part.radius, part.radius)
-            return sweep(head - reach, head + reach, sphere, sphere, SPHERE_ROUNDNESS, part.resolution, variant.scale)
         case Solid():
-            ends = _grown((anchor_point(head, tail, part.start, variant), anchor_point(head, tail, part.end, variant),
-                           part.start_radii, part.end_radii), part.grow, variant.scale)
             return sweep(*ends, part.roundness, part.resolution, variant.scale)
         case Wall():
-            inner = _grown((anchor_point(head, tail, part.start, variant), anchor_point(head, tail, part.end, variant),
-                            part.start_radii, part.end_radii), part.grow, variant.scale)
-            return _wall(inner, _grown(inner, part.thickness, variant.scale), part.roundness, part.keep,
+            return _wall(ends, grown(ends, part.thickness, variant.scale), part.roundness, part.keep,
                          part.resolution, variant.scale)
-
-
-def _grown(ends: Ends, amount: float, scale: float) -> Ends:
-    start, end, start_radii, end_radii = ends
-    reach = (end - start).normalized() * (amount * scale)
-    return (start - reach, end + reach, Radii(start_radii.across + amount, start_radii.deep + amount),
-            Radii(end_radii.across + amount, end_radii.deep + amount))
 
 
 def _wall(inner: Ends, outer: Ends, roundness: float, keep: tuple[float, float], resolution: Resolution,

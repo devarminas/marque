@@ -13,11 +13,10 @@ from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
 from armor import LOOKS
-from body import HUMAN_SHAPES, Joint
+from body import HUMAN_SHAPES, Band, anchor_point
 from contract import REPO, Contract, ContractError, load, res_to_path
 
 TOLERANCE = 0.003
-SEAM_PAD = 0.03
 LIMIT = 0
 WELD_DIGITS = 5
 RAY_STEP = 1.0e-5
@@ -34,7 +33,7 @@ LIMB_ROOTS = ("upperarm_l", "upperarm_r", "thigh_l", "thigh_r")
 METRICS = ("a", "b", "c")
 BODY = "body"
 SETS = REPO / "shared/sets.json"
-JOINT_RADII = {shape.bone: shape.radius for shapes in HUMAN_SHAPES.values() for shape in shapes if isinstance(shape, Joint)}
+BANDS = {shape.bone: shape for shapes in HUMAN_SHAPES.values() for shape in shapes if isinstance(shape, Band)}
 
 
 @dataclass(frozen=True)
@@ -95,7 +94,9 @@ def islands(contract: Contract, ob: bpy.types.Object) -> list[Island]:
     mesh.calc_loop_triangles()
     coords = np.empty(len(mesh.vertices) * 3)
     mesh.vertices.foreach_get("co", coords)
-    _, weld = np.unique(np.round(coords.reshape(-1, 3), WELD_DIGITS), axis=0, return_inverse=True)
+    group = np.array([max(vertex.groups, key=lambda g: g.weight).group for vertex in mesh.vertices])
+    keys = np.column_stack((np.round(coords.reshape(-1, 3), WELD_DIGITS), group))
+    _, weld = np.unique(keys, axis=0, return_inverse=True)
     weld = weld.ravel()
     triangles = np.empty(len(mesh.loop_triangles) * 3, dtype=np.int64)
     mesh.loop_triangles.foreach_get("vertices", triangles)
@@ -222,7 +223,28 @@ def _coverers(contract: Contract, config: Config) -> dict[str, str]:
     return coverer
 
 
-def seams(contract: Contract, config: Config, bones: tuple[str, ...] | None = None) -> dict[str, float]:
+@dataclass(frozen=True)
+class Reach:
+    far: float
+    radius: float
+
+    def grown(self, pad: float) -> float:
+        return float(np.hypot(self.far + pad, self.radius + pad))
+
+
+def band_reaches(contract: Contract) -> dict[str, Reach]:
+    variant = contract.variants[contract.clip_rig]
+    reaches = {}
+    for bone, band in sorted(BANDS.items()):
+        rest = contract.bone(bone)
+        head, tail = Vector(rest.head), Vector(rest.tail)
+        far = max((anchor_point(head, tail, anchor, variant) - head).length for anchor in (band.start, band.end))
+        reaches[bone] = Reach(far, max(band.radii))
+    return reaches
+
+
+def seams(contract: Contract, config: Config, reaches: dict[str, Reach],
+          bones: tuple[str, ...] | None = None) -> dict[str, float]:
     coverer = _coverers(contract, config)
     bone_region = {bone: region for region, members in contract.regions.items() for bone in members}
     balls = {}
@@ -235,7 +257,7 @@ def seams(contract: Contract, config: Config, bones: tuple[str, ...] | None = No
         if bones is not None and bone.name not in bones:
             continue
         pad = max((LOOKS[item].pad for item in sides if item != BODY), default=0.0)
-        balls[bone.name] = JOINT_RADII[bone.name] + pad + SEAM_PAD
+        balls[bone.name] = reaches[bone.name].grown(pad)
     return balls
 
 
@@ -243,12 +265,12 @@ def exempt(point: np.ndarray, heads: dict[str, np.ndarray], balls: dict[str, flo
     return any(np.linalg.norm(point - heads[bone]) <= radius for bone, radius in balls.items())
 
 
-def measure(contract: Contract, frame: Frame, config: Config) -> dict[str, Worst]:
+def measure(contract: Contract, frame: Frame, config: Config, reaches: dict[str, Reach]) -> dict[str, Worst]:
     hidden = {region for item in config.worn for region in contract.pieces[item].hides}
     shown = [key for key, posed in frame.posed.items()
              if (posed.island.owner == BODY and posed.island.region not in hidden) or posed.island.owner in config.worn]
-    joints = seams(contract, config)
-    roots = seams(contract, config, LIMB_ROOTS)
+    joints = seams(contract, config, reaches)
+    roots = seams(contract, config, reaches, LIMB_ROOTS)
     pairs: dict[str, list] = {metric: [] for metric in METRICS}
     for i, first in enumerate(shown):
         for second in shown[i + 1:]:
@@ -293,6 +315,7 @@ def main() -> None:
     rig, meshes = import_human(contract)
     parts = {ob.name: islands(contract, ob) for ob in meshes}
     kits = configs(contract)
+    reaches = band_reaches(contract)
     worst: dict[tuple[str, str], dict[str, Worst]] = {}
     enclosure: dict[str, int] = {}
     for clip, frames in FRAMES.items():
@@ -302,13 +325,14 @@ def main() -> None:
                 enclosure = exposed(contract, frame)
             for config in kits:
                 row = worst.setdefault((config.name, clip), {metric: Worst() for metric in METRICS})
-                for metric, found in measure(contract, frame, config).items():
+                for metric, found in measure(contract, frame, config, reaches).items():
                     held = row[metric]
                     if found.count > held.count or (found.count == held.count and found.depth > held.depth):
                         row[metric] = found
 
     print(f"clipping: worst frame per kit and clip; vertices buried deeper than {TOLERANCE * 1000:.0f} mm,"
-          f" seams and limb roots exempt within joint radius + piece pad + {SEAM_PAD * 100:.0f} cm")
+          " seams and limb roots exempt within the band rim reach grown by the piece pad")
+    print("band reach: " + ", ".join(f"{bone} {reach.grown(0.0) * 1000:.0f} mm" for bone, reach in reaches.items()))
     print(f"{'kit':<20}{'clip':<7}{'(a) body/piece':>18}{'(b) piece/piece':>18}{'(c) limb/trunk':>18}")
     failures = []
     for (name, clip), row in worst.items():
