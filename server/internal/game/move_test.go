@@ -161,7 +161,7 @@ func TestDeadRefusesMove(t *testing.T) {
 func TestWireStateIncludesY(t *testing.T) {
 	pw := newProbeWorld(t)
 	alice := pw.join()
-	state := alice.wireState()
+	state := pw.w.playerState(alice)
 	if state.Y != 0 {
 		t.Fatalf("Y=%v, want 0", state.Y)
 	}

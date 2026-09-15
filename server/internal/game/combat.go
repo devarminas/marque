@@ -40,7 +40,7 @@ func (p *player) clearCombat() {
 	p.combatExpiresTick = 0
 }
 
-func (p *player) wireState() mnet.PlayerState {
+func (w *World) playerState(p *player) mnet.PlayerState {
 	return mnet.PlayerState{
 		ID:      p.id,
 		X:       p.pos.X,
@@ -50,6 +50,7 @@ func (p *player) wireState() mnet.PlayerState {
 		MaxHP:   MaxHP,
 		Mana:    p.mana,
 		MaxMana: MaxMana,
+		Worn:    w.wornSlots(p),
 	}
 }
 
@@ -251,6 +252,7 @@ func (w *World) resolveAttack(p *player) {
 	}
 
 	p.attackProgress = 0
+	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: w.playerWeaponID(p)}, nil)
 	target.hp -= AttackDamage
 	if target.hp < 0 {
 		target.hp = 0
@@ -286,6 +288,7 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 	}
 
 	p.attackProgress = 0
+	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: w.playerWeaponID(p)}, nil)
 	target.hp -= AttackDamage
 	if target.kind == KindDummy {
 		target.floorPracticeHP()

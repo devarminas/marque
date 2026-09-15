@@ -53,6 +53,7 @@ func (w *World) equip(p *player, msg mnet.Equip, seq mnet.Seq) {
 
 	w.sendInventory(p)
 	w.sendEquipment(p)
+	w.broadcast(mnet.Worn{ID: p.id, Slots: w.wornSlots(p)}, nil)
 	w.sendClass(p)
 }
 
@@ -96,6 +97,7 @@ func (w *World) unequip(p *player, msg mnet.Unequip, seq mnet.Seq) {
 
 	w.sendInventory(p)
 	w.sendEquipment(p)
+	w.broadcast(mnet.Worn{ID: p.id, Slots: w.wornSlots(p)}, nil)
 	w.sendClass(p)
 }
 func (w *World) seedJoinKit(p *player) {
@@ -113,10 +115,14 @@ func (w *World) seedJoinKit(p *player) {
 }
 
 func (w *World) sendEquipment(p *player) {
+	w.send(p, mnet.Equipment{Worn: WornSlots, Slots: w.wornSlots(p)})
+}
+
+func (w *World) wornSlots(p *player) []mnet.EquipmentSlot {
 	occupied := w.items.Worn(p.id)
 	slots := make([]mnet.EquipmentSlot, 0, len(occupied))
 	for _, s := range occupied {
 		slots = append(slots, mnet.EquipmentSlot{Slot: s.Slot, Kind: s.Kind})
 	}
-	w.send(p, mnet.Equipment{Worn: WornSlots, Slots: slots})
+	return slots
 }

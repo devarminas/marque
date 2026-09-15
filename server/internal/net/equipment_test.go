@@ -152,14 +152,14 @@ func TestEquippingASwordIsOneMoveFromBagToWeapon(t *testing.T) {
 
 	frames := alice.collect(silenceWindow)
 	kinds := countKinds(frames)
-	if kinds["inventory"] != 1 || kinds["equipment"] != 1 || kinds["class"] != 1 {
-		t.Fatalf("one equip sent %v, want exactly one inventory, one equipment and one class: the containers changed and the class derives from them, so all three are restated once", kinds)
+	if kinds["inventory"] != 1 || kinds["equipment"] != 1 || kinds["class"] != 1 || kinds["worn"] != 1 {
+		t.Fatalf("one equip sent %v, want exactly one inventory, one equipment, one class and one worn: the containers changed and the class derives from them, so all three are restated once, and every client hears the new look", kinds)
 	}
 	if kinds["item_spawn"] != 0 {
 		t.Fatalf("one equip sent %d item_spawn frames; an equip never puts anything on the ground", kinds["item_spawn"])
 	}
-	if len(frames) != 3 {
-		t.Fatalf("one equip sent %d frames (%v), want only the three restatements", len(frames), kinds)
+	if len(frames) != 4 {
+		t.Fatalf("one equip sent %d frames (%v), want only the three restatements and the worn broadcast", len(frames), kinds)
 	}
 
 	var held mnet.Inventory
@@ -189,10 +189,21 @@ func TestEquippingASwordIsOneMoveFromBagToWeapon(t *testing.T) {
 		t.Fatalf("the world holds %+v after an equip, want nothing on the ground", world.Items)
 	}
 
+	bobWorn := 0
 	for _, f := range bob.collect(silenceWindow) {
-		if f.Spawn == nil {
+		switch {
+		case f.Spawn != nil:
+		case f.Worn != nil:
+			bobWorn++
+			if len(f.Worn.Slots) != 1 || f.Worn.Slots[0].Kind != game.KindSword {
+				t.Errorf("bob was told alice wears %+v, want the sword: %s", f.Worn.Slots, f.raw)
+			}
+		default:
 			t.Errorf("bob was sent a %s frame for alice's equip: %s", f.kind(), f.raw)
 		}
+	}
+	if bobWorn != 1 {
+		t.Errorf("bob was sent %d worn frames for alice's equip, want 1", bobWorn)
 	}
 
 	equipped := h.eventsNamed(game.EvEquip)
@@ -222,8 +233,8 @@ func TestUnequippingReturnsTheSwordToTheLowestFreeBagSlot(t *testing.T) {
 
 	frames := alice.collect(silenceWindow)
 	kinds := countKinds(frames)
-	if kinds["inventory"] != 1 || kinds["equipment"] != 1 || kinds["class"] != 1 || len(frames) != 3 {
-		t.Fatalf("one unequip sent %v, want exactly one inventory, one equipment and one class and nothing else", kinds)
+	if kinds["inventory"] != 1 || kinds["equipment"] != 1 || kinds["class"] != 1 || kinds["worn"] != 1 || len(frames) != 4 {
+		t.Fatalf("one unequip sent %v, want exactly one inventory, one equipment, one class and one worn and nothing else", kinds)
 	}
 
 	var held mnet.Inventory
@@ -473,8 +484,8 @@ func TestEquippingOntoAWornSwordSwapsThroughTheVacatedSlot(t *testing.T) {
 	h.awaitEvents(game.EvEquip, 2)
 
 	frames := alice.collect(silenceWindow)
-	if kinds := countKinds(frames); kinds["inventory"] != 1 || kinds["equipment"] != 1 || kinds["class"] != 1 || len(frames) != 3 {
-		t.Fatalf("a swap sent %v, want one inventory, one equipment and one class", kinds)
+	if kinds := countKinds(frames); kinds["inventory"] != 1 || kinds["equipment"] != 1 || kinds["class"] != 1 || kinds["worn"] != 1 || len(frames) != 4 {
+		t.Fatalf("a swap sent %v, want one inventory, one equipment, one class and one worn", kinds)
 	}
 
 	var held mnet.Inventory

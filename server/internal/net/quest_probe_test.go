@@ -224,7 +224,7 @@ func equipKnightFromBag(t *testing.T, c *client, inv mnet.Inventory) {
 				break
 			}
 			switch {
-			case f.Inventory != nil, f.Equipment != nil:
+			case f.Inventory != nil, f.Equipment != nil, f.Worn != nil:
 			case f.Class != nil:
 				sawClass = true
 				if f.Class.Class == "knight" {
