@@ -1,8 +1,9 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/npc_dummy.gd" id="1_dummy"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/base_characters/Superhero_Female_FullBody.gltf" id="2_body"]
-[ext_resource type="AnimationLibrary" path="res://assets/quaternius/animations/locomotion_library.tres" id="3_locomotion"]
+[ext_resource type="Script" path="res://scripts/character_visual.gd" id="2_visual"]
+[ext_resource type="PackedScene" path="res://assets/proto/characters/humanoid.glb" id="3_body"]
+[ext_resource type="AnimationLibrary" path="res://assets/proto/anim/clips.glb" id="4_clips"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_click"]
 radius = 0.4
@@ -32,20 +33,28 @@ roughness = 0.75
 [node name="NpcQuestGiver" type="Node3D"]
 script = ExtResource("1_dummy")
 
-[node name="Body" parent="." instance=ExtResource("2_body")]
+[node name="Body" parent="." instance=ExtResource("3_body")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("../Body")
+libraries = {
+&"proto": ExtResource("4_clips")
+}
+
+[node name="Visual" type="Node" parent="." node_paths=PackedStringArray("body", "animation_player")]
+script = ExtResource("2_visual")
+variant = "human"
+body = NodePath("../Body")
+animation_player = NodePath("../AnimationPlayer")
+worn_slots = PackedStringArray("helmet", "chest", "trousers")
+worn_kinds = PackedStringArray("cloth_hood", "cloth_robe", "cloth_skirt")
 
 [node name="MissingBody" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
 visible = false
 mesh = SubResource("CapsuleMesh_missing")
 surface_material_override/0 = SubResource("Mat_missing")
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-root_node = NodePath("../Body")
-libraries = {
-&"ual2": ExtResource("3_locomotion")
-}
 
 [node name="ClickBody" type="StaticBody3D" parent="."]
 collision_layer = 4

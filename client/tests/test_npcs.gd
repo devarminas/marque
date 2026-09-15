@@ -12,7 +12,6 @@ const CharacterVisual := preload("res://scripts/character_visual.gd")
 const DemoNpcCapture := preload("res://scripts/demo_npc_capture.gd")
 const Assertions := preload("res://tests/assertions.gd")
 
-const QUEST_GIVER_BODY_SKIN := "Superhero_Female"
 const LABEL_CLEARANCE := 0.15
 const MAGENTA := Color(0.95, 0.08, 0.85, 1)
 
@@ -43,7 +42,7 @@ func get_assertion_count() -> int:
 func _ready() -> void:
 	print("== npcs: welcome, select, cast faction targets, attack refuse ==")
 
-	_test_quest_giver_scene_is_female_rig()
+	_test_quest_giver_scene_wears_its_cloth_loadout()
 	_test_dummy_scene_stays_capsule()
 	_test_imp_scenes_use_the_prototype_imp()
 	_test_imp_authors_animation_player()
@@ -89,24 +88,51 @@ func _ready() -> void:
 	_finished = true
 
 
-func _test_quest_giver_scene_is_female_rig() -> void:
+func _test_quest_giver_scene_wears_its_cloth_loadout() -> void:
+	var contract := CharacterVisual.contract()
 	var giver := NpcQuestGiverScene.instantiate() as NpcDummyScript
 	_check(giver != null, "npc_quest_giver.tscn instantiates as NpcDummy")
 	if giver == null:
 		return
 	_world.add_child(giver)
-	var skeleton := giver.get_node_or_null("Body/Armature/Skeleton3D") as Skeleton3D
-	_check(skeleton != null, "quest giver Body/Armature/Skeleton3D exists")
-	var skin_names := PackedStringArray()
-	if skeleton != null:
-		for node in skeleton.get_children():
-			if node is MeshInstance3D:
-				skin_names.append(String(node.name))
+	var body := giver.get_node_or_null("Body") as Node3D
 	_check(
-		skin_names.has(QUEST_GIVER_BODY_SKIN),
-		"quest giver skins include %s, got [%s]" % [QUEST_GIVER_BODY_SKIN, ", ".join(skin_names)],
+		body != null and body.scene_file_path == contract.variants["human"].glb,
+		"quest giver Body instances %s, got %s" % [contract.variants["human"].glb, "null" if body == null else body.scene_file_path],
 	)
-	_check(not (giver.get_node("Body") is MeshInstance3D), "quest giver Body is not a capsule mesh")
+	var skeleton := giver.get_node_or_null("Body/Rig/Skeleton3D") as Skeleton3D
+	_check(skeleton != null, "quest giver carries Body/Rig/Skeleton3D")
+	if skeleton == null:
+		giver.queue_free()
+		return
+	var visual := giver.visual()
+	_check(visual != null and visual.variant == "human", "quest giver drives a human CharacterVisual")
+	_check(
+		visual != null and visual.shown_pieces() == PackedStringArray(["cloth_hood", "cloth_robe", "cloth_skirt"]),
+		"quest giver wears its authored hood, robe, and skirt, got %s" % ([] if visual == null else visual.shown_pieces()),
+	)
+	_check(
+		visual != null and visual.hidden_regions() == PackedStringArray(["forearms", "hips", "thighs", "torso", "upper_arms"]),
+		"and hides the regions the robe and skirt cover, got %s" % ([] if visual == null else visual.hidden_regions()),
+	)
+	var top := 0.0
+	for child in skeleton.get_children():
+		var mesh := child as MeshInstance3D
+		if mesh == null:
+			continue
+		var worn := visual != null and visual.shown_pieces().has(String(mesh.name))
+		var hidden_region := visual != null and visual.hidden_regions().has(String(mesh.name).trim_prefix("region_"))
+		var expected := worn if not String(mesh.name).begins_with("region_") else not hidden_region
+		_check(mesh.visible == expected, "quest giver draws %s %s" % [mesh.name, "on" if expected else "off"])
+		if mesh.visible:
+			top = maxf(top, mesh.get_aabb().end.y)
+	var hp_y := (giver.get_node("HpLabel") as Node3D).position.y
+	_check(hp_y >= top + 0.05, "quest giver HpLabel at %.2f clears the %.3f m hood" % [hp_y, top])
+	_check(not (giver.get_node("MissingBody") as Node3D).visible, "quest giver keeps the magenta fallback hidden")
+	_check(
+		giver.current_anim_clip() == "proto/" + contract.clip_for("idle", ""),
+		"quest giver idles on the shared clip, got %s" % giver.current_anim_clip(),
+	)
 	giver.queue_free()
 
 
@@ -118,8 +144,8 @@ func _test_dummy_scene_stays_capsule() -> void:
 	_world.add_child(dummy)
 	_check(dummy.get_node("Body") is MeshInstance3D, "practice dummy Body stays a MeshInstance3D capsule")
 	_check(
-		dummy.get_node_or_null("Body/Armature/Skeleton3D") == null,
-		"practice dummy has no female Armature",
+		dummy.get_node_or_null("Body/Rig/Skeleton3D") == null,
+		"practice dummy has no prototype rig",
 	)
 	_check(dummy.static_mesh, "practice dummy is flagged static_mesh (no AnimationPlayer required)")
 	dummy.queue_free()
@@ -289,8 +315,8 @@ func _test_quest_giver_spawns_from_welcome() -> void:
 		return
 	_check(giver.kind == NpcDummyScript.KindQuestGiver, "id 1000003 kind is quest_giver")
 	_check(
-		giver.get_node_or_null("Body/Armature/Skeleton3D") != null,
-		"welcome quest giver uses the female rig scene",
+		giver.get_node_or_null("Body/Rig/Skeleton3D") != null,
+		"welcome quest giver uses the prototype humanoid scene",
 	)
 	_check(not (giver.get_node("Body") is MeshInstance3D), "welcome quest giver is not a capsule")
 
