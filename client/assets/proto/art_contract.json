@@ -120,10 +120,24 @@
     "lumberjack_axe": "res://assets/proto/items/lumberjack_axe.glb",
     "pickaxe": "res://assets/proto/items/pickaxe.glb"
   },
-  "clips": {"idle": {"frames": 60, "loop": true}, "walk": {"frames": 30, "loop": true}, "swing": {"frames": 12, "loop": false}},
+  "clips": {
+    "idle": {"frames": 60, "loop": true},
+    "walk": {"frames": 30, "loop": true},
+    "swing": {"frames": 12, "loop": false},
+    "jump_start": {"frames": 8, "loop": false},
+    "fall": {"frames": 18, "loop": true},
+    "cast_windup": {"frames": 24, "loop": true},
+    "cast_release": {"frames": 12, "loop": false}
+  },
   "routes": [
     {"action": "idle", "key": "", "clip": "idle"},
     {"action": "walk", "key": "", "clip": "walk"},
-    {"action": "swing", "key": "", "clip": "swing"}
+    {"action": "swing", "key": "", "clip": "swing"},
+    {"action": "jump_start", "key": "", "clip": "jump_start"},
+    {"action": "fall", "key": "", "clip": "fall"},
+    {"action": "cast_windup", "key": "", "clip": "cast_windup"},
+    {"action": "cast_windup", "key": "fireball", "clip": "cast_windup"},
+    {"action": "cast_release", "key": "", "clip": "cast_release"},
+    {"action": "cast_release", "key": "fireball", "clip": "cast_release"}
   ]
 }

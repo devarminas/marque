@@ -18,6 +18,7 @@ func run(assertions: Assertions) -> void:
 	_test_the_pieces_are_exactly_the_armor_the_sets_ship(assertions, text)
 	_test_every_clip_is_reached_through_a_fallback_route(assertions, text)
 	_test_an_unknown_key_falls_back_and_an_unknown_action_is_refused(assertions, text)
+	_test_jump_and_cast_actions_resolve_for_every_ability(assertions, text)
 	_test_the_imp_stands_at_its_own_pelvis_height(assertions, text)
 	_test_each_violation_is_named(assertions, text)
 	assertions.finish()
@@ -117,6 +118,24 @@ func _test_an_unknown_key_falls_back_and_an_unknown_action_is_refused(
 		contract.clip_for("dance", "") == "",
 		"an action with no route resolves to no clip",
 	)
+
+
+func _test_jump_and_cast_actions_resolve_for_every_ability(assertions: Assertions, text: String) -> void:
+	var contract := ArtContract.new(text)
+	var expected := [
+		["jump_start", "", "jump_start", false],
+		["fall", "", "fall", true],
+		["cast_windup", "fireball", "cast_windup", true],
+		["cast_windup", "heal", "cast_windup", true],
+		["cast_release", "fireball", "cast_release", false],
+		["cast_release", "heal", "cast_release", false],
+	]
+	for row in expected:
+		var clip := contract.clip_for(row[0], row[1])
+		assertions.check(
+			clip == row[2] and contract.clips.has(clip) and contract.clips[clip].loop == row[3],
+			'%s/"%s" plays %s with loop %s, got %s' % [row[0], row[1], row[2], row[3], clip],
+		)
 
 
 func _test_the_imp_stands_at_its_own_pelvis_height(assertions: Assertions, text: String) -> void:
