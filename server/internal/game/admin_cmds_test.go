@@ -113,6 +113,47 @@ func TestAdminGiveBadArgs(t *testing.T) {
 	}
 }
 
+func TestAdminGiveUnknownKindRefused(t *testing.T) {
+	pw := newProbeWorld(t)
+	alicePeer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)
+	drainJoin(t, alicePeer.ws)
+	alice := pw.w.byConn[alicePeer.conn]
+	pw.w.SetAdminACL(AdminACL{DevAdmin: true})
+	pw.w.SetAdminRegistry(NewDefaultAdminRegistry())
+	before := len(pw.w.items.Inventory(alice.id))
+
+	pw.w.handleFrame(mnet.Event{
+		Kind: mnet.EventFrame,
+		Conn: alice.conn,
+		Msg:  mnet.Admin{Line: "/give not_a_real_item 2"},
+		Seq:  1,
+	})
+
+	if got := len(pw.w.items.Inventory(alice.id)); got != before {
+		t.Fatalf("inventory slots=%d, want unchanged %d", got, before)
+	}
+	if got := countKind(pw.w.items.Inventory(alice.id), "not_a_real_item"); got != 0 {
+		t.Fatalf("unknown kind count=%d, want 0", got)
+	}
+	got := awaitAdminReply(t, alicePeer.ws, 2*time.Second)
+	if !strings.HasPrefix(got, "error: ") {
+		t.Fatalf("reply=%q, want error: prefix", got)
+	}
+	if strings.HasPrefix(got, "ok: ") {
+		t.Fatalf("reply=%q, must not be ok:", got)
+	}
+	if !strings.Contains(got, "unknown kind") {
+		t.Fatalf("reply=%q, want unknown kind detail", got)
+	}
+	evs := pw.events(EvAdmin)
+	if len(evs) != 1 || evs[0]["result"] != adminResultError {
+		t.Fatalf("admin audit=%v, want result=%q", evs, adminResultError)
+	}
+	if evs[0]["reason"] != string(mnet.ReasonUnknownItem) {
+		t.Fatalf("audit reason=%v, want %q", evs[0]["reason"], mnet.ReasonUnknownItem)
+	}
+}
+
 func TestAdminTPCoordsHappyPath(t *testing.T) {
 	pw := newProbeWorld(t)
 	alicePeer := dialHeartbeat(t, pw.w, pw.hub, pw.srv)

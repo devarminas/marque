@@ -120,6 +120,8 @@ type Store interface {
 
 	GrantInventoryKinds(player mnet.PlayerID, kinds []string) error
 
+	KnownItemKind(kind string) bool
+
 	Inventory(mnet.PlayerID) []Slot
 
 	Worn(mnet.PlayerID) []WornSlot
@@ -152,6 +154,28 @@ type memStore struct {
 
 var NoWearables = map[string][]mnet.EquipSlot{}
 
+var LooseItemKinds = map[string]struct{}{
+	KindAcorn:     {},
+	KindLogs:      {},
+	KindSticks:    {},
+	KindCopperOre: {},
+	KindCopperBar: {},
+}
+
+func IsKnownItemKind(kind string, wearables map[string][]mnet.EquipSlot) bool {
+	if kind == "" {
+		return false
+	}
+	if _, ok := LooseItemKinds[kind]; ok {
+		return true
+	}
+	if wearables == nil {
+		return false
+	}
+	_, ok := wearables[kind]
+	return ok
+}
+
 func NewMemoryStore(wearables map[string][]mnet.EquipSlot) Store {
 	if wearables == nil {
 		panic("game: NewMemoryStore: nil wearables (pass NoWearables for bag-only)")
@@ -161,6 +185,10 @@ func NewMemoryStore(wearables map[string][]mnet.EquipSlot) Store {
 		ground:    make(map[mnet.ItemID]GroundItem),
 		held:      make(map[mnet.PlayerID]*playerItems),
 	}
+}
+
+func (s *memStore) KnownItemKind(kind string) bool {
+	return IsKnownItemKind(kind, s.wearables)
 }
 
 func (s *memStore) AddPlayer(id mnet.PlayerID) {

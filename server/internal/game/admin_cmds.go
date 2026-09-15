@@ -30,6 +30,9 @@ func adminGive(w *World, p *player, args []string) (string, *mnet.RejectError) {
 	if kind == "" {
 		return "", adminUsage("/give <item_id> [qty] [player]")
 	}
+	if !w.items.KnownItemKind(kind) {
+		return "", adminFail(mnet.ReasonUnknownItem, fmt.Sprintf("unknown kind %q", kind))
+	}
 	qty := 1
 	target := p
 	switch len(args) {
