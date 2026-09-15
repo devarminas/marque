@@ -5,7 +5,7 @@
 # Helpers (marque-demo-lib.ps1, demo_npc_capture.gd) are not scanned.
 
 # scripts/*_demo.ps1
-scripts/combat_demo.ps1  # retired ARM-203 stub; keep listed so doctor stays green
+scripts/combat_demo.ps1
 scripts/contested_pickup_demo.ps1
 scripts/dummy_attack_demo.ps1
 scripts/dummy_cast_demo.ps1

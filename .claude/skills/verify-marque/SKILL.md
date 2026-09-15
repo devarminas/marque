@@ -36,7 +36,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/wasd_demo.ps1` | `WASD DEMO OK` |
 | `scripts/arena_collision_demo.ps1` | `ARENA COLLISION DEMO OK` |
 | `scripts/tab_combat_demo.ps1` | `TAB COMBAT DEMO OK` |
-| `scripts/combat_demo.ps1` | **retired** (ARM-203 stub). Exits 0 with no marker. Drive `dummy_attack_demo.ps1` / `tab_combat_demo.ps1` instead. |
+| `scripts/combat_demo.ps1` | **retired** (ARM-284 fail-closed stub). Exits non-zero with a clear message. Drive `dummy_attack_demo.ps1` / `tab_combat_demo.ps1` instead. |
 | `scripts/quest_demo.ps1` | `QUEST DEMO OK` |
 | `scripts/enemy_quest_demo.ps1` | `ENEMY QUEST DEMO OK` |
 | `scripts/admin_give_class_kits_demo.ps1` | `ADMIN GIVE CLASS KITS DEMO OK` |
@@ -187,8 +187,8 @@ enforces the allowlist; the skill text alone is not enough.
 | `--gather-craft-shots <abs-prefix>` | Enter the gather-then-craft milestone demo mode (`gather_craft_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **M4e.** Two clients; both equip then race the primary seeded tree at (5, 0). Absolute host path required. |
 | `--craft-cast-shots <abs-prefix>` | Enter the M12 craft+cast milestone demo (`craft_cast_demo.gd`); write `<prefix>_1.png` … `<prefix>_6.png`. Single client: mine→smelt→craft sword, then fireball cast-bar resolve and walk interrupt. Absolute host path required. |
 | `--gather-error-shots <abs-prefix>` | Enter the refused-gather demo mode (`gather_error_demo.gd`); write `<prefix>_1.png` … `<prefix>_3.png`. **ARM-147.** One client; right-clicks the tree unarmed, reads the refusal, wears a ground-seeded lumberjack set, chops. Absolute host path required. |
-| `--combat-shots <abs-prefix>` | Still wired in `main.gd` / `combat_demo.gd`, but **`scripts/combat_demo.ps1` is retired** (ARM-203 stub, exit 0, no marker). Do not drive the PS1 for proof. |
-| `--combat-role attacker\|victim` | Paired with `--combat-shots`. Same retired-PS1 rule. |
+| `--combat-shots <abs-prefix>` | **Fail-closed** (ARM-284). `combat_demo.gd` / `scripts/combat_demo.ps1` exit non-zero; do not drive for proof. Use `--dummy-attack` / `--tab-combat-shots`. |
+| `--combat-role attacker\|victim` | Legacy companion to `--combat-shots`. Same fail-closed rule; ignored by the stub. |
 | `--dummy-cast <abs-prefix>` | Dummy cast demo (`dummy_cast_demo.gd`). Absolute host path required. |
 | `--dummy-attack <abs-prefix>` | Hostile-dummy melee demo (`dummy_attack_demo.gd`). Absolute host path required. |
 | `--wasd-shots <abs-prefix>` | WASD move demo (`wasd_demo.gd`). Absolute host path required. |

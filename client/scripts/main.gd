@@ -21,8 +21,6 @@ const ArenaCollisionDemoScript := preload("res://scripts/arena_collision_demo.gd
 const TabCombatDemoScript := preload("res://scripts/tab_combat_demo.gd")
 const QuestDemoScript := preload("res://scripts/quest_demo.gd")
 const EnemyQuestDemoScript := preload("res://scripts/enemy_quest_demo.gd")
-const DeathOverlayScript := preload("res://scripts/death_overlay.gd")
-const HpHudScript := preload("res://scripts/hp_hud.gd")
 const DialogPanelScript := preload("res://scripts/dialog_panel.gd")
 const GivePanelScript := preload("res://scripts/give_panel.gd")
 const QuestLogPanelScript := preload("res://scripts/quest_log_panel.gd")
@@ -52,7 +50,6 @@ const CRAFT_CAST_SHOTS_FLAG := "--craft-cast-shots"
 const COMBAT_SHOTS_FLAG := "--combat-shots"
 const DUMMY_CAST_FLAG := "--dummy-cast"
 const DUMMY_ATTACK_FLAG := "--dummy-attack"
-const COMBAT_ROLE_FLAG := "--combat-role"
 const WASD_SHOTS_FLAG := "--wasd-shots"
 const ARENA_COLLISION_SHOTS_FLAG := "--arena-collision-shots"
 const TAB_COMBAT_SHOTS_FLAG := "--tab-combat-shots"
@@ -289,29 +286,9 @@ func _run_craft_cast_demo(args: Array) -> void:
 	get_tree().quit(code)
 
 
-func _run_combat_demo(args: Array) -> void:
-	var prefix := _argument_after(args, COMBAT_SHOTS_FLAG)
-	if prefix.is_empty():
-		push_error("%s needs an output path prefix after it" % COMBAT_SHOTS_FLAG)
-		get_tree().quit(1)
-		return
-	var role := _argument_after(args, COMBAT_ROLE_FLAG)
-	if role.is_empty():
-		push_error("%s needs attacker or victim after it" % COMBAT_ROLE_FLAG)
-		get_tree().quit(1)
-		return
-
-	var session := get_node_or_null("Session") as SessionScript
-	var death := get_node_or_null("UI/DeathOverlay") as DeathOverlayScript
-	var hp_hud := get_node_or_null("UI/HpHud") as HpHudScript
-	if session == null or death == null or hp_hud == null:
-		push_error("main.tscn is missing Session, UI/DeathOverlay, or UI/HpHud")
-		get_tree().quit(1)
-		return
-
+func _run_combat_demo(_args: Array) -> void:
 	var demo := CombatDemoScript.new()
-	var code: int = await demo.run(self, session, death, hp_hud, prefix, role)
-	get_tree().quit(code)
+	get_tree().quit(demo.run())
 
 
 func _run_wasd_demo(args: Array) -> void:

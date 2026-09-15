@@ -2,8 +2,8 @@
 
 M5 combat outcomes: period hits to death, death overlay, respawn to full HP, act
 again. The two-client PvP windowed demo (`scripts/combat_demo.ps1`) is **retired**
-(ARM-203; PvP attack refused). Live proof now uses NPC demos; player death/respawn
-store rules stay on the Go rung.
+(ARM-284 fail-closed stub; PvP attack refused since ARM-203). Live proof now uses
+NPC demos; player death/respawn store rules stay on the Go rung.
 
 ## Sub-features
 
@@ -50,9 +50,9 @@ Preconditions:
   Marker: `TAB COMBAT DEMO OK` last line; exit 0.
 - Period hits + death/respawn store: from `server/`,
   `CGO_ENABLED=1 go test -race ./internal/game/ -run 'TenHitsKillImpFromFull|AttackOutOfRangePathsInThenHitsOnPeriod|DeadRefuses|RespawnRestores|LivingRespawn|GatheringPlayerStillDies'`.
-- **Do not** treat `scripts/combat_demo.ps1` as a proof. It is a stub that exits 0
-  without a marker. Client `--combat-shots` wiring may still exist; the PS1 is what
-  agents must not run for markers.
+- **Do not** treat `scripts/combat_demo.ps1` as a proof. It is a fail-closed stub
+  (ARM-284) that exits non-zero with a clear message. `--combat-shots` / `combat_demo.gd`
+  are the same stub path; agents must drive `dummy_attack` / `tab_combat` for markers.
 
 ## Gotchas
 
