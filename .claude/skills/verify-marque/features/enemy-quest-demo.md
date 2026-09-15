@@ -90,5 +90,6 @@ Evidence lands in `-OutDir`, default `$env:TEMP\marque-enemy-quest`.
 - **Imp AnimationPlayer is present.** `npc_imp.tscn` authors one so a missing
   player no longer silent-no-ops (ARM-228), but Imp-compatible clips may still
   soft-skip via `has_animation`.
-- **Cite.** Pattern matches `scripts/quest_demo.ps1` / `gather_craft_demo.ps1`
-  and verify-marque two-client evidence layout.
+- **Cite.** Pattern matches `scripts/quest_demo.ps1` and verify-marque
+  two-client evidence layout. Do not cite `gather_craft_demo.ps1` (ARM-287
+  fail-closed stub).
