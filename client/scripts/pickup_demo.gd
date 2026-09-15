@@ -18,20 +18,64 @@ const JOIN_TIMEOUT_MSEC := 20000
 
 const USEC_PER_MSEC := 1000
 
-const CLICK_LEAD_TICKS := 20
-
-const SHOT_BEFORE_LEAD_TICKS := 6
-const SHOT_RESOLVED_OFFSET_TICKS := 26
-const WALK_AWAY_OFFSET_TICKS := 30
-const WALK_AWAY_DEADLINE_TICKS := 68
-const SHOT_DROPPED_OFFSET_TICKS := 76
-const HOLD_UNTIL_OFFSET_TICKS := 88
+# Tick budgets were authored against ~150ms ticks. At 40ms / 3.0 u/s (0.12 u/tick),
+# wall-scale them so wish walk-away covers the ~5.57u drop click (old 38-tick
+# window only reached 4.56u and never printed DEMO walkaway_arrived). Approach
+# origin→(-5,-5) is ~59 ticks; fail-closed path/move_to stays in the harness.
+const CLICK_LEAD_TICKS := 75
+# Capture 1 is uncoupled from the click. After both finish capture they run a
+# two-phase barrier on a shared Unix wall deadline. Freezing start_usec_of(aim)
+# still leaves per-process TickClock anchors free to diverge under GLES and was
+# landing pickup intents 5–15 server ticks apart; wall clock is cross-process.
+const SHOT_BEFORE_LEAD_TICKS := 40
+const CLICK_AFTER_READY_TICKS := 25
+const POST_CAPTURE_LEAD_TICKS := 100 # retained for unit tests / DEMO aim logging
+# Dual llvmpipe propose+commit can burn 1–2s of frames; keep multi-second slack
+# so both still share one fire after convergence.
+const POST_CAPTURE_LEAD_MSEC := 6000
+const BARRIER_MIN_LEAD_TICKS := 40 # retained for unit tests
+const BARRIER_MAX_ROUNDS := 24
+const BARRIER_MIN_SLACK_MSEC := 400
+# After capture, wait this long for abandon/resume to restore peer + seed.
+const POST_CAPTURE_RESTORE_MSEC := 15000
+# Last-N msec of the wall wait busy-spins instead of awaiting frames. llvmpipe
+# frames often run 50–200ms; 250ms was still overshooting the shared deadline.
+const WALL_SPIN_REMAINING_MSEC := 500
+# After the wall deadline, wait this long for the peer's go file before aborting
+# the generation (do not fire alone — that produced single-pickup runs).
+const GO_PEER_WAIT_MSEC := 2000
+const SHOT_RESOLVED_OFFSET_TICKS := 98
+const WALK_AWAY_OFFSET_TICKS := 113
+const WALK_AWAY_DEADLINE_TICKS := 255
+# Remaining walk budget after the walk-away offset (255 - 113). Arrival waits on
+# wall-clock from the moment the wish starts so a late/corrected estimated_tick
+# cannot make the deadline already past before the first step.
+const WALK_AWAY_BUDGET_TICKS := WALK_AWAY_DEADLINE_TICKS - WALK_AWAY_OFFSET_TICKS
+const SHOT_DROPPED_OFFSET_TICKS := 285
+const HOLD_UNTIL_OFFSET_TICKS := 330
 
 const TICK_WAIT_BACKSTOP_MSEC := 60000
+# Soft-pull display can lag sim/server by up to HARD_ERROR_M (2.0). Under dual
+# llvmpipe that lag routinely exceeds 0.75, so the walk-away kept steering past
+# the drop point, flipped wish, and never printed walkaway_arrived.
+const ARRIVAL_RADIUS := 2.0
+# After stop, soft-pull display can still lag sim/server by up to ~HARD_ERROR_M;
+# settle so DEMO walkaway_arrived is closer to the authoritative drop pose.
+const WALK_ARRIVAL_SETTLE_MSEC := 800
+const WISH_RESEND_MSEC := 100
 
 const BAG_LAYOUT_DEADLINE_MSEC := 2000
 
 const SPIN_USEC := 20000
+
+# Written under the --pickup-shots directory so both clients share one Unix fire
+# deadline. Per-process usec quanta are not comparable across Godots.
+# Propose and commit use separate files: overwriting propose with commit made a
+# slow settler lose its peer and deadlock across generations under llvmpipe.
+const SYNC_BARRIER_PREFIX := "marque-pickup-sync-"
+const COMMIT_BARRIER_PREFIX := "marque-pickup-commit-"
+const GO_BARRIER_PREFIX := "marque-pickup-go-"
+const READY_BARRIER_PREFIX := "marque-pickup-ready-"
 
 var _tree: SceneTree
 var _root: Node
@@ -73,27 +117,57 @@ func run(
 	var clock := _session.tick_clock()
 	if not clock.is_anchored():
 		return _fail("the tick clock is not anchored; there is no shared moment to click on")
-	var tick_usec := clock.tick_ms() * USEC_PER_MSEC
-	var ready_usec := ready_deadline_usec(scenario_usec, clock)
 	var sync_tick := clock.estimated_tick_at(scenario_usec)
-	print("DEMO sync %d %d" % [sync_tick, clock.estimated_tick_at(ready_usec)])
 
-	if not await _await_usec(ready_usec - SHOT_BEFORE_LEAD_TICKS * tick_usec):
-		return _fail("frames stopped before the first capture")
+	# Capture before the click barrier so a slow 15-frame warm-up cannot eat the
+	# shared lead. Shot 1 only needs both bodies + the seed visible.
+	if not await _await_tick(sync_tick + 10):
+		return _fail("the clock stalled before the first capture")
 	if not await _capture(1):
 		return _fail("capture 1 failed")
 
+	# Dual llvmpipe capture can starve the socket long enough to abandon and
+	# resume; the pre-capture GroundItem is freed and the peer may vanish from
+	# the roster briefly. Wait for the world to be contest-ready again, then
+	# take whatever seed id is present (resume may renumber).
+	var restored: Variant = await _await_contest_world_after_capture()
+	if restored == null:
+		return 1
+	item_id = int(restored["id"])
+	item = restored["item"]
+	# Do not start the wall barrier until both peers have restored. Otherwise the
+	# early client burns propose generations alone and the late one sees
+	# "barrier never locked" / a single pickup.
+	if not await _await_peers_post_capture_ready():
+		return 1
 	var picked: Variant = _screen_position_of(item)
 	if picked == null:
 		return 1
 	var screen: Vector2 = picked
 
-	var click_usec := clock.next_guard_usec(Time.get_ticks_usec(), click_guard_usec(tick_usec))
-	var click_tick := clock.estimated_tick_at(click_usec)
-	if not await _await_usec(click_usec):
-		return _fail("frames stopped before the click")
-	_click_at(screen)
-	print("DEMO pickupclick %d %d %f %f" % [clock.estimated_tick(), item_id, screen.x, screen.y])
+	# Propose → commit → wall wait → go rendezvous. Go miss retries the next
+	# barrier generation instead of firing alone (asymmetric commit/go was the
+	# "only one pickup" failure under dual llvmpipe).
+	var planned: Variant = await _plan_shared_click()
+	if planned == null:
+		return 1
+	var fire_unix_msec: int = planned["fire_unix_msec"]
+	var fire_generation: int = planned["generation"]
+	# DEMO sync second field is the shared wall deadline (msec); harness requires match.
+	print("DEMO sync %d %d" % [sync_tick, fire_unix_msec])
+
+	# Re-check the seed still exists after wall+go (peer may have raced).
+	if _session.item_for(item_id) == null:
+		return _fail("seed item %d vanished before wall-fire pickup" % item_id)
+	# Wire the pickup now. push_input/_click_at only reaches the session on a
+	# later frame under software GL and was splitting server intent ticks even
+	# when both processes woke on the same wall deadline. Screen projection
+	# above already proved the item is clickable. Wall+go already succeeded
+	# inside _plan_shared_click.
+	_session.request_pickup(item_id)
+	var click_tick := clock.estimated_tick()
+	print("DEMO pickupclick %d %d %f %f" % [click_tick, item_id, screen.x, screen.y])
+	print("DEMO firegen %d %d" % [fire_generation, fire_unix_msec])
 
 	if not await _await_tick(click_tick + SHOT_RESOLVED_OFFSET_TICKS):
 		return _fail("the clock stalled before the second capture")
@@ -134,9 +208,364 @@ static func ready_deadline_usec(scenario_usec: int, clock: TickClock) -> int:
 static func click_deadline_usec(scenario_usec: int, clock: TickClock) -> int:
 	var tick_usec := clock.tick_ms() * USEC_PER_MSEC
 	return clock.next_guard_usec(
-		ready_deadline_usec(scenario_usec, clock),
+		ready_deadline_usec(scenario_usec, clock) + CLICK_AFTER_READY_TICKS * tick_usec,
 		click_guard_usec(tick_usec),
 	)
+
+
+static func aim_tick_from_max_sync(max_sync_tick: int) -> int:
+	return max_sync_tick + POST_CAPTURE_LEAD_TICKS
+
+
+static func fire_unix_msec_from_max_ready(max_ready_msec: int) -> int:
+	return max_ready_msec + POST_CAPTURE_LEAD_MSEC
+
+
+static func unix_msec_now() -> int:
+	return int(Time.get_unix_time_from_system() * 1000.0)
+
+
+func _plan_shared_click() -> Variant:
+	for generation in range(1, BARRIER_MAX_ROUNDS + 1):
+		var fire_msec: int = await _propose_fire_unix_msec(generation)
+		if fire_msec == -2:
+			print("DEMO barrier_retry %d peer_ahead" % generation)
+			continue
+		if fire_msec < 0:
+			return null
+		var can_make := fire_msec - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC
+		if not await _commit_fire_unix_msec(generation, fire_msec, can_make):
+			# Peer may already have locked this fire while our commit loop starved
+			# under llvmpipe; adopt it rather than opening a solo next generation.
+			if _peer_locked_fire(generation, fire_msec) and _fire_still_joinable(fire_msec):
+				print("DEMO commit_adopt %d %d" % [generation, fire_msec])
+			else:
+				print("DEMO barrier_retry %d %d" % [generation, fire_msec])
+				continue
+		if not _fire_still_joinable(fire_msec):
+			print("DEMO barrier_retry %d %d missed_after_commit" % [generation, fire_msec])
+			continue
+		print("DEMO clickplan %d %d" % [generation, fire_msec])
+		if not await _await_unix_msec(fire_msec):
+			_fail("frames stopped before the shared wall-clock click")
+			return null
+		# Require the peer's go before either fires. A solo fire after go_timeout
+		# left GAMELOG with one pickup while the peer retried generations.
+		if not await _final_go_rendezvous(generation, fire_msec):
+			print("DEMO barrier_retry %d %d go_miss" % [generation, fire_msec])
+			continue
+		return {"fire_unix_msec": fire_msec, "generation": generation}
+	_fail("could not lock a shared wall-clock click after %d barrier round(s)" % BARRIER_MAX_ROUNDS)
+	return null
+
+
+func _barrier_dir() -> String:
+	var dir := _prefix.get_base_dir()
+	if dir.is_empty():
+		_fail("pickup shots prefix has no directory for the sync barrier")
+	return dir
+
+
+func _write_barrier_file(prefix: String, line: String) -> bool:
+	var dir := _barrier_dir()
+	if dir.is_empty():
+		return false
+	var path := dir.path_join("%s%d.txt" % [prefix, _session.own_id()])
+	var out := FileAccess.open(path, FileAccess.WRITE)
+	if out == null:
+		_fail("could not write sync barrier %s: %s" % [path, FileAccess.get_open_error()])
+		return false
+	out.store_line(line)
+	out.close()
+	return true
+
+
+func _read_barrier_rows(prefix: String, generation: int, want_phase: String) -> Array:
+	var rows: Array = []
+	var dir := _barrier_dir()
+	if dir.is_empty():
+		return rows
+	var names := DirAccess.get_files_at(dir)
+	for name in names:
+		if not str(name).begins_with(prefix) or not str(name).ends_with(".txt"):
+			continue
+		var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+		var parts := body.split(" ")
+		if want_phase == "propose":
+			# propose <gen> <ready_unix_msec> [fire_unix_msec]
+			if parts.size() < 3 or parts[0] != "propose":
+				continue
+			if not parts[1].is_valid_int() or not parts[2].is_valid_int():
+				continue
+			if int(parts[1]) != generation:
+				continue
+			var row := {"ready": int(parts[2]), "fire": -1}
+			if parts.size() >= 4 and parts[3].is_valid_int():
+				row["fire"] = int(parts[3])
+			rows.append(row)
+		elif want_phase == "commit":
+			# commit <gen> <fire_unix_msec> <ready 0|1>
+			if parts.size() != 4 or parts[0] != "commit":
+				continue
+			if not parts[1].is_valid_int() or not parts[2].is_valid_int() or not parts[3].is_valid_int():
+				continue
+			if int(parts[1]) != generation:
+				continue
+			rows.append({"fire": int(parts[2]), "ready": int(parts[3])})
+	return rows
+
+
+func _propose_fire_unix_msec(generation: int) -> int:
+	# Ready-only announce first. Once a fire candidate is published, never wipe
+	# it back to a 2-field propose — that thrash left peers seeing fire=-1 under
+	# llvmpipe and burned the wall lead before both could match.
+	var my_fire := -1
+	if not _write_barrier_file(SYNC_BARRIER_PREFIX, "propose %d %d" % [generation, unix_msec_now()]):
+		return -1
+
+	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		if _peer_generation_ahead(generation):
+			print("DEMO propose_abort %d" % generation)
+			return -2
+
+		var rows := _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
+		if rows.size() < REQUIRED_PLAYERS:
+			# Keep refreshing ready so a late peer still sees a live timestamp.
+			if my_fire < 0:
+				if not _write_barrier_file(
+					SYNC_BARRIER_PREFIX, "propose %d %d" % [generation, unix_msec_now()]
+				):
+					return -1
+			else:
+				if not _write_barrier_file(
+					SYNC_BARRIER_PREFIX,
+					"propose %d %d %d" % [generation, unix_msec_now(), my_fire]
+				):
+					return -1
+			await _tree.process_frame
+			continue
+
+		var max_ready := unix_msec_now()
+		var peer_fire := my_fire
+		for row in rows:
+			max_ready = maxi(max_ready, int(row["ready"]))
+			peer_fire = maxi(peer_fire, int(row["fire"]))
+
+		# Prefer any peer fire already on the table; otherwise mint from max ready.
+		# If the candidate is too close, bump it forward from *now* so slow
+		# frame waits cannot exhaust POST_CAPTURE_LEAD_MSEC mid-converge.
+		var fire := peer_fire if peer_fire >= 0 else fire_unix_msec_from_max_ready(max_ready)
+		if fire - unix_msec_now() < BARRIER_MIN_SLACK_MSEC:
+			fire = fire_unix_msec_from_max_ready(unix_msec_now())
+		my_fire = fire
+		if not _write_barrier_file(
+			SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), my_fire]
+		):
+			return -1
+
+		# Short settle: mix a couple of frames (so the socket keeps breathing)
+		# with immediate re-reads so we do not burn seconds per attempt.
+		for _i in 2:
+			await _tree.process_frame
+			if not _write_barrier_file(
+				SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), my_fire]
+			):
+				return -1
+
+		rows = _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
+		if rows.size() < REQUIRED_PLAYERS:
+			continue
+		var agreed := my_fire
+		var all_have_fire := true
+		for row in rows:
+			if int(row["fire"]) < 0:
+				all_have_fire = false
+				break
+			agreed = maxi(agreed, int(row["fire"]))
+		if not all_have_fire:
+			continue
+
+		# Adopt the max and hold it for a couple frames so the peer can copy.
+		my_fire = agreed
+		if not _write_barrier_file(
+			SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), agreed]
+		):
+			return -1
+		for _i in 2:
+			await _tree.process_frame
+			if not _write_barrier_file(
+				SYNC_BARRIER_PREFIX, "propose %d %d %d" % [generation, unix_msec_now(), agreed]
+			):
+				return -1
+
+		rows = _read_barrier_rows(SYNC_BARRIER_PREFIX, generation, "propose")
+		if rows.size() < REQUIRED_PLAYERS:
+			continue
+		var matched := true
+		for row in rows:
+			if int(row["fire"]) != agreed:
+				matched = false
+				break
+		if matched and agreed - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC:
+			print("DEMO barrier %d %d %d %d" % [generation, rows.size(), max_ready, agreed])
+			return agreed
+		# Matched but stale, or still split: loop and bump fire from now.
+		await _tree.process_frame
+	_fail(
+		"sync barrier gen %d never locked a fresh wall fire within %dms"
+		% [generation, JOIN_TIMEOUT_MSEC]
+	)
+	return -1
+
+
+func _commit_fire_unix_msec(generation: int, fire_msec: int, can_make: bool) -> bool:
+	var ready_flag := 1 if can_make else 0
+	if not _write_barrier_file(
+		COMMIT_BARRIER_PREFIX, "commit %d %d %d" % [generation, fire_msec, ready_flag]
+	):
+		return false
+
+	# Stay in the commit loop for the whole joinable window (fire + grace), not a
+	# precomputed monotonic deadline from start slack. A single long llvmpipe
+	# hitch used to expire the old deadline while unix was already past fire,
+	# then the late peer opened a solo gen-2 and the contest collapsed to one
+	# pickup.
+	var spins := 0
+	while _fire_still_joinable(fire_msec):
+		if _peer_generation_ahead(generation):
+			print("DEMO commit_abort %d" % generation)
+			return false
+		# Sticky ready: once voted ready=1, never downgrade to 0. A peer that
+		# already observed unanimous commit must not be stranded by a late
+		# ready=0 rewrite under slow llvmpipe frames.
+		if ready_flag != 1 and fire_msec - unix_msec_now() >= BARRIER_MIN_SLACK_MSEC:
+			ready_flag = 1
+		if not _write_barrier_file(
+			COMMIT_BARRIER_PREFIX, "commit %d %d %d" % [generation, fire_msec, ready_flag]
+		):
+			return false
+		var rows := _read_barrier_rows(COMMIT_BARRIER_PREFIX, generation, "commit")
+		if rows.size() >= REQUIRED_PLAYERS:
+			var all_ready := true
+			var peer_locked := false
+			var fire_mismatch := false
+			for row in rows:
+				if int(row["fire"]) != fire_msec:
+					fire_mismatch = true
+					all_ready = false
+					break
+				if int(row["ready"]) != 1:
+					all_ready = false
+				else:
+					peer_locked = true
+			# Do not abort on a brief ready=0: under llvmpipe one client can read
+			# the peer's stale flag, return false, and leave while the peer still
+			# sees unanimous ready=1 and fires alone.
+			if fire_mismatch:
+				print(
+					"DEMO commit %d %d %d 0"
+					% [generation, rows.size(), fire_msec]
+				)
+				return false
+			if all_ready:
+				print(
+					"DEMO commit %d %d %d 1"
+					% [generation, rows.size(), fire_msec]
+				)
+				return true
+			if peer_locked:
+				print("DEMO commit_join %d %d" % [generation, fire_msec])
+				return true
+		# Busy-spin near the fire; only await frames while lead is comfortable.
+		if fire_msec - unix_msec_now() > 300:
+			await _tree.process_frame
+		else:
+			spins += 1
+			if spins % 64 == 0:
+				await _tree.process_frame
+	if _peer_locked_fire(generation, fire_msec):
+		print("DEMO commit_adopt %d %d" % [generation, fire_msec])
+		return true
+	print("DEMO commit_timeout %d %d" % [generation, fire_msec])
+	return false
+
+
+func _peer_locked_fire(generation: int, fire_msec: int) -> bool:
+	for row in _read_barrier_rows(COMMIT_BARRIER_PREFIX, generation, "commit"):
+		if int(row["fire"]) == fire_msec and int(row["ready"]) == 1:
+			return true
+	return false
+
+
+func _fire_still_joinable(fire_msec: int) -> bool:
+	# Allow a short post-fire grace so a peer that already locked is not abandoned
+	# after one oversize software-GL frame.
+	return unix_msec_now() <= fire_msec + 400
+
+
+func _peer_generation_ahead(generation: int) -> bool:
+	var dir := _barrier_dir()
+	if dir.is_empty():
+		return false
+	for name in DirAccess.get_files_at(dir):
+		var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+		var parts := body.split(" ")
+		if parts.size() < 2 or not parts[1].is_valid_int():
+			continue
+		if parts[0] in ["propose", "commit"] and int(parts[1]) > generation:
+			return true
+	return false
+
+
+func _await_unix_msec(deadline_msec: int) -> bool:
+	var backstop := Time.get_ticks_msec() + TICK_WAIT_BACKSTOP_MSEC
+	while unix_msec_now() < deadline_msec:
+		if Time.get_ticks_msec() > backstop:
+			return false
+		# llvmpipe frames often take 50–200ms. Only await a frame when the
+		# remaining lead is larger than a worst-case frame; otherwise a single
+		# await overshoots the shared deadline and splits server ticks.
+		if deadline_msec - unix_msec_now() > WALL_SPIN_REMAINING_MSEC:
+			await _tree.process_frame
+	return true
+
+
+# After the wall deadline, both write a go file and wait for the peer. Returns
+# true only when both go files are visible — false means retry the barrier.
+func _final_go_rendezvous(generation: int, fire_msec: int) -> bool:
+	if not _write_barrier_file(GO_BARRIER_PREFIX, "go %d %d" % [generation, unix_msec_now()]):
+		return false
+	var wait_until := maxi(fire_msec + GO_PEER_WAIT_MSEC, unix_msec_now() + GO_PEER_WAIT_MSEC)
+	var backstop := Time.get_ticks_msec() + GO_PEER_WAIT_MSEC + 500
+	while unix_msec_now() < wait_until and Time.get_ticks_msec() < backstop:
+		var rows := _read_go_rows(generation)
+		if rows.size() >= REQUIRED_PLAYERS:
+			print("DEMO go %d %d" % [generation, rows.size()])
+			return true
+		# Busy-spin — do not await frames here.
+	print("DEMO go_timeout %d" % generation)
+	return false
+
+
+func _read_go_rows(generation: int) -> Array:
+	var rows: Array = []
+	var dir := _barrier_dir()
+	if dir.is_empty():
+		return rows
+	for name in DirAccess.get_files_at(dir):
+		if not str(name).begins_with(GO_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
+			continue
+		var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+		var parts := body.split(" ")
+		if parts.size() != 3 or parts[0] != "go":
+			continue
+		if not parts[1].is_valid_int() or not parts[2].is_valid_int():
+			continue
+		if int(parts[1]) != generation:
+			continue
+		rows.append({"at": int(parts[2])})
+	return rows
 
 
 func _walk_away_and_drop(click_tick: int) -> bool:
@@ -169,15 +598,27 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 		return false
 	var here := Vector2(avatar.position.x, avatar.position.z)
 	var wish := (destination - here).normalized()
+	print("DEMO wish %f %f" % [wish.x, wish.y])
 	_session.request_move(wish.x, wish.y)
 
-	if not await _await_arrival(click_tick + WALK_AWAY_DEADLINE_TICKS, destination):
+	var walk_budget_msec := WALK_AWAY_BUDGET_TICKS * _session.tick_clock().tick_ms()
+	if not await _await_arrival(walk_budget_msec, destination):
 		_fail(
-			"this client's own body was still walking at tick %d; dropping now would land the "
-			% (click_tick + WALK_AWAY_DEADLINE_TICKS)
-			+ "item under a walker rather than at a destination it reached"
+			"this client's own body was still walking after %dms of wish steer; dropping now "
+			% walk_budget_msec
+			+ "would land the item under a walker rather than at a destination it reached"
 		)
 		return false
+	# Stop and settle so display soft-pull catches sim/server before we claim arrived.
+	# Keep emitting zero through settle and bag layout so sticky wish cannot restart.
+	if not await _hold_zero_wish(WALK_ARRIVAL_SETTLE_MSEC):
+		return false
+	avatar = _session.avatar_for(_session.own_id())
+	if avatar == null:
+		_fail("local avatar vanished after walk-away settle")
+		return false
+	var arrived_here := Vector2(avatar.position.x, avatar.position.z)
+	print("DEMO walkaway_arrived %f %f" % [arrived_here.x, arrived_here.y])
 
 	var slot := _first_occupied_slot()
 	if slot < 0:
@@ -192,10 +633,12 @@ func _walk_away_and_drop(click_tick: int) -> bool:
 	if opened == null:
 		return false
 	var centre: Vector2 = opened
+	_session.request_move(0.0, 0.0)
 	print("DEMO dropclick %d %d %f %f" % [
 		_session.tick_clock().estimated_tick(), slot, centre.x, centre.y
 	])
 	_click_at(centre, true)
+	_session.request_move(0.0, 0.0)
 	return true
 
 
@@ -222,6 +665,7 @@ func _open_the_bag_onto(slot: int, widget: Control) -> Variant:
 				+ "laying out and any rect read now is stale"
 			)
 			return null
+		_session.request_move(0.0, 0.0)
 		settled = widget.get_global_rect()
 		await _tree.process_frame
 
@@ -237,6 +681,80 @@ func _open_the_bag_onto(slot: int, widget: Control) -> Variant:
 
 	print("DEMO bagopen %d" % _session.tick_clock().estimated_tick())
 	return centre
+
+
+func _await_contest_world_after_capture() -> Variant:
+	var deadline := Time.get_ticks_msec() + POST_CAPTURE_RESTORE_MSEC
+	while Time.get_ticks_msec() < deadline:
+		if not _session.tick_clock().is_anchored():
+			await _tree.process_frame
+			continue
+		if _session.known_ids().size() < REQUIRED_PLAYERS:
+			await _tree.process_frame
+			continue
+		var ids := _session.known_item_ids()
+		if ids.is_empty():
+			await _tree.process_frame
+			continue
+		var id: int = ids[0]
+		var body := _session.item_for(id)
+		if body != null and is_instance_valid(body):
+			print("DEMO seedrestore %d %s %f %f" % [id, body.kind, body.position.x, body.position.z])
+			return {"id": id, "item": body}
+		await _tree.process_frame
+	_fail(
+		"contest world not ready after capture 1 within %dms (players=%d items=%d)"
+		% [
+			POST_CAPTURE_RESTORE_MSEC,
+			_session.known_ids().size(),
+			_session.known_item_ids().size(),
+		]
+	)
+	return null
+
+
+func _await_peers_post_capture_ready() -> bool:
+	var own_id := _session.own_id()
+	if not _write_barrier_file(READY_BARRIER_PREFIX, "ready %d %d" % [own_id, unix_msec_now()]):
+		return false
+	var deadline := Time.get_ticks_msec() + POST_CAPTURE_RESTORE_MSEC
+	var peers := 0
+	while Time.get_ticks_msec() < deadline:
+		# Freshen so a peer that checks mid-wait still sees us as live.
+		if not _write_barrier_file(READY_BARRIER_PREFIX, "ready %d %d" % [own_id, unix_msec_now()]):
+			return false
+		peers = 0
+		var seen_ids := {}
+		var dir := _barrier_dir()
+		if dir.is_empty():
+			return false
+		var now_msec := unix_msec_now()
+		for name in DirAccess.get_files_at(dir):
+			if not str(name).begins_with(READY_BARRIER_PREFIX) or not str(name).ends_with(".txt"):
+				continue
+			var body := FileAccess.get_file_as_string(dir.path_join(str(name))).strip_edges()
+			var parts := body.split(" ")
+			if parts.size() != 3 or parts[0] != "ready":
+				continue
+			if not parts[1].is_valid_int() or not parts[2].is_valid_int():
+				continue
+			# Ignore stale ready files left by an abandoned prior session id.
+			if now_msec - int(parts[2]) > 5000:
+				continue
+			var peer_id := int(parts[1])
+			if seen_ids.has(peer_id):
+				continue
+			seen_ids[peer_id] = true
+			peers += 1
+		if peers >= REQUIRED_PLAYERS:
+			print("DEMO captureready %d %d" % [peers, unix_msec_now()])
+			return true
+		await _tree.process_frame
+	_fail(
+		"post-capture ready barrier saw %d peer file(s) after %dms, want %d"
+		% [peers, POST_CAPTURE_RESTORE_MSEC, REQUIRED_PLAYERS]
+	)
+	return false
 
 
 func _wait_for_scenario() -> int:
@@ -269,18 +787,42 @@ func _await_tick(target: int) -> bool:
 	return true
 
 
-func _await_arrival(deadline_tick: int, destination: Vector2) -> bool:
-	var clock := _session.tick_clock()
+func _await_arrival(budget_msec: int, destination: Vector2) -> bool:
 	var avatar := _session.avatar_for(_session.own_id())
 	if avatar == null:
 		return false
-	while clock.estimated_tick() < deadline_tick:
+	var deadline_msec := Time.get_ticks_msec() + maxi(budget_msec, 0)
+	var next_wish_msec := 0
+	while Time.get_ticks_msec() < deadline_msec:
+		avatar = _session.avatar_for(_session.own_id())
+		if avatar == null:
+			return false
 		var here := Vector2(avatar.position.x, avatar.position.z)
-		if here.distance_to(destination) <= 0.75:
+		if here.distance_to(destination) <= ARRIVAL_RADIUS:
 			_session.request_move(0.0, 0.0)
 			return true
+		var now := Time.get_ticks_msec()
+		if now >= next_wish_msec:
+			var wish := (destination - here).normalized()
+			_session.request_move(wish.x, wish.y)
+			next_wish_msec = now + WISH_RESEND_MSEC
 		await _tree.process_frame
 	return false
+
+
+func _hold_zero_wish(msec: int) -> bool:
+	var deadline := Time.get_ticks_msec() + maxi(msec, 0)
+	while Time.get_ticks_msec() < deadline:
+		_session.request_move(0.0, 0.0)
+		await _tree.create_timer(WISH_RESEND_MSEC / 1000.0).timeout
+	_session.request_move(0.0, 0.0)
+	return true
+
+
+func _wait_msec(msec: int) -> void:
+	if msec <= 0:
+		return
+	await _tree.create_timer(msec / 1000.0).timeout
 
 
 func _capture(index: int) -> bool:

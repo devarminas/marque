@@ -39,9 +39,10 @@ The script builds marqued, warms Godot once, starts the server on a free port wi
   `unequip_rejected`.
 - Client layer: `DEMO equipopen` proves the panel is right-anchored; shots 2 and 3
   `DEMO worn` / `DEMO invslot` lines match the post-equip and post-unequip states.
-- Three PNGs over 4KB each and `DEMO done` on the client.
+- `DEMO done` on the client. PNG artifacts may land in `-OutDir`; they are not
+  soft-pass proof (ARM-289).
 
-Evidence lands in `-OutDir`, default `$env:TEMP\marque-equip`: three PNGs,
+Evidence lands in `-OutDir`, default `$env:TEMP\marque-equip`: optional PNGs,
 `client.stdout.log`, `client.stderr.log`, and `server.stdout.ndjson`.
 
 ## Gotchas

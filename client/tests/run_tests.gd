@@ -18,6 +18,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "dialog protocol", "script": preload("res://tests/test_dialog_protocol.gd")},
 	{"name": "quest log protocol", "script": preload("res://tests/test_quest_log_protocol.gd")},
 	{"name": "party protocol", "script": preload("res://tests/test_party_protocol.gd")},
+	{"name": "admin protocol", "script": preload("res://tests/test_admin_protocol.gd")},
 	{"name": "give protocol", "script": preload("res://tests/test_give_protocol.gd")},
 	{"name": "ability defs", "script": preload("res://tests/test_ability_defs.gd")},
 	{"name": "casting protocol", "script": preload("res://tests/test_casting.gd")},
@@ -45,6 +46,7 @@ const SCENE_SUITES: Array = [
 	{"name": "class debug", "scene": "res://tests/test_class_debug.tscn"},
 	{"name": "error hud", "scene": "res://tests/test_error_hud.tscn"},
 	{"name": "esc menu", "scene": "res://tests/test_esc_menu.tscn"},
+	{"name": "admin console", "scene": "res://tests/test_admin_console.tscn"},
 	{"name": "keybinds", "scene": "res://tests/test_keybinds.tscn"},
 	{"name": "dialog", "scene": "res://tests/test_dialog.tscn"},
 	{"name": "quest log", "scene": "res://tests/test_quest_log.tscn"},
@@ -66,7 +68,10 @@ const Assertions := preload("res://tests/assertions.gd")
 
 const STARTUP_GRACE_FRAMES := 10
 
-const WATCHDOG_FRAMES := 1250
+# Per scene-suite budget. Live interop/wiring hold sockets and wait on wish
+# walks; a whole-run counter falsely trips on later suites after healthy
+# earlier suites burned the shared pool.
+const WATCHDOG_FRAMES := 2500
 
 var _frames := 0
 var _suite_frames := 0
@@ -148,10 +153,10 @@ func _on_process_frame() -> void:
 		_report_and_quit()
 		return
 
-	if _frames >= WATCHDOG_FRAMES:
+	if _suite_frames >= WATCHDOG_FRAMES:
 		_fail(
-			"tests did not finish within %d frames (stuck in '%s')"
-			% [WATCHDOG_FRAMES, suite["name"]]
+			"suite '%s' did not finish within %d frames"
+			% [suite["name"], WATCHDOG_FRAMES]
 		)
 		_report_and_quit()
 		return

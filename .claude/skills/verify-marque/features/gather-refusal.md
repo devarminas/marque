@@ -42,13 +42,15 @@ lumberjack set between spawn and the tree, and runs one windowed client in
 `--gather-error-shots` mode. `DefaultJoinKit` stays empty, so the no-tool case is
 reached by joining, not by patching the server.
 
-Three frames land in `-OutDir`, default `$env:TEMP\marque-gather-error`:
+Three frames land in `-OutDir`, default `$env:TEMP\marque-gather-error`. Default
+proof is DEMO + GAMELOG; the PNG pair is a **named-pixel** contract (label band),
+not a soft existence check (ARM-289):
 
-| Frame | What it must show |
+| Frame | Named pixel / DEMO fact |
 |---|---|
-| `a_1.png` | the refusal text on screen, right after an unarmed right-click |
-| `a_2.png` | the same view with the text gone |
-| `a_3.png` | the depleted tree and `logs` in the bag, error label empty |
+| `a_1.png` | refusal text present in the ErrorHud band (paired with `DEMO errorhud`) |
+| `a_2.png` | same band cleared; control band left of it stays quiet |
+| `a_3.png` | depleted tree + `logs` in bag via DEMO; error label empty |
 
 Both layers are asserted. Client layer: the `DEMO errortext`, `DEMO errorhud`,
 `DEMO errorcleared`, `DEMO leftclickgathers`, `DEMO class` and `DEMO gathered` lines,
@@ -64,9 +66,9 @@ pass. Server layer: exactly one `gather_rejected` with reason
 - **The refused gather never logs `gather`.** A refusal on receipt logs
   `gather_rejected` only, so "exactly one accepted `gather`" is what proves the left
   click sent nothing, not a count of `gather_rejected`.
-- **Empty join kit.** `DefaultJoinKit` is empty since M7. Any recipe that assumes a
-  bag axe at join, `scripts/gather_craft_demo.ps1` among them, cannot reach its
-  scenario. Seed the kit on the ground with `-item x,z,kind` and pick it up.
+- **Empty join kit.** `DefaultJoinKit` is empty since M7. Seed the kit on the
+  ground with `-item x,z,kind` and pick it up (as this demo does). Do not drive
+  `scripts/gather_craft_demo.ps1` (ARM-287 fail-closed stub).
 - **The linger window is a tuning knob.** The harness accepts 3000..9000ms around the
   authored 4.0s `wait_time` rather than asserting the number, so a retune does not
   turn the demo red for the wrong reason.

@@ -79,6 +79,32 @@ func (k *kindList) Set(value string) error {
 	return nil
 }
 
+type playerIDList []mnet.PlayerID
+
+func (p *playerIDList) String() string {
+	parts := make([]string, 0, len(*p))
+	for _, id := range *p {
+		parts = append(parts, strconv.FormatInt(int64(id), 10))
+	}
+	return strings.Join(parts, " ")
+}
+
+func (p *playerIDList) Set(value string) error {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return fmt.Errorf("player id is empty")
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return fmt.Errorf("player id %q: %w", value, err)
+	}
+	if n < 1 {
+		return fmt.Errorf("player id %q must be >= 1", value)
+	}
+	*p = append(*p, mnet.PlayerID(n))
+	return nil
+}
+
 const shutdownGrace = 5 * time.Second
 
 const wsPath = "/ws"
@@ -98,12 +124,19 @@ func run() error {
 	weaponsPath := flag.String("weapons", "", "path to shared/weapons.json (default: search from cwd, or MARQUE_WEAPONS)")
 	questsPath := flag.String("quests", "", "path to shared/quests.json (default: search from cwd, or MARQUE_QUESTS)")
 	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
-	seedClassKits := flag.Bool("seed-class-kits", false, "place one ground item per unique kind from shared/sets.json (armor + tools) on a grid near spawn for class demo/test; does not change DefaultJoinKit")
+	seedClassKits := flag.Bool("seed-class-kits", false, "retired: hard-errors; use -admin and /give instead")
 	var seeds itemSeeds
-	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world. Combines with -seed-class-kits.")
+	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world.")
 	joinKit := append(kindList(nil), game.DefaultJoinKit...)
 	flag.Var(&joinKit, "join-kit", "seed this kind into the bag of every joining player (demo harness).\nRepeat the flag for more kinds. Omit it entirely to keep the shipped DefaultJoinKit.")
+	devAdmin := flag.Bool("admin", false, "grant every connected player admin (dev harness; default deny)")
+	var adminPlayers playerIDList
+	flag.Var(&adminPlayers, "admin-player", "allow this player id to run admin commands.\nRepeat the flag for more ids. Ignored when -admin is set.")
 	flag.Parse()
+
+	if *seedClassKits {
+		return fmt.Errorf("-seed-class-kits retired; start with -admin (or -admin-player) and /give <kind> via the admin bus")
+	}
 
 	mapCfg, err := game.LookupMap(strings.TrimSpace(*mapID))
 	if err != nil {
@@ -177,18 +210,15 @@ func run() error {
 	world.SetWeapons(weapons)
 	world.SetClasses(classes)
 	world.SetQuests(quests)
-
-	var groundSeeds itemSeeds
-	var classKitFields []gamelog.Fields
-	if *seedClassKits {
-		for _, s := range game.ClassKitSeeds(classes) {
-			groundSeeds = append(groundSeeds, itemSeed{kind: s.Kind, x: s.X, z: s.Z})
-			classKitFields = append(classKitFields, gamelog.Fields{
-				"kind": s.Kind, "x": s.X, "z": s.Z,
-			})
+	acl := game.AdminACL{DevAdmin: *devAdmin}
+	if len(adminPlayers) > 0 {
+		acl.Players = make(map[mnet.PlayerID]struct{}, len(adminPlayers))
+		for _, id := range adminPlayers {
+			acl.Players[id] = struct{}{}
 		}
 	}
-	groundSeeds = append(groundSeeds, seeds...)
+	world.SetAdminACL(acl)
+	world.SetAdminRegistry(game.NewDefaultAdminRegistry())
 
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
@@ -208,8 +238,7 @@ func run() error {
 		"world_half_extent": world.HalfExtent(),
 		"inventory_size":    game.InventorySize,
 		"resume_grace":      game.ResumeGraceTicks,
-		"seeded_items":      len(groundSeeds),
-		"seed_class_kits":   *seedClassKits,
+		"seeded_items":      len(seeds),
 		"join_kit":          joinKit,
 		"worn_slots":        game.WornSlots,
 		"abilities":         abilities.Len(),
@@ -218,13 +247,12 @@ func run() error {
 		"quests_path":       qpath,
 		"classes":           classes.ClassLen(),
 		"skills":            classes.SkillLen(),
-	}
-	if *seedClassKits {
-		started["class_kit_seeds"] = classKitFields
+		"admin":             *devAdmin,
+		"admin_players":     adminPlayers,
 	}
 	log.Event(0, game.EvServerStarted, started)
 
-	for _, seed := range groundSeeds {
+	for _, seed := range seeds {
 		if err := world.SeedGroundItem(seed.kind, seed.x, seed.z); err != nil {
 			return err
 		}
