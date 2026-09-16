@@ -191,8 +191,9 @@ every `--*-shots` string literal in `client/scripts/main.gd` must appear in
 doctor. Helpers such as `scripts/marque-demo-lib.ps1`,
 `client/scripts/demo_npc_capture.gd`, `review-evidence.sh`, and
 `review-evidence.ps1` are not windowed demos and are not scanned. Doctor does
-require those two review-evidence helpers to exist on disk. There is no
-`.github/` workflow tree in this repo; **doctor is the gate**.
+require those two review-evidence helpers to exist on disk. Pull requests use
+`.github/PULL_REQUEST_TEMPLATE.md` (one body for features and bugs). There is no
+CI workflow tree; **doctor is the gate**.
 It warns — with the exact warm-up command — when `client/.godot/` is missing. Run it
 first whenever anything looks off.
 
@@ -524,7 +525,8 @@ then `attach`. Do not re-assert PNG byte size.
 
 Feature files keep Atlas's four H2s. Put a one-line **Reviewer evidence:** note
 in Driving or Gotchas where the change is visual. `features/README.md` has the
-kind table.
+kind table. Fill `.github/PULL_REQUEST_TEMPLATE.md` when opening the PR — same
+sections for features and bugs.
 
 ## Headless-only claims
 

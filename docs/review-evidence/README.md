@@ -9,4 +9,5 @@ How to capture and attach: `.cursor/skills/verify-marque/SKILL.md`
 
 Keep one folder per issue or slug. Commit at most 1–3 artifacts. Link them from
 the PR body with `blob/<head-branch>/path?raw=true` (relative PR-body image
-links resolve against `main`).
+links resolve against `main`). The PR template's **Reviewer evidence** section
+is `.github/PULL_REQUEST_TEMPLATE.md`.
