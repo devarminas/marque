@@ -68,7 +68,9 @@ foreach ($relative in @(
     "scripts\interop_test.ps1",
     "scripts\two_client_demo.ps1",
     "scripts\contested_pickup_demo.ps1",
-    "scripts\equip_demo.ps1"
+    "scripts\equip_demo.ps1",
+    ".cursor\skills\verify-marque\review-evidence.sh",
+    ".cursor\skills\verify-marque\review-evidence.ps1"
 )) {
     if (-not (Test-Path (Join-Path $repo $relative))) {
         $failures.Add("missing $relative; this is not the checkout the skill was written against")
@@ -110,8 +112,8 @@ if (-not (Test-Path $allowlistPath)) {
     foreach ($dirRel in @("scripts", "client\scripts")) {
         $dir = Join-Path $repo $dirRel
         if (-not (Test-Path -LiteralPath $dir)) { continue }
-        # Match *_demo.ps1 / *_demo.gd only — not helpers like marque-demo-lib.ps1
-        # or demo_npc_capture.gd (those are not windowed demos).
+        # Match *_demo.ps1 / *_demo.gd only — not helpers like marque-demo-lib.ps1,
+        # demo_npc_capture.gd, or review-evidence.* (those are not windowed demos).
         $filter = if ($dirRel -eq "scripts") { "*_demo.ps1" } else { "*_demo.gd" }
         Get-ChildItem -LiteralPath $dir -File -Filter $filter | ForEach-Object {
             $rel = Get-RepoRelativeForwardSlash $_.FullName

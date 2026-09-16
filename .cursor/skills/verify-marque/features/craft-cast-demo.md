@@ -38,7 +38,10 @@ Preconditions:
 
 Both harnesses build marqued with `-admin` (empty join kit), warm Godot, and
 `/give` the needed kinds via the admin bus. Default proof is DEMO + GAMELOG
-(ARM-289). PNGs are artifacts only.
+(ARM-289). PNGs are artifacts only. **Reviewer evidence:** screenshot of bag /
+recipe state at rest after craft. Cast-bar appear/resolve or walk-interrupt is
+video or ordered frames (`--record-frames` or copy demo shots). Attach with
+`review-evidence.sh`.
 
 ## Gotchas
 

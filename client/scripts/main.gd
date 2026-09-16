@@ -34,6 +34,13 @@ const QuestLogPanelScript := preload("res://scripts/quest_log_panel.gd")
 const SCREENSHOT_FLAG := "--screenshot"
 const SCREENSHOT_PATH := "user://shot.png"
 
+# Reviewer-facing frame strip (not a --*-shots demo; DEMO+GAMELOG still gates).
+const RECORD_FRAMES_FLAG := "--record-frames"
+const RECORD_COUNT_FLAG := "--record-count"
+const RECORD_INTERVAL_MS_FLAG := "--record-interval-ms"
+const REVIEW_RECORD_DEFAULT_COUNT := 16
+const REVIEW_RECORD_DEFAULT_INTERVAL_MS := 100
+
 const FEED_FLAG := "--feed"
 
 const SHOTS_FLAG := "--shots"
@@ -160,8 +167,11 @@ func _ready() -> void:
 	if SHOTS_FLAG in args:
 		await _run_demo(args)
 		return
+	if RECORD_FRAMES_FLAG in args:
+		await _record_frames_and_quit(args)
+		return
 	if SCREENSHOT_FLAG in args:
-		await _capture_and_quit()
+		await _capture_and_quit(_optional_arg_after(args, SCREENSHOT_FLAG))
 
 
 func _feed_scripted_frames(args: Array) -> int:
@@ -583,10 +593,7 @@ func _capture(session: SessionScript, prefix: String, index: int) -> bool:
 		await RenderingServer.frame_post_draw
 
 	var path := "%s_%d.png" % [prefix, index]
-	var image := get_viewport().get_texture().get_image()
-	var error := image.save_png(path)
-	if error != OK:
-		push_error("screenshot failed to save to %s: %d" % [path, error])
+	if not _save_viewport_png(path):
 		return false
 
 	print("DEMO shot %d %s" % [index, path])
@@ -669,19 +676,72 @@ func _wait_msec(duration: int) -> void:
 		await get_tree().process_frame
 
 
-func _capture_and_quit() -> void:
+func _capture_and_quit(out_path: String) -> void:
 	for _frame in SCREENSHOT_WARMUP_FRAMES:
 		await RenderingServer.frame_post_draw
 
-	var image := get_viewport().get_texture().get_image()
-	var error := image.save_png(SCREENSHOT_PATH)
-	if error != OK:
-		push_error("screenshot failed to save to %s: %d" % [SCREENSHOT_PATH, error])
+	var path := out_path.strip_edges()
+	if path.is_empty():
+		path = ProjectSettings.globalize_path(SCREENSHOT_PATH)
+	elif not path.is_absolute_path():
+		push_error("%s output path must be absolute, got %s" % [SCREENSHOT_FLAG, path])
 		get_tree().quit(1)
 		return
 
-	print("screenshot: ", ProjectSettings.globalize_path(SCREENSHOT_PATH))
+	if not _save_viewport_png(path):
+		get_tree().quit(1)
+		return
+
+	print("screenshot: ", path)
+	print("REVIEW shot %s" % path)
 	get_tree().quit(0)
+
+
+func _record_frames_and_quit(args: Array) -> void:
+	var prefix := _optional_arg_after(args, RECORD_FRAMES_FLAG)
+	if prefix.is_empty() or not prefix.is_absolute_path():
+		push_error("%s needs an absolute output prefix after it" % RECORD_FRAMES_FLAG)
+		get_tree().quit(1)
+		return
+
+	var count := _int_after(args, RECORD_COUNT_FLAG, REVIEW_RECORD_DEFAULT_COUNT)
+	var interval_ms := _int_after(
+		args, RECORD_INTERVAL_MS_FLAG, REVIEW_RECORD_DEFAULT_INTERVAL_MS
+	)
+	if count < 2 or count > 60:
+		push_error("%s count must be 2..60, got %d" % [RECORD_COUNT_FLAG, count])
+		get_tree().quit(1)
+		return
+	if interval_ms < 16 or interval_ms > 1000:
+		push_error(
+			"%s must be 16..1000, got %d" % [RECORD_INTERVAL_MS_FLAG, interval_ms]
+		)
+		get_tree().quit(1)
+		return
+
+	for _frame in SCREENSHOT_WARMUP_FRAMES:
+		await RenderingServer.frame_post_draw
+
+	for index in range(1, count + 1):
+		var path := "%s_%d.png" % [prefix, index]
+		if not _save_viewport_png(path):
+			get_tree().quit(1)
+			return
+		print("REVIEW frame %d %s" % [index, path])
+		if index < count:
+			await _wait_msec(interval_ms)
+
+	print("REVIEW frames done %d" % count)
+	get_tree().quit(0)
+
+
+func _save_viewport_png(path: String) -> bool:
+	var image := get_viewport().get_texture().get_image()
+	var error := image.save_png(path)
+	if error != OK:
+		push_error("screenshot failed to save to %s: %d" % [path, error])
+		return false
+	return true
 
 
 static func _argument_after(args: Array, flag: String) -> String:
@@ -689,6 +749,20 @@ static func _argument_after(args: Array, flag: String) -> String:
 	if index == -1 or index + 1 >= args.size():
 		return ""
 	return args[index + 1]
+
+
+static func _optional_arg_after(args: Array, flag: String) -> String:
+	var value := _argument_after(args, flag)
+	if value.is_empty() or value.begins_with("--"):
+		return ""
+	return value
+
+
+static func _int_after(args: Array, flag: String, fallback: int) -> int:
+	var text := _optional_arg_after(args, flag)
+	if text.is_empty() or not text.is_valid_int():
+		return fallback
+	return int(text)
 
 
 static func _parse_fraction(text: String) -> Vector2:

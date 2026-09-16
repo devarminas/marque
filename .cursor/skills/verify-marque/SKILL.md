@@ -47,6 +47,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/enemy_quest_turnin_demo.ps1` | `ENEMY QUEST TURNIN DEMO OK` |
 | `scripts/admin_give_class_kits_demo.ps1` | `ADMIN GIVE CLASS KITS DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
+| `review-evidence.sh` / `review-evidence.ps1` | `REVIEW CAPTURE OK` / `REVIEW STITCH OK` / `REVIEW ATTACH OK` — last line of that command. Not a behavioural pass. |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
 | each scripted client | `DEMO done` on its stdout |
 
@@ -75,6 +76,12 @@ the second body, the still-camera quiet band, the label-band differing pixels.
 "`a_1.png` exists and is over 4KB" is never proof (ARM-289). Do not steer a recipe
 toward soft visual-only passes. If the claim does not need a named-pixel contract,
 leave the Pixel column empty or `optional` and prove it with DEMO + GAMELOG.
+
+**Reviewer-facing media is a separate lane.** When the PR changes something a human
+should see without launching the client, attach 1–3 screenshots or a short clip to
+the GitHub PR after a successful verify run. That attachment is complementary. It
+does not replace DEMO + GAMELOG, and file presence still does not pass a claim.
+See *Reviewer-facing evidence*.
 
 ## Proof ladder
 
@@ -110,7 +117,15 @@ mid-chase remains DEMO npc/anim via `enemy_midchase_demo.ps1`
 ## Launch
 
 All commands run from the repo root. Go 1.27 and Godot 4.7 (`godot`) are on PATH;
-every script here also honours `$env:GODOT` as the Godot executable.
+every script here also honours `$env:GODOT` / `$GODOT` as the Godot executable.
+
+**Cloud Agent / Linux.** `doctor.ps1`, `run.ps1`, and `scripts/*_demo.ps1` stay
+PowerShell (`pwsh` is fine). Reviewer media uses the bash helper
+`.cursor/skills/verify-marque/review-evidence.sh` (PowerShell twin:
+`review-evidence.ps1`). Windowed self-capture needs a real X display: honour
+`$DISPLAY`, and if it is unset but `/tmp/.X11-unix/X1` exists the helper uses
+`:1`. Headless Godot cannot produce reviewer pixels. Do not automate the desktop
+mouse; the game still screenshots itself.
 
 **Fresh checkout or worktree: warm the Godot caches once, before anything else.**
 `client/.godot/` is gitignored, and without it headless Godot fails to *parse* any
@@ -171,9 +186,11 @@ client, and both canonical scripts where this skill expects them. It also fails 
 on windowed demos: every `scripts/*_demo.ps1`, every `client/scripts/*_demo.gd`, and
 every `--*-shots` string literal in `client/scripts/main.gd` must appear in
 `.cursor/skills/verify-marque/demo-allowlist.txt`. An unlisted file or flag fails
-doctor. Helpers such as `scripts/marque-demo-lib.ps1` and
-`client/scripts/demo_npc_capture.gd` are not windowed demos and are not scanned.
-There is no `.github/` workflow tree in this repo; **doctor is the gate**.
+doctor. Helpers such as `scripts/marque-demo-lib.ps1`,
+`client/scripts/demo_npc_capture.gd`, `review-evidence.sh`, and
+`review-evidence.ps1` are not windowed demos and are not scanned. Doctor does
+require those two review-evidence helpers to exist on disk. There is no
+`.github/` workflow tree in this repo; **doctor is the gate**.
 It warns — with the exact warm-up command — when `client/.godot/` is missing. Run it
 first whenever anything looks off.
 
@@ -219,7 +236,8 @@ is not enough.
 | `--enemy-midchase-shots <abs-prefix>` | Mid-chase Imp visibility (`enemy_midchase_demo.gd`). Absolute host path required. |
 | `--enemy-quest-turnin-shots <abs-prefix>` | Camp kills + party credit + turn-in (`enemy_quest_turnin_demo.gd`). Requires `--enemy-quest-turnin-role leader\|member`. Absolute host path required. |
 | `--enemy-quest-turnin-role leader\|member` | Which side of the turn-in demo this client plays. |
-| `--screenshot` | No server needed: render `main.tscn`, save one frame to `user://shot.png`, print its absolute path, quit. The single-client visual baseline. |
+| `--screenshot [abs-path]` | No server needed: render `main.tscn`, save one frame, print its absolute path, quit. Optional absolute host path; omitted, writes `user://shot.png`. The single-client visual baseline and the screenshot half of reviewer evidence. |
+| `--record-frames <abs-prefix>` | No server needed: after the same warmup, write `<prefix>_1.png` … `<prefix>_N.png` and print `REVIEW frame` / `REVIEW frames done`. Optional `--record-count N` (2–60, default 16) and `--record-interval-ms MS` (16–1000, default 100). Not a `--*-shots` demo; doctor does not allowlist it. Use for reviewer video / ordered frames, then stitch with `review-evidence.sh stitch`. |
 
 Scripted demo mode waits for **two** players (`DEMO_MIN_PLAYERS` in `main.gd`), so a
 lone `--shots` client times out after 20s and exits 1 by design; scripted windowed
@@ -425,6 +443,72 @@ always resolve ids via `DEMO joined`. Shared dump helper:
   skill's own proof run produced a false "sky band identical" from a
   silently-disposed bitmap whose band read back as zero bytes.
 
+## Reviewer-facing evidence
+
+This lane is for **humans reading the PR**, not for pass/fail. Run it after the
+behavioural verify that already printed its marker. Attach the best 1–3 artifacts
+so Arminas can open the GitHub PR and see the feature without launching the client.
+
+**Decide the kind from the feature, then stop.**
+
+| Kind | When | Capture |
+|---|---|---|
+| **Screenshot** | Static layout/chrome at rest: inventory hover popup *content*, recipe sheet open, highlight colors at rest, cursor/mode badge in one frame. | `--screenshot /abs/out.png`, or copy 1–2 PNGs from an existing allowlisted demo's evidence dir. |
+| **Video / ordered frames** | Temporal UX: enter Use-mode → highlights appear → cancel clears; hover pop-in/out; preview cue on Use-hover; sheet dismiss; cast-bar appear/resolve. | `--record-frames /abs/prefix` (optional `--record-count`, `--record-interval-ms`), then `review-evidence.sh stitch --prefix … --mp4`. Keep clips to a few seconds. Prefer engine frames + ffmpeg over desktop recorders. Godot `--write-movie` is allowed if ffmpeg is missing; convert to mp4 before attach. |
+| **None** | Pure logic/wire already covered by DEMO+GAMELOG / Go / headless. Heartbeat, rejected intents, `move_to` refuse, store contests. | Do not capture. Do not attach a decorative title-screen PNG. |
+
+Prefer extending an existing allowlisted demo or these two flags over minting a
+new `*_demo.ps1` / `*_demo.gd` / `--*-shots` flag. If you must add one of those,
+update `demo-allowlist.txt` in the same change (ARM-290). `--record-frames` is
+not a `--*-shots` flag; doctor does not allowlist it.
+
+### Capture + attach path
+
+Staging dir (not committed; emptied only by you): `$TMPDIR/marque-review-evidence`
+on Linux, `$env:TEMP\marque-review-evidence` on Windows.
+
+Linux / Cloud Agent (from repo root):
+
+    bash .cursor/skills/verify-marque/review-evidence.sh capture-screenshot
+    # writes $TMPDIR/marque-review-evidence/baseline.png (default staging)
+    # After the PR exists:
+    bash .cursor/skills/verify-marque/review-evidence.sh attach \
+      --files "${TMPDIR:-/tmp}/marque-review-evidence/baseline.png" \
+      --pr auto --kind screenshot \
+      --caption "main.tscn baseline; HUD chrome at rest"
+
+    bash .cursor/skills/verify-marque/review-evidence.sh capture-frames \
+      --mp4 --attach --pr auto \
+      --kind video --caption "Use-mode highlights then cancel"
+
+Windows:
+
+    powershell -ExecutionPolicy Bypass -File .cursor/skills/verify-marque/review-evidence.ps1 `
+      capture-screenshot -Attach -Pr auto -Caption "main.tscn baseline"
+
+`--attach` / `attach` runs `gh pr comment --attach`. GitHub renders PNG/JPEG/GIF
+inline and plays MP4 in the comment. That is the preferred surface: reviewers see
+the media on github.com without Cursor, and relative markdown in a PR *body*
+resolves against the default branch, so committed files in the head branch do not
+embed there unless you use a `blob/<head>/...?raw=true` URL.
+
+Optional durable copy: commit at most those same 1–3 files under
+`docs/review-evidence/<issue-or-slug>/` so the Files tab shows them. Do not dump
+full demo evidence dirs. Label them reviewer media, not proof.
+
+Markers: `REVIEW CAPTURE OK`, `REVIEW STITCH OK`, `REVIEW ATTACH OK` — last line
+**and** exit 0, same rule as every other recipe. A missing output file fails the
+helper because there is nothing to attach; that is not a named-pixel contract and
+not a substitute for `DEMO done`.
+
+Reuse demo PNGs when the visual claim already drove `scripts/*_demo.ps1`: copy
+the informative frames out of `-OutDir` *before* the next harness run empties it,
+then `attach`. Do not re-assert PNG byte size.
+
+Feature files keep Atlas's four H2s. Put a one-line **Reviewer evidence:** note
+in Driving or Gotchas where the change is visual. `features/README.md` has the
+kind table.
+
 ## Headless-only claims
 
 The suite runner (`client/tests/run_tests.gd`) owns the false-pass holes: it requires
@@ -445,6 +529,8 @@ number and report what you got rather than comparing against a figure written he
   and remove only their own scratch working directories.
 - The evidence directory is never cleaned up *after* a run. Proof artifacts survive
   at the printed path; delete them yourself only after the claim is recorded.
+  Reviewer-media staging (`marque-review-evidence`) is the same: the helper does
+  not delete captures after attach.
 - It is emptied at the *start* of the next run of that harness, so copy anything you
   intend to keep somewhere else before rerunning. A directory the harness did not
   write is refused rather than emptied.
@@ -457,14 +543,20 @@ number and report what you got rather than comparing against a figure written he
 - **No display, no pixels.** Windowed clients need a real desktop session; there is
   no virtual-display path here. Headless runs prove logic, never rendering. In
   display-less CI, only `interop_test.ps1`-style headless runs and Go tests exist.
-- **A captured PNG is the whole visual story.** No video, no motion capture, no human
-  aesthetic judgment — only assertions computable from the files.
+  Reviewer media has the same constraint: no X/Wayland, no attachable pixels.
+- **Behavioural proof is never media presence.** Reviewer screenshots and short
+  clips (see *Reviewer-facing evidence*) let a human see the feature on the PR.
+  They do not pass a claim. Named-pixel contracts remain the only pixel
+  assertions. Do not treat a PNG, GIF, or MP4 as a substitute for DEMO lines or
+  GAMELOG. Human aesthetic judgment is not an assertion.
 - **`go test -race` needs a C toolchain on PATH first.** The LLVM-MinGW toolchain is
   installed but not on PATH by default. Put a C toolchain Go can use as `CC` on PATH,
   then from `server/`: `CGO_ENABLED=1 go test -race ./...`. This entry used to say no C
   compiler existed. That was true until 2026-09-02.
 - **No desktop automation.** The game drives and screenshots itself; nothing moves
   the real mouse. What the flag path cannot reach, a raw protocol probe must.
+  Do not drive reviewer video with a desktop screen recorder or computer-use
+  mouse when `--screenshot` / `--record-frames` / an existing demo can shoot it.
 - **One shared `user://`.** Anything two clients both write must go to absolute
   paths.
 - **A starved display fails every visual assertion at once.** Each capture waits 15

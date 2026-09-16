@@ -41,3 +41,6 @@ Markers: exit 0; suite line `PASS: player_character prop mock`; overall last lin
 - Remotes still instance bare `player_avatar.tscn` (no camera). Only the local
   character uses the prop.
 - Prototype move-to-walk is retired; this mock is the presentation home.
+- **Reviewer evidence:** screenshot of the prop or `main.tscn` at rest. Walk/jump
+  timing is frames/video. The headless mock suite still gates. Attach with
+  `review-evidence.sh`.

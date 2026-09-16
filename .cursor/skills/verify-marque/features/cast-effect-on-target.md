@@ -42,3 +42,6 @@ stdout/stderr and `server.stdout.ndjson`.
 - **Scene-authored flash.** `cast_hit_fx.tscn` holds the sphere; scripts only
   instance and tint it.
 - **Casters only.** Other clients do not see the flash (no world wire cue).
+- **Reviewer evidence:** flash is temporal — short clip or pre/post frames.
+  `DEMO castfx` + GAMELOG `cast_effect` still gate. Attach with
+  `review-evidence.sh`.

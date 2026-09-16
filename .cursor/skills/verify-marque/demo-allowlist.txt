@@ -2,7 +2,8 @@
 # scripts/*_demo.ps1, client/scripts/*_demo.gd, or main.gd --*-shots flag is
 # absent from this file. Paths are repo-relative with forward slashes.
 # Lines starting with # are comments. Trailing # comments on entry lines are ok.
-# Helpers (marque-demo-lib.ps1, demo_npc_capture.gd, demo_admin_give.gd) are not scanned.
+# Helpers (marque-demo-lib.ps1, demo_npc_capture.gd, demo_admin_give.gd,
+# review-evidence.sh, review-evidence.ps1) are not scanned.
 
 # scripts/*_demo.ps1
 scripts/combat_demo.ps1
