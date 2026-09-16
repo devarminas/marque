@@ -512,7 +512,8 @@ tags; still commit or link so github.com reviewers see the files without Cursor.
 Optional durable copy is that same `docs/review-evidence/<slug>/` tree. Do not
 dump full demo evidence dirs. Label them reviewer media, not proof.
 
-Markers: `REVIEW CAPTURE OK`, `REVIEW STITCH OK`, `REVIEW ATTACH OK` — last line
+Markers: `REVIEW CAPTURE OK`, `REVIEW STITCH OK`, `REVIEW ATTACH OK`,
+`REVIEW STAGE OK` — last line
 **and** exit 0, same rule as every other recipe. A missing output file fails the
 helper because there is nothing to attach; that is not a named-pixel contract and
 not a substitute for `DEMO done`.

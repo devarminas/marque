@@ -23,7 +23,7 @@ Commands:
   capture-screenshot  Windowed --screenshot (optional absolute --out).
   capture-frames      Windowed --record-frames strip; optionally stitch mp4/gif.
   stitch              ffmpeg a prefix_1.png.. strip into mp4 and/or gif.
-  attach              gh pr comment --attach (max 3 files). GitHub renders them inline.
+  attach              gh pr comment --attach (max 3 files), or --stage-repo fallback.
 
 Kind heuristic (documentation, passed through --kind or inferred):
   screenshot  static layout/chrome at rest
