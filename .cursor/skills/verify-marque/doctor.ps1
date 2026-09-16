@@ -39,15 +39,23 @@ try {
     # string. A preflight written as `if (-not ($v = godot --version))` therefore
     # reports Godot missing on a machine where it is installed and on PATH.
     #
-    # The `cmd /c` wrapper is here for `2>nul` — keeping Godot's stderr off
+    # Windows: `cmd /c` is here for `2>nul` — keeping Godot's stderr off
     # this script's error stream — not for the capture. The
     # `| Select-Object -First 1` after it is what captures, and it works
     # without the wrapper.
     #
+    # Linux/pwsh: `cmd` is not on PATH. Redirect stderr in-process instead so
+    # Cloud Agents can still get DOCTOR OK. Detect by whether `cmd` exists,
+    # not $IsWindows — Windows PowerShell 5 has no $IsWindows.
+    #
     # The run scripts are immune either way, because Start-Process
     # -RedirectStandardOutput hands the process a real file handle rather than
     # a pipeline.
-    $godotVersion = (cmd /c "`"$Godot`" --version 2>nul") | Select-Object -First 1
+    if (Get-Command cmd -ErrorAction SilentlyContinue) {
+        $godotVersion = (cmd /c "`"$Godot`" --version 2>nul") | Select-Object -First 1
+    } else {
+        $godotVersion = (& $Godot --version 2>$null) | Select-Object -First 1
+    }
     if ([string]::IsNullOrWhiteSpace($godotVersion)) {
         $failures.Add("'$Godot' is not answering (set `$env:GODOT or put godot on PATH)")
     } elseif ($godotVersion -notmatch "^4\.7\.") {
@@ -68,7 +76,9 @@ foreach ($relative in @(
     "scripts\interop_test.ps1",
     "scripts\two_client_demo.ps1",
     "scripts\contested_pickup_demo.ps1",
-    "scripts\equip_demo.ps1"
+    "scripts\equip_demo.ps1",
+    ".cursor\skills\verify-marque\review-evidence.sh",
+    ".cursor\skills\verify-marque\review-evidence.ps1"
 )) {
     if (-not (Test-Path (Join-Path $repo $relative))) {
         $failures.Add("missing $relative; this is not the checkout the skill was written against")
@@ -110,8 +120,8 @@ if (-not (Test-Path $allowlistPath)) {
     foreach ($dirRel in @("scripts", "client\scripts")) {
         $dir = Join-Path $repo $dirRel
         if (-not (Test-Path -LiteralPath $dir)) { continue }
-        # Match *_demo.ps1 / *_demo.gd only — not helpers like marque-demo-lib.ps1
-        # or demo_npc_capture.gd (those are not windowed demos).
+        # Match *_demo.ps1 / *_demo.gd only — not helpers like marque-demo-lib.ps1,
+        # demo_npc_capture.gd, or review-evidence.* (those are not windowed demos).
         $filter = if ($dirRel -eq "scripts") { "*_demo.ps1" } else { "*_demo.gd" }
         Get-ChildItem -LiteralPath $dir -File -Filter $filter | ForEach-Object {
             $rel = Get-RepoRelativeForwardSlash $_.FullName

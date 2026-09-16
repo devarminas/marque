@@ -52,3 +52,7 @@ godot --headless --path client --script res://tests/run_tests.gd
 - Visual checks: the game screenshots itself; do not automate the desktop.
 - Behavioural client/server claims: `.cursor/skills/verify-marque/SKILL.md`.
 - Server: from `server/`, with a C toolchain on PATH, `CGO_ENABLED=1 go test -race ./...`.
+
+## Pull requests
+
+Fill `.github/PULL_REQUEST_TEMPLATE.md`. One body for features and bugs.

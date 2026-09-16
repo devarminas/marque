@@ -40,7 +40,8 @@ The script builds marqued, warms Godot once, starts the server on a free port wi
 - Client layer: `DEMO equipopen` proves the panel is right-anchored; shots 2 and 3
   `DEMO worn` / `DEMO invslot` lines match the post-equip and post-unequip states.
 - `DEMO done` on the client. PNG artifacts may land in `-OutDir`; they are not
-  soft-pass proof (ARM-289).
+  soft-pass proof (ARM-289). **Reviewer evidence:** screenshot of the right-dock
+  equipment panel with the sword worn. Attach with `review-evidence.sh`.
 
 Evidence lands in `-OutDir`, default `$env:TEMP\marque-equip`: optional PNGs,
 `client.stdout.log`, `client.stderr.log`, and `server.stdout.ndjson`.

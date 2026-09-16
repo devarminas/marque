@@ -32,3 +32,6 @@ export_presets.cfg
 # so every worker's `git status` grew two or three untracked files it must not
 # commit and must not delete either, because the ledger quotes their tail lines.
 out-*.txt
+
+# Reviewer media is attached to the PR (gh comment or Cloud artifact URLs), never git.
+docs/review-evidence/

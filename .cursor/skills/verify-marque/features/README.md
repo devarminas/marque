@@ -29,6 +29,41 @@ doctor, drive, evidence, and cleanup live in [../SKILL.md](../SKILL.md).
 - Do not remove proof artifacts during cleanup. The harness that wrote them
   empties its own output directory at the start of its *next* run.
 
+## Reviewer evidence (human-facing, not a pass)
+
+When the PR changes something a human should see without launching the client,
+attach 1–3 screenshots or a short clip after the DEMO+GAMELOG (or Go / headless)
+verify run. See *Reviewer-facing evidence* in `../SKILL.md`. PNG/video presence
+is never a behavioural pass (ARM-289). Kind:
+
+| Kind | Use when | Skip when |
+|---|---|---|
+| screenshot | chrome/layout at rest (hover popup content, sheet open, badge, ring) | the claim is wire/store only |
+| video / frames | timing or motion (hover pop-in/out, Use-mode on→off, sheet dismiss) | one still frame already shows the state |
+| none | heartbeat, rejected intents, `move_to` refuse, contested store races | — |
+
+Visual features (put a one-line **Reviewer evidence:** note in Driving or Gotchas;
+do not add a fifth H2):
+
+- [Two clients see each other walk](./two-clients-see-each-other.md) — screenshot
+  (or existing demo PNGs); named-pixel still-camera stays the pixel *proof*.
+- [Tab targeting](./tab-targeting.md) — screenshot of the yellow ring at rest;
+  Escape-clear is frames if timing is the claim.
+- [Equip the join-kit weapon](./equip-weapon.md) — screenshot of the right dock.
+- [Mine, smelt, craft sword](./craft-cast-demo.md) — screenshot of bag/recipe at
+  rest; cast-bar appear/interrupt is video.
+- [Gather then craft](./gather-craft.md) — future Use-mode / hover / recipe-sheet
+  PRs: video for enter→highlight→cancel and hover pop; screenshot for a sheet
+  at rest. Drive existing demos or `--screenshot` / `--record-frames`.
+- [Cast effect on target](./cast-effect-on-target.md) — flash is temporal (clip
+  or pre/post frames).
+- [Prop: player character](./polish/props/player-character.md) — screenshot at
+  rest; walk/jump timing is frames.
+
+Capture + attach: `review-evidence.sh` (Linux) or `review-evidence.ps1`
+(Windows). Preferred GitHub surface: `gh pr comment --attach` (not git).
+Fill the **Reviewer evidence** section of `.github/PULL_REQUEST_TEMPLATE.md`.
+
 ## Proof and skip reporting
 
 - Capture the user action and the resulting state, not only the final screen.

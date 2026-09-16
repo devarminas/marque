@@ -81,6 +81,9 @@ Preconditions:
 - **Both layers or it is half-proven.** Own-avatar `DEMO pos` can include prediction;
   the watcher's `DEMO pos` for the walker is server pose. Movement claims need both
   plus GAMELOG `move`.
+- **Reviewer evidence:** screenshot (or 1–2 PNGs copied from `-OutDir` before the
+  next run empties it). Named-pixel still-camera remains the only pixel *proof*.
+  Attach with `review-evidence.sh`; presence is not `TWO CLIENT DEMO OK`.
 - **System.Drawing / GDI+ is Windows-centric.** `Compare-Frames` needs that stack.
   On Linux, `Add-Type System.Drawing` can succeed while `Bitmap.FromFile` still
   native-aborts and kills the harness before DEMO/GAMELOG asserts. The harness

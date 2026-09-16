@@ -38,3 +38,6 @@ Markers:
 - **Left-click is not attack.** Combat demos must right-click (or call
   `request_attack`) after M6c.
 - **HP 0 refuses select.** Feed HP before asserting select-on-corpse refusals.
+- **Reviewer evidence:** screenshot of the yellow ring at rest after select.
+  Escape-clear is a short frame strip only if chrome timing is the PR claim.
+  Headless `remote.is_selected()` still gates; attach with `review-evidence.sh`.

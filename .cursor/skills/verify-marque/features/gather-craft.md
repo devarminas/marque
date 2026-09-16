@@ -61,3 +61,8 @@ Preconditions:
   to wish+pose + `/give`. Contested craft race needs a later migrate; live
   gather proof is `gather_error_demo.ps1`. Reason lives in this note and PR
   #191 — do not revive a committed `decisions.tsv`.
+- **Reviewer evidence (future Use-mode / hover / recipe sheet PRs):** video or
+  ordered frames for enter Use-mode → highlights → cancel, hover pop-in/out,
+  sheet dismiss. Screenshot for a sheet or badge at rest. Drive an existing
+  allowlisted demo or `--screenshot` / `--record-frames`; do not mint a new
+  `*_demo`. Attach with `review-evidence.sh`. DEMO+GAMELOG still gate.
