@@ -23,6 +23,7 @@ param(
     [string] $Kind = "",
     [string] $Pr = "auto",
     [string[]] $Files = @(),
+    [string] $StageRepo = "",
     [switch] $Attach,
     [switch] $Mp4,
     [switch] $Gif,
@@ -38,9 +39,9 @@ Usage:
   review-evidence.ps1 capture-screenshot [-Out PATH] [-Attach] [-Pr NUMBER|auto] [-Caption TEXT]
   review-evidence.ps1 capture-frames [-OutPrefix PATH] [-Count N] [-IntervalMs MS] [-Mp4] [-Gif] [-Attach]
   review-evidence.ps1 stitch -OutPrefix PATH [-Mp4] [-Gif]
-  review-evidence.ps1 attach -Files FILE[,FILE...] [-Pr NUMBER|auto] [-Caption TEXT] [-Kind KIND]
+  review-evidence.ps1 attach -Files FILE[,FILE...] [-Pr NUMBER|auto] [-Caption TEXT] [-Kind KIND] [-StageRepo RELPATH]
 
-Markers (last line; require exit 0 as well): REVIEW CAPTURE OK / REVIEW STITCH OK / REVIEW ATTACH OK
+Markers (last line; require exit 0 as well): REVIEW CAPTURE OK / REVIEW STITCH OK / REVIEW ATTACH OK / REVIEW STAGE OK
 PNG/video presence is never behavioural proof (ARM-289).
 "@
     exit 0
@@ -77,7 +78,7 @@ function Invoke-WindowedGodot {
         Write-Host "review-evidence: warming client/.godot"
         & $Godot --headless --path (Join-Path $repo "client") --editor --quit | Out-Null
     }
-    $all = @("--path", (Join-Path $repo "client"), "--quit-after", "3600", "--") + $UserArgs
+    $all = @("--path", (Join-Path $repo "client"), "--audio-driver", "Dummy", "--quit-after", "3600", "--") + $UserArgs
     & $Godot @all
     if ($LASTEXITCODE -ne 0) {
         throw "godot exited $LASTEXITCODE"
@@ -113,13 +114,17 @@ function Invoke-Attach {
         Write-Host "review-evidence: taking the first 3 of $($Paths.Count) files (skill cap)"
         $Paths = $Paths[0..2]
     }
-    $pr = Get-PrNumber $Pr
     $text = if ($Caption) { $Caption } else { "Reviewer-facing visual evidence" }
     $kindText = if ($Kind) { $Kind } else { "screenshot" }
     $attach = @()
     foreach ($f in $Paths) {
         if (-not (Test-Path -LiteralPath $f)) { throw "missing artifact: $f" }
-        $attach += @("--attach", "$f#$text")
+        $ext = [System.IO.Path]::GetExtension($f).TrimStart('.').ToLowerInvariant()
+        if ($ext -in @("mp4", "webm", "mov", "avi")) {
+            $attach += @("--attach", $f)
+        } else {
+            $attach += @("--attach", "$f#$text")
+        }
     }
     $body = @"
 **Reviewer evidence** (human-visible; **not** a behavioural pass).
@@ -128,9 +133,32 @@ function Invoke-Attach {
 - $text
 - DEMO+GAMELOG (or Go / headless) still gate. PNG/video presence is never proof (ARM-289).
 "@
-    & gh pr comment $pr --body $body @attach
-    if ($LASTEXITCODE -ne 0) { throw "gh pr comment failed" }
-    Write-Host "REVIEW ATTACH OK"
+    if ($StageRepo) {
+        $dest = if ([System.IO.Path]::IsPathRooted($StageRepo)) { $StageRepo } else { Join-Path $repo $StageRepo }
+        New-Item -ItemType Directory -Force -Path $dest | Out-Null
+        foreach ($f in $Paths) {
+            $target = Join-Path $dest (Split-Path -Leaf $f)
+            Copy-Item -LiteralPath $f -Destination $target -Force
+            Write-Host "review-evidence: staged $target"
+        }
+    }
+    $pr = $null
+    try { $pr = Get-PrNumber $Pr } catch { Write-Host "review-evidence: $($_.Exception.Message)" }
+    if ($pr) {
+        & gh pr comment $pr --body $body @attach
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "REVIEW ATTACH OK"
+            return
+        }
+        Write-Host "review-evidence: gh pr comment --attach failed (installation tokens often cannot upload assets)."
+    }
+    if ($StageRepo) {
+        $branch = (git -C $repo rev-parse --abbrev-ref HEAD).Trim()
+        Write-Host "review-evidence: commit the staged files and put blob/${branch}/…?raw=true links in the PR body."
+        Write-Host "REVIEW STAGE OK"
+        return
+    }
+    throw "attach failed and no -StageRepo fallback"
 }
 
 New-Item -ItemType Directory -Force -Path $staging | Out-Null

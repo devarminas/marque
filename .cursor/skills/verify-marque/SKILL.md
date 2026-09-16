@@ -47,7 +47,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/enemy_quest_turnin_demo.ps1` | `ENEMY QUEST TURNIN DEMO OK` |
 | `scripts/admin_give_class_kits_demo.ps1` | `ADMIN GIVE CLASS KITS DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
-| `review-evidence.sh` / `review-evidence.ps1` | `REVIEW CAPTURE OK` / `REVIEW STITCH OK` / `REVIEW ATTACH OK` — last line of that command. Not a behavioural pass. |
+| `review-evidence.sh` / `review-evidence.ps1` | `REVIEW CAPTURE OK` / `REVIEW STITCH OK` / `REVIEW ATTACH OK` / `REVIEW STAGE OK` — last line of that command. Not a behavioural pass. |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
 | each scripted client | `DEMO done` on its stdout |
 
@@ -180,9 +180,11 @@ started. Never kill by process name.
 One read-only check that answers "is this checkout worth driving?":
 
     powershell -ExecutionPolicy Bypass -File .cursor/skills/verify-marque/doctor.ps1
+    # Linux / Cloud Agent: pwsh -File .cursor/skills/verify-marque/doctor.ps1
 
 `DOCTOR OK` means Go and Godot 4.7 answer on PATH and the repo has the server, the
-client, and both canonical scripts where this skill expects them. It also fails closed
+client, and both canonical scripts where this skill expects them. On Linux/pwsh,
+doctor reads `godot --version` without `cmd` (that wrapper is Windows-only). It also fails closed
 on windowed demos: every `scripts/*_demo.ps1`, every `client/scripts/*_demo.gd`, and
 every `--*-shots` string literal in `client/scripts/main.gd` must appear in
 `.cursor/skills/verify-marque/demo-allowlist.txt`. An unlisted file or flag fails
@@ -487,14 +489,28 @@ Windows:
       capture-screenshot -Attach -Pr auto -Caption "main.tscn baseline"
 
 `--attach` / `attach` runs `gh pr comment --attach`. GitHub renders PNG/JPEG/GIF
-inline and plays MP4 in the comment. That is the preferred surface: reviewers see
-the media on github.com without Cursor, and relative markdown in a PR *body*
-resolves against the default branch, so committed files in the head branch do not
-embed there unless you use a `blob/<head>/...?raw=true` URL.
+inline and plays MP4 in the comment. That is the preferred surface when the
+token can upload (`gh` user PATs). Do not put `#alt` on video attachments
+(`gh` refuses it); images may carry alt after `#`.
 
-Optional durable copy: commit at most those same 1–3 files under
-`docs/review-evidence/<issue-or-slug>/` so the Files tab shows them. Do not dump
-full demo evidence dirs. Label them reviewer media, not proof.
+**Cloud Agent / GitHub App installation tokens** often cannot `addComment` or
+upload assets (`Resource not accessible by integration`, `unsupported
+authentication type`). Then:
+
+    bash .cursor/skills/verify-marque/review-evidence.sh attach \
+      --files "${TMPDIR:-/tmp}/marque-review-evidence/baseline.png" \
+      --stage-repo docs/review-evidence/<issue-or-slug> \
+      --kind screenshot --caption "what a reviewer should see"
+
+Marker: `REVIEW STAGE OK` (last line, plus exit 0). Commit the staged files
+(at most those 1–3). Put **absolute** `blob/<head-branch>/path?raw=true` links
+in the PR body — relative markdown in a PR body resolves against the default
+branch, so a relative `![x](docs/...)` will 404 until merge. Cursor Cloud
+`ManagePullRequest` can also embed `/opt/cursor/artifacts/...` `<img>` / `<video>`
+tags; still commit or link so github.com reviewers see the files without Cursor.
+
+Optional durable copy is that same `docs/review-evidence/<slug>/` tree. Do not
+dump full demo evidence dirs. Label them reviewer media, not proof.
 
 Markers: `REVIEW CAPTURE OK`, `REVIEW STITCH OK`, `REVIEW ATTACH OK` — last line
 **and** exit 0, same rule as every other recipe. A missing output file fails the

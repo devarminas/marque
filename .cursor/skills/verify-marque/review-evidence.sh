@@ -17,6 +17,7 @@ Usage:
                                     [--mp4] [--gif] [--attach] [--pr NUMBER|auto] [--caption TEXT]
   review-evidence.sh stitch --prefix PATH [--mp4] [--gif]
   review-evidence.sh attach --files FILE [FILE ...] [--pr NUMBER|auto] [--caption TEXT] [--kind KIND]
+                            [--stage-repo RELPATH]
 
 Commands:
   capture-screenshot  Windowed --screenshot (optional absolute --out).
@@ -57,6 +58,7 @@ DO_MP4=0
 DO_GIF=0
 OUT=""
 OUT_PREFIX=""
+STAGE_REPO=""
 COUNT=16
 INTERVAL_MS=100
 FILES=()
@@ -105,6 +107,7 @@ parse_common() {
       --caption) CAPTION="${2:-}"; shift 2 ;;
       --kind) KIND="${2:-}"; shift 2 ;;
       --pr) PR_SPEC="${2:-}"; shift 2 ;;
+      --stage-repo) STAGE_REPO="${2:-}"; shift 2 ;;
       --files)
         shift
         while [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; do
@@ -127,7 +130,7 @@ run_windowed_godot() {
   ensure_repo_layout
   warm_godot_cache
   # Bound runaway loops. 3600 frames is a minute at 60 Hz; capture paths quit sooner.
-  "$GODOT" --path "$ROOT_DIR/client" --quit-after 3600 "$@"
+  "$GODOT" --path "$ROOT_DIR/client" --audio-driver Dummy --quit-after 3600 "$@"
 }
 
 resolve_pr() {
@@ -140,8 +143,7 @@ resolve_pr() {
 }
 
 attach_files() {
-  local pr caption kind
-  pr="$(resolve_pr "${PR_SPEC:-auto}")"
+  local caption kind body dest branch pr
   caption="${CAPTION:-Reviewer-facing visual evidence}"
   kind="${KIND:-screenshot}"
   if [ "${#FILES[@]}" -eq 0 ]; then
@@ -151,12 +153,19 @@ attach_files() {
     echo "review-evidence: taking the first 3 of ${#FILES[@]} files (skill cap)"
     FILES=("${FILES[@]:0:3}")
   fi
-  local f attach_args=()
+  local f attach_args=() ext
   for f in "${FILES[@]}"; do
     [ -f "$f" ] || die "missing artifact: $f"
-    attach_args+=(--attach "$f#${caption}")
+    ext="${f##*.}"
+    case "$ext" in
+      mp4|webm|mov|avi|MP4|WEBM|MOV|AVI)
+        attach_args+=(--attach "$f")
+        ;;
+      *)
+        attach_args+=(--attach "$f#${caption}")
+        ;;
+    esac
   done
-  local body
   body="$(cat <<EOF
 **Reviewer evidence** (human-visible; **not** a behavioural pass).
 
@@ -165,8 +174,43 @@ attach_files() {
 - DEMO+GAMELOG (or Go / headless) still gate. PNG/video presence is never proof (ARM-289).
 EOF
 )"
-  gh pr comment "$pr" --body "$body" "${attach_args[@]}"
-  echo "REVIEW ATTACH OK"
+
+  if [ -n "$STAGE_REPO" ]; then
+    case "$STAGE_REPO" in
+      /*) dest="$STAGE_REPO" ;;
+      *) dest="$ROOT_DIR/$STAGE_REPO" ;;
+    esac
+    mkdir -p "$dest"
+    for f in "${FILES[@]}"; do
+      cp -f "$f" "$dest/$(basename "$f")"
+      echo "review-evidence: staged $dest/$(basename "$f")"
+    done
+  fi
+
+  pr=""
+  if command -v gh >/dev/null 2>&1; then
+    pr="$(gh pr view --json number --jq .number 2>/dev/null || true)"
+    if [ -n "${PR_SPEC:-}" ] && [ "$PR_SPEC" != "auto" ]; then
+      pr="$PR_SPEC"
+    fi
+    if [ -n "$pr" ]; then
+      if gh pr comment "$pr" --body "$body" "${attach_args[@]}"; then
+        echo "REVIEW ATTACH OK"
+        return 0
+      fi
+      echo "review-evidence: gh pr comment --attach failed (installation tokens often cannot upload assets)."
+    else
+      echo "review-evidence: no open PR for this branch (pass --pr NUMBER, or rely on --stage-repo)."
+    fi
+  fi
+
+  if [ -n "$STAGE_REPO" ]; then
+    branch="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)"
+    echo "review-evidence: commit the staged files and put blob/${branch}/…?raw=true links in the PR body."
+    echo "REVIEW STAGE OK"
+    return 0
+  fi
+  die "attach failed and no --stage-repo fallback"
 }
 
 stitch_prefix() {
