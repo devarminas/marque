@@ -1,0 +1,9 @@
+{
+  "name": "Project Marque",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "user": "ubuntu",
+  "install": "bash scripts/cloud_agent_setup.sh --repo-only"
+}
