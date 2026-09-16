@@ -67,7 +67,7 @@ transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0.08, 0)
 visible = false
 
 [node name="staff" parent="Grip/left hand" instance=ExtResource("8_staff")]
-transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0.08, 0)
+transform = Transform3D(-0.83433, 0.55059, -0.02711, -0.55059, -0.82989, 0.0901, 0.02711, 0.0901, 0.99556, 0, 0.08, 0)
 visible = false
 
 [node name="bow" parent="Grip/left hand" instance=ExtResource("9_bow")]
@@ -97,7 +97,7 @@ transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0.08, 0)
 visible = false
 
 [node name="staff" parent="Grip/right hand" instance=ExtResource("8_staff")]
-transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 0, 0.08, 0)
+transform = Transform3D(-0.83433, 0.55059, -0.02711, -0.55059, -0.82989, 0.0901, 0.02711, 0.0901, 0.99556, 0, 0.08, 0)
 visible = false
 
 [node name="bow" parent="Grip/right hand" instance=ExtResource("9_bow")]
