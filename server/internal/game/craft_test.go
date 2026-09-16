@@ -67,8 +67,11 @@ func TestUseSwordCraftRefusesMissingSticks(t *testing.T) {
 		t.Fatal("missing-sticks craft mutated the bag")
 	}
 	rejected := pw.events(EvUseRejected)
-	if len(rejected) != 1 || rejected[0]["reason"] != string(mnet.ReasonNoRecipe) {
-		t.Fatalf("use_rejected=%v, want no_recipe", rejected)
+	if len(rejected) != 1 || rejected[0]["reason"] != string(mnet.ReasonMissingMat) {
+		t.Fatalf("use_rejected=%v, want missing_mat", rejected)
+	}
+	if rejected[0]["detail"] != "missing sticks" {
+		t.Fatalf("use_rejected detail=%v, want missing sticks", rejected[0]["detail"])
 	}
 }
 

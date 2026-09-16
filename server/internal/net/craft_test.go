@@ -186,9 +186,12 @@ func TestUseCopperBarWithoutSticksIsRefused(t *testing.T) {
 	if got.Re != mnet.MsgUse {
 		t.Fatalf("refusal names %q, want %q: %+v", got.Re, mnet.MsgUse, got)
 	}
+	if got.Msg != "missing sticks" {
+		t.Errorf("refusal reads %q, want missing sticks", got.Msg)
+	}
 	rejected := h.awaitEvents(game.EvUseRejected, 1)
-	if r := rejected[0]["reason"]; r != string(mnet.ReasonNoRecipe) {
-		t.Errorf("%s reason %v, want %q", game.EvUseRejected, r, mnet.ReasonNoRecipe)
+	if r := rejected[0]["reason"]; r != string(mnet.ReasonMissingMat) {
+		t.Errorf("%s reason %v, want %q", game.EvUseRejected, r, mnet.ReasonMissingMat)
 	}
 
 	alice.destroy()

@@ -52,9 +52,11 @@ func _ready() -> void:
 
 	_test_the_hud_is_authored_in_the_scene()
 	_test_the_class_gate_detail_maps_to_the_player_text()
+	_test_use_refusals_map_by_reason()
 	_test_any_other_refusal_passes_through()
 	await _test_a_class_gate_error_frame_paints_the_hud()
 	await _test_an_unmapped_gather_error_frame_shows_the_server_text()
+	await _test_a_use_error_frame_paints_the_hud()
 	_test_clearing_empties_and_hides()
 
 	print(
@@ -102,6 +104,47 @@ func _test_the_class_gate_detail_maps_to_the_player_text() -> void:
 	)
 
 
+func _test_use_refusals_map_by_reason() -> void:
+	_check(
+		SessionScript.player_refusal_text("use", "that cannot be crafted") == "no recipe for that",
+		'no_recipe use reads "no recipe for that", got "%s"'
+		% SessionScript.player_refusal_text("use", "that cannot be crafted"),
+	)
+	_check(
+		SessionScript.player_refusal_text("use", "too far from that station")
+		== "too far from that station",
+		"out_of_range use stays distinct, got \"%s\""
+		% SessionScript.player_refusal_text("use", "too far from that station"),
+	)
+	_check(
+		SessionScript.player_refusal_text("use", "inventory is full") == "inventory is full",
+		'inventory_full use stays honest, got "%s"'
+		% SessionScript.player_refusal_text("use", "inventory is full"),
+	)
+	_check(
+		SessionScript.player_refusal_text("use", "that slot is empty") == "that slot is empty",
+		'empty_slot use stays honest, got "%s"'
+		% SessionScript.player_refusal_text("use", "that slot is empty"),
+	)
+	_check(
+		SessionScript.player_refusal_text("use", "no such slot: 99 is outside 0 to 27")
+		== "that slot is not in the bag",
+		'no_such_slot use reads "that slot is not in the bag", got "%s"'
+		% SessionScript.player_refusal_text("use", "no such slot: 99 is outside 0 to 27"),
+	)
+	_check(
+		SessionScript.player_refusal_text("use", "missing sticks") == "missing Sticks",
+		'missing_mat use names Sticks, got "%s"'
+		% SessionScript.player_refusal_text("use", "missing sticks"),
+	)
+	_check(
+		SessionScript.player_refusal_text("gather", "that cannot be crafted")
+		== "that cannot be crafted",
+		"use mapping does not rewrite gather copy, got \"%s\""
+		% SessionScript.player_refusal_text("gather", "that cannot be crafted"),
+	)
+
+
 func _test_any_other_refusal_passes_through() -> void:
 	_check(
 		SessionScript.player_refusal_text("gather", DEPLETED_DETAIL) == DEPLETED_DETAIL,
@@ -135,6 +178,35 @@ func _test_an_unmapped_gather_error_frame_shows_the_server_text() -> void:
 	_check(
 		_error_hud.text == DEPLETED_DETAIL,
 		'an unmapped gather error draws "%s", got "%s"' % [DEPLETED_DETAIL, _error_hud.text],
+	)
+
+
+func _test_a_use_error_frame_paints_the_hud() -> void:
+	await _feed('{"error":{"re":"use","msg":"that cannot be crafted"}}')
+	_check(
+		_error_hud.text == "no recipe for that",
+		'a no_recipe use error draws "no recipe for that", got "%s"' % _error_hud.text,
+	)
+	_check(_error_hud.visible, "and shows the hud")
+	await _feed('{"error":{"re":"use","msg":"missing sticks"}}')
+	_check(
+		_error_hud.text == "missing Sticks",
+		'a missing_mat use error draws "missing Sticks", got "%s"' % _error_hud.text,
+	)
+	await _feed('{"error":{"re":"use","msg":"too far from that station"}}')
+	_check(
+		_error_hud.text == "too far from that station",
+		'an out_of_range use error stays distinct, got "%s"' % _error_hud.text,
+	)
+	await _feed('{"error":{"re":"use","msg":"inventory is full"}}')
+	_check(
+		_error_hud.text == "inventory is full",
+		'an inventory_full use error stays honest, got "%s"' % _error_hud.text,
+	)
+	await _feed('{"error":{"re":"use","msg":"that slot is empty"}}')
+	_check(
+		_error_hud.text == "that slot is empty",
+		'an empty_slot use error stays honest, got "%s"' % _error_hud.text,
 	)
 
 

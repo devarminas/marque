@@ -575,6 +575,7 @@ const (
 	ReasonNodeDepleted     RejectReason = "node_depleted"
 	ReasonNeedsClass       RejectReason = "needs_class"
 	ReasonNoRecipe         RejectReason = "no_recipe"
+	ReasonMissingMat       RejectReason = "missing_mat"
 	ReasonUnknownPlayer    RejectReason = "unknown_player"
 	ReasonSelf             RejectReason = "self"
 	ReasonTargetDead       RejectReason = "target_dead"
