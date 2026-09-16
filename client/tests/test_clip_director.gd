@@ -27,6 +27,7 @@ func run(assertions: Assertions) -> void:
 	_test_a_step_under_the_enter_height_never_leaves_the_ground(assertions, contract)
 	_test_the_air_layer_outranks_walking_and_hands_it_back(assertions, contract)
 	_test_an_actor_that_never_elevates_stays_grounded(assertions, contract)
+	_test_the_first_jump_tick_clears_the_enter_height_across_the_tick_band(assertions)
 	_test_a_cast_winds_up_then_releases(assertions, contract)
 	_test_a_cancelled_cast_returns_to_locomotion(assertions, contract)
 	_test_an_ability_with_no_row_of_its_own_falls_back(assertions, contract)
@@ -178,6 +179,16 @@ func _test_the_air_layer_outranks_walking_and_hands_it_back(
 		director.advance(0.2).clip == contract.clip_for("walk", ""),
 		"landing mid-swing hands straight back to the walk",
 	)
+
+
+func _test_the_first_jump_tick_clears_the_enter_height_across_the_tick_band(assertions: Assertions) -> void:
+	for hz: float in [20.0, 25.0, 30.0]:
+		var dt := 1.0 / hz
+		var rise := (SteerIntegrate.JUMP_SPEED - SteerIntegrate.GRAVITY * dt) * dt
+		assertions.check(
+			rise > ClipDirector.AIR_ENTER,
+			"at %.0f Hz the first jump tick rises %.3f m, over AIR_ENTER %.3f" % [hz, rise, ClipDirector.AIR_ENTER],
+		)
 
 
 func _test_an_actor_that_never_elevates_stays_grounded(

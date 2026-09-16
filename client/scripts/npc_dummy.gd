@@ -18,7 +18,6 @@ const KindImp := "imp"
 const OVERHEAD_PROXIMITY := 12.0
 const OVERHEAD_CLICK_LAYER := 4
 
-# An overlay, not an override, so the prop's own shading still reads under the tint.
 const TINT_ALPHA := 0.5
 
 var npc_id := 0

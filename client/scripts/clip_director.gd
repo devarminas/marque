@@ -30,13 +30,8 @@ const LAYERS := [
 
 const MOVING_SPEED := 0.05
 
-# Clearance above the ground under the actor, not pose y, so a ramp never reads as
-# flight. ADR 0004 jumps at 5.0 m/s under gravity 20.0, so the first tick of a jump
-# reaches 0.144 m at 30 Hz and 0.2 m at 20 Hz, both over AIR_ENTER. The display
-# height lags the ground by far less than that on any walkable slope, and AIR_EXIT
-# at a third of AIR_ENTER leaves a band no lag or pose noise can chatter across.
 const AIR_ENTER := 0.12
-const AIR_EXIT := 0.04
+const AIR_EXIT := AIR_ENTER / 3.0
 
 
 class Choice:
@@ -94,10 +89,10 @@ func cast_phase(phase: String, ability: String) -> void:
 		PHASE_BEGIN:
 			_channel = ability
 		PHASE_RESOLVE:
-			_end_channel(ability)
+			_end_channel_for(ability)
 			_play_once(CAST_RELEASE, ability, 1.0)
 		PHASE_CANCEL:
-			_end_channel(ability)
+			_end_channel_for(ability)
 		_:
 			push_error('clip_director: unknown cast phase "%s" for ability %s' % [phase, ability])
 
@@ -118,9 +113,7 @@ func advance(dt: float) -> Choice:
 	return null
 
 
-# ADR 0013: an end matches its begin by ability, so an instant cast that resolves
-# mid-channel leaves the pending one running.
-func _end_channel(ability: String) -> void:
+func _end_channel_for(ability: String) -> void:
 	if _channel == ability:
 		_channel = ""
 
