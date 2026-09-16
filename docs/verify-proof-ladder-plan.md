@@ -19,7 +19,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Read these from trunk at program start. Re-read them at every tick.
   - [ ] `git show origin/main:pstack/skills/poteto-mode/playbooks/autopilot-stack.md`
   - [ ] `git show origin/main:pstack/skills/swarm/SKILL.md`
-  - [ ] `git show origin/main:.claude/skills/verify-marque/SKILL.md`
+  - [ ] `git show origin/main:.cursor/skills/verify-marque/SKILL.md`
   - [ ] `git show origin/main:pstack/skills/poteto-mode/playbooks/opening-a-pr.md`
   - [ ] `git show origin/main:pstack/skills/deslop/SKILL.md`
 - [ ] Arm the 30-minute audit tick. In a local session, a real terminal `/loop`. In a remote root, a remote-sleeper wake chain. Never leave the cadence to memory.
@@ -32,7 +32,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Follow this dependency graph. Start dependent work only after its parent merges, or base it on the parent branch when the execution playbook stacks.
   - [ ] ARM-226 and ARM-227 are independent and first. Both branch from `main`. Stack order still places ARM-226 then ARM-227.
   - [ ] ARM-228 after ARM-227 in the stack (no code depend). ARM-229 after ARM-228. ARM-230 after ARM-226. ARM-231 after ARM-227 and ARM-229 and ARM-230. ARM-232 after ARM-229.
-- [ ] Hold the file boundaries. ARM-226 touches only `.claude/skills/verify-marque/**`. ARM-227 touches doctor, allowlist, CI, and skill rule lines. ARM-228 touches client NPC scenes and npc_dummy plus tests. ARM-229 touches DEMO helpers and enemy quest demo. ARM-230 touches server net tests and skill cites. ARM-231 touches scripts/*.ps1 library. ARM-232 touches server game NPC arrival and verify-marque GAMELOG vocabulary.
+- [ ] Hold the file boundaries. ARM-226 touches only `.cursor/skills/verify-marque/**`. ARM-227 touches doctor, allowlist, CI, and skill rule lines. ARM-228 touches client NPC scenes and npc_dummy plus tests. ARM-229 touches DEMO helpers and enemy quest demo. ARM-230 touches server net tests and skill cites. ARM-231 touches scripts/*.ps1 library. ARM-232 touches server game NPC arrival and verify-marque GAMELOG vocabulary.
 - [ ] Hold the review gate. ARM-228 and ARM-229 change an interaction. They wait for the operator's review in chat with screenshots and a video before merge.
 
 ### PR mechanics, for every PR
@@ -65,13 +65,13 @@ Each live lane runs in its own remote worktree at the PR head. Drive through `co
 
 **Files.**
 
-- [ ] Edit `.claude/skills/verify-marque/SKILL.md`.
-- [ ] Edit `.claude/skills/verify-marque/features/README.md`.
-- [ ] Edit `.claude/skills/verify-marque/features/enemy-quest-demo.md`.
-- [ ] Edit `.claude/skills/verify-marque/features/quest-demo.md`.
-- [ ] Edit `.claude/skills/verify-marque/features/two-clients-see-each-other.md`.
-- [ ] Edit `.claude/skills/verify-marque/features/contested-pickup.md`.
-- [ ] Edit `.claude/skills/verify-marque/features/combat-kill-respawn.md` (retire combat_demo cite).
+- [ ] Edit `.cursor/skills/verify-marque/SKILL.md`.
+- [ ] Edit `.cursor/skills/verify-marque/features/README.md`.
+- [ ] Edit `.cursor/skills/verify-marque/features/enemy-quest-demo.md`.
+- [ ] Edit `.cursor/skills/verify-marque/features/quest-demo.md`.
+- [ ] Edit `.cursor/skills/verify-marque/features/two-clients-see-each-other.md`.
+- [ ] Edit `.cursor/skills/verify-marque/features/contested-pickup.md`.
+- [ ] Edit `.cursor/skills/verify-marque/features/combat-kill-respawn.md` (retire combat_demo cite).
 
 **Build.**
 
@@ -88,7 +88,7 @@ Each live lane runs in its own remote worktree at the PR head. Drive through `co
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Grep skill and features for rung table and outcome-not-chase wording. Run `rg -n "lowest falsifying rung|outcome-not-chase" .claude/skills/verify-marque`.
+- [ ] Grep skill and features for rung table and outcome-not-chase wording. Run `rg -n "lowest falsifying rung|outcome-not-chase" .cursor/skills/verify-marque`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `sonnet` at the PR head, per the boot recipe.
 
@@ -126,10 +126,10 @@ Each live lane runs in its own remote worktree at the PR head. Drive through `co
 
 **Files.**
 
-- [ ] Create `.claude/skills/verify-marque/demo-allowlist.txt` (or equivalent manifest).
-- [ ] Edit `.claude/skills/verify-marque/doctor.ps1`.
+- [ ] Create `.cursor/skills/verify-marque/demo-allowlist.txt` (or equivalent manifest).
+- [ ] Edit `.cursor/skills/verify-marque/doctor.ps1`.
 - [ ] Edit CI workflow under `.github/workflows/` if present, else document doctor as the gate.
-- [ ] Edit `.claude/skills/verify-marque/SKILL.md` hard rule.
+- [ ] Edit `.cursor/skills/verify-marque/SKILL.md` hard rule.
 
 **Build.**
 
@@ -244,7 +244,7 @@ Each live lane runs in its own remote worktree at the PR head. Drive through `co
 - [ ] Create or edit shared capture helper under `client/scripts/` (for example demo_capture.gd).
 - [ ] Edit `client/scripts/enemy_quest_demo.gd` (or tab_combat) for mid-chase capture.
 - [ ] Edit `scripts/enemy_quest_demo.ps1` asserts for NPC DEMO lines when claiming chase.
-- [ ] Edit `.claude/skills/verify-marque/SKILL.md` DEMO grammar.
+- [ ] Edit `.cursor/skills/verify-marque/SKILL.md` DEMO grammar.
 - [ ] Edit `features/enemy-quest-demo.md` if chase sub-feature becomes verified.
 
 **Build.**
@@ -478,7 +478,7 @@ ARM-228 push_error can red enemy_quest until Imp scene gains AnimationPlayer. Ow
 - Parent https://linear.app/arminas/issue/ARM-225/verify-proof-ladder-scale-tests-without-per-quest-demos
 - Children ARM-226 through ARM-232 under that parent
 - Atlas feature map template https://github.com/poteto/verification-skill-example/blob/main/.cursor/skills/verify-atlas/references/features/README.md (and `sign-in.md`). ARM-226 follows that four-H2 contract. Evidence and rung live inside Sub-features, Driving, and Gotchas. No fifth H2.
-- `.claude/skills/verify-marque/SKILL.md`
+- `.cursor/skills/verify-marque/SKILL.md`
 - `server/internal/net/harness_test.go`
 - how and interrogate on ARM-230 and ARM-232 if wire or event shape debates reopen
 - Decision trail per show-me-your-work during autopilot-stack

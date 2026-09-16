@@ -63,7 +63,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# .claude/skills/verify-marque -> skills -> .claude -> repo root.
+# .cursor/skills/verify-marque -> skills -> .cursor -> repo root.
 $repo = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $serverDir = Join-Path $repo "server"
 $clientDir = Join-Path $repo "client"
@@ -114,7 +114,7 @@ try {
         New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
     }
     Set-Content -LiteralPath $evidenceMarker -Encoding utf8 `
-        -Value "Evidence from .claude/skills/verify-marque/run.ps1. Its next run empties this directory."
+        -Value "Evidence from .cursor/skills/verify-marque/run.ps1. Its next run empties this directory."
 
     Write-Host "==> building marqued"
     Push-Location $serverDir
