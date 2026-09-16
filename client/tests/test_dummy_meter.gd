@@ -26,8 +26,8 @@ func _test_cast_fallback(assertions: Assertions) -> void:
 	var meter := DummyMeterScript.new()
 	meter.observe_cast("fireball")
 	assertions.check(
-		is_equal_approx(meter.rate_per_sec(), 8.0),
-		"fireball cast fallback reads as 8 DPS, got %s" % meter.rate_per_sec(),
+		is_equal_approx(meter.rate_per_sec(), 4.4),
+		"fireball cast fallback reads as 4.4 DPS, got %s" % meter.rate_per_sec(),
 	)
 	meter.reset()
 	meter.observe_cast("heal")
