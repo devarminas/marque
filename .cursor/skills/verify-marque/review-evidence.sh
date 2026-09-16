@@ -34,6 +34,7 @@ Markers (must be the last line; require exit 0 as well):
   REVIEW CAPTURE OK
   REVIEW STITCH OK
   REVIEW ATTACH OK
+  REVIEW STAGE OK
 
 Environment:
   GODOT     Godot 4.7 executable (default: godot)
