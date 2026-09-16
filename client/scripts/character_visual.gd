@@ -85,6 +85,13 @@ func locomote(ground_speed: float) -> void:
 	_apply(_director.advance(0.0))
 
 
+func elevate(clearance: float) -> void:
+	if _director == null:
+		return
+	_director.elevate(clearance)
+	_apply(_director.advance(0.0))
+
+
 func swing(weapon: String, tick_ms: int) -> void:
 	if _director == null:
 		return

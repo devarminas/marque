@@ -1085,8 +1085,7 @@ func _advance_locomotion(delta: float) -> void:
 	if _local_mover != null and _local != null:
 		_local_mover.advance_to_tick(est)
 		_local_mover.soft_pull_display(delta)
-		var ground := _local_mover.display_xz()
-		_local.present_at(ground.x, ground.y, _local_mover.moving(), _local_mover.display_height())
+		_present_local()
 	_sync_npc_overhead_proximity()
 	var render_tick := _render_tick_fraction()
 	for id in _remote_poses.keys():
@@ -1098,8 +1097,36 @@ func _advance_locomotion(delta: float) -> void:
 		var buf: PoseInterp = _remote_poses[id]
 		if buf == null:
 			continue
-		var sample := buf.sample_xyz(render_tick)
-		avatar.present_at(sample.x, sample.z, buf.moving(render_tick), sample.y)
+		_present_remote(avatar, buf, render_tick)
+
+
+func _present_local() -> void:
+	var ground := _local_mover.display_xz()
+	var height := _local_mover.display_height()
+	_local.present_at(
+		ground.x,
+		ground.y,
+		_local_mover.moving(),
+		height,
+		_local_mover.ground_y_at(ground.x, ground.y, height),
+	)
+
+
+func _present_remote(avatar: PlayerAvatarScript, buf: PoseInterp, render_tick: float) -> void:
+	var sample := buf.sample_xyz(render_tick)
+	avatar.present_at(
+		sample.x,
+		sample.z,
+		buf.moving(render_tick),
+		sample.y,
+		_ground_height_at(sample.x, sample.z, sample.y),
+	)
+
+
+func _ground_height_at(x: float, z: float, near_y: float) -> float:
+	if _local_mover != null:
+		return _local_mover.ground_y_at(x, z, near_y)
+	return MapCfg.ground_y(_predict_map_id)
 
 
 func _render_tick_fraction() -> float:
@@ -1306,8 +1333,7 @@ func _on_pose_received(id: int, tick: int, x: float, y: float, z: float) -> void
 		else:
 			_local_mover.reconcile_server_pose(tick, x, z, y)
 		if _local != null:
-			var ground := _local_mover.display_xz()
-			_local.present_at(ground.x, ground.y, _local_mover.moving(), _local_mover.display_height())
+			_present_local()
 		return
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar == null:
@@ -1320,9 +1346,7 @@ func _on_pose_received(id: int, tick: int, x: float, y: float, z: float) -> void
 		_remote_poses[id] = buf
 	else:
 		buf.push_pose(tick, x, z, y)
-	var render_tick := _render_tick_fraction()
-	var sample := buf.sample_xyz(render_tick)
-	avatar.present_at(sample.x, sample.z, buf.moving(render_tick), sample.y)
+	_present_remote(avatar, buf, _render_tick_fraction())
 
 
 func _on_server_error(re: String, message: String) -> void:
