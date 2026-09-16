@@ -27,7 +27,7 @@ MARKER
 
 ## Reviewer evidence
 
-<!-- screenshot | video/frames | none. Visual changes: 1–3 artifacts so a reviewer does not launch the client. `.cursor/skills/verify-marque/SKILL.md` *Reviewer-facing evidence*. Relative `![](docs/...)` in this body resolves against main — use blob/<head-branch>/path?raw=true or `review-evidence.sh attach`. -->
+<!-- screenshot | video/frames | none. Visual changes: 1–3 artifacts so a reviewer does not launch the client. Do not commit PNGs. `review-evidence.sh attach` (`gh pr comment --attach`) or Cloud Agent `<img src="/opt/cursor/artifacts/…">` in this body. `.cursor/skills/verify-marque/SKILL.md` *Reviewer-facing evidence*. -->
 
 - Kind: <!-- screenshot / video / none -->
 - Link:

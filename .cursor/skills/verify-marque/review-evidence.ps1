@@ -23,7 +23,7 @@ param(
     [string] $Kind = "",
     [string] $Pr = "auto",
     [string[]] $Files = @(),
-    [string] $StageRepo = "",
+    [string] $ArtifactsDir = "",
     [switch] $Attach,
     [switch] $Mp4,
     [switch] $Gif,
@@ -39,9 +39,9 @@ Usage:
   review-evidence.ps1 capture-screenshot [-Out PATH] [-Attach] [-Pr NUMBER|auto] [-Caption TEXT]
   review-evidence.ps1 capture-frames [-OutPrefix PATH] [-Count N] [-IntervalMs MS] [-Mp4] [-Gif] [-Attach]
   review-evidence.ps1 stitch -OutPrefix PATH [-Mp4] [-Gif]
-  review-evidence.ps1 attach -Files FILE[,FILE...] [-Pr NUMBER|auto] [-Caption TEXT] [-Kind KIND] [-StageRepo RELPATH]
+  review-evidence.ps1 attach -Files FILE[,FILE...] [-Pr NUMBER|auto] [-Caption TEXT] [-Kind KIND] [-ArtifactsDir DIR]
 
-Markers (last line; require exit 0 as well): REVIEW CAPTURE OK / REVIEW STITCH OK / REVIEW ATTACH OK / REVIEW STAGE OK
+Markers (last line; require exit 0 as well): REVIEW CAPTURE OK / REVIEW STITCH OK / REVIEW ATTACH OK / REVIEW ARTIFACT OK
 PNG/video presence is never behavioural proof (ARM-289).
 "@
     exit 0
@@ -133,15 +133,6 @@ function Invoke-Attach {
 - $text
 - DEMO+GAMELOG (or Go / headless) still gate. PNG/video presence is never proof (ARM-289).
 "@
-    if ($StageRepo) {
-        $dest = if ([System.IO.Path]::IsPathRooted($StageRepo)) { $StageRepo } else { Join-Path $repo $StageRepo }
-        New-Item -ItemType Directory -Force -Path $dest | Out-Null
-        foreach ($f in $Paths) {
-            $target = Join-Path $dest (Split-Path -Leaf $f)
-            Copy-Item -LiteralPath $f -Destination $target -Force
-            Write-Host "review-evidence: staged $target"
-        }
-    }
     $pr = $null
     try { $pr = Get-PrNumber $Pr } catch { Write-Host "review-evidence: $($_.Exception.Message)" }
     if ($pr) {
@@ -152,13 +143,22 @@ function Invoke-Attach {
         }
         Write-Host "review-evidence: gh pr comment --attach failed (installation tokens often cannot upload assets)."
     }
-    if ($StageRepo) {
-        $branch = (git -C $repo rev-parse --abbrev-ref HEAD).Trim()
-        Write-Host "review-evidence: commit the staged files and put blob/${branch}/…?raw=true links in the PR body."
-        Write-Host "REVIEW STAGE OK"
-        return
+    $dest = $ArtifactsDir
+    if (-not $dest -and (Test-Path "/opt/cursor/artifacts")) { $dest = "/opt/cursor/artifacts" }
+    if (-not $dest) { $dest = $staging }
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    Write-Host "review-evidence: not committing media. Copied for PR-body embed:"
+    foreach ($f in $Paths) {
+        $out = Join-Path $dest (Split-Path -Leaf $f)
+        Copy-Item -LiteralPath $f -Destination $out -Force
+        $ext = [System.IO.Path]::GetExtension($f).TrimStart('.').ToLowerInvariant()
+        if ($ext -in @("mp4", "webm", "mov", "avi")) {
+            Write-Host "<video src=`"$out`" controls></video>"
+        } else {
+            Write-Host "<img alt=`"$text`" src=`"$out`" />"
+        }
     }
-    throw "attach failed and no -StageRepo fallback"
+    Write-Host "REVIEW ARTIFACT OK"
 }
 
 New-Item -ItemType Directory -Force -Path $staging | Out-Null

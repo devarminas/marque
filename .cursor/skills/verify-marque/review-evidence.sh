@@ -17,13 +17,15 @@ Usage:
                                     [--mp4] [--gif] [--attach] [--pr NUMBER|auto] [--caption TEXT]
   review-evidence.sh stitch --prefix PATH [--mp4] [--gif]
   review-evidence.sh attach --files FILE [FILE ...] [--pr NUMBER|auto] [--caption TEXT] [--kind KIND]
-                            [--stage-repo RELPATH]
+                            [--pr-artifacts DIR]
 
 Commands:
   capture-screenshot  Windowed --screenshot (optional absolute --out).
   capture-frames      Windowed --record-frames strip; optionally stitch mp4/gif.
   stitch              ffmpeg a prefix_1.png.. strip into mp4 and/or gif.
-  attach              gh pr comment --attach (max 3 files), or --stage-repo fallback.
+  attach              gh pr comment --attach (max 3 files). Never git. If upload
+                      fails, copy to --pr-artifacts (default /opt/cursor/artifacts
+                      when writable) and print <img>/<video> tags for the PR body.
 
 Kind heuristic (documentation, passed through --kind or inferred):
   screenshot  static layout/chrome at rest
@@ -34,7 +36,7 @@ Markers (must be the last line; require exit 0 as well):
   REVIEW CAPTURE OK
   REVIEW STITCH OK
   REVIEW ATTACH OK
-  REVIEW STAGE OK
+  REVIEW ARTIFACT OK
 
 Environment:
   GODOT     Godot 4.7 executable (default: godot)
@@ -59,7 +61,7 @@ DO_MP4=0
 DO_GIF=0
 OUT=""
 OUT_PREFIX=""
-STAGE_REPO=""
+ARTIFACTS_DIR=""
 COUNT=16
 INTERVAL_MS=100
 FILES=()
@@ -108,7 +110,10 @@ parse_common() {
       --caption) CAPTION="${2:-}"; shift 2 ;;
       --kind) KIND="${2:-}"; shift 2 ;;
       --pr) PR_SPEC="${2:-}"; shift 2 ;;
-      --stage-repo) STAGE_REPO="${2:-}"; shift 2 ;;
+      --pr-artifacts) ARTIFACTS_DIR="${2:-}"; shift 2 ;;
+      --stage-repo)
+        die "--stage-repo is gone. Do not commit reviewer media. Use attach (gh) or --pr-artifacts DIR."
+        ;;
       --files)
         shift
         while [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; do
@@ -144,7 +149,7 @@ resolve_pr() {
 }
 
 attach_files() {
-  local caption kind body dest branch pr
+  local caption kind body dest pr
   caption="${CAPTION:-Reviewer-facing visual evidence}"
   kind="${KIND:-screenshot}"
   if [ "${#FILES[@]}" -eq 0 ]; then
@@ -176,18 +181,6 @@ attach_files() {
 EOF
 )"
 
-  if [ -n "$STAGE_REPO" ]; then
-    case "$STAGE_REPO" in
-      /*) dest="$STAGE_REPO" ;;
-      *) dest="$ROOT_DIR/$STAGE_REPO" ;;
-    esac
-    mkdir -p "$dest"
-    for f in "${FILES[@]}"; do
-      cp -f "$f" "$dest/$(basename "$f")"
-      echo "review-evidence: staged $dest/$(basename "$f")"
-    done
-  fi
-
   pr=""
   if command -v gh >/dev/null 2>&1; then
     pr="$(gh pr view --json number --jq .number 2>/dev/null || true)"
@@ -201,17 +194,34 @@ EOF
       fi
       echo "review-evidence: gh pr comment --attach failed (installation tokens often cannot upload assets)."
     else
-      echo "review-evidence: no open PR for this branch (pass --pr NUMBER, or rely on --stage-repo)."
+      echo "review-evidence: no open PR for gh attach (pass --pr NUMBER)."
     fi
   fi
 
-  if [ -n "$STAGE_REPO" ]; then
-    branch="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)"
-    echo "review-evidence: commit the staged files and put blob/${branch}/…?raw=true links in the PR body."
-    echo "REVIEW STAGE OK"
-    return 0
+  dest="$ARTIFACTS_DIR"
+  if [ -z "$dest" ] && [ -d /opt/cursor/artifacts ] && [ -w /opt/cursor/artifacts ]; then
+    dest=/opt/cursor/artifacts
   fi
-  die "attach failed and no --stage-repo fallback"
+  if [ -z "$dest" ]; then
+    dest="$STAGING"
+  fi
+  mkdir -p "$dest"
+  echo "review-evidence: not committing media. Copied for PR-body embed:"
+  for f in "${FILES[@]}"; do
+    local out
+    out="$dest/$(basename "$f")"
+    cp -f "$f" "$out"
+    ext="${f##*.}"
+    case "$ext" in
+      mp4|webm|mov|avi|MP4|WEBM|MOV|AVI)
+        echo "<video src=\"$out\" controls></video>"
+        ;;
+      *)
+        echo "<img alt=\"${caption}\" src=\"$out\" />"
+        ;;
+    esac
+  done
+  echo "REVIEW ARTIFACT OK"
 }
 
 stitch_prefix() {

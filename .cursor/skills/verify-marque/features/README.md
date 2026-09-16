@@ -61,8 +61,8 @@ do not add a fifth H2):
   rest; walk/jump timing is frames.
 
 Capture + attach: `review-evidence.sh` (Linux) or `review-evidence.ps1`
-(Windows). Preferred GitHub surface: `gh pr comment --attach`. Fill the
-**Reviewer evidence** section of `.github/PULL_REQUEST_TEMPLATE.md`.
+(Windows). Preferred GitHub surface: `gh pr comment --attach` (not git).
+Fill the **Reviewer evidence** section of `.github/PULL_REQUEST_TEMPLATE.md`.
 
 ## Proof and skip reporting
 

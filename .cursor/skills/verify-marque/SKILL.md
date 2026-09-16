@@ -47,7 +47,7 @@ has a marker line, and a run without its marker failed, whatever the exit code s
 | `scripts/enemy_quest_turnin_demo.ps1` | `ENEMY QUEST TURNIN DEMO OK` |
 | `scripts/admin_give_class_kits_demo.ps1` | `ADMIN GIVE CLASS KITS DEMO OK` |
 | `run.ps1` (this skill) | `VERIFY HARNESS OK` |
-| `review-evidence.sh` / `review-evidence.ps1` | `REVIEW CAPTURE OK` / `REVIEW STITCH OK` / `REVIEW ATTACH OK` / `REVIEW STAGE OK` — last line of that command. Not a behavioural pass. |
+| `review-evidence.sh` / `review-evidence.ps1` | `REVIEW CAPTURE OK` / `REVIEW STITCH OK` / `REVIEW ATTACH OK` / `REVIEW ARTIFACT OK` — last line of that command. Not a behavioural pass. |
 | marqued readiness | a `GAMELOG` line with `"ev":"server_started"` |
 | each scripted client | `DEMO done` on its stdout |
 
@@ -489,32 +489,29 @@ Windows:
     powershell -ExecutionPolicy Bypass -File .cursor/skills/verify-marque/review-evidence.ps1 `
       capture-screenshot -Attach -Pr auto -Caption "main.tscn baseline"
 
-`--attach` / `attach` runs `gh pr comment --attach`. GitHub renders PNG/JPEG/GIF
-inline and plays MP4 in the comment. That is the preferred surface when the
-token can upload (`gh` user PATs). Do not put `#alt` on video attachments
-(`gh` refuses it); images may carry alt after `#`.
+`--attach` / `attach` runs `gh pr comment --attach`. GitHub hosts the files on
+the comment (`user-attachments`), not in git. Reviewers see PNG/JPEG/GIF inline
+and MP4 in a player. That is the default surface. Do not `git add` screenshots
+or clips. Do not put `#alt` on video attachments (`gh` refuses it); images may
+carry alt after `#`.
 
-**Cloud Agent / GitHub App installation tokens** often cannot `addComment` or
-upload assets (`Resource not accessible by integration`, `unsupported
-authentication type`). Then:
+**Cloud Agent / GitHub App installation tokens** often cannot upload
+(`Resource not accessible by integration`, `unsupported authentication type`).
+Do **not** fall back to committing binaries. Copy the same 1–3 files to
+`/opt/cursor/artifacts/` and put HTML tags with those absolute paths in the PR
+body. Cursor rewrites them to public URLs on the PR. Helper:
 
     bash .cursor/skills/verify-marque/review-evidence.sh attach \
       --files "${TMPDIR:-/tmp}/marque-review-evidence/baseline.png" \
-      --stage-repo docs/review-evidence/<issue-or-slug> \
+      --pr-artifacts /opt/cursor/artifacts \
       --kind screenshot --caption "what a reviewer should see"
 
-Marker: `REVIEW STAGE OK` (last line, plus exit 0). Commit the staged files
-(at most those 1–3). Put **absolute** `blob/<head-branch>/path?raw=true` links
-in the PR body — relative markdown in a PR body resolves against the default
-branch, so a relative `![x](docs/...)` will 404 until merge. Cursor Cloud
-`ManagePullRequest` can also embed `/opt/cursor/artifacts/...` `<img>` / `<video>`
-tags; still commit or link so github.com reviewers see the files without Cursor.
-
-Optional durable copy is that same `docs/review-evidence/<slug>/` tree. Do not
-dump full demo evidence dirs. Label them reviewer media, not proof.
+Marker: `REVIEW ARTIFACT OK` (last line, plus exit 0). Then update the PR body
+with the printed `<img>` / `<video>` tags. Evidence lives on the PR, not in
+history.
 
 Markers: `REVIEW CAPTURE OK`, `REVIEW STITCH OK`, `REVIEW ATTACH OK`,
-`REVIEW STAGE OK` — last line
+`REVIEW ARTIFACT OK` — last line
 **and** exit 0, same rule as every other recipe. A missing output file fails the
 helper because there is nothing to attach; that is not a named-pixel contract and
 not a substitute for `DEMO done`.
