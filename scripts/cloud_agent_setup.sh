@@ -2,28 +2,38 @@
 #
 # Cloud Agent environment bootstrap for Project Marque.
 #
-# Provisions the exact toolchains the repo needs and/or prepares the checked-out
-# source. It has two independent halves so it can serve both the container image
-# build and the per-checkout install step:
+# Provisions the toolchains the repo needs and/or prepares the checked-out
+# source. Two independent halves let it serve both the container image build and
+# the per-checkout install step:
 #
-#   cloud_agent_setup.sh --tools-only   Install Go 1.27, Godot 4.7 (headless),
-#                                        and PowerShell 7 into /usr/local. Used
-#                                        from the Dockerfile (runs as root).
+#   cloud_agent_setup.sh --tools-only   Install Go, Godot 4.7 (headless), and
+#                                        PowerShell 7. Used from the Dockerfile
+#                                        (runs as root).
 #   cloud_agent_setup.sh --repo-only    Fetch Go modules, build the server, and
 #                                        warm the Godot import cache. Used as the
 #                                        environment `install` command.
 #   cloud_agent_setup.sh                 Both halves (handy for a fresh local
 #                                        Linux checkout).
 #
-# The toolchain half is idempotent: an already-correct toolchain is left alone.
+# Install methods (Ubuntu):
+#   * Go        - apt `golang-go`. Go's automatic toolchain management then
+#                 fetches the exact version server/go.mod pins (`go 1.27.0`) on
+#                 first build, so the apt version only needs to be recent enough
+#                 to honour the toolchain directive.
+#   * PowerShell- Microsoft PMC apt repository (packages.microsoft.com), the
+#                 method documented at
+#                 https://learn.microsoft.com/powershell/scripting/install/install-ubuntu
+#   * Godot     - official Linux headless-capable binary from the GitHub release
+#                 (snap/flatpak are desktop-oriented and do not work inside an
+#                 image build; the binary is the identical 4.7 engine).
+#
+# The toolchain half is idempotent: an already-working toolchain is left alone.
 # The Linux desktop is headless here; the Godot editor/headless binary runs, but
 # windowed *_demo.ps1 captures need a real display and are out of scope. The
 # headless suite and scripts/interop_test.ps1 are the full-stack proof paths.
 set -euo pipefail
 
-GO_VERSION="1.27.1"
 GODOT_VERSION="4.7-stable"
-PWSH_VERSION="7.6.6"
 
 MODE="all"
 case "${1:-}" in
@@ -38,56 +48,55 @@ if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-fetch() {
-  # fetch <url> <output>: curl with retries.
-  curl -fsSL --retry 4 --retry-delay 2 -o "$2" "$1"
-}
-
 install_tools() {
   local arch tmp
   arch="$(uname -m)"
   [ "$arch" = "x86_64" ] || { echo "unsupported arch: $arch (expected x86_64)"; exit 1; }
 
-  # A cold image may lack unzip/curl; the archives need them.
-  if ! command -v unzip >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
-    $SUDO apt-get update -y
-    $SUDO apt-get install -y --no-install-recommends unzip curl ca-certificates
-  fi
+  $SUDO apt-get update -y
+  $SUDO apt-get install -y --no-install-recommends \
+    ca-certificates curl wget git unzip apt-transport-https
 
-  tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' RETURN
-
-  if [ -x /usr/local/go/bin/go ] && /usr/local/go/bin/go version 2>/dev/null | grep -q "go${GO_VERSION} "; then
-    echo "go ${GO_VERSION} already installed"
+  # Go: apt provides the toolchain manager; go.mod's `go 1.27.0` directive makes
+  # `go` fetch 1.27.x automatically on first build.
+  if command -v go >/dev/null 2>&1; then
+    echo "go already present: $(go version)"
   else
-    echo "installing go ${GO_VERSION}"
-    fetch "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" "$tmp/go.tar.gz"
-    $SUDO rm -rf /usr/local/go
-    $SUDO tar -C /usr/local -xzf "$tmp/go.tar.gz"
+    echo "installing go via apt"
+    $SUDO apt-get install -y --no-install-recommends golang-go
   fi
-  $SUDO ln -sf /usr/local/go/bin/go /usr/local/bin/go
-  $SUDO ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
 
+  # Godot 4.7 headless binary.
   if [ -x /usr/local/bin/godot ] && /usr/local/bin/godot --version --headless 2>/dev/null | grep -q "^${GODOT_VERSION%-stable}.stable"; then
     echo "godot ${GODOT_VERSION} already installed"
   else
     echo "installing godot ${GODOT_VERSION}"
-    fetch "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip" "$tmp/godot.zip"
+    tmp="$(mktemp -d)"
+    curl -fsSL --retry 4 --retry-delay 2 \
+      -o "$tmp/godot.zip" \
+      "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
     ( cd "$tmp" && unzip -o godot.zip )
     $SUDO install -m 0755 "$tmp/Godot_v${GODOT_VERSION}_linux.x86_64" /usr/local/bin/godot
+    rm -rf "$tmp"
   fi
 
-  if [ -x /opt/microsoft/powershell/7/pwsh ] && /opt/microsoft/powershell/7/pwsh --version 2>/dev/null | grep -q "PowerShell ${PWSH_VERSION}"; then
-    echo "powershell ${PWSH_VERSION} already installed"
+  # PowerShell 7 from Microsoft's PMC apt repository.
+  if command -v pwsh >/dev/null 2>&1 && pwsh --version 2>/dev/null | grep -q "PowerShell 7"; then
+    echo "powershell already installed: $(pwsh --version)"
   else
-    echo "installing powershell ${PWSH_VERSION}"
-    fetch "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz" "$tmp/pwsh.tar.gz"
-    $SUDO rm -rf /opt/microsoft/powershell/7
-    $SUDO mkdir -p /opt/microsoft/powershell/7
-    $SUDO tar -xzf "$tmp/pwsh.tar.gz" -C /opt/microsoft/powershell/7
-    $SUDO chmod +x /opt/microsoft/powershell/7/pwsh
+    echo "installing powershell via microsoft apt repo"
+    $SUDO apt-get install -y --no-install-recommends software-properties-common
+    local rel deb
+    rel="$(. /etc/os-release && echo "$VERSION_ID")"
+    deb="$(mktemp --suffix=.deb)"
+    curl -fsSL --retry 4 --retry-delay 2 \
+      -o "$deb" \
+      "https://packages.microsoft.com/config/ubuntu/${rel}/packages-microsoft-prod.deb"
+    $SUDO dpkg -i "$deb"
+    rm -f "$deb"
+    $SUDO apt-get update -y
+    $SUDO apt-get install -y powershell
   fi
-  $SUDO ln -sf /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh
 
   hash -r
   echo "--- toolchain versions ---"
