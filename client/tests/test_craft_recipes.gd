@@ -8,6 +8,7 @@ func run(assertions: Assertions) -> void:
 	_test_bag_recipes_match_server(assertions)
 	_test_station_recipes_match_server(assertions)
 	_test_partner_slots(assertions)
+	_test_preview_copy(assertions)
 	assertions.finish()
 
 
@@ -102,6 +103,40 @@ func _test_partner_slots(assertions: Assertions) -> void:
 	assertions.check(
 		_packed_has(from_sticks, 0) and _packed_has(from_sticks, 3),
 		"sticks+bar names the bar slot and source, got %s" % from_sticks,
+	)
+
+
+func _test_preview_copy(assertions: Assertions) -> void:
+	var logs := CraftRecipes.bag_preview("logs", PackedStringArray(["logs"]))
+	assertions.check(
+		String(logs.get("text", "")) == "Craft → Sticks" and bool(logs.get("complete", false)),
+		'logs preview is "Craft → Sticks", got %s' % logs,
+	)
+	var sword := CraftRecipes.bag_preview(
+		"copper_bar", PackedStringArray(["copper_bar", "sticks"])
+	)
+	assertions.check(
+		String(sword.get("text", "")) == "Craft → Sword" and bool(sword.get("complete", false)),
+		'bar+sticks preview is "Craft → Sword", got %s' % sword,
+	)
+	var missing := CraftRecipes.bag_preview("copper_bar", PackedStringArray(["copper_bar"]))
+	assertions.check(
+		String(missing.get("text", "")) == "Craft → Sword (missing Sticks)"
+		and not bool(missing.get("complete", true)),
+		'bar without sticks marks missing Sticks, got %s' % missing,
+	)
+	var smelt := CraftRecipes.station_preview("smelter", "copper_ore")
+	assertions.check(
+		String(smelt.get("text", "")) == "Smelt → Copper bar",
+		'smelter+ore preview is "Smelt → Copper bar", got %s' % smelt,
+	)
+	assertions.check(
+		CraftRecipes.bag_preview("acorn", PackedStringArray(["acorn"])).is_empty(),
+		"acorn has no bag preview",
+	)
+	assertions.check(
+		CraftRecipes.station_preview("smelter", "logs").is_empty(),
+		"logs on a smelter have no station preview",
 	)
 
 

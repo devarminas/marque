@@ -85,3 +85,62 @@ static func partner_slots(
 	if complete:
 		found.append(source)
 	return found
+
+
+static func display_name(kind: String) -> String:
+	match kind:
+		"logs":
+			return "Logs"
+		"sticks":
+			return "Sticks"
+		"copper_ore":
+			return "Copper ore"
+		"copper_bar":
+			return "Copper bar"
+		"sword":
+			return "Sword"
+		_:
+			return kind
+
+
+static func missing_kinds(source_kind: String, kinds: PackedStringArray) -> PackedStringArray:
+	var missing := PackedStringArray()
+	var recipe := bag_recipe_for(source_kind)
+	if recipe.is_empty():
+		return missing
+	var pool := {}
+	for kind: String in kinds:
+		pool[kind] = int(pool.get(kind, 0)) + 1
+	for need: String in recipe["consumes"]:
+		var have := int(pool.get(need, 0))
+		if have > 0:
+			pool[need] = have - 1
+		else:
+			missing.append(need)
+	return missing
+
+
+static func bag_preview(source_kind: String, kinds: PackedStringArray) -> Dictionary:
+	var recipe := bag_recipe_for(source_kind)
+	if recipe.is_empty():
+		return {}
+	var missing := missing_kinds(source_kind, kinds)
+	var text := "Craft → %s" % display_name(String(recipe["produce"]))
+	if not missing.is_empty():
+		var names := PackedStringArray()
+		for kind: String in missing:
+			names.append(display_name(kind))
+		text = "%s (missing %s)" % [text, ", ".join(names)]
+	return {"text": text, "complete": missing.is_empty(), "missing": missing}
+
+
+static func station_preview(station_kind: String, consume_kind: String) -> Dictionary:
+	var produce := station_produce(station_kind, consume_kind)
+	if produce.is_empty():
+		return {}
+	var verb := "Smelt" if station_kind == "smelter" else "Craft"
+	return {
+		"text": "%s → %s" % [verb, display_name(produce)],
+		"complete": true,
+		"missing": PackedStringArray(),
+	}

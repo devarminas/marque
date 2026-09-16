@@ -165,13 +165,14 @@ alignment = 1
 [node name="FeetSlot" parent="RightDock/Margin/Rows/WornCross/FeetRow" unique_id=1483027760 instance=ExtResource("10_worn_slot")]
 layout_mode = 2
 
-[node name="InventoryPanel" type="PanelContainer" parent="RightDock/Margin/Rows" unique_id=1701428772 node_paths=PackedStringArray("slot_grid", "heading")]
+[node name="InventoryPanel" type="PanelContainer" parent="RightDock/Margin/Rows" unique_id=1701428772 node_paths=PackedStringArray("slot_grid", "heading", "use_preview")]
 layout_mode = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("style_inv_panel_clear")
 script = ExtResource("8_inventory_panel")
 slot_grid = NodePath("Margin/Rows/Slots")
 heading = NodePath("Margin/Rows/Heading")
+use_preview = NodePath("Margin/Rows/UsePreview")
 
 [node name="Margin" type="MarginContainer" parent="RightDock/Margin/Rows/InventoryPanel" unique_id=1813670329]
 layout_mode = 2
@@ -191,6 +192,15 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
 theme_override_font_sizes/font_size = 14
 text = "Inventory —"
+
+[node name="UsePreview" type="Label" parent="RightDock/Margin/Rows/InventoryPanel/Margin/Rows"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.95, 0.86, 0.45, 1)
+theme_override_font_sizes/font_size = 12
+text = ""
+autowrap_mode = 2
 
 [node name="Slots" type="GridContainer" parent="RightDock/Margin/Rows/InventoryPanel/Margin/Rows" unique_id=1565320478]
 layout_mode = 2
