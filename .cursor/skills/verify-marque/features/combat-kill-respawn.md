@@ -7,8 +7,8 @@ NPC demos; player death/respawn store rules stay on the Go rung.
 
 ## Sub-features
 
-- `period-hits` — Go: ten `attack_hit` of damage 10 to death on an Imp
-  (`TestTenHitsKillImpFromFull`). Live smoke: ≥1 `attack_hit` via
+- `period-hits` — Go: sword whites from `shared/weapons.json` kill an Imp
+  (`TestWhitesKillImpFromFull`). Live smoke: ≥1 `attack_hit` via
   `dummy_attack_demo.ps1`.
 - `death-and-respawn` — Go: `death` then `respawn` restores HP 100 / clears walk
   (`TestRespawnRestoresAtJoinSpawn`, `TestDeadRefusesOrdinaryIntents`). No live
@@ -25,7 +25,7 @@ Minimum evidence:
 
 | Claim | GAMELOG | DEMO | Pixel | Default rung |
 |---|---|---|---|---|
-| Period hits to kill | ten `attack_hit` dmg 10 → HP 0 (`TestTenHitsKillImpFromFull`, `TestAttackOutOfRangePathsInThenHitsOnPeriod`) | n/a | n/a | **Go** |
+| Period hits to kill | sword min..max whites → HP 0 (`TestWhitesKillImpFromFull`, `TestAttackOutOfRangeSteersInThenHitsOnPeriod`) | n/a | n/a | **Go** |
 | Live NPC melee smoke | ≥1 `attack_hit` | attack DEMO | optional | live `dummy_attack` |
 | Player death/respawn | `death`, `respawn`, HP 100 | n/a (no live PvP) | n/a | **Go** |
 | Tab combat claims | `cast_effect`, `attack_hit`, `move` | fireball/heal/attack/move DEMO | optional | live focused units (ARM-290) |
@@ -50,7 +50,7 @@ Preconditions:
 - Heal wounded: `powershell -ExecutionPolicy Bypass -File scripts/heal_wounded_demo.ps1`.
   Marker: `HEAL WOUNDED DEMO OK` last line; exit 0.
 - Period hits + death/respawn store: from `server/`,
-  `CGO_ENABLED=1 go test -race ./internal/game/ -run 'TenHitsKillImpFromFull|AttackOutOfRangePathsInThenHitsOnPeriod|DeadRefuses|RespawnRestores|LivingRespawn|GatheringPlayerStillDies'`.
+  `CGO_ENABLED=1 go test -race ./internal/game/ -run 'WhitesKillImpFromFull|AttackOutOfRangeSteersInThenHitsOnPeriod|DeadRefuses|RespawnRestores|LivingRespawn|GatheringPlayerStillDies'`.
 - **Do not** treat `scripts/combat_demo.ps1` or `scripts/tab_combat_demo.ps1` as
   proofs. Both are fail-closed stubs (ARM-284 / ARM-290).
 

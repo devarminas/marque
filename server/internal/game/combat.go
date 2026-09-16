@@ -11,7 +11,6 @@ import (
 
 const (
 	MaxHP              = 100
-	AttackDamage       = 10
 	AttackRange        = 1.5
 	CombatTimeoutTicks = int64(6 * time.Second / TickDuration)
 	CauseMove          = "move"
@@ -150,18 +149,31 @@ func (w *World) npcWeaponID(n *npc) string {
 	return n.weapon
 }
 
-func (w *World) attackPeriodTicks(weaponID string) int {
+func (w *World) weaponDef(weaponID string) weapondef.Weapon {
 	if w.weapons == nil {
 		panic("game: weapons catalog required for auto-attack")
 	}
-	if period, ok := w.weapons.Period(weaponID); ok {
-		return period
+	if weapon, ok := w.weapons.Get(weaponID); ok {
+		return weapon
 	}
-	period, ok := w.weapons.Period(weapondef.Unarmed)
+	weapon, ok := w.weapons.Get(weapondef.Unarmed)
 	if !ok {
 		panic("game: weapons catalog missing unarmed")
 	}
-	return period
+	return weapon
+}
+
+func (w *World) attackPeriodTicks(weaponID string) int {
+	return w.weaponDef(weaponID).AttackPeriodTicks
+}
+
+func (w *World) rollWhiteDamage(weaponID string) int {
+	weapon := w.weaponDef(weaponID)
+	span := weapon.DamageMax - weapon.DamageMin
+	if span <= 0 {
+		return weapon.DamageMin
+	}
+	return weapon.DamageMin + w.intN(span+1)
 }
 
 func (w *World) playerAttackPeriod(p *player) int {
@@ -252,15 +264,17 @@ func (w *World) resolveAttack(p *player) {
 	}
 
 	p.attackProgress = 0
-	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: w.playerWeaponID(p)}, nil)
-	target.hp -= AttackDamage
+	weaponID := w.playerWeaponID(p)
+	damage := w.rollWhiteDamage(weaponID)
+	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: weaponID}, nil)
+	target.hp -= damage
 	if target.hp < 0 {
 		target.hp = 0
 	}
 	w.markCombat(p)
 	w.markCombat(target)
 	fields := playerTargetFields(p.id, target.id)
-	fields["damage"] = AttackDamage
+	fields["damage"] = damage
 	fields["target_hp"] = target.hp
 	w.log.Event(w.tick, EvAttackHit, fields)
 	w.broadcastHP(target)
@@ -288,8 +302,10 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 	}
 
 	p.attackProgress = 0
-	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: w.playerWeaponID(p)}, nil)
-	target.hp -= AttackDamage
+	weaponID := w.playerWeaponID(p)
+	damage := w.rollWhiteDamage(weaponID)
+	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: weaponID}, nil)
+	target.hp -= damage
 	if target.kind == KindDummy {
 		target.floorPracticeHP()
 	} else if target.hp < 0 {
@@ -297,7 +313,7 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 	}
 	w.markCombat(p)
 	fields := playerTargetFields(p.id, target.id)
-	fields["damage"] = AttackDamage
+	fields["damage"] = damage
 	fields["target_hp"] = target.hp
 	w.log.Event(w.tick, EvAttackHit, fields)
 	w.broadcastNPCHP(target)

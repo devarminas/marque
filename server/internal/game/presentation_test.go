@@ -365,14 +365,10 @@ func TestImpFireballCancelsOnceWhenTheImpDies(t *testing.T) {
 	}
 	total := imp.castTotal
 	pw.w.attack(alice, mnet.Attack{Player: imp.id}, 0)
-	for i := 0; i < total-1; i++ {
-		if _, live := pw.w.npcs[imp.id]; !live {
-			break
-		}
-		pw.w.step()
-	}
+	alice.attackProgress = pw.playerPeriod(alice) - 1
+	pw.w.step()
 	if _, live := pw.w.npcs[imp.id]; live {
-		t.Fatalf("imp survived %d ticks of melee", total-1)
+		t.Fatal("imp survived a lethal melee swing")
 	}
 	pw.w.stepNForTest(total)
 

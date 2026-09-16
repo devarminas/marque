@@ -71,6 +71,49 @@ func (pw *probeWorld) npcPeriod(n *npc) int {
 	return pw.w.npcAttackPeriod(n)
 }
 
+func (pw *probeWorld) weapon(id string) weapondef.Weapon {
+	pw.t.Helper()
+	wpn, ok := pw.w.weapons.Get(id)
+	if !ok {
+		pw.t.Fatalf("missing weapon def %q", id)
+	}
+	return wpn
+}
+
+func (pw *probeWorld) lastHitDamage() int {
+	pw.t.Helper()
+	hits := pw.events(EvAttackHit)
+	if len(hits) == 0 {
+		pw.t.Fatal("no attack_hit")
+	}
+	d, ok := hits[len(hits)-1]["damage"].(float64)
+	if !ok {
+		pw.t.Fatalf("damage=%v", hits[len(hits)-1]["damage"])
+	}
+	return int(d)
+}
+
+func (pw *probeWorld) assertWhiteHit(before, after int, weaponID string) {
+	pw.t.Helper()
+	wpn := pw.weapon(weaponID)
+	got := before - after
+	if got < wpn.DamageMin || got > wpn.DamageMax {
+		pw.t.Fatalf("%s white %d outside [%d,%d]", weaponID, got, wpn.DamageMin, wpn.DamageMax)
+	}
+	if pw.lastHitDamage() != got {
+		pw.t.Fatalf("logged damage %d != hp drop %d", pw.lastHitDamage(), got)
+	}
+}
+
+func parseWeapons(t *testing.T, raw string) *weapondef.Catalog {
+	t.Helper()
+	cat, err := weapondef.Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cat
+}
+
 func (pw *probeWorld) dial(token string) *mnet.Conn {
 	pw.t.Helper()
 	conn, _ := pw.dialSocket(token)

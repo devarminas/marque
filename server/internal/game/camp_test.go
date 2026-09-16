@@ -72,7 +72,7 @@ func TestImpDeathRemovesInstanceAndLogs(t *testing.T) {
 	imp := pw.w.npcByKind(KindImp)
 	impID := imp.id
 	alice.pos = imp.pos
-	imp.hp = AttackDamage
+	imp.hp = 1
 
 	pw.w.attack(alice, mnet.Attack{Player: imp.id}, 1)
 	for range pw.playerPeriod(alice) {
@@ -105,7 +105,7 @@ func TestCampRespawnAfterDeathTimer(t *testing.T) {
 	c.content.DeathTimerTicks = 5
 	imp := pw.w.npcByKind(KindImp)
 	alice.pos = imp.pos
-	imp.hp = AttackDamage
+	imp.hp = 1
 	beforeSpawned := len(pw.events(EvNpcSpawned))
 
 	pw.w.attack(alice, mnet.Attack{Player: imp.id}, 1)
@@ -152,7 +152,7 @@ func TestCampRespawnBroadcastsNpcSpawn(t *testing.T) {
 	imp := pw.w.npcByKind(KindImp)
 	deadID := imp.id
 	alice.pos = imp.pos
-	imp.hp = AttackDamage
+	imp.hp = 1
 
 	pw.w.attack(alice, mnet.Attack{Player: imp.id}, 1)
 	for range pw.playerPeriod(alice) {
@@ -236,7 +236,7 @@ func TestCampRespawnDelayIncludesJitter(t *testing.T) {
 	pw.w.rng = mrand.New(mrand.NewPCG(9, 9))
 	imp := pw.w.npcByKind(KindImp)
 	alice.pos = imp.pos
-	imp.hp = AttackDamage
+	imp.hp = 1
 
 	pw.w.attack(alice, mnet.Attack{Player: imp.id}, 1)
 	for range pw.playerPeriod(alice) {

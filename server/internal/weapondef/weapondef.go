@@ -21,6 +21,8 @@ const (
 type Weapon struct {
 	ID                string `json:"id"`
 	AttackPeriodTicks int    `json:"attack_period_ticks"`
+	DamageMin         int    `json:"damage_min"`
+	DamageMax         int    `json:"damage_max"`
 }
 
 type Catalog struct {
@@ -75,6 +77,12 @@ func validate(w Weapon) error {
 	}
 	if w.AttackPeriodTicks < 1 {
 		return fmt.Errorf("%q: attack_period_ticks must be >= 1", w.ID)
+	}
+	if w.DamageMin < 1 {
+		return fmt.Errorf("%q: damage_min must be >= 1", w.ID)
+	}
+	if w.DamageMax < w.DamageMin {
+		return fmt.Errorf("%q: damage_max must be >= damage_min", w.ID)
 	}
 	return nil
 }
