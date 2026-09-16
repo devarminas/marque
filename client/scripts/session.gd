@@ -38,6 +38,7 @@ const TickClock := preload("res://scripts/tick_clock.gd")
 const LocalMover := preload("res://scripts/local_mover.gd")
 const PoseInterp := preload("res://scripts/pose_interp.gd")
 const MapCfg := preload("res://scripts/map_cfg.gd")
+const CraftRecipes := preload("res://scripts/craft_recipes.gd")
 
 const SERVER_ARG := "--server"
 
@@ -716,11 +717,33 @@ func clear_use_selection() -> bool:
 	if _use_from < 0:
 		return false
 	_use_from = -1
+	_sync_use_chrome()
 	return true
 
 
 func has_pending_use() -> bool:
 	return _use_from >= 0
+
+
+func _sync_use_chrome() -> void:
+	if _panel == null:
+		return
+	if _use_from < 0:
+		_panel.clear_use_chrome()
+		_highlight_stations("")
+		return
+	var source_kind := _panel.kind_in_slot(_use_from)
+	var valid := CraftRecipes.partner_slots(_use_from, source_kind, _bag_indices, _bag_kinds)
+	_panel.apply_use_chrome(_use_from, valid)
+	_highlight_stations(CraftRecipes.station_kind_for(source_kind))
+
+
+func _highlight_stations(station_kind: String) -> void:
+	for id: int in _nodes:
+		var body: ResourceNodeScript = _nodes[id]
+		if body == null:
+			continue
+		body.set_use_highlight(not station_kind.is_empty() and body.kind == station_kind)
 
 
 func selected_player_id() -> int:
@@ -1222,6 +1245,8 @@ func _on_node_spawned(id: int, kind: String, spawn_position: Vector2, state: Str
 	if body == null:
 		return
 	body.place_at(spawn_position.x, spawn_position.y)
+	if has_pending_use():
+		_sync_use_chrome()
 
 
 func _on_node_despawned(id: int) -> void:
@@ -1533,6 +1558,7 @@ func _on_slot_activated(slot: int) -> void:
 		return
 	if _use_from < 0:
 		_use_from = slot
+		_sync_use_chrome()
 		return
 	var from := _use_from
 	request_use(from, slot)

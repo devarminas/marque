@@ -70,6 +70,30 @@ func occupied_slot_count() -> int:
 	return occupied
 
 
+func apply_use_chrome(source: int, valid: PackedInt32Array) -> void:
+	for index: int in _slots:
+		var slot: InventorySlotScript = _slots[index]
+		if index == source:
+			slot.set_use_chrome(InventorySlotScript.UseChrome.SOURCE)
+		elif _packed_has(valid, index):
+			slot.set_use_chrome(InventorySlotScript.UseChrome.VALID)
+		else:
+			slot.set_use_chrome(InventorySlotScript.UseChrome.NONE)
+
+
+func clear_use_chrome() -> void:
+	for index: int in _slots:
+		var slot: InventorySlotScript = _slots[index]
+		slot.set_use_chrome(InventorySlotScript.UseChrome.NONE)
+
+
+static func _packed_has(values: PackedInt32Array, needle: int) -> bool:
+	for entry in values.size():
+		if int(values[entry]) == needle:
+			return true
+	return false
+
+
 func _rebuild(size: int) -> void:
 	if slot_grid == null:
 		push_error("InventoryPanel: the scene did not assign a slot grid")

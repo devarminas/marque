@@ -28,12 +28,13 @@ script = ExtResource("1_main")
 script = ExtResource("4_ground_picker")
 camera = NodePath("../PlayerCharacter/CameraRig/Camera3D")
 
-[node name="CursorHint" type="Node" parent="." unique_id=298958687 node_paths=PackedStringArray("picker", "camera", "local_player", "chrome_layer")]
+[node name="CursorHint" type="Node" parent="." unique_id=298958687 node_paths=PackedStringArray("picker", "camera", "local_player", "chrome_layer", "use_mode")]
 script = ExtResource("9_cursor_hint")
 picker = NodePath("../GroundPicker")
 camera = NodePath("../PlayerCharacter/CameraRig/Camera3D")
 local_player = NodePath("../PlayerCharacter/Player")
 chrome_layer = NodePath("../UI")
+use_mode = NodePath("../Session")
 
 [node name="Recheck" type="Timer" parent="CursorHint" unique_id=805402287]
 wait_time = 0.25

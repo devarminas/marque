@@ -22,7 +22,7 @@ border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.22, 0.24, 0.28, 1)
 
-[node name="InventorySlot" type="Button" node_paths=PackedStringArray("fill", "label", "hover_popup", "hover_image", "hover_name", "hover_class")]
+[node name="InventorySlot" type="Button" node_paths=PackedStringArray("fill", "label", "hover_popup", "hover_image", "hover_name", "hover_class", "use_highlight")]
 custom_minimum_size = Vector2(52, 52)
 focus_mode = 0
 theme_override_styles/normal = SubResource("style_slot_frame")
@@ -40,6 +40,7 @@ hover_popup = NodePath("HoverPopup")
 hover_image = NodePath("HoverPopup/Margin/Row/Image")
 hover_name = NodePath("HoverPopup/Margin/Row/Texts/Name")
 hover_class = NodePath("HoverPopup/Margin/Row/Texts/Class")
+use_highlight = NodePath("UseHighlight")
 
 [node name="Fill" type="ColorRect" parent="."]
 layout_mode = 1
@@ -54,6 +55,21 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 color = Color(0.2, 0.2, 0.22, 0.15)
+
+[node name="UseHighlight" type="ColorRect" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 0.78, 0.18, 0.55)
 
 [node name="Label" type="Label" parent="."]
 layout_mode = 1

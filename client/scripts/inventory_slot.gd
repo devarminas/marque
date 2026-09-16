@@ -29,6 +29,16 @@ var kind := ""
 
 @export var hover_class: Label
 
+enum UseChrome { NONE, SOURCE, VALID }
+
+var use_chrome := UseChrome.NONE
+
+@export var use_highlight: ColorRect
+
+@export var source_chrome_color: Color = Color(1.0, 0.78, 0.18, 0.55)
+
+@export var valid_chrome_color: Color = Color(0.18, 0.82, 1.0, 0.42)
+
 var _pointer_inside := false
 
 
@@ -43,6 +53,7 @@ func configure(index: int) -> void:
 func show_item(item_kind: String) -> void:
 	kind = item_kind
 	disabled = false
+	_paint_use_chrome()
 	if not ItemKinds.is_known(item_kind):
 		push_warning(
 			'InventorySlot: slot %d holds unknown kind "%s"; drawing it magenta'
@@ -55,12 +66,18 @@ func show_item(item_kind: String) -> void:
 func show_empty() -> void:
 	kind = ""
 	disabled = true
+	set_use_chrome(UseChrome.NONE)
 	_paint(empty_color, str(slot_index))
 	_sync_hover()
 
 
 func is_occupied() -> bool:
 	return not kind.is_empty()
+
+
+func set_use_chrome(chrome: UseChrome) -> void:
+	use_chrome = chrome
+	_paint_use_chrome()
 
 
 func display_color() -> Color:
@@ -108,6 +125,20 @@ func _on_mouse_entered() -> void:
 func _on_mouse_exited() -> void:
 	_pointer_inside = false
 	_sync_hover()
+
+
+func _paint_use_chrome() -> void:
+	if use_highlight == null:
+		return
+	match use_chrome:
+		UseChrome.SOURCE:
+			use_highlight.color = source_chrome_color
+			use_highlight.visible = true
+		UseChrome.VALID:
+			use_highlight.color = valid_chrome_color
+			use_highlight.visible = true
+		_:
+			use_highlight.visible = false
 
 
 func _paint(color: Color, text: String) -> void:
