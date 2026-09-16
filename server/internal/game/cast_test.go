@@ -27,11 +27,11 @@ func TestCastFireballDamagesHostileInRange(t *testing.T) {
 	}
 	pw.w.stepNForTest(alice.castTotal)
 
-	if bob.hp != MaxHP-40 {
-		t.Fatalf("bob hp=%d, want %d", bob.hp, MaxHP-40)
+	if bob.hp != MaxHP-22 {
+		t.Fatalf("bob hp=%d, want %d", bob.hp, MaxHP-22)
 	}
-	if alice.mana != MaxMana-35 {
-		t.Fatalf("alice mana=%d, want %d", alice.mana, MaxMana-35)
+	if alice.mana != MaxMana-25 {
+		t.Fatalf("alice mana=%d, want %d", alice.mana, MaxMana-25)
 	}
 	if alice.casting() {
 		t.Fatal("pending cast survived resolve")
@@ -230,7 +230,7 @@ func TestCastIgnoresClientAuthoredDamage(t *testing.T) {
 	}
 	pw.w.cast(alice, cast, 1)
 	pw.w.stepNForTest(alice.castTotal)
-	if bob.hp != MaxHP-40 {
+	if bob.hp != MaxHP-22 {
 		t.Fatalf("client damage leaked: hp=%d", bob.hp)
 	}
 }
@@ -292,13 +292,13 @@ const sharedAbilitiesJSON = `{
     {
       "id": "fireball",
       "name": "Fireball",
-      "mana_cost": 35,
-      "cooldown_ticks": 30,
-      "cast_ticks": 30,
+      "mana_cost": 25,
+      "cooldown_ticks": 75,
+      "cast_ticks": 38,
       "range": 8,
       "target": "hostile",
       "locomotion": "interrupt_on_move",
-      "effect": {"kind": "damage", "amount": 40},
+      "effect": {"kind": "damage", "amount": 22},
       "ui": {"hotbar_slot": 2, "color": "red"}
     }
   ]
@@ -460,11 +460,11 @@ func TestFireballGraceSurvivesWalk(t *testing.T) {
 	}
 	remaining := alice.castTotal - alice.castProgress
 	pw.w.stepNForTest(remaining)
-	if bob.hp != MaxHP-40 {
-		t.Fatalf("grace cast hp=%d, want %d", bob.hp, MaxHP-40)
+	if bob.hp != MaxHP-22 {
+		t.Fatalf("grace cast hp=%d, want %d", bob.hp, MaxHP-22)
 	}
-	if alice.mana != MaxMana-35 {
-		t.Fatalf("grace cast mana=%d, want %d", alice.mana, MaxMana-35)
+	if alice.mana != MaxMana-25 {
+		t.Fatalf("grace cast mana=%d, want %d", alice.mana, MaxMana-25)
 	}
 	if alice.casting() {
 		t.Fatal("pending cast after grace resolve")

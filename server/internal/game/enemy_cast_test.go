@@ -40,8 +40,8 @@ func TestImpThinkCastSkillFireballDamagesPlayer(t *testing.T) {
 		t.Fatalf("castTotal=%d", total)
 	}
 	pw.w.stepNForTest(total)
-	if alice.hp != before-40 {
-		t.Fatalf("alice hp=%d, want %d", alice.hp, before-40)
+	if alice.hp != before-22 {
+		t.Fatalf("alice hp=%d, want %d", alice.hp, before-22)
 	}
 	if imp.casting() {
 		t.Fatal("cast survived resolve")

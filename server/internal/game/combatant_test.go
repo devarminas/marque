@@ -55,8 +55,8 @@ func TestNPCCombatantCastTicksFireballDamagesPlayer(t *testing.T) {
 		t.Fatalf("castTotal=%d, want cast_ticks>0", total)
 	}
 	pw.w.stepNForTest(total)
-	if alice.hp != MaxHP-40 {
-		t.Fatalf("alice hp=%d, want %d", alice.hp, MaxHP-40)
+	if alice.hp != MaxHP-22 {
+		t.Fatalf("alice hp=%d, want %d", alice.hp, MaxHP-22)
 	}
 	if caster.casting() {
 		t.Fatal("npc cast survived resolve")
