@@ -49,6 +49,13 @@ func _ready() -> void:
 	await _test_deselect_clears_frame()
 	await _test_despawn_clears_frame()
 	await _test_player_select_keeps_frame_hidden()
+	await _test_hostile_cast_shows_name_and_progress()
+	await _test_mid_select_shows_in_progress_cast()
+	await _test_cast_cancel_clears_bar()
+	await _test_cast_resolve_clears_bar()
+	await _test_deselect_hides_cast_bar()
+	await _test_player_cast_does_not_fill_target_bar()
+	await _test_instant_heal_has_no_stuck_bar()
 
 	print(
 		"TARGET FRAME RAN: %d assertions, %d failed"
@@ -100,6 +107,21 @@ func _test_authored_layout() -> void:
 	_check(
 		add_child.search(source) == null,
 		"target_frame.gd never builds its tree with add_child",
+	)
+	var cast_row := _frame.get_node_or_null("Stack/CastRow") as Control
+	_check(cast_row != null, "TargetFrame authors Stack/CastRow")
+	_check(
+		cast_row != null and not cast_row.visible,
+		"cast row starts hidden",
+	)
+	_check(
+		_frame.cast_bar == cast_row,
+		"cast_bar export points at authored CastRow",
+	)
+	var session_src := FileAccess.get_file_as_string("res://scripts/session.gd")
+	_check(
+		not session_src.contains("interruptible"),
+		"hostile cast bar has no interruptible-only filter",
 	)
 
 
@@ -178,6 +200,96 @@ func _test_player_select_keeps_frame_hidden() -> void:
 	_check(_session.selected_player_id() == 2, "remote is selected")
 	_check(not _frame.visible, "player selection does not open the enemy target frame")
 	_session.clear_selection()
+
+
+func _test_hostile_cast_shows_name_and_progress() -> void:
+	await _feed_welcome()
+	_check(_session.select_player(1000004), "select imp for hostile cast")
+	_check(not _frame.cast_visible, "cast bar hidden until CastPhase begin")
+	await _feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":1,"phase":"begin"}}')
+	_check(_frame.cast_visible, "Imp fireball begin shows the target cast bar")
+	_check(
+		_frame.cast_text == "Fireball",
+		'target cast name reads "Fireball", got "%s"' % _frame.cast_text,
+	)
+	var bar := _cast_progress_bar()
+	_check(bar != null, "CastRow authors a ProgressBar")
+	if bar == null:
+		return
+	_check(
+		bar.max_value > 0.0,
+		"cast bar total is catalog cast_ticks × tick_ms, got max %s" % bar.max_value,
+	)
+	var first := bar.value
+	await get_tree().create_timer(0.12).timeout
+	await get_tree().process_frame
+	_check(
+		_frame.cast_visible and bar.value > first,
+		"cast bar advances from begin toward resolve, %s then %s" % [first, bar.value],
+	)
+
+
+func _test_mid_select_shows_in_progress_cast() -> void:
+	_session.clear_selection()
+	_check(not _frame.visible, "deselect hides the frame before mid-select")
+	await _feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":1,"phase":"cancel"}}')
+	await _feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":1,"phase":"begin"}}')
+	_check(not _frame.cast_visible, "unselected Imp does not show a cast bar")
+	_check(_session.select_player(1000004), "select Imp already casting")
+	_check(
+		_frame.visible and _frame.cast_visible and _frame.cast_text == "Fireball",
+		"selecting a casting hostile still shows Fireball",
+	)
+	await _feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":1,"phase":"cancel"}}')
+
+
+func _test_cast_cancel_clears_bar() -> void:
+	_check(_session.select_player(1000004), "select imp for cancel")
+	await _feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":1,"phase":"begin"}}')
+	_check(_frame.cast_visible, "precondition: bar visible before cancel")
+	await _feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":1,"phase":"cancel"}}')
+	_check(_frame.visible, "cancel keeps the target frame")
+	_check(not _frame.cast_visible, "cancel phase clears the cast bar")
+	_check(
+		_frame.cast_text == "",
+		'cancel leaves the cast label empty, got "%s"' % _frame.cast_text,
+	)
+
+
+func _test_cast_resolve_clears_bar() -> void:
+	await _feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":1,"phase":"begin"}}')
+	_check(_frame.cast_visible, "precondition: bar visible before resolve")
+	await _feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":1,"phase":"resolve"}}')
+	_check(_frame.visible, "resolve keeps the target frame")
+	_check(not _frame.cast_visible, "resolve phase clears the cast bar")
+
+
+func _test_deselect_hides_cast_bar() -> void:
+	await _feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":1,"phase":"begin"}}')
+	_check(_frame.cast_visible, "precondition: bar visible before deselect")
+	_check(_session.clear_selection(), "deselect while Imp is casting")
+	_check(not _frame.visible, "deselect hides the target frame")
+	_check(not _frame.cast_visible, "no target hides the cast bar")
+	await _feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":1,"phase":"cancel"}}')
+
+
+func _test_player_cast_does_not_fill_target_bar() -> void:
+	_check(_session.select_player(1000004), "select imp while the local player casts")
+	await _feed('{"cast_phase":{"id":1,"ability":"fireball","target":1000004,"phase":"begin"}}')
+	_check(_frame.visible, "hostile stays selected during the player's own cast")
+	_check(not _frame.cast_visible, "the player's CastPhase does not fill the hostile bar")
+	await _feed('{"cast_phase":{"id":1,"ability":"fireball","target":1000004,"phase":"cancel"}}')
+
+
+func _test_instant_heal_has_no_stuck_bar() -> void:
+	await _feed('{"cast_phase":{"id":1000004,"ability":"heal","target":1,"phase":"begin"}}')
+	_check(not _frame.cast_visible, "instant heal (no cast_ticks) does not open a bar")
+	await _feed('{"cast_phase":{"id":1000004,"ability":"heal","target":1,"phase":"resolve"}}')
+	_check(not _frame.cast_visible, "instant heal resolve leaves the bar hidden")
+
+
+func _cast_progress_bar() -> ProgressBar:
+	return _frame.get_node_or_null("Stack/CastRow/Bar") as ProgressBar
 
 
 func _feed_welcome() -> void:

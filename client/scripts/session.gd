@@ -167,6 +167,7 @@ var _esc_menu: EscMenuScript = null
 var _admin_console: AdminConsoleScript = null
 var _hotbar: HotbarScript = null
 var _cast_bar: CastBarScript = null
+var _npc_casts := {}
 var _hp := {}
 var _mana := {}
 var _local: PlayerAvatarScript = null
@@ -860,6 +861,55 @@ func _refresh_target_frame() -> void:
 	if dummy != null:
 		label = dummy.display_name
 	_target_frame.apply(label, pair.x, pair.y)
+	_refresh_target_cast_bar()
+
+
+func _record_hostile_cast(id: int, ability: String, phase: String) -> void:
+	if _avatars.has(id):
+		return
+	if phase == "begin":
+		var total := _ability_cast_total_msec(ability)
+		if total <= 0:
+			_npc_casts.erase(id)
+			return
+		_npc_casts[id] = {
+			"ability": ability,
+			"started_msec": Time.get_ticks_msec(),
+			"total_msec": total,
+		}
+		return
+	if phase == "resolve" or phase == "cancel":
+		_npc_casts.erase(id)
+
+
+func _refresh_target_cast_bar() -> void:
+	if _target_frame == null:
+		return
+	var id := _selected_player_id
+	if id <= 0 or not _npcs.has(id) or not _npc_casts.has(id):
+		_target_frame.clear_cast()
+		return
+	var rec: Dictionary = _npc_casts[id]
+	var ability := String(rec.get("ability", ""))
+	var total := int(rec.get("total_msec", 0))
+	if ability.is_empty() or total <= 0:
+		_target_frame.clear_cast()
+		return
+	var elapsed := Time.get_ticks_msec() - int(rec.get("started_msec", 0))
+	_target_frame.apply_cast(ability, elapsed, total)
+
+
+func _ability_cast_total_msec(ability_id: String) -> int:
+	var catalog: Dictionary = AbilityDefs._empty_catalog()
+	if _hotbar != null:
+		catalog = _hotbar.catalog()
+	var ability: Variant = AbilityDefs.get_ability(catalog, ability_id)
+	if typeof(ability) != TYPE_DICTIONARY:
+		return 0
+	var ticks := int(ability.get("cast_ticks", 0))
+	if ticks <= 0 or _tick_ms <= 0:
+		return 0
+	return ticks * _tick_ms
 
 
 func _input(event: InputEvent) -> void:
@@ -1160,6 +1210,7 @@ func _process(delta: float) -> void:
 	_maybe_reconnect()
 	_poll_move_intent()
 	_advance_locomotion(delta)
+	_refresh_target_cast_bar()
 	var window := _claim_expired_window()
 	if window == 0:
 		return
@@ -1836,15 +1887,17 @@ func _on_swing_observed(id: int, _target: int, weapon: String) -> void:
 
 
 func _on_cast_phase_observed(id: int, ability: String, _target: int, phase: String) -> void:
+	_record_hostile_cast(id, ability, phase)
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar != null:
 		avatar.cast_phase(phase, ability)
-		return
-	var npc: NpcDummyScript = _npcs.get(id)
-	if npc != null:
-		npc.cast_phase(phase, ability)
-		return
-	push_warning("session: cast_phase for unknown actor %d; ignoring" % id)
+	else:
+		var npc: NpcDummyScript = _npcs.get(id)
+		if npc != null:
+			npc.cast_phase(phase, ability)
+		else:
+			push_warning("session: cast_phase for unknown actor %d; ignoring" % id)
+	_refresh_target_cast_bar()
 
 
 func _on_class_changed(
@@ -2090,6 +2143,7 @@ func _forget_node(id: int) -> void:
 
 
 func _forget_npc(id: int) -> void:
+	_npc_casts.erase(id)
 	if id == _selected_player_id:
 		clear_selection()
 	var body: NpcDummyScript = _npcs.get(id)
@@ -2124,6 +2178,7 @@ func _forget_everyone() -> void:
 		_forget_node(id)
 	for id: int in _npcs.keys():
 		_forget_npc(id)
+	_npc_casts.clear()
 
 
 func _apply_hit_points(id: int, hp: int, max_hp: int) -> void:

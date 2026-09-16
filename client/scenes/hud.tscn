@@ -1,4 +1,4 @@
-[gd_scene load_steps=44 format=3]
+[gd_scene load_steps=46 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/hotbar.gd" id="13_hotbar"]
 [ext_resource type="PackedScene" path="res://scenes/hotbar_slot.tscn" id="14_hotbar_slot"]
 [ext_resource type="PackedScene" path="res://scenes/cast_bar.tscn" id="14_cast_bar"]
+[ext_resource type="Script" path="res://scripts/cast_bar.gd" id="14_cast_bar_script"]
 [ext_resource type="Script" path="res://scripts/class_hud.gd" id="15_class_hud"]
 [ext_resource type="Script" path="res://scripts/class_debug.gd" id="16_class_debug"]
 [ext_resource type="Script" path="res://scripts/error_hud.gd" id="17_error_hud"]
@@ -68,6 +69,9 @@ texture = ExtResource("20_hp_line")
 
 [sub_resource type="StyleBoxTexture" id="style_mana_fill"]
 texture = ExtResource("21_mana_line")
+
+[sub_resource type="StyleBoxFlat" id="style_cast_fill"]
+bg_color = Color(0.92, 0.78, 0.28, 1)
 
 [sub_resource type="StyleBoxTexture" id="style_hotbar_bar"]
 content_margin_left = 8.0
@@ -676,7 +680,7 @@ text = "—"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="TargetFrame" type="Control" parent="." unique_id=190769655 node_paths=PackedStringArray("name_label", "hp_bar", "hp_label")]
+[node name="TargetFrame" type="Control" parent="." unique_id=190769655 node_paths=PackedStringArray("name_label", "hp_bar", "hp_label", "cast_bar")]
 visible = false
 layout_mode = 3
 anchors_preset = 5
@@ -685,13 +689,14 @@ anchor_right = 0.5
 offset_left = -152.0
 offset_top = 12.0
 offset_right = 152.0
-offset_bottom = 88.0
+offset_bottom = 106.0
 grow_horizontal = 2
 mouse_filter = 2
 script = ExtResource("11_target_frame")
 name_label = NodePath("Stack/NameLabel")
 hp_bar = NodePath("Stack/HpRow/Bar")
 hp_label = NodePath("Stack/HpRow/Label")
+cast_bar = NodePath("Stack/CastRow")
 
 [node name="Frame" type="NinePatchRect" parent="TargetFrame" unique_id=1774159569]
 layout_mode = 1
@@ -811,6 +816,43 @@ theme_override_constants/shadow_offset_x = 1
 theme_override_constants/shadow_offset_y = 1
 theme_override_font_sizes/font_size = 11
 text = "—"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CastRow" type="Control" parent="TargetFrame/Stack" unique_id=190769657 node_paths=PackedStringArray("bar", "label")]
+visible = false
+custom_minimum_size = Vector2(0, 13)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+script = ExtResource("14_cast_bar_script")
+bar = NodePath("Bar")
+label = NodePath("Label")
+
+[node name="Bar" type="ProgressBar" parent="TargetFrame/Stack/CastRow" unique_id=190769658]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/background = SubResource("style_bar_bg")
+theme_override_styles/fill = SubResource("style_cast_fill")
+show_percentage = false
+
+[node name="Label" type="Label" parent="TargetFrame/Stack/CastRow" unique_id=190769659]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.92, 0.94, 0.98, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 11
 horizontal_alignment = 1
 vertical_alignment = 1
 
