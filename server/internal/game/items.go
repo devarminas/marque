@@ -44,6 +44,7 @@ func (w *World) pickup(p *player, msg mnet.Pickup, seq mnet.Seq) {
 	p.pending = item.ID
 	w.clearPendingTalk(p)
 	w.cancelGather(p)
+	w.clearPendingUse(p)
 	w.cancelAttack(p, CausePickup)
 	p.clearSteer()
 

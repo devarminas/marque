@@ -156,6 +156,7 @@ func (w *World) gather(p *player, msg mnet.Gather, seq mnet.Seq) {
 	w.cancelGather(p)
 	p.pending = 0
 	w.clearPendingTalk(p)
+	w.clearPendingUse(p)
 	w.cancelAttack(p, CauseGather)
 	w.cancelCast(p, CauseGather)
 	p.clearSteer()

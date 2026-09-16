@@ -37,6 +37,8 @@ func (w *World) use(p *player, msg mnet.Use, seq mnet.Seq) {
 		return
 	}
 
+	w.clearPendingUse(p)
+
 	if msg.Slot < 0 || msg.Slot >= InventorySize {
 		w.refuseCraft(p, msg.Slot, ErrNoSuchSlot)
 		return
