@@ -8,6 +8,7 @@ const GroundPickerScript := preload("res://scripts/ground_picker.gd")
 const GroundItemScript := preload("res://scripts/ground_item.gd")
 const GroundItemScene := preload("res://scenes/ground_item.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
+const StationRecipeSheetScript := preload("res://scripts/station_recipe_sheet.gd")
 const EquipmentPanelScript := preload("res://scripts/equipment_panel.gd")
 const InventorySlotScript := preload("res://scripts/inventory_slot.gd")
 const PlayerAvatarScript := preload("res://scripts/player_avatar.gd")
@@ -58,6 +59,7 @@ var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
 var _camera: Camera3D = null
 var _panel: InventoryPanelScript = null
+var _station_sheet: StationRecipeSheetScript = null
 var _dock: EquipmentPanelScript = null
 var _grid: GridContainer = null
 var _items_container: Node3D = null
@@ -95,6 +97,7 @@ func _ready() -> void:
 	_picker = _root.get_node("GroundPicker") as GroundPickerScript
 	_camera = _root.get_node("PlayerCharacter/CameraRig/Camera3D") as Camera3D
 	_panel = _root.get_node("UI/RightDock/Margin/Rows/InventoryPanel") as InventoryPanelScript
+	_station_sheet = _root.get_node("UI/StationRecipeSheet") as StationRecipeSheetScript
 	_dock = _root.get_node("UI/RightDock") as EquipmentPanelScript
 	_grid = _root.get_node("UI/RightDock/Margin/Rows/InventoryPanel/Margin/Rows/Slots") as GridContainer
 	_items_container = _root.get_node("GroundItems") as Node3D
@@ -163,6 +166,7 @@ func _ready() -> void:
 	await _test_clicking_an_occupied_slot_uses_it()
 	await _test_cancel_clears_use_selection()
 	await _test_use_mode_highlights_valid_targets()
+	await _test_smelter_opens_station_recipe_sheet()
 	await _test_clicking_an_empty_slot_uses_nothing()
 	await _test_shift_clicking_an_occupied_slot_drops_it()
 	await _test_clicking_the_panel_chrome_reaches_nothing()
@@ -207,6 +211,19 @@ func _test_the_panel_is_authored() -> void:
 		and _panel.use_preview != null
 		and not _panel.use_preview.visible,
 		"which starts hidden",
+	)
+	_check(
+		_station_sheet != null,
+		"and main.tscn authors a StationRecipeSheet",
+	)
+	_check(
+		_station_sheet != null and not _station_sheet.visible,
+		"which starts hidden",
+	)
+	var session_source := FileAccess.get_file_as_string("res://scripts/session.gd")
+	_check(
+		not session_source.contains("StationRecipeSheetScript.new("),
+		"session never builds the station sheet at runtime",
 	)
 	_check(
 		_dock != null and _dock.mouse_filter == Control.MOUSE_FILTER_STOP,
@@ -1192,6 +1209,108 @@ func _test_use_mode_highlights_valid_targets() -> void:
 	)
 	if smelter != null:
 		_check(not smelter.is_use_highlighted(), "and station highlight does not linger")
+
+
+func _test_smelter_opens_station_recipe_sheet() -> void:
+	const SMELTER_ID := 31
+	const TREE_ID := 32
+	var ore_slot := WIRE_SIZE - 1
+	await _feed(
+		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"logs"}]}}' % [WIRE_SIZE, 0]
+	)
+	await _feed(
+		'{"node_spawn":{"id":%d,"kind":"smelter","x":1.0,"z":1.0,"state":"full"}}' % SMELTER_ID
+	)
+	await _feed('{"node_spawn":{"id":%d,"kind":"tree","x":2.0,"z":2.0,"state":"full"}}' % TREE_ID)
+	await get_tree().physics_frame
+	var smelter := _session.node_for(SMELTER_ID)
+	var tree := _session.node_for(TREE_ID)
+	_check(smelter != null and _station_sheet != null, "the smelter and sheet exist")
+	_check(
+		_station_sheet != null and not _station_sheet.is_open(),
+		"the sheet starts closed",
+	)
+
+	_watch()
+	if tree != null:
+		_picker.node_clicked.emit(tree)
+	_check(
+		_station_sheet != null and not _station_sheet.is_open(),
+		"clicking a tree does not open a recipe sheet",
+	)
+	_check(_use_intents.is_empty(), "and sends no use")
+
+	if smelter != null:
+		_picker.node_clicked.emit(smelter)
+	_check(_station_sheet != null and _station_sheet.is_open(), "clicking the smelter opens the sheet")
+	_check(
+		_station_sheet != null and _station_sheet.station_kind() == "smelter",
+		"scoped to the smelter, got %s"
+		% ("" if _station_sheet == null else _station_sheet.station_kind()),
+	)
+	_check(
+		_station_sheet != null and _station_sheet.recipe_text() == "Copper ore → Copper bar (missing)",
+		'without ore the row is marked missing, got "%s"'
+		% ("" if _station_sheet == null else _station_sheet.recipe_text()),
+	)
+	_check(_use_intents.is_empty(), "and opening the sheet sends no use")
+
+	await _feed(
+		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"copper_ore"}]}}'
+		% [WIRE_SIZE, ore_slot]
+	)
+	_check(
+		_station_sheet != null
+		and _station_sheet.is_open()
+		and _station_sheet.recipe_text() == "Copper ore → Copper bar",
+		'ore in the bag prefers the attemptable row, got "%s"'
+		% ("" if _station_sheet == null else _station_sheet.recipe_text()),
+	)
+
+	if _station_sheet != null and _station_sheet.close_button != null:
+		_station_sheet.close_button.pressed.emit()
+	_check(
+		_station_sheet != null and not _station_sheet.is_open(),
+		"Close dismisses the sheet",
+	)
+
+	if smelter != null:
+		_picker.node_clicked.emit(smelter)
+	_check(_station_sheet != null and _station_sheet.is_open(), "the sheet can open again")
+	var viewport := _camera.get_viewport()
+	var cancel := InputEventKey.new()
+	cancel.keycode = KEY_ESCAPE
+	cancel.physical_keycode = KEY_ESCAPE
+	cancel.pressed = true
+	viewport.push_input(cancel)
+	await get_tree().process_frame
+	_check(
+		_station_sheet != null and not _station_sheet.is_open(),
+		"escape dismisses the sheet",
+	)
+
+	if smelter != null:
+		_picker.node_clicked.emit(smelter)
+	_panel.slot_activated.emit(ore_slot)
+	_check(_session.has_pending_use(), "selecting ore arms Use-mode")
+	_check(
+		_station_sheet != null and not _station_sheet.is_open(),
+		"and closes the sheet so Use stays the 1:1 path",
+	)
+	_watch()
+	if smelter != null:
+		_picker.node_clicked.emit(smelter)
+	_check(
+		_use_intents.size() == 1
+		and _use_intents[0].x == ore_slot
+		and _use_intents[0].y == SMELTER_ID,
+		"Use on the smelter still sends use slot-on-station, got %s" % [_use_intents],
+	)
+	_check(
+		_station_sheet != null and not _station_sheet.is_open(),
+		"and does not open the sheet",
+	)
+	_session.clear_use_selection()
 
 
 func _slot_chrome(index: int) -> int:

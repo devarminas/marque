@@ -9,6 +9,7 @@ func run(assertions: Assertions) -> void:
 	_test_station_recipes_match_server(assertions)
 	_test_partner_slots(assertions)
 	_test_preview_copy(assertions)
+	_test_station_sheet_rows(assertions)
 	assertions.finish()
 
 
@@ -137,6 +138,34 @@ func _test_preview_copy(assertions: Assertions) -> void:
 	assertions.check(
 		CraftRecipes.station_preview("smelter", "logs").is_empty(),
 		"logs on a smelter have no station preview",
+	)
+
+
+func _test_station_sheet_rows(assertions: Assertions) -> void:
+	var empty := CraftRecipes.station_sheet_rows("smelter", PackedStringArray())
+	assertions.check(
+		empty.size() == 1
+		and String(empty[0].get("text", "")) == "Copper ore → Copper bar"
+		and not bool(empty[0].get("ready", true)),
+		"empty bag lists the smelter recipe as not ready, got %s" % empty,
+	)
+	var ready := CraftRecipes.station_sheet_rows("smelter", PackedStringArray(["copper_ore"]))
+	assertions.check(
+		ready.size() == 1 and bool(ready[0].get("ready", false)),
+		"ore in the bag marks the smelter recipe ready, got %s" % ready,
+	)
+	var sticks := CraftRecipes.station_sheet_rows("smelter", PackedStringArray(["sticks"]))
+	assertions.check(
+		sticks.size() == 1 and not bool(sticks[0].get("ready", true)),
+		"sticks do not make the smelter recipe ready, got %s" % sticks,
+	)
+	assertions.check(
+		CraftRecipes.station_recipes("smith").is_empty(),
+		"smith has no recipes until that station kind exists",
+	)
+	assertions.check(
+		CraftRecipes.station_recipes("tree").is_empty(),
+		"a tree is not a station sheet",
 	)
 
 

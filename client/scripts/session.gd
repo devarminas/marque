@@ -16,6 +16,7 @@ const NpcImpScene := preload("res://scenes/npc_imp.tscn")
 const NpcImpQuestGiverScene := preload("res://scenes/npc_imp_quest_giver.tscn")
 const InventoryPanelScript := preload("res://scripts/inventory_panel.gd")
 const DialogPanelScript := preload("res://scripts/dialog_panel.gd")
+const StationRecipeSheetScript := preload("res://scripts/station_recipe_sheet.gd")
 const GivePanelScript := preload("res://scripts/give_panel.gd")
 const QuestLogPanelScript := preload("res://scripts/quest_log_panel.gd")
 const PartyPanelScript := preload("res://scripts/party_panel.gd")
@@ -39,6 +40,7 @@ const LocalMover := preload("res://scripts/local_mover.gd")
 const PoseInterp := preload("res://scripts/pose_interp.gd")
 const MapCfg := preload("res://scripts/map_cfg.gd")
 const CraftRecipes := preload("res://scripts/craft_recipes.gd")
+const NodeKinds := preload("res://scripts/node_kinds.gd")
 
 const SERVER_ARG := "--server"
 
@@ -126,6 +128,7 @@ signal respawn_requested()
 @export var ground_picker: Node
 @export var inventory_panel: Node
 @export var dialog_panel: Node
+@export var station_recipe_sheet: Node
 @export var give_panel: Node
 @export var quest_log_panel: Node
 @export var party_panel: Node
@@ -146,6 +149,7 @@ var _net: NetClientScript = null
 var _picker: GroundPickerScript = null
 var _panel: InventoryPanelScript = null
 var _dialog: DialogPanelScript = null
+var _station_sheet: StationRecipeSheetScript = null
 var _give: GivePanelScript = null
 var _quest_log: QuestLogPanelScript = null
 var _party: PartyPanelScript = null
@@ -287,6 +291,12 @@ func _ready() -> void:
 		push_error("Session.dialog_panel must point at a node running dialog_panel.gd")
 	else:
 		_dialog.option_chosen.connect(_on_dialog_option_chosen)
+
+	_station_sheet = station_recipe_sheet as StationRecipeSheetScript
+	if _station_sheet == null:
+		push_error(
+			"Session.station_recipe_sheet must point at a node running station_recipe_sheet.gd"
+		)
 
 	_give = give_panel as GivePanelScript
 	if _give == null:
@@ -722,6 +732,13 @@ func request_respawn() -> void:
 	_net.send_respawn()
 
 
+func clear_station_sheet() -> bool:
+	if _station_sheet == null or not _station_sheet.is_open():
+		return false
+	_station_sheet.clear()
+	return true
+
+
 func clear_use_selection() -> bool:
 	if _use_from < 0:
 		return false
@@ -865,6 +882,9 @@ func _input(event: InputEvent) -> void:
 		return
 	if _esc_menu != null and _esc_menu.is_open():
 		_close_esc_menu()
+		get_viewport().set_input_as_handled()
+		return
+	if clear_station_sheet():
 		get_viewport().set_input_as_handled()
 		return
 	if clear_use_selection():
@@ -1304,6 +1324,8 @@ func _on_node_despawned(id: int) -> void:
 	if not _nodes.has(id):
 		push_warning("session: node_despawn for unknown node %d; ignoring" % id)
 		return
+	if _station_sheet != null and _station_sheet.station_id() == id:
+		clear_station_sheet()
 	_forget_node(id)
 
 
@@ -1541,7 +1563,38 @@ func _on_node_clicked(body: Node3D) -> void:
 			"session: the picker reported a click on %s, which is not a resource node" % body
 		)
 		return
-	_try_use_on_node(resource_node)
+	if _try_use_on_node(resource_node):
+		return
+	_try_open_station_sheet(resource_node)
+
+
+func _try_open_station_sheet(resource_node: ResourceNodeScript) -> bool:
+	if _station_sheet == null:
+		return false
+	if not NodeKinds.is_station(resource_node.kind):
+		return false
+	var id := _id_of_node_body(resource_node)
+	if id == 0:
+		push_warning(
+			"session: clicked a station this session has no registry entry for (%s); ignoring"
+			% resource_node.name
+		)
+		return true
+	_station_sheet.apply(
+		id, resource_node.kind, CraftRecipes.station_sheet_rows(resource_node.kind, _bag_kinds)
+	)
+	return true
+
+
+func _refresh_station_sheet() -> void:
+	if _station_sheet == null or not _station_sheet.is_open():
+		return
+	var id := _station_sheet.station_id()
+	var body := node_for(id)
+	if body == null:
+		clear_station_sheet()
+		return
+	_station_sheet.apply(id, body.kind, CraftRecipes.station_sheet_rows(body.kind, _bag_kinds))
 
 
 func _try_use_on_node(resource_node: ResourceNodeScript) -> bool:
@@ -1622,6 +1675,7 @@ func _on_slot_activated(slot: int) -> void:
 		push_error("session: use for slot %d; slot indices start at 0" % slot)
 		return
 	if _use_from < 0:
+		clear_station_sheet()
 		_use_from = slot
 		_sync_use_chrome()
 		return
@@ -1653,6 +1707,7 @@ func _on_inventory_changed(
 	clear_use_selection()
 	_panel.apply(size, slot_indices, slot_kinds)
 	_reconcile_give_panel()
+	_refresh_station_sheet()
 
 
 func _on_dialog_changed(npc_id: int, lines: PackedStringArray, option_ids: PackedStringArray) -> void:

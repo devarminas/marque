@@ -1,4 +1,4 @@
-[gd_scene load_steps=43 format=3]
+[gd_scene load_steps=44 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="8_inventory_panel"]
 [ext_resource type="Script" path="res://scripts/equipment_panel.gd" id="9_equipment_panel"]
@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://scripts/class_debug.gd" id="16_class_debug"]
 [ext_resource type="Script" path="res://scripts/error_hud.gd" id="17_error_hud"]
 [ext_resource type="Script" path="res://scripts/dialog_panel.gd" id="18_dialog_panel"]
+[ext_resource type="Script" path="res://scripts/station_recipe_sheet.gd" id="44_station_sheet"]
 [ext_resource type="Script" path="res://scripts/give_panel.gd" id="39_give_panel"]
 [ext_resource type="Script" path="res://scripts/quest_log_panel.gd" id="38_quest_log_panel"]
 [ext_resource type="Script" path="res://scripts/party_panel.gd" id="40_party_panel"]
@@ -909,6 +910,60 @@ visible = false
 custom_minimum_size = Vector2(140, 32)
 layout_mode = 2
 text = "Stop talking"
+
+[node name="StationRecipeSheet" type="PanelContainer" parent="." unique_id=2970000001 node_paths=PackedStringArray("heading", "recipes_label", "close_button")]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = 48.0
+offset_right = 220.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+custom_minimum_size = Vector2(200, 96)
+theme_override_styles/panel = SubResource("style_dock_panel")
+script = ExtResource("44_station_sheet")
+heading = NodePath("Margin/Rows/Heading")
+recipes_label = NodePath("Margin/Rows/Recipes")
+close_button = NodePath("Margin/Rows/Close")
+
+[node name="Margin" type="MarginContainer" parent="StationRecipeSheet" unique_id=2970000002]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="Rows" type="VBoxContainer" parent="StationRecipeSheet/Margin" unique_id=2970000003]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Heading" type="Label" parent="StationRecipeSheet/Margin/Rows" unique_id=2970000004]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 16
+text = "Smelter"
+
+[node name="Recipes" type="Label" parent="StationRecipeSheet/Margin/Rows" unique_id=2970000005]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.95, 0.86, 0.45, 1)
+theme_override_font_sizes/font_size = 14
+text = ""
+autowrap_mode = 2
+
+[node name="Close" type="Button" parent="StationRecipeSheet/Margin/Rows" unique_id=2970000006]
+custom_minimum_size = Vector2(120, 32)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Close"
 
 [node name="GivePanel" type="PanelContainer" parent="." unique_id=1911911911 node_paths=PackedStringArray("slot_grid", "cancel_button")]
 visible = false
