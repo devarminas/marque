@@ -99,6 +99,8 @@ static func display_name(kind: String) -> String:
 			return "Copper bar"
 		"sword":
 			return "Sword"
+		"smelter":
+			return "Smelter"
 		_:
 			return kind
 
@@ -132,6 +134,38 @@ static func bag_preview(source_kind: String, kinds: PackedStringArray) -> Dictio
 			names.append(display_name(kind))
 		text = "%s (missing %s)" % [text, ", ".join(names)]
 	return {"text": text, "complete": missing.is_empty(), "missing": missing}
+
+
+static func station_recipes(station_kind: String) -> Array:
+	var found: Array = []
+	if station_kind.is_empty():
+		return found
+	for recipe: Dictionary in STATION:
+		if String(recipe["station"]) == station_kind:
+			found.append(recipe)
+	return found
+
+
+static func station_sheet_rows(station_kind: String, bag_kinds: PackedStringArray) -> Array:
+	var ready: Array = []
+	var rest: Array = []
+	for recipe: Dictionary in station_recipes(station_kind):
+		var consume := String(recipe["consume"])
+		var produce := String(recipe["produce"])
+		var have := false
+		for kind: String in bag_kinds:
+			if kind == consume:
+				have = true
+				break
+		var row := {
+			"text": "%s → %s" % [display_name(consume), display_name(produce)],
+			"ready": have,
+		}
+		if have:
+			ready.append(row)
+		else:
+			rest.append(row)
+	return ready + rest
 
 
 static func station_preview(station_kind: String, consume_kind: String) -> Dictionary:
