@@ -85,12 +85,26 @@ func locomote(ground_speed: float) -> void:
 	_apply(_director.advance(0.0))
 
 
+func elevate(clearance: float) -> void:
+	if _director == null:
+		return
+	_director.elevate(clearance)
+	_apply(_director.advance(0.0))
+
+
 func swing(weapon: String, tick_ms: int) -> void:
 	if _director == null:
 		return
 	if not _attack_period_ticks.has(weapon) or tick_ms <= 0:
 		push_error("CharacterVisual %s: swing needs a known weapon and tick_ms, got %s and %d" % [get_path(), weapon, tick_ms])
 	_director.swing(_attack_period_ticks.get(weapon, 0) * tick_ms / 1000.0)
+	_apply(_director.advance(0.0))
+
+
+func cast_phase(phase: String, ability: String) -> void:
+	if _director == null:
+		return
+	_director.cast_phase(phase, ability)
 	_apply(_director.advance(0.0))
 
 

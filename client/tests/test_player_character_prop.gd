@@ -178,6 +178,12 @@ func _test_jump_height_presentation() -> void:
 		HEIGHT_EPSILON,
 		"present_at lifts avatar y for jump",
 	)
+	var animation := _animation()
+	_assertions.check(
+		animation != null and animation.current_animation == _clip("jump_start"),
+		"leaving the ground plays jump_start, got \"%s\""
+		% ("" if animation == null else animation.current_animation),
+	)
 
 	mover.advance_to_tick(200)
 	mover.soft_pull_display(1.0)
@@ -193,6 +199,12 @@ func _test_jump_height_presentation() -> void:
 		avatar.ground_y,
 		HEIGHT_EPSILON,
 		"landed present_at returns avatar to ground_y",
+	)
+	animation = _animation()
+	_assertions.check(
+		animation != null and animation.current_animation == _clip("idle"),
+		"and landing hands the body back to idle, got \"%s\""
+		% ("" if animation == null else animation.current_animation),
 	)
 
 

@@ -1,10 +1,7 @@
 [gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/npc_dummy.gd" id="1_dummy"]
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_body"]
-radius = 0.35
-height = 1.4
+[ext_resource type="PackedScene" path="res://assets/proto/props/training_dummy.glb" id="2_training_dummy"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_click"]
 radius = 0.4
@@ -23,13 +20,12 @@ ring_segments = 24
 shading_mode = 0
 albedo_color = Color(1, 0.85, 0.15, 1)
 
-[node name="NpcDummy" type="Node3D"]
+[node name="NpcDummy" type="Node3D" node_paths=PackedStringArray("faction_tint")]
 script = ExtResource("1_dummy")
 static_mesh = true
+faction_tint = NodePath("Body")
 
-[node name="Body" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
-mesh = SubResource("CapsuleMesh_body")
+[node name="Body" parent="." instance=ExtResource("2_training_dummy")]
 
 [node name="ClickBody" type="StaticBody3D" parent="."]
 collision_layer = 4

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (Prototype art / ARM-271).
+Accepted (Prototype art / ARM-271). Extended with the airborne and cast clips (ARM-276) and the world props (ARM-270).
 
 ## Context
 
@@ -28,7 +28,9 @@ The body is a base-mesh mannequin: capsule limbs, a lofted torso, pelvis, and fe
     - The imp uses the human shapes with thicker radii per region, plus its own head, horns, and tail.
 7. **Slot ownership.** `slot_regions` maps each armor slot to the regions it owns. No region belongs to two slots, and `hands` belongs to none.
 8. **Clips.** `anim/clips.glb` is one clip library authored on the `clip_rig`. Each clip keys bone rotations plus one `pelvis` position track. The glb holds no constant per-bone position tracks, so a smaller variant keeps its own bone lengths. The `.import` sidecar imports `clips.glb` as an `AnimationLibrary` and sets each loop mode in `_subresources`. Clip names carry no `_Loop` suffix. The rig glbs import with `animation/import=false`. `swing` winds up with the right elbow out to the side and back, strikes forward and down across the front at frame 7, and follows through with the hand in front of the hips at frame 9. The arm stays lateral of the chest in every frame, which padded sleeves need.
-9. **Routes.** Each `routes` row maps an `action` and a `key` to a clip. Every action has a row with `key: ""`. `ArtContract.clip_for` returns the exact row, else the `key: ""` row, so an actor with no special key plays the default clip.
+    The library holds seven clips: `idle` (60 frames, loop), `walk` (30, loop), `swing` (12, one-shot), `jump_start` (8, one-shot), `fall` (18, loop), `cast_windup` (24, loop), and `cast_release` (12, one-shot). `jump_start` drops the hips, folds the knees, pitches the torso forward and swings the arms back, then extends the legs and carries the arms overhead and forward, so its first and last frames read as different silhouettes. `fall` cycles an airborne tuck with one knee high and the other trailing, arms out for balance. `cast_windup` holds both hands in front of the chest with the elbows outboard of the shoulders, and sways. `cast_release` drives the hands forward over a short step with a torso turn, then settles to rest.
+    A clip keys only the bones its own poses turn. A mixer that accumulates onto the rest pose returns every unkeyed bone to rest, so a clip never inherits a limb from the clip before it. Measured in the client: `fall` holds `calf_l` 55 degrees off rest, and switching to `cast_windup`, which keys no leg bone, puts it back at 0.00 degrees.
+9. **Routes.** Each `routes` row maps an `action` and a `key` to a clip. Every action has a row with `key: ""`. `ArtContract.clip_for` returns the exact row, else the `key: ""` row, so an actor with no special key plays the default clip. `cast_windup` and `cast_release` key on the ability id: `fireball` carries its own row and `heal` resolves through the `key: ""` row, so an ability needs a row only when it wants a clip of its own. Every other action carries the `key: ""` row alone.
 10. **Armor pieces.** Each `pieces` row names an item id, its `slot`, and the regions it `hides`. The 16 rows match the armor that `shared/sets.json` ships, in both directions. Each piece is one skinned `MeshInstance3D` named by its item id under `Rig/Skeleton3D` of the `clip_rig` glb (`humanoid.glb`). Each piece has a pad, a paint, and styled extras.
 11. **Replacement rules.** A worn piece shows its mesh and hides the `region_<region>` meshes in its `hides`.
     - The skeleton stays at scale 1.0. No body part shrinks to fit gear.
@@ -40,7 +42,7 @@ The body is a base-mesh mannequin: capsule limbs, a lofted torso, pelvis, and fe
     - Pieces that hide nothing (`cloth_hood`, `leather_helm`, `prospector_helm`, `forester_cap`) are hollow shells whose inner surface clears the visible head.
     - Where a piece meets an uncovered region, its grown capsule cap or socket ends around the pivot of that seam and overlaps the visible band, the same way the bare body's shapes meet.
     - Where two slots overlap beyond a seam (the plate fauld over the trousers, the robe skirt over the thighs, boot shafts over the shins), the outer piece is a hollow shell whose inner surface clears the inner piece.
-12. **Clipping properties.** The shipped `humanoid.glb` and `clips.glb` were measured at every fifth `idle` frame and at every `walk` and `swing` frame, with each mesh split into its closed parts. The measurement covers the bare body, each `sets.json` kit, and each piece worn alone. It counts vertices buried more than 3 mm inside another shown part, by ray parity and nearest-surface depth:
+12. **Clipping properties.** The shipped `humanoid.glb` and `clips.glb` were measured at every fifth `idle` frame, every second `cast_windup` frame, and every frame of `walk`, `swing`, `jump_start`, `fall`, and `cast_release`, with each mesh split into its closed parts. Each clip is posed from rest, the way the client's mixer starts it. The measurement covers the bare body, each `sets.json` kit, and each piece worn alone. It counts vertices buried more than 3 mm inside another shown part, by ray parity and nearest-surface depth:
     - (a) visible body and worn piece parts inside each other
     - (b) parts of two different worn pieces inside each other
     - (c) arm parts inside torso, head, or hips parts, and leg parts inside torso or head parts
@@ -50,12 +52,21 @@ The body is a base-mesh mannequin: capsule limbs, a lofted torso, pelvis, and fe
     - Islands weld only within one dominant bone, so mirrored parts that touch stay separate.
     - The enclosure count is the number of hidden body vertices outside every part of their piece that shares a bone.
     - (a), (b), (c), and the enclosure count allow zero. (d) allows 60 mm of cut line per kit and clip.
-    - Result: (a), (b), (c), and the enclosure count are 0 on every kit and piece in every clip. The worst (d) cut line is 0 mm for the bare body. It is 3, 40, and 22 mm for the knight and 3, 49, and 36 mm for the mage, in `idle`, `walk`, and `swing`.
+    - Result: (a), (b), (c), and the enclosure count are 0 on every kit and piece in every clip. The worst (d) cut line is 0 mm for the bare body in every clip. Across the kits it is 18 mm in `idle`, 49 mm in `walk`, 36 mm in `swing`, 36 mm in `jump_start`, 41 mm in `fall`, 9 mm in `cast_windup`, and 30 mm in `cast_release`.
+    - The covers bound the poses. Hip flexion past about 30 degrees drives a skirt cover through the robe hem, and knee bend past about 55 degrees folds a trouser cover into itself, so `jump_start` takes its crouch depth from the pelvis drop and the torso pitch rather than deeper flexion.
     - Negative control: with `plate_chest` built from rigid capsule covers plus a separate pauldron, (d) fails 6 rows at the elbow with up to 689 mm of cut line.
     - Negative control: with the `plate_chest` pad set to -20 mm, 10 rows fail. 48 neck vertices sit up to 51 mm inside the chest shell, and 1058 hidden body vertices sit outside the shell.
     - The measurement covers the human only.
 13. **Hand items.** `hand_items` maps each tool kind in `shared/sets.json` to a static glb under `client/assets/proto/items/`. In the glb (Godot axes) the grip centre is the origin. The haft, blade, or bow limbs run along +Y toward the head or tip. The striking side faces +Z, the model front: the sword edge, the axe blade, the front pick point, the shield face, and the bow belly. The bow string sits at -Z. Grips are 16 mm to 18 mm in radius, sized to the mannequin hand. Socket scenes still author their own per-item transforms.
-14. **Generator.** The glbs are generated by an external Blender toolchain kept outside the repo. Two consecutive builds produced byte-identical files for all nine glbs: the two character glbs, `anim/clips.glb`, and the six hand items.
+14. **Generator.** The glbs are generated by an external Blender toolchain kept outside the repo. Two consecutive builds produced byte-identical files for all fifteen glbs: the two character glbs, `anim/clips.glb`, the six hand items, and the six props.
+15. **Props.** `props` maps each world kind to the static glb that draws it. A gatherable node kind carries a `full` row and a `depleted` row. A kind with one look carries a single `""` row that any state falls back to, so a station arriving in wire state `full` still resolves. `ArtContract.prop_for` returns the exact state row, else the `""` row.
+    - The rows cover the node and station kinds that the client scripts and the server source both declare, plus the `dummy` NPC kind. `client/tests/test_art_contract.gd` reads both sides and fails when they drift apart.
+    - Each prop is one static mesh with no skeleton, built from the same soft primitives, flat colors, and bevelled edges as the mannequin, and sized in meters: the tree 4.1 m, the stump 0.5 m, the ore rock 1.1 m, the depleted rock 0.45 m, the smelter 2.3 m, and the training dummy 1.7 m.
+    - The origin is the ground contact point. The lowest vertex sits within 20 mm of `y = 0`, so a prop is placed by its ground position alone.
+    - In the glb (Godot axes) +Y is up and the model front faces +Z, as hand items do. The smelter mouth and the dummy target face the model front.
+    - The triangle budget is 300 to 3,000. The shipped props measure 1352, 1192, 864, 1312, 1288, and 1524 triangles.
+    - The training dummy keeps a neutral sack color, so the faction tint the client applies to an NPC still reads on it.
+    - `client/tests/test_art_assets.gd` checks each prop glb for one static mesh with no skeleton, its triangle budget, and its origin on the ground.
 
 ## Swap in real skinned art
 
@@ -70,13 +81,12 @@ The body is a base-mesh mannequin: capsule limbs, a lofted torso, pelvis, and fe
 ## Consequences
 
 - `client/tests/test_art_contract.gd` checks the contract invariants, including pieces and hand items against `shared/sets.json`, and names each violation. `client/tests/test_art_assets.tscn` checks the imported glbs against the contract, including the imp pelvis height under `motion_scale`.
-- The repo holds no generator. A change to a body shape, an armor piece, a hand item, or a clip means regenerating the glbs outside the repo and committing the results.
+- The repo holds no generator. A change to a body shape, an armor piece, a hand item, a clip, or a prop means regenerating the glbs outside the repo and committing the results.
 - A change to rest orientations invalidates every authored clip.
 - A change to `swing`, `idle`, `walk`, or a region shape can bury gear. The rule 12 properties must hold again for the new glbs.
 - The imp plays the same clips with thicker regions and is inspected by render.
 
 ## Non-goals
 
-- Props and clips other than `idle`, `walk`, and `swing`.
-- Wiring the art into `player_avatar.tscn`, NPC scenes, or `session.gd` (ARM-274).
+- Clips beyond the seven the library holds, and props beyond the six the table maps.
 - Deleting the Quaternius assets.

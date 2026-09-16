@@ -18,6 +18,8 @@ const KindImp := "imp"
 const OVERHEAD_PROXIMITY := 12.0
 const OVERHEAD_CLICK_LAYER := 4
 
+const TINT_ALPHA := 0.5
+
 var npc_id := 0
 var kind := KindDummy
 var faction := FactionHostile
@@ -29,8 +31,8 @@ var clock: TickClock = null
 @export var face_travel_direction := true
 @export var turn_degrees_per_second := 540.0
 @export var static_mesh := false
+@export var faction_tint: Node3D
 
-var _body_mesh: MeshInstance3D = null
 var _meter: DummyMeterScript = null
 var _last_hp := -1
 var _last_max_hp := -1
@@ -50,9 +52,6 @@ var _meter_label: Label3D = null
 
 func _ready() -> void:
 	_meter_label = get_node_or_null("MeterLabel") as Label3D
-	var body := get_node_or_null("Body")
-	if body is MeshInstance3D:
-		_body_mesh = body as MeshInstance3D
 	var missing := get_node_or_null("MissingBody") as MeshInstance3D
 	if missing != null and visual() != null and get_node_or_null("Body/Rig/Skeleton3D") == null:
 		missing.visible = true
@@ -154,6 +153,18 @@ func swing(weapon: String) -> void:
 		push_error("NpcDummy '%s' (kind=%s): a swing arrived for an NPC with no CharacterVisual" % [name, kind])
 		return
 	character.swing(weapon, _tick_ms)
+
+
+func cast_phase(phase: String, ability: String) -> void:
+	var character := visual()
+	if character == null:
+		if not static_mesh:
+			push_error(
+				"NpcDummy '%s' (kind=%s): a cast arrived for an NPC with no CharacterVisual"
+				% [name, kind]
+			)
+		return
+	character.cast_phase(phase, ability)
 
 
 func update_to_tick(tick: int) -> void:
@@ -266,18 +277,23 @@ func _apply_overhead_visibility() -> void:
 		_meter_label.text = ""
 
 
-func _apply_faction_color() -> void:
-	if _body_mesh == null:
-		return
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+func faction_color() -> Color:
 	if faction == FactionFriendly:
-		mat.albedo_color = Color(0.25, 0.75, 0.35, 1)
-	elif faction == FactionNeutral:
-		mat.albedo_color = Color(0.35, 0.55, 0.9, 1)
-	else:
-		mat.albedo_color = Color(0.85, 0.25, 0.2, 1)
-	_body_mesh.material_override = mat
+		return Color(0.25, 0.75, 0.35, TINT_ALPHA)
+	if faction == FactionNeutral:
+		return Color(0.35, 0.55, 0.9, TINT_ALPHA)
+	return Color(0.85, 0.25, 0.2, TINT_ALPHA)
+
+
+func _apply_faction_color() -> void:
+	if faction_tint == null:
+		return
+	var tint := StandardMaterial3D.new()
+	tint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	tint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	tint.albedo_color = faction_color()
+	for node in faction_tint.find_children("*", "MeshInstance3D", true, false):
+		(node as MeshInstance3D).material_overlay = tint
 
 
 func _locomote(ground_speed: float) -> void:

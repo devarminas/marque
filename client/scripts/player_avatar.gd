@@ -41,6 +41,10 @@ func swing(weapon: String) -> void:
 	visual().swing(weapon, _tick_ms)
 
 
+func cast_phase(phase: String, ability: String) -> void:
+	visual().cast_phase(phase, ability)
+
+
 func visual() -> CharacterVisual:
 	return $Visual as CharacterVisual
 
@@ -57,10 +61,13 @@ func teleport_to(x: float, z: float) -> void:
 	present_at(x, z, false)
 
 
-func present_at(x: float, z: float, walking: bool, height: float = 0.0) -> void:
+func present_at(
+	x: float, z: float, walking: bool, height: float = 0.0, ground_height: float = 0.0
+) -> void:
 	var prior := Vector2(position.x, position.z)
 	position = Vector3(x, ground_y + height, z)
 	visual().locomote(SteerIntegrate.WALK_SPEED if walking else 0.0)
+	visual().elevate(height - ground_height)
 	if not face_travel_direction or not walking:
 		return
 	var delta := Vector2(x - prior.x, z - prior.y)

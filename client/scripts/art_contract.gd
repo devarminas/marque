@@ -4,6 +4,7 @@ extends RefCounted
 const PATH := "res://assets/proto/art_contract.json"
 const VERSION := 1
 const FALLBACK_KEY := ""
+const PROP_STATES: PackedStringArray = ["", "full", "depleted"]
 
 
 class Bone:
@@ -48,6 +49,7 @@ var regions := {}
 var slot_regions := {}
 var pieces := {}
 var hand_items := {}
+var props := {}
 var clips := {}
 var _routes := {}
 
@@ -86,6 +88,7 @@ func _init(text: String) -> void:
 	var items := _object(root, "hand_items", "contract")
 	for item in items:
 		hand_items[item] = _res_path(items, item, "hand_items")
+	_parse_props(_object(root, "props", "contract"))
 	_parse_clips(_object(root, "clips", "contract"))
 	_parse_routes(_array(root, "routes", "contract"))
 
@@ -119,6 +122,14 @@ func clip_length(clip: String) -> float:
 
 func motion_scale(variant: String) -> float:
 	return variants[variant].scale / variants[clip_rig].scale
+
+
+func prop_for(kind: String, state: String) -> String:
+	var by_state: Dictionary = props.get(kind, {})
+	var glb: String = by_state.get(state, by_state.get(FALLBACK_KEY, ""))
+	if glb.is_empty():
+		push_error('art_contract: no prop for kind %s in state "%s"' % [kind, state])
+	return glb
 
 
 func _parse_bones(rows: Array) -> void:
@@ -248,6 +259,19 @@ func _parse_routes(rows: Array) -> void:
 	for clip in clips:
 		if not routed.has(clip):
 			_fail("clip %s is not routed by any action" % clip)
+
+
+func _parse_props(rows: Dictionary) -> void:
+	for kind in rows:
+		var where := "prop %s" % kind
+		var states := _entry(rows[kind], where)
+		for state in states:
+			if not PROP_STATES.has(state):
+				_fail('%s names unknown state "%s"' % [where, state])
+			_res_path(states, state, where)
+		if not states.has(FALLBACK_KEY) and not (states.has("full") and states.has("depleted")):
+			_fail('%s needs a "" row or both full and depleted rows' % where)
+		props[kind] = states
 
 
 func _fail(message: String) -> void:

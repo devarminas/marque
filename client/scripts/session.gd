@@ -245,6 +245,7 @@ func _ready() -> void:
 	_net.equipment_changed.connect(_on_equipment_changed)
 	_net.worn_changed.connect(_on_worn_changed)
 	_net.swing_observed.connect(_on_swing_observed)
+	_net.cast_phase_observed.connect(_on_cast_phase_observed)
 	_net.class_changed.connect(_on_class_changed)
 	_net.skills_changed.connect(_on_skills_changed)
 	_net.hp_changed.connect(_on_hp_changed)
@@ -1085,8 +1086,7 @@ func _advance_locomotion(delta: float) -> void:
 	if _local_mover != null and _local != null:
 		_local_mover.advance_to_tick(est)
 		_local_mover.soft_pull_display(delta)
-		var ground := _local_mover.display_xz()
-		_local.present_at(ground.x, ground.y, _local_mover.moving(), _local_mover.display_height())
+		_present_local()
 	_sync_npc_overhead_proximity()
 	var render_tick := _render_tick_fraction()
 	for id in _remote_poses.keys():
@@ -1098,8 +1098,36 @@ func _advance_locomotion(delta: float) -> void:
 		var buf: PoseInterp = _remote_poses[id]
 		if buf == null:
 			continue
-		var sample := buf.sample_xyz(render_tick)
-		avatar.present_at(sample.x, sample.z, buf.moving(render_tick), sample.y)
+		_present_remote(avatar, buf, render_tick)
+
+
+func _present_local() -> void:
+	var ground := _local_mover.display_xz()
+	var height := _local_mover.display_height()
+	_local.present_at(
+		ground.x,
+		ground.y,
+		_local_mover.moving(),
+		height,
+		_local_mover.ground_y_at(ground.x, ground.y, height),
+	)
+
+
+func _present_remote(avatar: PlayerAvatarScript, buf: PoseInterp, render_tick: float) -> void:
+	var sample := buf.sample_xyz(render_tick)
+	avatar.present_at(
+		sample.x,
+		sample.z,
+		buf.moving(render_tick),
+		sample.y,
+		_ground_height_at(sample.x, sample.z, sample.y),
+	)
+
+
+func _ground_height_at(x: float, z: float, near_y: float) -> float:
+	if _local_mover != null:
+		return _local_mover.ground_y_at(x, z, near_y)
+	return MapCfg.ground_y(_predict_map_id)
 
 
 func _render_tick_fraction() -> float:
@@ -1306,8 +1334,7 @@ func _on_pose_received(id: int, tick: int, x: float, y: float, z: float) -> void
 		else:
 			_local_mover.reconcile_server_pose(tick, x, z, y)
 		if _local != null:
-			var ground := _local_mover.display_xz()
-			_local.present_at(ground.x, ground.y, _local_mover.moving(), _local_mover.display_height())
+			_present_local()
 		return
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar == null:
@@ -1320,9 +1347,7 @@ func _on_pose_received(id: int, tick: int, x: float, y: float, z: float) -> void
 		_remote_poses[id] = buf
 	else:
 		buf.push_pose(tick, x, z, y)
-	var render_tick := _render_tick_fraction()
-	var sample := buf.sample_xyz(render_tick)
-	avatar.present_at(sample.x, sample.z, buf.moving(render_tick), sample.y)
+	_present_remote(avatar, buf, _render_tick_fraction())
 
 
 func _on_server_error(re: String, message: String) -> void:
@@ -1662,6 +1687,18 @@ func _on_swing_observed(id: int, _target: int, weapon: String) -> void:
 		npc.swing(weapon)
 		return
 	push_warning("session: swing for unknown actor %d; ignoring" % id)
+
+
+func _on_cast_phase_observed(id: int, ability: String, _target: int, phase: String) -> void:
+	var avatar: PlayerAvatarScript = _avatars.get(id)
+	if avatar != null:
+		avatar.cast_phase(phase, ability)
+		return
+	var npc: NpcDummyScript = _npcs.get(id)
+	if npc != null:
+		npc.cast_phase(phase, ability)
+		return
+	push_warning("session: cast_phase for unknown actor %d; ignoring" % id)
 
 
 func _on_class_changed(

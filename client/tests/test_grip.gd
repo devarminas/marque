@@ -21,6 +21,10 @@ const MAX_TOOL_EXTENT := 2.2
 const MAX_SOCKET_ESCAPE := 0.1
 const DETACH_BONE_SHIFT := Vector3(0.0, 0.5, 0.0)
 const DETACH_DRIFT_EPSILON := 1.0e-4
+const CAST_THRUST_SEC := 0.133
+const CAST_SETTLE_SEC := 0.333
+const MIN_CAST_LEAN := 0.25
+const MIN_UPRIGHT := 0.9
 
 const WELCOME_FRAME := (
 	'{"welcome":{"you":1,"tick_ms":150,"tick":1,"heartbeat_ticks":10,'
@@ -65,6 +69,7 @@ func _ready() -> void:
 	_test_a_two_handed_kind_shows_exactly_one_mesh()
 	_test_a_knight_kit_shows_its_pieces_and_hides_the_regions_they_cover()
 	_test_every_tool_reads_against_a_player_sized_avatar()
+	await _test_the_staff_leans_forward_on_the_cast_and_stands_up_otherwise()
 	await _test_a_detached_body_leaves_the_socket_where_it_was()
 	await _test_worn_frames_dress_local_and_remote_avatars()
 
@@ -361,6 +366,38 @@ func _equipment_frame(slot_names: Array, slot_kinds: Array) -> String:
 
 func _equip(avatar: PlayerAvatar, slot_names: Array, slot_kinds: Array) -> void:
 	avatar.apply_equipment(PackedStringArray(slot_names), PackedStringArray(slot_kinds))
+
+
+func _test_the_staff_leans_forward_on_the_cast_and_stands_up_otherwise() -> void:
+	var avatar := _spawn(9)
+	avatar.apply_equipment(
+		PackedStringArray([GripDefs.OFF_HAND, GripDefs.GRIP_HAND]),
+		PackedStringArray(["staff", "staff"]),
+	)
+	var release := await _staff_heading(avatar, "cast_release", CAST_THRUST_SEC)
+	_assertions.check(
+		release.z <= -MIN_CAST_LEAN,
+		"a two-handed staff leans forward past %.2f mid cast_release, got %.2v"
+		% [MIN_CAST_LEAN, release],
+	)
+	for pose: Array in [["idle", 0.0], ["walk", 0.2], ["cast_release", CAST_SETTLE_SEC]]:
+		var heading := await _staff_heading(avatar, pose[0], pose[1])
+		_assertions.check(
+			heading.y >= MIN_UPRIGHT,
+			"and stands back up in %s at %.2fs, %.2v against %.2f"
+			% [pose[0], pose[1], heading, MIN_UPRIGHT],
+		)
+	avatar.queue_free()
+
+
+func _staff_heading(avatar: PlayerAvatar, clip: String, at_sec: float) -> Vector3:
+	var player := avatar.get_node("AnimationPlayer") as AnimationPlayer
+	player.play("proto/%s" % clip)
+	player.seek(at_sec, true)
+	player.pause()
+	await get_tree().process_frame
+	var staff := avatar.get_node("Grip/%s/staff" % GripDefs.GRIP_HAND) as Node3D
+	return staff.global_transform.basis.y.normalized()
 
 
 func _spawn(id: int) -> PlayerAvatar:

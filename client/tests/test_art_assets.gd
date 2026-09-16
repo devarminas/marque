@@ -19,6 +19,9 @@ const PIECE_TRIANGLES_MIN := 300
 const PIECE_TRIANGLES_MAX := 2000
 const ITEM_TRIANGLES_MIN := 200
 const ITEM_TRIANGLES_MAX := 2000
+const PROP_TRIANGLES_MIN := 300
+const PROP_TRIANGLES_MAX := 3000
+const GROUND_EPSILON := 0.02
 const WEIGHT_SUM_TOLERANCE := 0.002
 
 var _assertions: Assertions = null
@@ -53,6 +56,7 @@ func _ready() -> void:
 		_test_each_body_stays_within_the_triangle_budget(rigs)
 		_test_each_piece_is_a_skinned_mesh_weighted_to_its_slot_bones(rigs[_contract.clip_rig])
 		_test_each_hand_item_is_a_static_mesh_gripped_at_the_origin()
+		_test_each_prop_is_a_static_mesh_standing_on_its_origin()
 		_test_the_clip_library_matches_the_contract()
 		await _test_the_imp_plays_idle_at_its_own_pelvis_height()
 		await _test_swing_moves_the_grip_hand()
@@ -136,6 +140,41 @@ func _test_each_hand_item_is_a_static_mesh_gripped_at_the_origin() -> void:
 				"%s has %d triangles, within %d to %d" % [item, triangles, ITEM_TRIANGLES_MIN, ITEM_TRIANGLES_MAX],
 			)
 		instance.queue_free()
+
+
+func _test_each_prop_is_a_static_mesh_standing_on_its_origin() -> void:
+	for kind in _contract.props:
+		for state in _contract.props[kind]:
+			var path: String = _contract.props[kind][state]
+			var scene := load(path) as PackedScene
+			_assertions.check(scene != null, "%s loads as a scene" % path)
+			if scene == null:
+				continue
+			var instance := scene.instantiate() as Node3D
+			add_child(instance)
+			var meshes := instance.find_children("*", "MeshInstance3D", true, false)
+			_assertions.check(
+				meshes.size() == 1 and instance.find_children("*", "Skeleton3D", true, false).is_empty(),
+				"%s holds one static mesh and no skeleton, got %d meshes" % [path.get_file(), meshes.size()],
+			)
+			if meshes.size() == 1:
+				var mesh := meshes[0] as MeshInstance3D
+				var triangles := _triangles(mesh.mesh)
+				_assertions.check(
+					triangles >= PROP_TRIANGLES_MIN and triangles <= PROP_TRIANGLES_MAX,
+					"%s has %d triangles, within %d to %d"
+					% [path.get_file(), triangles, PROP_TRIANGLES_MIN, PROP_TRIANGLES_MAX],
+				)
+				var lowest := INF
+				for surface in mesh.mesh.get_surface_count():
+					var vertices: PackedVector3Array = mesh.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+					for vertex in vertices:
+						lowest = minf(lowest, (mesh.global_transform * vertex).y)
+				_assertions.check(
+					absf(lowest) <= GROUND_EPSILON,
+					"%s stands on its origin, lowest vertex at y %.4f" % [path.get_file(), lowest],
+				)
+			instance.queue_free()
 
 
 func _triangles(mesh: Mesh) -> int:

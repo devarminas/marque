@@ -43,7 +43,7 @@ func _ready() -> void:
 	print("== npcs: welcome, select, cast faction targets, attack refuse ==")
 
 	_test_quest_giver_scene_wears_its_cloth_loadout()
-	_test_dummy_scene_stays_capsule()
+	_test_dummy_scene_draws_the_contract_prop()
 	_test_imp_scenes_use_the_prototype_imp()
 	_test_imp_authors_animation_player()
 	_test_mobile_npc_without_animation_player_reports_once()
@@ -81,6 +81,7 @@ func _ready() -> void:
 	_test_despawn_forgets_npc()
 	_test_npc_spawn_after_despawn()
 	_test_imp_quest_giver_spawns_and_a_swing_reaches_the_imp()
+	_test_cast_phase_reaches_players_and_imps_alike()
 	_test_npc_spawn_missing_name_is_empty()
 	_test_hostile_overhead_proximity_and_name()
 	_test_overhead_click_resolves_like_body()
@@ -136,18 +137,47 @@ func _test_quest_giver_scene_wears_its_cloth_loadout() -> void:
 	giver.queue_free()
 
 
-func _test_dummy_scene_stays_capsule() -> void:
+func _test_dummy_scene_draws_the_contract_prop() -> void:
+	var contract := CharacterVisual.contract()
 	var dummy := NpcDummyScene.instantiate() as NpcDummyScript
 	_check(dummy != null, "npc_dummy.tscn instantiates as NpcDummy")
 	if dummy == null:
 		return
 	_world.add_child(dummy)
-	_check(dummy.get_node("Body") is MeshInstance3D, "practice dummy Body stays a MeshInstance3D capsule")
+	var body := dummy.get_node_or_null("Body") as Node3D
+	var want := contract.prop_for("dummy", "")
+	_check(
+		body != null and body.scene_file_path == want,
+		"practice dummy Body instances the contract's %s, got %s"
+		% [want, "null" if body == null else body.scene_file_path],
+	)
 	_check(
 		dummy.get_node_or_null("Body/Rig/Skeleton3D") == null,
 		"practice dummy has no prototype rig",
 	)
 	_check(dummy.static_mesh, "practice dummy is flagged static_mesh (no AnimationPlayer required)")
+	for faction: String in [NpcDummyScript.FactionHostile, NpcDummyScript.FactionFriendly]:
+		dummy.configure(1, NpcDummyScript.KindDummy, faction, "")
+		var tinted := 0
+		for node in body.find_children("*", "MeshInstance3D", true, false):
+			var overlay := (node as MeshInstance3D).material_overlay as StandardMaterial3D
+			if overlay != null and overlay.albedo_color.is_equal_approx(dummy.faction_color()):
+				tinted += 1
+		_check(
+			tinted > 0 and tinted == body.find_children("*", "MeshInstance3D", true, false).size(),
+			"a %s dummy tints every prop mesh %s, got %d of %d"
+			% [
+				faction,
+				dummy.faction_color(),
+				tinted,
+				body.find_children("*", "MeshInstance3D", true, false).size(),
+			],
+		)
+	_check(
+		dummy.faction_color().a < 1.0,
+		"and the tint is an overlay the prop's own shading reads through, alpha %.2f"
+		% dummy.faction_color().a,
+	)
 	dummy.queue_free()
 
 
@@ -580,6 +610,51 @@ func _test_imp_quest_giver_spawns_and_a_swing_reaches_the_imp() -> void:
 	_check(
 		imp.visual().current_clip() == CharacterVisual.contract().clip_for("swing", ""),
 		"a swing frame naming the imp swings its visual, got %s" % imp.visual().current_clip(),
+	)
+
+
+func _test_cast_phase_reaches_players_and_imps_alike() -> void:
+	var contract := CharacterVisual.contract()
+	var you := _session.avatar_for(_session.own_id())
+	_check(you != null, "the local player has an avatar to cast on")
+	if you == null:
+		return
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":3,"ability":"fireball","target":1000002,"phase":"begin"}}'
+	)
+	_check(
+		you.visual().current_clip() == contract.clip_for("cast_windup", "fireball"),
+		"cast_phase begin winds the player up, got %s" % you.visual().current_clip(),
+	)
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":3,"ability":"fireball","target":1000002,"phase":"resolve"}}'
+	)
+	_check(
+		you.visual().current_clip() == contract.clip_for("cast_release", "fireball"),
+		"resolve releases it, got %s" % you.visual().current_clip(),
+	)
+	_net.ingest_text_frame(
+		'{"npc_spawn":{"id":1000008,"kind":"imp","faction":"hostile","name":"Caster",'
+		+ '"x":9.0,"z":9.0,"hp":50,"max_hp":50}}'
+	)
+	var npcs: Dictionary = _session.get("_npcs")
+	var imp: NpcDummyScript = npcs.get(1000008)
+	_check(imp != null, "a fresh imp is present for the cast frames")
+	if imp == null:
+		return
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":1000008,"ability":"fireball","target":3,"phase":"begin"}}'
+	)
+	_check(
+		imp.visual().current_clip() == contract.clip_for("cast_windup", "fireball"),
+		"an imp winds up on the same message, got %s" % imp.visual().current_clip(),
+	)
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":1000008,"ability":"fireball","target":3,"phase":"cancel"}}'
+	)
+	_check(
+		imp.visual().current_clip() == contract.clip_for("idle", ""),
+		"and cancel drops it back to idle with no release, got %s" % imp.visual().current_clip(),
 	)
 
 
