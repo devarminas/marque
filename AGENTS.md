@@ -50,5 +50,5 @@ godot --headless --path client --script res://tests/run_tests.gd
 - `print()` → stdout. `quit(1)` → exit code. `--quit-after N` bounds runaway loops.
 - Anything visual (shaders, viewport textures) does not work headless.
 - Visual checks: the game screenshots itself; do not automate the desktop.
-- Behavioural client/server claims: `.claude/skills/verify-marque/SKILL.md`.
+- Behavioural client/server claims: `.cursor/skills/verify-marque/SKILL.md`.
 - Server: from `server/`, with a C toolchain on PATH, `CGO_ENABLED=1 go test -race ./...`.

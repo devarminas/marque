@@ -164,13 +164,13 @@ started. Never kill by process name.
 
 One read-only check that answers "is this checkout worth driving?":
 
-    powershell -ExecutionPolicy Bypass -File .claude/skills/verify-marque/doctor.ps1
+    powershell -ExecutionPolicy Bypass -File .cursor/skills/verify-marque/doctor.ps1
 
 `DOCTOR OK` means Go and Godot 4.7 answer on PATH and the repo has the server, the
 client, and both canonical scripts where this skill expects them. It also fails closed
 on windowed demos: every `scripts/*_demo.ps1`, every `client/scripts/*_demo.gd`, and
 every `--*-shots` string literal in `client/scripts/main.gd` must appear in
-`.claude/skills/verify-marque/demo-allowlist.txt`. An unlisted file or flag fails
+`.cursor/skills/verify-marque/demo-allowlist.txt`. An unlisted file or flag fails
 doctor. Helpers such as `scripts/marque-demo-lib.ps1` and
 `client/scripts/demo_npc_capture.gd` are not windowed demos and are not scanned.
 There is no `.github/` workflow tree in this repo; **doctor is the gate**.
@@ -229,7 +229,7 @@ socket → server.
 
 ### The generic harness
 
-    powershell -ExecutionPolicy Bypass -File .claude/skills/verify-marque/run.ps1
+    powershell -ExecutionPolicy Bypass -File .cursor/skills/verify-marque/run.ps1
 
 Optional: `-ClickA "0.30,0.72" -ClickB "0.70,0.72" -EvidenceDir <dir>`. Pass
 `-ClickA ""` (or `-ClickB ""`) to make that client watch without ever walking.

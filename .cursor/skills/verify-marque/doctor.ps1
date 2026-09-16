@@ -17,7 +17,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# .claude/skills/verify-marque -> skills -> .claude -> repo root.
+# .cursor/skills/verify-marque -> skills -> .cursor -> repo root.
 $repo = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $failures = New-Object System.Collections.Generic.List[string]
 
@@ -84,7 +84,7 @@ if (-not (Test-Path (Join-Path $repo "client\.godot"))) {
 
 $allowlistPath = Join-Path $PSScriptRoot "demo-allowlist.txt"
 if (-not (Test-Path $allowlistPath)) {
-    $failures.Add("missing .claude/skills/verify-marque/demo-allowlist.txt")
+    $failures.Add("missing .cursor/skills/verify-marque/demo-allowlist.txt")
 } else {
     $allowed = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     foreach ($raw in Get-Content -LiteralPath $allowlistPath) {

@@ -33,7 +33,7 @@ Preconditions:
 - `DOCTOR OK`; a desktop session; no flags needed beyond defaults.
 
 - **Join two players.** Run
-  `powershell -ExecutionPolicy Bypass -File .claude/skills/verify-marque/run.ps1`.
+  `powershell -ExecutionPolicy Bypass -File .cursor/skills/verify-marque/run.ps1`.
   Marker: `VERIFY HARNESS OK`.
 - **Own id learned.** Each client log has one `DEMO joined <id>` line; the two ids
   are 1 and 2 in some order.
