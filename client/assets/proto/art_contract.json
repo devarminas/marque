@@ -120,6 +120,12 @@
     "lumberjack_axe": "res://assets/proto/items/lumberjack_axe.glb",
     "pickaxe": "res://assets/proto/items/pickaxe.glb"
   },
+  "props": {
+    "tree": {"full": "res://assets/proto/props/tree.glb", "depleted": "res://assets/proto/props/tree_stump.glb"},
+    "rock": {"full": "res://assets/proto/props/ore_rock.glb", "depleted": "res://assets/proto/props/ore_rock_depleted.glb"},
+    "smelter": {"": "res://assets/proto/props/smelter.glb"},
+    "dummy": {"": "res://assets/proto/props/training_dummy.glb"}
+  },
   "clips": {
     "idle": {"frames": 60, "loop": true},
     "walk": {"frames": 30, "loop": true},

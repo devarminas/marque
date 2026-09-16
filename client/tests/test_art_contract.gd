@@ -3,10 +3,19 @@ extends RefCounted
 const ArtContract := preload("res://scripts/art_contract.gd")
 const Assertions := preload("res://tests/assertions.gd")
 const ClassDefs := preload("res://scripts/class_defs.gd")
+const NodeKinds := preload("res://scripts/node_kinds.gd")
+const NpcDummy := preload("res://scripts/npc_dummy.gd")
 
 const BONE_COUNT := 23
 const IMP_PELVIS_HEIGHT := 0.62
 const IMP_PELVIS_EPSILON := 0.01
+const PROPS_DIR := "res://assets/proto/props/"
+const SERVER_GAME := "../server/internal/game"
+const SERVER_PROP_KINDS := {
+	"nodes.go": ["KindTree", "KindRock"],
+	"stations.go": ["KindSmelter"],
+	"npc.go": ["KindDummy"],
+}
 
 
 func run(assertions: Assertions) -> void:
@@ -19,6 +28,7 @@ func run(assertions: Assertions) -> void:
 	_test_every_clip_is_reached_through_a_fallback_route(assertions, text)
 	_test_an_unknown_key_falls_back_and_an_unknown_action_is_refused(assertions, text)
 	_test_jump_and_cast_actions_resolve_for_every_ability(assertions, text)
+	_test_the_props_cover_the_kinds_the_client_and_server_know(assertions, text)
 	_test_the_imp_stands_at_its_own_pelvis_height(assertions, text)
 	_test_each_violation_is_named(assertions, text)
 	assertions.finish()
@@ -138,6 +148,52 @@ func _test_jump_and_cast_actions_resolve_for_every_ability(assertions: Assertion
 		)
 
 
+func _test_the_props_cover_the_kinds_the_client_and_server_know(assertions: Assertions, text: String) -> void:
+	var contract := ArtContract.new(text)
+	var kinds := PackedStringArray(contract.props.keys())
+	kinds.sort()
+	var client := NodeKinds.KNOWN.duplicate()
+	client.append(NpcDummy.KindDummy)
+	client.sort()
+	assertions.check(kinds == client, "the props cover the client node kinds and the dummy %s, got %s" % [client, kinds])
+	var server := _server_prop_kinds(assertions)
+	server.sort()
+	assertions.check(kinds == server, "the props cover the server node, station, and dummy kinds %s, got %s" % [server, kinds])
+	for kind in contract.props:
+		var states := PackedStringArray((contract.props[kind] as Dictionary).keys())
+		states.sort()
+		var expected := PackedStringArray(["depleted", "full"])
+		if not NodeKinds.is_gatherable(kind):
+			expected = PackedStringArray([ArtContract.FALLBACK_KEY])
+		assertions.check(states == expected, "prop %s maps states %s, got %s" % [kind, expected, states])
+		for state in expected:
+			assertions.check(
+				contract.prop_for(kind, state).begins_with(PROPS_DIR),
+				'prop %s/"%s" resolves under %s, got %s' % [kind, state, PROPS_DIR, contract.prop_for(kind, state)],
+			)
+	assertions.check(
+		contract.prop_for(NodeKinds.KIND_SMELTER, "full") == contract.prop_for(NodeKinds.KIND_SMELTER, ArtContract.FALLBACK_KEY),
+		"a smelter in wire state full falls back to its stateless prop",
+	)
+
+
+func _server_prop_kinds(assertions: Assertions) -> PackedStringArray:
+	var kinds := PackedStringArray()
+	var game := ProjectSettings.globalize_path("res://").path_join(SERVER_GAME)
+	var constant := RegEx.create_from_string('(?m)^\\s*(Kind\\w+)\\s*=\\s*"([a-z_]+)"')
+	for file in SERVER_PROP_KINDS:
+		var source := FileAccess.get_file_as_string(game.path_join(file))
+		assertions.check(not source.is_empty(), "the server source %s is readable" % game.path_join(file))
+		var declared := {}
+		for hit in constant.search_all(source):
+			declared[hit.get_string(1)] = hit.get_string(2)
+		for name in SERVER_PROP_KINDS[file]:
+			assertions.check(declared.has(name), "server %s declares %s" % [file, name])
+			if declared.has(name):
+				kinds.append(declared[name])
+	return kinds
+
+
 func _test_the_imp_stands_at_its_own_pelvis_height(assertions: Assertions, text: String) -> void:
 	var contract := ArtContract.new(text)
 	var pelvis: ArtContract.Bone = contract.bones[contract.bone_names().find("pelvis")]
@@ -195,6 +251,10 @@ func _test_each_violation_is_named(assertions: Assertions, text: String) -> void
 			func(raw: Dictionary): raw["routes"].append(raw["routes"][1].duplicate())],
 		["a clip no route reaches", "clip jump is not routed by any action",
 			func(raw: Dictionary): raw["clips"]["jump"] = {"frames": 20.0, "loop": true}],
+		["a prop in an unknown state", 'prop tree names unknown state "burning"',
+			func(raw: Dictionary): raw["props"]["tree"]["burning"] = raw["props"]["tree"]["full"]],
+		["a gatherable prop missing its depleted row", 'prop rock needs a "" row or both full and depleted rows',
+			func(raw: Dictionary): raw["props"]["rock"].erase("depleted")],
 	]
 	for case in cases:
 		var raw: Dictionary = (JSON.parse_string(text) as Dictionary).duplicate(true)
