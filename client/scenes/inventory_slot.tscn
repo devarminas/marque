@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/inventory_slot.gd" id="1_inventory_slot"]
 [ext_resource type="Texture2D" path="res://assets/classic_rpg_ui/uielements/inventory_frame_little.png" id="2_little_frame"]
@@ -10,7 +10,19 @@ content_margin_right = 4.0
 content_margin_bottom = 4.0
 texture = ExtResource("2_little_frame")
 
-[node name="InventorySlot" type="Button" node_paths=PackedStringArray("fill", "label")]
+[sub_resource type="StyleBoxFlat" id="style_hover_popup"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.08, 0.09, 0.11, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.22, 0.24, 0.28, 1)
+
+[node name="InventorySlot" type="Button" node_paths=PackedStringArray("fill", "label", "hover_popup", "hover_image", "hover_name", "hover_class")]
 custom_minimum_size = Vector2(52, 52)
 focus_mode = 0
 theme_override_styles/normal = SubResource("style_slot_frame")
@@ -24,6 +36,10 @@ label = NodePath("Label")
 empty_color = Color(0.2, 0.2, 0.22, 0.15)
 known_color = Color(0.18, 0.72, 0.26, 1)
 unknown_color = Color(0.95, 0.08, 0.85, 1)
+hover_popup = NodePath("HoverPopup")
+hover_image = NodePath("HoverPopup/Margin/Row/Image")
+hover_name = NodePath("HoverPopup/Margin/Row/Texts/Name")
+hover_class = NodePath("HoverPopup/Margin/Row/Texts/Class")
 
 [node name="Fill" type="ColorRect" parent="."]
 layout_mode = 1
@@ -55,3 +71,55 @@ theme_override_font_sizes/font_size = 11
 horizontal_alignment = 1
 vertical_alignment = 1
 clip_text = true
+
+[node name="HoverPopup" type="PanelContainer" parent="."]
+visible = false
+z_index = 20
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 1
+anchors_preset = 0
+offset_left = -156.0
+offset_right = -4.0
+offset_bottom = 44.0
+mouse_filter = 2
+top_level = true
+theme_override_styles/panel = SubResource("style_hover_popup")
+
+[node name="Margin" type="MarginContainer" parent="HoverPopup"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 0
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 0
+theme_override_constants/margin_bottom = 0
+
+[node name="Row" type="HBoxContainer" parent="HoverPopup/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Image" type="ColorRect" parent="HoverPopup/Margin/Row"]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.2, 0.2, 0.22, 0.15)
+
+[node name="Texts" type="VBoxContainer" parent="HoverPopup/Margin/Row"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 2
+alignment = 1
+
+[node name="Name" type="Label" parent="HoverPopup/Margin/Row/Texts"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 12
+text = ""
+
+[node name="Class" type="Label" parent="HoverPopup/Margin/Row/Texts"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.94, 0.95, 0.96, 1)
+theme_override_font_sizes/font_size = 11
+text = ""

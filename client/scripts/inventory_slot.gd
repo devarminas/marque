@@ -21,6 +21,16 @@ var kind := ""
 
 @export var unknown_color: Color
 
+@export var hover_popup: PanelContainer
+
+@export var hover_image: ColorRect
+
+@export var hover_name: Label
+
+@export var hover_class: Label
+
+var _pointer_inside := false
+
 
 func configure(index: int) -> void:
 	if index < 0:
@@ -39,12 +49,14 @@ func show_item(item_kind: String) -> void:
 			% [slot_index, item_kind]
 		)
 	_paint(known_color if ItemKinds.is_known(item_kind) else unknown_color, item_kind)
+	_sync_hover()
 
 
 func show_empty() -> void:
 	kind = ""
 	disabled = true
 	_paint(empty_color, str(slot_index))
+	_sync_hover()
 
 
 func is_occupied() -> bool:
@@ -81,10 +93,68 @@ func _get_drag_data(_at_position: Vector2) -> Variant:
 	return {"bag_slot": slot_index}
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_MOUSE_ENTER:
+		_on_mouse_entered()
+	elif what == NOTIFICATION_MOUSE_EXIT:
+		_on_mouse_exited()
+
+
+func _on_mouse_entered() -> void:
+	_pointer_inside = true
+	_sync_hover()
+
+
+func _on_mouse_exited() -> void:
+	_pointer_inside = false
+	_sync_hover()
+
+
 func _paint(color: Color, text: String) -> void:
 	if fill == null or label == null:
 		push_error("InventorySlot: the scene did not assign both a fill and a label")
 		return
 	fill.color = color
 	label.text = text
-	tooltip_text = "slot %d: %s" % [slot_index, kind if is_occupied() else "empty"]
+
+
+func _sync_hover() -> void:
+	if _pointer_inside and is_occupied():
+		_enter_shown()
+	else:
+		_enter_hidden()
+
+
+func _enter_shown() -> void:
+	if not _hover_nodes_ok():
+		return
+	hover_image.color = display_color()
+	hover_name.text = ItemKinds.display_name(kind)
+	hover_class.text = ItemKinds.item_class(kind)
+	hover_popup.visible = true
+	_place_hover_popup()
+
+
+func _enter_hidden() -> void:
+	if not _hover_nodes_ok():
+		return
+	hover_popup.visible = false
+
+
+func _place_hover_popup() -> void:
+	var popup_size := hover_popup.get_combined_minimum_size()
+	if popup_size.x < 1.0:
+		popup_size = hover_popup.size
+	if popup_size.x < 1.0:
+		popup_size = hover_popup.custom_minimum_size
+	hover_popup.global_position = Vector2(
+		global_position.x - popup_size.x - 4.0,
+		global_position.y
+	)
+
+
+func _hover_nodes_ok() -> bool:
+	if hover_popup == null or hover_image == null or hover_name == null or hover_class == null:
+		push_error("InventorySlot: the scene did not assign hover popup, image, name, and class")
+		return false
+	return true
