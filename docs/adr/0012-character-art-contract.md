@@ -89,6 +89,4 @@ The body is a base-mesh mannequin: capsule limbs, a lofted torso, pelvis, and fe
 ## Non-goals
 
 - Clips beyond the seven the library holds, and props beyond the six the table maps.
-- Drawing the props from the contract table in the node and NPC scenes, and routing the new clips from the presentation broadcasts.
-- Wiring the art into `player_avatar.tscn`, NPC scenes, or `session.gd` (ARM-274).
 - Deleting the Quaternius assets.
