@@ -245,6 +245,7 @@ func _ready() -> void:
 	_net.equipment_changed.connect(_on_equipment_changed)
 	_net.worn_changed.connect(_on_worn_changed)
 	_net.swing_observed.connect(_on_swing_observed)
+	_net.cast_phase_observed.connect(_on_cast_phase_observed)
 	_net.class_changed.connect(_on_class_changed)
 	_net.skills_changed.connect(_on_skills_changed)
 	_net.hp_changed.connect(_on_hp_changed)
@@ -1686,6 +1687,18 @@ func _on_swing_observed(id: int, _target: int, weapon: String) -> void:
 		npc.swing(weapon)
 		return
 	push_warning("session: swing for unknown actor %d; ignoring" % id)
+
+
+func _on_cast_phase_observed(id: int, ability: String, _target: int, phase: String) -> void:
+	var avatar: PlayerAvatarScript = _avatars.get(id)
+	if avatar != null:
+		avatar.cast_phase(phase, ability)
+		return
+	var npc: NpcDummyScript = _npcs.get(id)
+	if npc != null:
+		npc.cast_phase(phase, ability)
+		return
+	push_warning("session: cast_phase for unknown actor %d; ignoring" % id)
 
 
 func _on_class_changed(

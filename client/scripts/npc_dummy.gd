@@ -156,6 +156,18 @@ func swing(weapon: String) -> void:
 	character.swing(weapon, _tick_ms)
 
 
+func cast_phase(phase: String, ability: String) -> void:
+	var character := visual()
+	if character == null:
+		if not static_mesh:
+			push_error(
+				"NpcDummy '%s' (kind=%s): a cast arrived for an NPC with no CharacterVisual"
+				% [name, kind]
+			)
+		return
+	character.cast_phase(phase, ability)
+
+
 func update_to_tick(tick: int) -> void:
 	if _walker == null or not _walker.has_path():
 		_locomote(0.0)

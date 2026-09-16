@@ -9,13 +9,21 @@ const WALK := &"walk"
 const SWING := &"swing"
 const JUMP_START := &"jump_start"
 const FALL := &"fall"
+const CAST_WINDUP := &"cast_windup"
+const CAST_RELEASE := &"cast_release"
 
-enum Mode { ONE_SHOT, AIR_LAUNCH, AIR_FALL, MOVING, ALWAYS }
+const PHASE_BEGIN := "begin"
+const PHASE_RESOLVE := "resolve"
+const PHASE_CANCEL := "cancel"
+
+enum Mode { ONE_SHOT, AIR_LAUNCH, AIR_FALL, CHANNEL, MOVING, ALWAYS }
 
 const LAYERS := [
 	{"action": SWING, "mode": Mode.ONE_SHOT},
+	{"action": CAST_RELEASE, "mode": Mode.ONE_SHOT},
 	{"action": JUMP_START, "mode": Mode.AIR_LAUNCH},
 	{"action": FALL, "mode": Mode.AIR_FALL},
+	{"action": CAST_WINDUP, "mode": Mode.CHANNEL},
 	{"action": WALK, "mode": Mode.MOVING},
 	{"action": IDLE, "mode": Mode.ALWAYS},
 ]
@@ -43,6 +51,7 @@ var _reference_speed := 0.0
 var _grip := GearLook.GRIP_NONE
 var _ground_speed := 0.0
 var _airborne := false
+var _channel := ""
 var _one_shots := {}
 var _restarted := &""
 
@@ -69,7 +78,7 @@ func elevate(clearance: float) -> void:
 			_one_shots.erase(JUMP_START)
 	elif clearance > AIR_ENTER:
 		_airborne = true
-		_play_once(JUMP_START, 1.0)
+		_play_once(JUMP_START, _grip, 1.0)
 
 
 func airborne() -> bool:
@@ -77,7 +86,24 @@ func airborne() -> bool:
 
 
 func swing(attack_period_sec: float) -> void:
-	_play_once(SWING, _swing_speed(attack_period_sec))
+	_play_once(SWING, _grip, _swing_speed(attack_period_sec))
+
+
+func cast_phase(phase: String, ability: String) -> void:
+	match phase:
+		PHASE_BEGIN:
+			_channel = ability
+		PHASE_RESOLVE:
+			_end_channel(ability)
+			_play_once(CAST_RELEASE, ability, 1.0)
+		PHASE_CANCEL:
+			_end_channel(ability)
+		_:
+			push_error('clip_director: unknown cast phase "%s" for ability %s' % [phase, ability])
+
+
+func channelling() -> String:
+	return _channel
 
 
 func advance(dt: float) -> Choice:
@@ -92,6 +118,13 @@ func advance(dt: float) -> Choice:
 	return null
 
 
+# ADR 0013: an end matches its begin by ability, so an instant cast that resolves
+# mid-channel leaves the pending one running.
+func _end_channel(ability: String) -> void:
+	if _channel == ability:
+		_channel = ""
+
+
 func _swing_speed(period_sec: float) -> float:
 	if period_sec <= 0.0:
 		push_error("clip_director: swing needs a positive period, got %f" % period_sec)
@@ -99,8 +132,9 @@ func _swing_speed(period_sec: float) -> float:
 	return maxf(1.0, _contract.clip_length(_contract.clip_for(SWING, _grip)) / period_sec)
 
 
-func _play_once(action: StringName, speed: float) -> void:
-	_one_shots[action] = {"left": _contract.clip_length(_contract.clip_for(action, _grip)), "speed": speed}
+func _play_once(action: StringName, key: String, speed: float) -> void:
+	var length := _contract.clip_length(_contract.clip_for(action, key))
+	_one_shots[action] = {"left": length, "speed": speed, "key": key}
 	_restarted = action
 
 
@@ -112,6 +146,8 @@ func _active(layer: Dictionary) -> bool:
 			return _airborne and _one_shots.has(JUMP_START)
 		Mode.AIR_FALL:
 			return _airborne
+		Mode.CHANNEL:
+			return not _channel.is_empty()
 		Mode.MOVING:
 			return _ground_speed > MOVING_SPEED
 	return true
@@ -119,9 +155,10 @@ func _active(layer: Dictionary) -> bool:
 
 func _choose(layer: Dictionary) -> Choice:
 	var action: StringName = layer["action"]
+	var mode: Mode = layer["mode"]
 	var choice := Choice.new()
-	choice.clip = _contract.clip_for(action, _grip)
-	match layer["mode"]:
+	choice.clip = _contract.clip_for(action, _key_for(mode, action))
+	match mode:
 		Mode.ONE_SHOT, Mode.AIR_LAUNCH:
 			choice.speed_scale = _one_shots[action]["speed"]
 			choice.restart = _restarted == action
@@ -129,3 +166,12 @@ func _choose(layer: Dictionary) -> Choice:
 			choice.speed_scale = _ground_speed / _reference_speed
 	_restarted = &""
 	return choice
+
+
+func _key_for(mode: Mode, action: StringName) -> String:
+	match mode:
+		Mode.ONE_SHOT, Mode.AIR_LAUNCH:
+			return _one_shots[action]["key"]
+		Mode.CHANNEL:
+			return _channel
+	return _grip

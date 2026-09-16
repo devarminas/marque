@@ -41,6 +41,10 @@ func swing(weapon: String) -> void:
 	visual().swing(weapon, _tick_ms)
 
 
+func cast_phase(phase: String, ability: String) -> void:
+	visual().cast_phase(phase, ability)
+
+
 func visual() -> CharacterVisual:
 	return $Visual as CharacterVisual
 

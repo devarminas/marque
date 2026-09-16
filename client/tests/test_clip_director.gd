@@ -27,6 +27,10 @@ func run(assertions: Assertions) -> void:
 	_test_a_step_under_the_enter_height_never_leaves_the_ground(assertions, contract)
 	_test_the_air_layer_outranks_walking_and_hands_it_back(assertions, contract)
 	_test_an_actor_that_never_elevates_stays_grounded(assertions, contract)
+	_test_a_cast_winds_up_then_releases(assertions, contract)
+	_test_a_cancelled_cast_returns_to_locomotion(assertions, contract)
+	_test_an_ability_with_no_row_of_its_own_falls_back(assertions, contract)
+	_test_an_instant_cast_leaves_a_pending_channel_alone(assertions, contract)
 	_test_every_weapon_has_an_attack_period(assertions)
 	assertions.finish()
 
@@ -186,6 +190,89 @@ func _test_an_actor_that_never_elevates_stays_grounded(
 	assertions.check(
 		not imp.airborne() and imp.advance(1.0).clip == contract.clip_for("idle", ""),
 		"an NPC whose visual never calls elevate can only walk and idle",
+	)
+
+
+func _test_a_cast_winds_up_then_releases(assertions: Assertions, contract: ArtContract) -> void:
+	var director := ClipDirector.new(contract, WALK_SPEED)
+	var windup := contract.clip_for("cast_windup", "fireball")
+	var release := contract.clip_for("cast_release", "fireball")
+	director.cast_phase(ClipDirector.PHASE_BEGIN, "fireball")
+	assertions.check(director.advance(0.0).clip == windup, "begin starts the windup")
+	assertions.check(
+		director.advance(contract.clip_length(windup) * 3.0).clip == windup,
+		"which loops for as long as the server keeps the cast open",
+	)
+	director.cast_phase(ClipDirector.PHASE_RESOLVE, "fireball")
+	var first := director.advance(0.0)
+	assertions.check(
+		first.clip == release and first.restart,
+		"resolve plays the release from its first frame, got %s" % first.clip,
+	)
+	assertions.check(
+		director.advance(contract.clip_length(release) * 0.5).clip == release,
+		"the release runs its own length, not the cast's",
+	)
+	assertions.check(
+		director.advance(contract.clip_length(release)).clip == contract.clip_for("idle", ""),
+		"and hands back to idle once, never looping the release",
+	)
+
+
+func _test_a_cancelled_cast_returns_to_locomotion(
+	assertions: Assertions, contract: ArtContract
+) -> void:
+	var director := ClipDirector.new(contract, WALK_SPEED)
+	director.locomote(WALK_SPEED)
+	director.cast_phase(ClipDirector.PHASE_BEGIN, "fireball")
+	assertions.check(
+		director.advance(0.0).clip == contract.clip_for("cast_windup", "fireball"),
+		"a cast outranks walking",
+	)
+	director.cast_phase(ClipDirector.PHASE_CANCEL, "fireball")
+	assertions.check(
+		director.advance(0.0).clip == contract.clip_for("walk", ""),
+		"cancel drops straight back to the walk with no release",
+	)
+	assertions.check(director.channelling().is_empty(), "and nothing is channelling")
+
+
+func _test_an_ability_with_no_row_of_its_own_falls_back(
+	assertions: Assertions, contract: ArtContract
+) -> void:
+	var director := ClipDirector.new(contract, WALK_SPEED)
+	director.cast_phase(ClipDirector.PHASE_BEGIN, "heal")
+	var windup := director.advance(0.0).clip
+	assertions.check(
+		windup == contract.clip_for("cast_windup", ""),
+		'heal has no cast_windup row, so it resolves through key "", got %s' % windup,
+	)
+	director.cast_phase(ClipDirector.PHASE_RESOLVE, "heal")
+	var release := director.advance(0.0).clip
+	assertions.check(
+		release == contract.clip_for("cast_release", ""),
+		'and its release does the same, got %s' % release,
+	)
+	assertions.check(
+		not windup.is_empty() and not release.is_empty(),
+		"neither falls through to an empty clip name",
+	)
+
+
+func _test_an_instant_cast_leaves_a_pending_channel_alone(
+	assertions: Assertions, contract: ArtContract
+) -> void:
+	var director := ClipDirector.new(contract, WALK_SPEED)
+	director.cast_phase(ClipDirector.PHASE_BEGIN, "fireball")
+	director.cast_phase(ClipDirector.PHASE_RESOLVE, "heal")
+	assertions.check(
+		director.channelling() == "fireball",
+		"an instant resolve with no begin of its own leaves the timed cast pending (ADR 0013)",
+	)
+	assertions.check(
+		director.advance(contract.clip_length(contract.clip_for("cast_release", "heal"))).clip
+		== contract.clip_for("cast_windup", "fireball"),
+		"so the windup is still there when the instant's release ends",
 	)
 
 

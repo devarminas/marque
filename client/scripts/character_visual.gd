@@ -101,6 +101,13 @@ func swing(weapon: String, tick_ms: int) -> void:
 	_apply(_director.advance(0.0))
 
 
+func cast_phase(phase: String, ability: String) -> void:
+	if _director == null:
+		return
+	_director.cast_phase(phase, ability)
+	_apply(_director.advance(0.0))
+
+
 func current_clip() -> String:
 	return _clip
 
