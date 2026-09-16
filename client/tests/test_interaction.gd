@@ -1298,6 +1298,10 @@ func _test_smelter_opens_station_recipe_sheet() -> void:
 		"and closes the sheet so Use stays the 1:1 path",
 	)
 	_watch()
+	if tree != null:
+		_picker.node_clicked.emit(tree)
+	_check(_use_intents.is_empty(), "Use-mode click on a tree does not send use")
+	_check(_session.has_pending_use(), "and keeps the pending selection")
 	if smelter != null:
 		_picker.node_clicked.emit(smelter)
 	_check(

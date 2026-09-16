@@ -1607,6 +1607,11 @@ func _try_use_on_node(resource_node: ResourceNodeScript) -> bool:
 			% resource_node.name
 		)
 		return true
+	var source_kind := ""
+	if _panel != null:
+		source_kind = _panel.kind_in_slot(_use_from)
+	if CraftRecipes.station_kind_for(source_kind) != resource_node.kind:
+		return true
 	var from := _use_from
 	request_use(from, id)
 	return true
