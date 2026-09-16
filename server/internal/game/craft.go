@@ -93,6 +93,18 @@ func (w *World) refuseCraft(p *player, slot int, err error) {
 			Re:          mnet.MsgUse,
 			Disposition: mnet.ReplyError,
 		})
+	case errors.Is(err, ErrMissingMat):
+		kind := "materials"
+		var missing missingMatError
+		if errors.As(err, &missing) && missing.Kind != "" {
+			kind = missing.Kind
+		}
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonMissingMat,
+			Detail:      "missing " + kind,
+			Re:          mnet.MsgUse,
+			Disposition: mnet.ReplyError,
+		})
 	case errors.Is(err, ErrNoRecipe):
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonNoRecipe,

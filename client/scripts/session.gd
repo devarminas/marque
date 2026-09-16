@@ -53,6 +53,12 @@ const REFUSAL_TEXT := {
 	"gather": {
 		"gather requires an active class whose skill matches this node": "usable tool not equipped",
 	},
+	"use": {
+		"that cannot be crafted": "no recipe for that",
+		"too far from that station": "too far from that station",
+		"inventory is full": "inventory is full",
+		"that slot is empty": "that slot is empty",
+	},
 }
 
 signal joined(you: int)
@@ -1429,7 +1435,21 @@ func _on_server_error(re: String, message: String) -> void:
 
 
 static func player_refusal_text(re: String, message: String) -> String:
-	return REFUSAL_TEXT.get(re, {}).get(message, message)
+	var table: Variant = REFUSAL_TEXT.get(re, {})
+	if typeof(table) == TYPE_DICTIONARY and (table as Dictionary).has(message):
+		return String((table as Dictionary)[message])
+	if re == "use":
+		return _use_refusal_text(message)
+	return message
+
+
+static func _use_refusal_text(message: String) -> String:
+	const MISSING_PREFIX := "missing "
+	if message.begins_with(MISSING_PREFIX):
+		return "missing %s" % CraftRecipes.display_name(message.substr(MISSING_PREFIX.length()))
+	if message.begins_with("no such slot"):
+		return "that slot is not in the bag"
+	return message
 
 
 func _on_disconnected(code: int, reason: String) -> void:

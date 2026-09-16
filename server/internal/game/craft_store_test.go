@@ -137,8 +137,8 @@ func TestCraftSwordRefusesMissingSticks(t *testing.T) {
 		t.Fatalf("seeding copper_bar: %v", err)
 	}
 
-	if _, err := s.CraftInventoryRecipe(1, 0, []string{KindCopperBar, KindSticks}, KindSword); !errors.Is(err, ErrNoRecipe) {
-		t.Fatalf("craft returned %v, want ErrNoRecipe", err)
+	if _, err := s.CraftInventoryRecipe(1, 0, []string{KindCopperBar, KindSticks}, KindSword); !errors.Is(err, ErrMissingMat) {
+		t.Fatalf("craft returned %v, want ErrMissingMat", err)
 	}
 	got := s.Inventory(1)
 	if len(got) != 1 || got[0].Kind != KindCopperBar {
@@ -153,8 +153,8 @@ func TestCraftSwordRefusesMissingBar(t *testing.T) {
 		t.Fatalf("seeding sticks: %v", err)
 	}
 
-	if _, err := s.CraftInventoryRecipe(1, 0, []string{KindCopperBar, KindSticks}, KindSword); !errors.Is(err, ErrNoRecipe) {
-		t.Fatalf("craft returned %v, want ErrNoRecipe", err)
+	if _, err := s.CraftInventoryRecipe(1, 0, []string{KindCopperBar, KindSticks}, KindSword); !errors.Is(err, ErrMissingMat) {
+		t.Fatalf("craft returned %v, want ErrMissingMat", err)
 	}
 	got := s.Inventory(1)
 	if len(got) != 1 || got[0].Kind != KindSticks {

@@ -1,4 +1,4 @@
-﻿package game
+package game
 
 import (
 	"errors"
@@ -36,17 +36,30 @@ var WornSlots = []mnet.EquipSlot{
 var DefaultJoinKit []string
 
 var (
-	ErrNoSuchItem = errors.New("game: no such ground item")
-	ErrInventoryFull = errors.New("game: inventory is full")
-	ErrNoSuchSlot = errors.New("game: no such inventory slot")
-	ErrEmptySlot = errors.New("game: inventory slot is empty")
-	ErrNoSuchPlayer = errors.New("game: no such player")
-	ErrNotEquippable = errors.New("game: that kind cannot be worn")
+	ErrNoSuchItem     = errors.New("game: no such ground item")
+	ErrInventoryFull  = errors.New("game: inventory is full")
+	ErrNoSuchSlot     = errors.New("game: no such inventory slot")
+	ErrEmptySlot      = errors.New("game: inventory slot is empty")
+	ErrNoSuchPlayer   = errors.New("game: no such player")
+	ErrNotEquippable  = errors.New("game: that kind cannot be worn")
 	ErrNoSuchWornSlot = errors.New("game: no such worn slot")
-	ErrEmptyWornSlot = errors.New("game: worn slot is empty")
-	ErrNoRecipe = errors.New("game: no matching craft recipe")
-	ErrWrongKind = errors.New("game: inventory slot holds the wrong kind")
+	ErrEmptyWornSlot  = errors.New("game: worn slot is empty")
+	ErrNoRecipe       = errors.New("game: no matching craft recipe")
+	ErrMissingMat     = errors.New("game: missing craft material")
+	ErrWrongKind      = errors.New("game: inventory slot holds the wrong kind")
 )
+
+type missingMatError struct {
+	Kind string
+}
+
+func (e missingMatError) Error() string {
+	return fmt.Sprintf("game: missing %q", e.Kind)
+}
+
+func (e missingMatError) Unwrap() error {
+	return ErrMissingMat
+}
 
 type GroundItem struct {
 	ID   mnet.ItemID
@@ -407,7 +420,7 @@ func (s *memStore) CraftInventoryRecipe(player mnet.PlayerID, slot int, consumeK
 			break
 		}
 		if found < 0 {
-			return Crafted{}, fmt.Errorf("craft missing %q for player %d: %w", need, player, ErrNoRecipe)
+			return Crafted{}, fmt.Errorf("craft missing %q for player %d: %w", need, player, missingMatError{Kind: need})
 		}
 		taken[found] = true
 	}
