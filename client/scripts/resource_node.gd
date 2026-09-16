@@ -1,9 +1,10 @@
 extends StaticBody3D
 
 
+const CharacterVisual := preload("res://scripts/character_visual.gd")
 const NodeKinds := preload("res://scripts/node_kinds.gd")
 
-enum Look { TREE, STUMP, MISSING }
+enum Look { FULL, DEPLETED, MISSING }
 
 var node_id := 0
 
@@ -12,16 +13,12 @@ var kind := ""
 var state := ""
 
 @export var ground_y := 0.0
-@export var tree_visual: Node3D
-@export var stump_visual: MeshInstance3D
-@export var rock_visual: Node3D
-@export var rock_depleted_visual: Node3D
-@export var smelter_visual: Node3D
+@export var props: Node3D
 @export var missing_visual: MeshInstance3D
 @export var trunk_shape: CollisionShape3D
 @export var canopy_shape: CollisionShape3D
 
-var _look: Look = Look.TREE
+var _look: Look = Look.FULL
 
 
 func configure(id: int, node_kind: String, node_state: String) -> void:
@@ -65,12 +62,22 @@ func showing() -> Look:
 	return _look
 
 
+func prop_name() -> String:
+	return CharacterVisual.contract().prop_for(kind, state).get_file().get_basename()
+
+
+func shown_visual() -> Node3D:
+	if _look == Look.MISSING:
+		return missing_visual
+	return props.get_node_or_null(prop_name()) as Node3D
+
+
 static func look_for(kind_known: bool, node_state: String) -> Look:
 	if not kind_known:
 		return Look.MISSING
 	if node_state == "depleted":
-		return Look.STUMP
-	return Look.TREE
+		return Look.DEPLETED
+	return Look.FULL
 
 
 func _apply_state(node_state: String) -> void:
@@ -91,16 +98,8 @@ func _apply_state(node_state: String) -> void:
 
 func _show(next: Look) -> void:
 	var unassigned := PackedStringArray()
-	if tree_visual == null:
-		unassigned.append("tree_visual")
-	if stump_visual == null:
-		unassigned.append("stump_visual")
-	if rock_visual == null:
-		unassigned.append("rock_visual")
-	if rock_depleted_visual == null:
-		unassigned.append("rock_depleted_visual")
-	if smelter_visual == null:
-		unassigned.append("smelter_visual")
+	if props == null:
+		unassigned.append("props")
 	if missing_visual == null:
 		unassigned.append("missing_visual")
 	if trunk_shape == null:
@@ -111,18 +110,17 @@ func _show(next: Look) -> void:
 		push_error("ResourceNode: the scene did not assign %s" % ", ".join(unassigned))
 		return
 
-	var rock := is_rock()
-	var smelter := is_smelter()
-	var full := next == Look.TREE
-	var depleted := next == Look.STUMP
-	var missing := next == Look.MISSING
-
-	tree_visual.visible = full and not rock and not smelter
-	stump_visual.visible = depleted and not rock and not smelter
-	rock_visual.visible = full and rock
-	rock_depleted_visual.visible = depleted and rock
-	smelter_visual.visible = smelter and not missing
-	missing_visual.visible = missing
-
-	canopy_shape.disabled = not full or rock or smelter
 	_look = next
+	var drawn := shown_visual()
+	if drawn == null and next != Look.MISSING:
+		push_error(
+			'ResourceNode: node %d wants a "%s" prop that the scene does not author'
+			% [node_id, prop_name()]
+		)
+	missing_visual.visible = next == Look.MISSING
+	for child in props.get_children():
+		var visual := child as Node3D
+		if visual != null:
+			visual.visible = visual == drawn
+
+	canopy_shape.disabled = next != Look.FULL or kind != NodeKinds.KIND_TREE

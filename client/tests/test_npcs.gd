@@ -43,7 +43,7 @@ func _ready() -> void:
 	print("== npcs: welcome, select, cast faction targets, attack refuse ==")
 
 	_test_quest_giver_scene_wears_its_cloth_loadout()
-	_test_dummy_scene_stays_capsule()
+	_test_dummy_scene_draws_the_contract_prop()
 	_test_imp_scenes_use_the_prototype_imp()
 	_test_imp_authors_animation_player()
 	_test_mobile_npc_without_animation_player_reports_once()
@@ -137,18 +137,47 @@ func _test_quest_giver_scene_wears_its_cloth_loadout() -> void:
 	giver.queue_free()
 
 
-func _test_dummy_scene_stays_capsule() -> void:
+func _test_dummy_scene_draws_the_contract_prop() -> void:
+	var contract := CharacterVisual.contract()
 	var dummy := NpcDummyScene.instantiate() as NpcDummyScript
 	_check(dummy != null, "npc_dummy.tscn instantiates as NpcDummy")
 	if dummy == null:
 		return
 	_world.add_child(dummy)
-	_check(dummy.get_node("Body") is MeshInstance3D, "practice dummy Body stays a MeshInstance3D capsule")
+	var body := dummy.get_node_or_null("Body") as Node3D
+	var want := contract.prop_for("dummy", "")
+	_check(
+		body != null and body.scene_file_path == want,
+		"practice dummy Body instances the contract's %s, got %s"
+		% [want, "null" if body == null else body.scene_file_path],
+	)
 	_check(
 		dummy.get_node_or_null("Body/Rig/Skeleton3D") == null,
 		"practice dummy has no prototype rig",
 	)
 	_check(dummy.static_mesh, "practice dummy is flagged static_mesh (no AnimationPlayer required)")
+	for faction: String in [NpcDummyScript.FactionHostile, NpcDummyScript.FactionFriendly]:
+		dummy.configure(1, NpcDummyScript.KindDummy, faction, "")
+		var tinted := 0
+		for node in body.find_children("*", "MeshInstance3D", true, false):
+			var overlay := (node as MeshInstance3D).material_overlay as StandardMaterial3D
+			if overlay != null and overlay.albedo_color.is_equal_approx(dummy.faction_color()):
+				tinted += 1
+		_check(
+			tinted > 0 and tinted == body.find_children("*", "MeshInstance3D", true, false).size(),
+			"a %s dummy tints every prop mesh %s, got %d of %d"
+			% [
+				faction,
+				dummy.faction_color(),
+				tinted,
+				body.find_children("*", "MeshInstance3D", true, false).size(),
+			],
+		)
+	_check(
+		dummy.faction_color().a < 1.0,
+		"and the tint is an overlay the prop's own shading reads through, alpha %.2f"
+		% dummy.faction_color().a,
+	)
 	dummy.queue_free()
 
 
