@@ -10,8 +10,11 @@ signal equip_requested(slot: int)
 
 signal drop_requested(slot: int)
 
+signal slot_hovered(slot: int)
+
 @export var slot_grid: GridContainer
 @export var heading: Label
+@export var use_preview: Label
 @export var unknown_heading := "Inventory —"
 
 var _size := 0
@@ -85,6 +88,19 @@ func clear_use_chrome() -> void:
 	for index: int in _slots:
 		var slot: InventorySlotScript = _slots[index]
 		slot.set_use_chrome(InventorySlotScript.UseChrome.NONE)
+	clear_use_preview()
+
+
+func show_use_preview(text: String, dim: bool) -> void:
+	if use_preview == null:
+		return
+	use_preview.text = text
+	use_preview.visible = not text.is_empty()
+	use_preview.modulate.a = 0.55 if dim else 1.0
+
+
+func clear_use_preview() -> void:
+	show_use_preview("", false)
 
 
 static func _packed_has(values: PackedInt32Array, needle: int) -> bool:
@@ -116,6 +132,7 @@ func _rebuild(size: int) -> void:
 		slot.pressed.connect(_on_slot_pressed.bind(index))
 		slot.equip_requested.connect(_on_slot_equip_requested)
 		slot.drop_requested.connect(drop_requested.emit)
+		slot.hovered.connect(_on_slot_hovered)
 		slot_grid.add_child(slot)
 		_slots[index] = slot
 
@@ -136,6 +153,10 @@ func _on_slot_equip_requested(slot: int) -> void:
 		push_error("InventoryPanel: bag slot indices start at 0, got %d" % slot)
 		return
 	equip_requested.emit(slot)
+
+
+func _on_slot_hovered(slot: int) -> void:
+	slot_hovered.emit(slot)
 
 
 func _update_heading(occupied: int) -> void:

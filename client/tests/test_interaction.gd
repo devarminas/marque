@@ -199,6 +199,16 @@ func _test_the_panel_is_authored() -> void:
 		% [0 if _grid == null else _grid.columns],
 	)
 	_check(
+		_panel != null and _panel.use_preview != null,
+		"and the panel has a scene-authored UsePreview label",
+	)
+	_check(
+		_panel != null
+		and _panel.use_preview != null
+		and not _panel.use_preview.visible,
+		"which starts hidden",
+	)
+	_check(
 		_dock != null and _dock.mouse_filter == Control.MOUSE_FILTER_STOP,
 		"and the dock stops every click inside its rect, got filter %d"
 		% (-1 if _dock == null else _dock.mouse_filter),
@@ -1102,9 +1112,78 @@ func _test_use_mode_highlights_valid_targets() -> void:
 	if smelter != null:
 		_check(not smelter.is_use_highlighted(), "logs do not highlight the smelter")
 
+	_panel.slot_hovered.emit(acorn_slot)
+	_check(
+		_panel.use_preview != null and not _panel.use_preview.visible,
+		"hovering acorn in Use-mode does not show a recipe preview",
+	)
+	_panel.slot_hovered.emit(logs_slot)
+	_check(
+		_preview_text() == "Craft → Sticks",
+		'hovering selected logs previews "Craft → Sticks", got "%s"' % _preview_text(),
+	)
+	_check(
+		_panel.use_preview != null and is_equal_approx(_panel.use_preview.modulate.a, 1.0),
+		"and a complete recipe is not dimmed",
+	)
+
 	_session.clear_use_selection()
-	_panel.slot_activated.emit(logs_slot)
-	_check(_session.has_pending_use(), "logs are selected before the next inventory frame")
+	_panel.slot_activated.emit(bar_slot)
+	_panel.slot_hovered.emit(sticks_slot)
+	_check(
+		_preview_text() == "Craft → Sword",
+		'hovering sticks while the bar is selected previews "Craft → Sword", got "%s"'
+		% _preview_text(),
+	)
+
+	_session.clear_use_selection()
+	_panel.slot_activated.emit(ore_slot)
+	_session.hover_use_node(SMELTER_ID)
+	_check(
+		_preview_text() == "Smelt → Copper bar",
+		'Use-hovering the smelter with ore previews "Smelt → Copper bar", got "%s"'
+		% _preview_text(),
+	)
+	_session.hover_use_node(TREE_ID)
+	_check(
+		_preview_text() == "",
+		"hovering a tree does not preview a smelt, got \"%s\"" % _preview_text(),
+	)
+	_session.hover_use_node(0)
+
+	_session.clear_use_selection()
+	_check(
+		_preview_text() == "",
+		"leaving Use-mode clears the preview",
+	)
+	_panel.slot_hovered.emit(bar_slot)
+	_check(
+		_preview_text() == "",
+		"and hovering a bag slot outside Use-mode stays silent",
+	)
+
+	await _feed(
+		'{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"copper_bar"}]}}' % [WIRE_SIZE, bar_slot]
+	)
+	_panel.slot_activated.emit(bar_slot)
+	_panel.slot_hovered.emit(bar_slot)
+	_check(
+		_preview_text() == "Craft → Sword (missing Sticks)",
+		'incomplete sword path marks missing Sticks, got "%s"' % _preview_text(),
+	)
+	_check(
+		_panel.use_preview != null and _panel.use_preview.modulate.a < 0.9,
+		"and dims the preview, got alpha %s"
+		% (0.0 if _panel.use_preview == null else _panel.use_preview.modulate.a),
+	)
+	_check(
+		_panel.kind_in_slot(bar_slot) == "copper_bar",
+		"without predicting a craft into the bag",
+	)
+
+	_session.clear_use_selection()
+	_panel.slot_activated.emit(bar_slot)
+	_check(_session.has_pending_use(), "bar is selected before the next inventory frame")
 	await _feed('{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"copper_ore"}]}}' % [WIRE_SIZE, ore_slot])
 	_check(not _session.has_pending_use(), "an inventory frame drops pending Use")
 	_check(
@@ -1120,6 +1199,12 @@ func _slot_chrome(index: int) -> int:
 	if slot == null:
 		return -1
 	return slot.use_chrome
+
+
+func _preview_text() -> String:
+	if _panel == null or _panel.use_preview == null or not _panel.use_preview.visible:
+		return ""
+	return _panel.use_preview.text
 
 
 func _test_clicking_an_empty_slot_uses_nothing() -> void:

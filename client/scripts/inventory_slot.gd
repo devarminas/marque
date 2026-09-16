@@ -7,6 +7,8 @@ signal equip_requested(slot: int)
 
 signal drop_requested(slot: int)
 
+signal hovered(slot: int)
+
 var slot_index := -1
 
 var kind := ""
@@ -120,11 +122,14 @@ func _notification(what: int) -> void:
 func _on_mouse_entered() -> void:
 	_pointer_inside = true
 	_sync_hover()
+	if is_occupied():
+		hovered.emit(slot_index)
 
 
 func _on_mouse_exited() -> void:
 	_pointer_inside = false
 	_sync_hover()
+	hovered.emit(-1)
 
 
 func _paint_use_chrome() -> void:

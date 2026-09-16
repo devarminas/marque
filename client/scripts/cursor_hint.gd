@@ -95,14 +95,17 @@ func refresh() -> void:
 	if not _mouse_present:
 		_watch(null)
 		_apply(Hint.POINTER)
+		_report_use_hover({})
 		return
 	if _over_chrome:
 		_watch(null)
 		_apply(Hint.USE if _armed else Hint.POINTER)
+		_report_use_hover({})
 		return
 	var picked := _picker.pick(_mouse)
 	_watch(_dependency_of(picked))
 	_apply(_world_hint(picked))
+	_report_use_hover(picked)
 
 
 func current_hint() -> Hint:
@@ -146,6 +149,16 @@ func _world_hint(picked: Dictionary) -> Hint:
 
 func _use_armed() -> bool:
 	return use_mode != null and use_mode.has_method("has_pending_use") and use_mode.has_pending_use()
+
+
+func _report_use_hover(picked: Dictionary) -> void:
+	if use_mode == null or not use_mode.has_method("hover_use_node"):
+		return
+	if not _armed or picked.is_empty() or picked.get("target") != GroundPickerScript.Target.NODE:
+		use_mode.hover_use_node(0)
+		return
+	var resource_node := picked["node"] as ResourceNodeScript
+	use_mode.hover_use_node(0 if resource_node == null else resource_node.node_id)
 
 
 func _stale() -> bool:

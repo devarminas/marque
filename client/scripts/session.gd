@@ -176,6 +176,8 @@ var _items := {}
 var _nodes := {}
 var _npcs := {}
 var _use_from := -1
+var _hover_slot := -1
+var _hover_node := 0
 var _bag_size := 0
 var _bag_indices := PackedInt32Array()
 var _bag_kinds := PackedStringArray()
@@ -272,6 +274,7 @@ func _ready() -> void:
 		_panel.slot_activated.connect(_on_slot_activated)
 		_panel.equip_requested.connect(_on_equip_requested)
 		_panel.drop_requested.connect(request_drop)
+		_panel.slot_hovered.connect(hover_use_slot)
 
 	_dialog = dialog_panel as DialogPanelScript
 	if _dialog == null:
@@ -744,6 +747,48 @@ func _highlight_stations(station_kind: String) -> void:
 		if body == null:
 			continue
 		body.set_use_highlight(not station_kind.is_empty() and body.kind == station_kind)
+	_refresh_use_preview()
+
+
+func hover_use_slot(slot: int) -> void:
+	_hover_slot = slot
+	_refresh_use_preview()
+
+
+func hover_use_node(node_id: int) -> void:
+	_hover_node = node_id
+	_refresh_use_preview()
+
+
+func _refresh_use_preview() -> void:
+	if _panel == null:
+		return
+	if not has_pending_use():
+		_panel.clear_use_preview()
+		return
+	var source_kind := _panel.kind_in_slot(_use_from)
+	if _hover_node > 0:
+		var body := node_for(_hover_node)
+		if body != null:
+			var station: Dictionary = CraftRecipes.station_preview(body.kind, source_kind)
+			if not station.is_empty():
+				_panel.show_use_preview(String(station["text"]), not bool(station["complete"]))
+				return
+	var recipe := CraftRecipes.bag_recipe_for(source_kind)
+	var on_source := _hover_slot == _use_from
+	var on_partner := false
+	if not on_source and _hover_slot >= 0:
+		var valid := CraftRecipes.partner_slots(_use_from, source_kind, _bag_indices, _bag_kinds)
+		for entry in valid.size():
+			if int(valid[entry]) == _hover_slot:
+				on_partner = true
+				break
+	if (on_source or on_partner) and not recipe.is_empty():
+		var bag: Dictionary = CraftRecipes.bag_preview(source_kind, _bag_kinds)
+		if not bag.is_empty():
+			_panel.show_use_preview(String(bag["text"]), not bool(bag["complete"]))
+			return
+	_panel.clear_use_preview()
 
 
 func selected_player_id() -> int:
