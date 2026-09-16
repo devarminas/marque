@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/resource_node.gd" id="1_resource_node"]
 [ext_resource type="PackedScene" path="res://assets/proto/props/tree.glb" id="2_tree"]
@@ -22,7 +22,16 @@ radius = 0.6
 [sub_resource type="SphereShape3D" id="SphereShape3D_canopy"]
 radius = 1.25
 
-[node name="ResourceNode" type="StaticBody3D" node_paths=PackedStringArray("props", "missing_visual", "trunk_shape", "canopy_shape")]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_use_highlight"]
+shading_mode = 0
+albedo_color = Color(1, 0.82, 0.22, 0.7)
+transparency = 1
+
+[sub_resource type="TorusMesh" id="TorusMesh_use_highlight"]
+inner_radius = 0.85
+outer_radius = 1.15
+
+[node name="ResourceNode" type="StaticBody3D" node_paths=PackedStringArray("props", "missing_visual", "trunk_shape", "canopy_shape", "use_highlight")]
 collision_layer = 8
 collision_mask = 0
 script = ExtResource("1_resource_node")
@@ -31,6 +40,7 @@ props = NodePath("Props")
 missing_visual = NodePath("MissingVisual")
 trunk_shape = NodePath("TrunkShape")
 canopy_shape = NodePath("CanopyShape")
+use_highlight = NodePath("UseHighlight")
 
 [node name="Props" type="Node3D" parent="."]
 
@@ -54,6 +64,13 @@ visible = false
 cast_shadow = 1
 material_override = SubResource("StandardMaterial3D_missing")
 mesh = SubResource("CapsuleMesh_missing")
+
+[node name="UseHighlight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0)
+visible = false
+cast_shadow = 0
+material_override = SubResource("StandardMaterial3D_use_highlight")
+mesh = SubResource("TorusMesh_use_highlight")
 
 [node name="TrunkShape" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)

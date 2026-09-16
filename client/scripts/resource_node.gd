@@ -17,8 +17,10 @@ var state := ""
 @export var missing_visual: MeshInstance3D
 @export var trunk_shape: CollisionShape3D
 @export var canopy_shape: CollisionShape3D
+@export var use_highlight: MeshInstance3D
 
 var _look: Look = Look.FULL
+var _use_highlighted := false
 
 
 func configure(id: int, node_kind: String, node_state: String) -> void:
@@ -56,6 +58,16 @@ func is_smelter() -> bool:
 
 func is_gatherable() -> bool:
 	return NodeKinds.is_gatherable(kind)
+
+
+func set_use_highlight(on: bool) -> void:
+	_use_highlighted = on
+	if use_highlight != null:
+		use_highlight.visible = on
+
+
+func is_use_highlighted() -> bool:
+	return _use_highlighted
 
 
 func showing() -> Look:

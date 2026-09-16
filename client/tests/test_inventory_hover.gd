@@ -70,6 +70,16 @@ func _test_the_popup_is_authored_before_anything_runs() -> void:
 		"and the scene assigned hover image, name, and class",
 	)
 	_check(unopened.tooltip_text.is_empty(), "and tooltip_text starts empty")
+	var highlight := unopened.get_node_or_null("UseHighlight") as ColorRect
+	_check(highlight != null, "inventory_slot.tscn authors UseHighlight")
+	_check(
+		highlight != null and not highlight.visible,
+		"and the scene file is what starts the Use chrome hidden",
+	)
+	_check(
+		unopened.use_highlight == highlight,
+		"and the slot export points at that authored highlight",
+	)
 	unopened.queue_free()
 
 

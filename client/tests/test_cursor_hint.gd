@@ -130,6 +130,7 @@ func _ready() -> void:
 	await _test_a_despawn_under_a_still_mouse_drops_the_sword()
 	await _test_focus_and_mouse_exit_drop_the_sword()
 	await _test_the_recheck_timer_covers_what_the_rules_miss()
+	await _test_use_mode_changes_the_cursor()
 
 	_finish()
 
@@ -154,6 +155,7 @@ func _test_the_owner_is_scene_authored() -> void:
 	_check(_cursor.camera != null, "and its camera export")
 	_check(_cursor.local_player != null, "and its local_player export")
 	_check(_cursor.chrome_layer == _ui, "and its chrome_layer export to the UI layer")
+	_check(_cursor.use_mode == _session, "and its use_mode export to Session")
 	_check(_recheck != null, "the recheck timer is scene-authored")
 	if _recheck == null:
 		return
@@ -199,6 +201,7 @@ func _test_the_hotspots_are_the_decided_pixels() -> void:
 	_check_hotspot(CursorHintScript.Hint.ATTACK, Vector2(4, 4), "the blade tip")
 	_check_hotspot(CursorHintScript.Hint.CHOP, Vector2(13, 3), "the top of the axe blade")
 	_check_hotspot(CursorHintScript.Hint.TALK, Vector2(3, 4), "the pointing fingertip")
+	_check_hotspot(CursorHintScript.Hint.USE, Vector2(3, 4), "the Use-mode gauntlet")
 
 
 func _check_hotspot(hint: int, expected: Vector2, what: String) -> void:
@@ -461,6 +464,66 @@ func _test_the_recheck_timer_covers_what_the_rules_miss() -> void:
 	_check(not _recheck.is_stopped(), "the recheck timer is armed again")
 	_recheck.timeout.emit()
 	_check_hint(CursorHintScript.Hint.ATTACK, "and its timeout re-derives the sword")
+
+
+func _test_use_mode_changes_the_cursor() -> void:
+	_recheck.stop()
+	await _feed(
+		'{"inventory":{"size":28,"slots":[{"slot":0,"kind":"logs"}]}}'
+	)
+	await _feed(
+		'{"node_spawn":{"id":%d,"kind":"tree","x":%f,"z":%f,"state":"full"}}'
+		% [NODE_ID, NODE_GROUND.x, NODE_GROUND.y]
+	)
+	await get_tree().physics_frame
+	var dock := _root.get_node("UI/RightDock") as Control
+	_check(dock != null, "the bag dock exists to arm Use-mode")
+	if dock != null:
+		dock.visible = true
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var panel := _root.get_node_or_null("UI/RightDock/Margin/Rows/InventoryPanel")
+	_check(panel != null, "the inventory panel exists to arm Use-mode")
+	if panel != null:
+		panel.slot_activated.emit(0)
+		await get_tree().process_frame
+	_check(_session.has_pending_use(), "activating logs arms Use-mode")
+	_check(_session.has_pending_use(), "clicking logs arms Use-mode")
+
+	await _aim_at(EMPTY_GROUND)
+	_check_hint(CursorHintScript.Hint.USE, "Use-mode on bare ground draws the gauntlet")
+
+	await _aim_at(NODE_GROUND)
+	_check_subject(_session.node_for(NODE_ID), "the tree")
+	_check_hint(CursorHintScript.Hint.USE, "and a gatherable node is Use, not chop")
+
+	await _aim_at(HOSTILE_GROUND)
+	_check_hint(CursorHintScript.Hint.ATTACK, "a hostile still draws the sword")
+
+	var toggle := _root.get_node("UI/InventoryToggle") as Control
+	_check(toggle != null, "the inventory toggle exists")
+	if toggle != null:
+		toggle.visible = true
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var at := _point_inside(toggle.get_global_rect())
+		var motion := InputEventMouseMotion.new()
+		motion.position = at
+		motion.global_position = at
+		_camera.get_viewport().push_input(motion)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_check_hint(CursorHintScript.Hint.USE, "Use-mode over chrome still draws the gauntlet")
+		_check_chrome(true, "because the toggle is chrome")
+		toggle.visible = false
+
+	_session.clear_use_selection()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await _aim_at(EMPTY_GROUND)
+	_check_hint(CursorHintScript.Hint.POINTER, "leaving Use-mode restores the pointer")
+	await _aim_at(NODE_GROUND)
+	_check_hint(CursorHintScript.Hint.CHOP, "and chop returns on the tree")
 
 
 func _aim_at(ground: Vector2) -> void:

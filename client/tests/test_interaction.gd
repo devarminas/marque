@@ -162,6 +162,7 @@ func _ready() -> void:
 
 	await _test_clicking_an_occupied_slot_uses_it()
 	await _test_cancel_clears_use_selection()
+	await _test_use_mode_highlights_valid_targets()
 	await _test_clicking_an_empty_slot_uses_nothing()
 	await _test_shift_clicking_an_occupied_slot_drops_it()
 	await _test_clicking_the_panel_chrome_reaches_nothing()
@@ -1007,6 +1008,118 @@ func _test_cancel_clears_use_selection() -> void:
 	_check(_session.clear_use_selection(), "and clear_use_selection drops it")
 	_check(not _session.has_pending_use(), "leaving no pending selection")
 	_check(_use_intents.is_empty(), "without sending use")
+
+
+func _test_use_mode_highlights_valid_targets() -> void:
+	const SMELTER_ID := 21
+	const TREE_ID := 22
+	_dock.visible = true
+	var bar_slot := WIRE_SIZE - 5
+	var sticks_slot := WIRE_SIZE - 4
+	var acorn_slot := WIRE_SIZE - 3
+	var logs_slot := WIRE_SIZE - 2
+	var ore_slot := WIRE_SIZE - 1
+	await _feed(
+		(
+			'{"inventory":{"size":%d,"slots":['
+			+ '{"slot":%d,"kind":"copper_bar"},{"slot":%d,"kind":"sticks"},'
+			+ '{"slot":%d,"kind":"acorn"},{"slot":%d,"kind":"logs"},'
+			+ '{"slot":%d,"kind":"copper_ore"}]}}'
+		)
+		% [WIRE_SIZE, bar_slot, sticks_slot, acorn_slot, logs_slot, ore_slot]
+	)
+	await _feed(
+		'{"node_spawn":{"id":%d,"kind":"smelter","x":1.0,"z":1.0,"state":"full"}}' % SMELTER_ID
+	)
+	await _feed('{"node_spawn":{"id":%d,"kind":"tree","x":2.0,"z":2.0,"state":"full"}}' % TREE_ID)
+	await get_tree().physics_frame
+	var smelter := _session.node_for(SMELTER_ID)
+	var tree := _session.node_for(TREE_ID)
+	_check(smelter != null, "the smelter exists for Use-mode highlight")
+	_check(tree != null, "and a tree exists as the invalid station")
+	if smelter != null:
+		_check(not smelter.is_use_highlighted(), "outside Use-mode the smelter is not highlighted")
+	_check(
+		_slot_chrome(bar_slot) == InventorySlotScript.UseChrome.NONE,
+		"and bag slots carry no Use chrome before a selection",
+	)
+
+	_watch()
+	_panel.slot_activated.emit(bar_slot)
+	_check(_session.has_pending_use(), "selecting copper_bar enters Use-mode")
+	_check(
+		_slot_chrome(bar_slot) == InventorySlotScript.UseChrome.SOURCE,
+		"and the selected bar is the source",
+	)
+	_check(
+		_slot_chrome(sticks_slot) == InventorySlotScript.UseChrome.VALID,
+		"sticks are a valid bag partner",
+	)
+	_check(
+		_slot_chrome(acorn_slot) == InventorySlotScript.UseChrome.NONE,
+		"acorn is not a valid partner",
+	)
+	_check(
+		_slot_chrome(logs_slot) == InventorySlotScript.UseChrome.NONE,
+		"logs are not a partner of copper_bar",
+	)
+	_check(
+		_slot_chrome(ore_slot) == InventorySlotScript.UseChrome.NONE,
+		"ore is not a bag partner of copper_bar",
+	)
+	if smelter != null:
+		_check(not smelter.is_use_highlighted(), "a bar does not highlight the smelter")
+	if tree != null:
+		_check(not tree.is_use_highlighted(), "and does not highlight a tree")
+
+	_session.clear_use_selection()
+	_panel.slot_activated.emit(ore_slot)
+	_check(_session.has_pending_use(), "selecting ore enters Use-mode")
+	_check(
+		_slot_chrome(ore_slot) == InventorySlotScript.UseChrome.SOURCE,
+		"ore is the source",
+	)
+	_check(
+		_slot_chrome(bar_slot) == InventorySlotScript.UseChrome.NONE
+		and _slot_chrome(sticks_slot) == InventorySlotScript.UseChrome.NONE,
+		"bar and sticks are not valid bag partners of ore",
+	)
+	if smelter != null:
+		_check(smelter.is_use_highlighted(), "ore highlights the smelter")
+	if tree != null:
+		_check(not tree.is_use_highlighted(), "and does not present a tree as valid")
+
+	_session.clear_use_selection()
+	_panel.slot_activated.emit(logs_slot)
+	_check(
+		_slot_chrome(logs_slot) == InventorySlotScript.UseChrome.SOURCE,
+		"logs are the source of a complete self-use",
+	)
+	_check(
+		_slot_chrome(acorn_slot) == InventorySlotScript.UseChrome.NONE,
+		"and acorn is still not a partner",
+	)
+	if smelter != null:
+		_check(not smelter.is_use_highlighted(), "logs do not highlight the smelter")
+
+	_session.clear_use_selection()
+	_panel.slot_activated.emit(logs_slot)
+	_check(_session.has_pending_use(), "logs are selected before the next inventory frame")
+	await _feed('{"inventory":{"size":%d,"slots":[{"slot":%d,"kind":"copper_ore"}]}}' % [WIRE_SIZE, ore_slot])
+	_check(not _session.has_pending_use(), "an inventory frame drops pending Use")
+	_check(
+		_slot_chrome(ore_slot) == InventorySlotScript.UseChrome.NONE,
+		"and the replacement slots start without chrome",
+	)
+	if smelter != null:
+		_check(not smelter.is_use_highlighted(), "and station highlight does not linger")
+
+
+func _slot_chrome(index: int) -> int:
+	var slot := _panel.slot_at(index)
+	if slot == null:
+		return -1
+	return slot.use_chrome
 
 
 func _test_clicking_an_empty_slot_uses_nothing() -> void:

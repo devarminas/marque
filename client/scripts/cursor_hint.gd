@@ -9,6 +9,7 @@ enum Hint {
 	ATTACK,
 	CHOP,
 	TALK,
+	USE,
 }
 
 const SHAPES := {
@@ -28,12 +29,17 @@ const SHAPES := {
 		"image": preload("res://assets/kenney_cursors/gauntlet_point.png"),
 		"hotspot": Vector2(3, 4),
 	},
+	Hint.USE: {
+		"image": preload("res://assets/kenney_cursors/gauntlet_point.png"),
+		"hotspot": Vector2(3, 4),
+	},
 }
 
 @export var picker: Node
 @export var camera: Camera3D
 @export var local_player: Node3D
 @export var chrome_layer: CanvasLayer
+@export var use_mode: Node
 
 var _picker: GroundPickerScript = null
 var _hint := Hint.POINTER
@@ -44,6 +50,7 @@ var _over_chrome := false
 var _watched: Node3D = null
 var _watched_pose := Transform3D()
 var _camera_pose := Transform3D()
+var _armed := false
 
 
 func _ready() -> void:
@@ -83,14 +90,19 @@ func refresh() -> void:
 	if _picker == null:
 		return
 	_camera_pose = camera.global_transform
+	_armed = _use_armed()
 	_over_chrome = _mouse_present and _chrome_at(_mouse)
-	if not _mouse_present or _over_chrome:
+	if not _mouse_present:
 		_watch(null)
 		_apply(Hint.POINTER)
 		return
+	if _over_chrome:
+		_watch(null)
+		_apply(Hint.USE if _armed else Hint.POINTER)
+		return
 	var picked := _picker.pick(_mouse)
 	_watch(_dependency_of(picked))
-	_apply(hint_for(picked, local_player))
+	_apply(_world_hint(picked))
 
 
 func current_hint() -> Hint:
@@ -123,7 +135,22 @@ static func hint_for(picked: Dictionary, own_avatar: Node3D) -> Hint:
 			return Hint.POINTER
 
 
+func _world_hint(picked: Dictionary) -> Hint:
+	var hint := hint_for(picked, local_player)
+	if not _armed:
+		return hint
+	if hint == Hint.ATTACK or hint == Hint.TALK:
+		return hint
+	return Hint.USE
+
+
+func _use_armed() -> bool:
+	return use_mode != null and use_mode.has_method("has_pending_use") and use_mode.has_pending_use()
+
+
 func _stale() -> bool:
+	if _use_armed() != _armed:
+		return true
 	if not _mouse_present:
 		return false
 	if _chrome_at(_mouse) != _over_chrome:
