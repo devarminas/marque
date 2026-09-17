@@ -1,8 +1,11 @@
 extends Control
 
+const CastBarScript := preload("res://scripts/cast_bar.gd")
+
 @export var name_label: Label
 @export var hp_bar: ProgressBar
 @export var hp_label: Label
+@export var cast_bar: CastBarScript
 
 var text: String:
 	get:
@@ -11,6 +14,16 @@ var text: String:
 var name_text: String:
 	get:
 		return "" if name_label == null else name_label.text
+
+var cast_text: String:
+	get:
+		if cast_bar == null or cast_bar.label == null:
+			return ""
+		return cast_bar.label.text
+
+var cast_visible: bool:
+	get:
+		return cast_bar != null and cast_bar.visible
 
 
 func apply(display_name: String, hp: int, max_hp: int) -> void:
@@ -28,6 +41,17 @@ func apply(display_name: String, hp: int, max_hp: int) -> void:
 	visible = true
 
 
+func apply_cast(ability: String, progress: int, total: int) -> void:
+	if cast_bar == null:
+		return
+	cast_bar.apply(ability, progress, total)
+
+
+func clear_cast() -> void:
+	if cast_bar != null:
+		cast_bar.clear()
+
+
 func clear() -> void:
 	if name_label != null:
 		name_label.text = ""
@@ -36,4 +60,5 @@ func clear() -> void:
 		hp_bar.value = 0
 	if hp_label != null:
 		hp_label.text = "—"
+	clear_cast()
 	visible = false
