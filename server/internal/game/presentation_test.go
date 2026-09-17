@@ -292,6 +292,7 @@ func TestPlayerFireballEndsWithExactlyOneCancel(t *testing.T) {
 			name:  "mana short",
 			cause: CauseInsufficientMana,
 			interrupt: func(t *testing.T, pw *classProbe, alice, bob *player) {
+				alice.castProgress = alice.castTotal - 1
 				alice.mana = 0
 			},
 		},

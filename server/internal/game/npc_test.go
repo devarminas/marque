@@ -99,8 +99,8 @@ func TestCastFireballDamagesEnemyDummyOnly(t *testing.T) {
 
 	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: hostile.id}, 1)
 	pw.w.stepNForTest(alice.castTotal)
-	if hostile.hp != DummyMaxHP-40 {
-		t.Fatalf("hostile hp=%d, want %d", hostile.hp, DummyMaxHP-40)
+	if hostile.hp != DummyMaxHP-22 {
+		t.Fatalf("hostile hp=%d, want %d", hostile.hp, DummyMaxHP-22)
 	}
 	if friendly.hp != friendlyHP {
 		t.Fatalf("friendly hp changed to %d", friendly.hp)
@@ -227,13 +227,13 @@ const sharedAbilitiesJSONWithHealRange = `{
     {
       "id": "fireball",
       "name": "Fireball",
-      "mana_cost": 35,
-      "cooldown_ticks": 30,
-      "cast_ticks": 30,
+      "mana_cost": 25,
+      "cooldown_ticks": 75,
+      "cast_ticks": 38,
       "range": 8,
       "target": "hostile",
       "locomotion": "interrupt_on_move",
-      "effect": {"kind": "damage", "amount": 40},
+      "effect": {"kind": "damage", "amount": 22},
       "ui": {"hotbar_slot": 2, "color": "red"}
     }
   ]
