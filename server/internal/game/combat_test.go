@@ -187,6 +187,43 @@ func TestPracticeDummySurvivesLethalVolley(t *testing.T) {
 	}
 }
 
+func TestPracticeDummyFloorHitLogsTheAppliedDelta(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	obs := pw.observe()
+	hostile := pw.seedHostile()
+	hostile.hp = DummyMinHP
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	obs.flush()
+
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+	pw.stepN(pw.playerPeriod(alice))
+
+	hits := pw.events(EvAttackHit)
+	if len(hits) != 1 {
+		t.Fatalf("logged %d attack_hit, want 1", len(hits))
+	}
+	damage, ok := hits[0]["damage"].(float64)
+	if !ok {
+		t.Fatalf("damage=%v", hits[0]["damage"])
+	}
+	applied, ok := hits[0]["applied"].(float64)
+	if !ok {
+		t.Fatalf("attack_hit applied=%v, want the HP the target moved", hits[0]["applied"])
+	}
+	if want := float64(hostile.hp - DummyMinHP); applied != want {
+		t.Fatalf("attack_hit applied=%v, want %v (the floored dummy did not move)", applied, want)
+	}
+	if damage <= applied {
+		t.Fatalf("attack_hit damage=%v, applied=%v: the roll must stay readable beside the clamped delta", damage, applied)
+	}
+	swings := decodeFrames[mnet.Swing](t, obs.flush(), "swing")
+	if len(swings) != 1 || swings[0].Amount != int(applied) {
+		t.Fatalf("swing frames=%+v, want one with amount=%d", swings, int(applied))
+	}
+}
+
 func TestDeadRefusesOrdinaryIntents(t *testing.T) {
 	pw := newProbeWorld(t)
 	alice := pw.join()
