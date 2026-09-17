@@ -1,0 +1,19 @@
+{
+  "archetypes": [
+    {
+      "id": "imp",
+      "max_hp": 50,
+      "weapon_id": "imp_claw",
+      "threat": 8,
+      "leash": 16,
+      "wander": 3,
+      "skills": ["fireball"],
+      "idle_min_ticks": 50,
+      "idle_max_ticks": 150,
+      "str": 10,
+      "dex": 10,
+      "con": 5,
+      "int": 10
+    }
+  ]
+}

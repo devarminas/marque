@@ -15,7 +15,7 @@ func TestNPCPathStaysOnMeshAcrossHole(t *testing.T) {
 	imp := &npc{
 		id:   9001,
 		kind: KindImp,
-		hp:   ImpMaxHP,
+		hp:   pw.impArch().MaxHP,
 		home: Point{X: -22, Z: 5},
 		pos:  Point{X: -22, Z: 5},
 	}
@@ -46,7 +46,7 @@ func TestImpChaseDoesNotTunnelHole(t *testing.T) {
 	imp := &npc{
 		id:           9002,
 		kind:         KindImp,
-		hp:           ImpMaxHP,
+		hp:           pw.impArch().MaxHP,
 		home:         Point{X: -22, Z: 5},
 		pos:          Point{X: -22, Z: 5},
 		phase:        phaseChase,
@@ -128,7 +128,7 @@ func TestImpCannotReachThroughOffMeshGap(t *testing.T) {
 	imp := &npc{
 		id:           9003,
 		kind:         KindImp,
-		hp:           ImpMaxHP,
+		hp:           pw.impArch().MaxHP,
 		home:         Point{X: 6, Z: 6},
 		pos:          Point{X: 6, Z: 6},
 		phase:        phaseChase,

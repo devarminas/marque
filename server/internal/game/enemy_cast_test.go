@@ -29,8 +29,8 @@ func TestImpThinkCastSkillFireballDamagesPlayer(t *testing.T) {
 	if imp.phase != phaseCombat || imp.combatBeat != combatCast {
 		t.Fatalf("phase=%d beat=%d after Think, want Combat/cast", imp.phase, imp.combatBeat)
 	}
-	if !imp.casting() || imp.castAbility != ImpSkillID {
-		t.Fatalf("casting=%v ability=%q, want %s", imp.casting(), imp.castAbility, ImpSkillID)
+	if !imp.casting() || imp.castAbility != pw.impArch().SkillID() {
+		t.Fatalf("casting=%v ability=%q, want %s", imp.casting(), imp.castAbility, pw.impArch().SkillID())
 	}
 	if alice.hp != before {
 		t.Fatalf("damage before cast finished: hp=%d", alice.hp)
@@ -68,13 +68,13 @@ func TestImpLeashCancelsPendingCast(t *testing.T) {
 	despawnOtherImps(pw.w, imp)
 
 	imp.home = Point{X: 0, Z: 0}
-	imp.pos = Point{X: ImpLeashRange + 1, Z: 0}
-	alice.pos = Point{X: ImpLeashRange + 1, Z: 1}
+	imp.pos = Point{X: pw.impArch().Leash + 1, Z: 0}
+	alice.pos = Point{X: pw.impArch().Leash + 1, Z: 1}
 	imp.phase = phaseCombat
 	imp.combatBeat = combatCast
 	imp.attackTarget = alice.id
 	imp.remaining = nil
-	if rej := pw.w.castAbility(imp, ImpSkillID, alice.id); rej != nil {
+	if rej := pw.w.castAbility(imp, pw.impArch().SkillID(), alice.id); rej != nil {
 		t.Fatalf("castAbility: %+v", rej)
 	}
 	if !imp.casting() {
@@ -111,7 +111,7 @@ func TestImpPathMoveInterruptsCast(t *testing.T) {
 	imp.phase = phaseCombat
 	imp.combatBeat = combatCast
 	imp.attackTarget = alice.id
-	if rej := pw.w.castAbility(imp, ImpSkillID, alice.id); rej != nil {
+	if rej := pw.w.castAbility(imp, pw.impArch().SkillID(), alice.id); rej != nil {
 		t.Fatalf("castAbility: %+v", rej)
 	}
 	if !imp.casting() {

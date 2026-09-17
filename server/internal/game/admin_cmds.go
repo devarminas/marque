@@ -101,7 +101,7 @@ func adminSpawn(w *World, p *player, args []string) (string, *mnet.RejectError) 
 		return "", adminUsage("/spawn <npc_kind> [x z]")
 	}
 	kind := strings.ToLower(strings.TrimSpace(args[0]))
-	faction, maxHP, ok := adminNPCArchetype(kind)
+	faction, maxHP, ok := w.adminNPCArchetype(kind)
 	if !ok {
 		return "", adminUsage(fmt.Sprintf("unknown npc_kind %q", kind))
 	}
@@ -173,12 +173,16 @@ func (w *World) adminPlayer(raw string) (*player, *mnet.RejectError) {
 	return target, nil
 }
 
-func adminNPCArchetype(kind string) (faction string, maxHP int, ok bool) {
+func (w *World) adminNPCArchetype(kind string) (faction string, maxHP int, ok bool) {
 	switch kind {
 	case KindDummy:
 		return FactionHostile, DummyMaxHP, true
 	case KindImp:
-		return FactionHostile, ImpMaxHP, true
+		arch, err := w.lookupImpArchetype()
+		if err != nil {
+			return "", 0, false
+		}
+		return FactionHostile, arch.MaxHP, true
 	case KindQuestGiver, KindImpQuestGiver:
 		return FactionNeutral, MaxHP, true
 	default:

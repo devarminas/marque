@@ -31,13 +31,14 @@ func TestFireballPacingVsPostWeaponWhites(t *testing.T) {
 		t.Fatal("missing heal")
 	}
 
+	imp := loadSharedImp(t)
 	swordAvg := float64(sword.DamageMin+sword.DamageMax) / 2
 	fbDmg := fb.Effect.Amount
 	if fbDmg <= swordAvg {
 		t.Fatalf("fireball amount %.0f is not worth a white (sword avg %.1f)", fbDmg, swordAvg)
 	}
-	if fbDmg >= float64(ImpMaxHP) {
-		t.Fatalf("fireball amount %.0f one-shots Imp max HP %d", fbDmg, ImpMaxHP)
+	if fbDmg >= float64(imp.MaxHP) {
+		t.Fatalf("fireball amount %.0f one-shots Imp max HP %d", fbDmg, imp.MaxHP)
 	}
 
 	whitePeriod := float64(sword.AttackPeriodTicks) * TickDuration.Seconds()
@@ -50,15 +51,15 @@ func TestFireballPacingVsPostWeaponWhites(t *testing.T) {
 		t.Fatalf("fireball cooldown %d < cast %d", fb.CooldownTicks, fb.CastTicks)
 	}
 
-	whiteTTK := math.Ceil(float64(ImpMaxHP)/swordAvg) * whitePeriod
-	weaveTTK := castSec + math.Ceil((float64(ImpMaxHP)-fbDmg)/swordAvg)*whitePeriod
+	whiteTTK := math.Ceil(float64(imp.MaxHP)/swordAvg) * whitePeriod
+	weaveTTK := castSec + math.Ceil((float64(imp.MaxHP)-fbDmg)/swordAvg)*whitePeriod
 	if weaveTTK >= whiteTTK {
 		t.Fatalf("weaving fireball TTK %.2fs is not faster than whites-only %.2fs", weaveTTK, whiteTTK)
 	}
 
 	t.Logf("sword white avg %.1f / %.2fs (DPS %.2f)", swordAvg, whitePeriod, swordAvg/whitePeriod)
 	t.Logf("fireball %.0f in %.2fs cast + %.2fs CD (DPC vs one white: %.1fx)", fbDmg, castSec, cdSec, fbDmg/swordAvg)
-	t.Logf("Imp %d HP TTK whites-only %.2fs vs one fireball then whites %.2fs", ImpMaxHP, whiteTTK, weaveTTK)
+	t.Logf("Imp %d HP TTK whites-only %.2fs vs one fireball then whites %.2fs", imp.MaxHP, whiteTTK, weaveTTK)
 
 	if heal.Effect.Amount != 25 || heal.CooldownTicks != 38 || heal.ManaCost != 20 {
 		t.Fatalf("heal was retuned unexpectedly: %+v", heal)

@@ -38,13 +38,13 @@ func (w *World) stepImp(n *npc, distance float64) {
 	case phaseCombat:
 		w.stepImpCombat(n)
 	case phaseWander:
-		if target := w.nearestLivingPlayerInRange(n.pos, ImpThreatRange); target != nil {
+		if target := w.nearestLivingPlayerInRange(n.pos, w.impArchetype().Threat); target != nil {
 			w.beginImpChase(n, target)
 		} else {
 			w.stepImpWander(n)
 		}
 	case phaseIdle:
-		if target := w.nearestLivingPlayerInRange(n.pos, ImpThreatRange); target != nil {
+		if target := w.nearestLivingPlayerInRange(n.pos, w.impArchetype().Threat); target != nil {
 			w.beginImpChase(n, target)
 		} else {
 			w.stepImpIdle(n)
@@ -197,7 +197,8 @@ func (w *World) beginImpCastSkill(n *npc, target *player) bool {
 	if w.abilities == nil {
 		return false
 	}
-	ability, ok := w.abilities.Get(ImpSkillID)
+	skillID := w.impArchetype().SkillID()
+	ability, ok := w.abilities.Get(skillID)
 	if !ok {
 		return false
 	}
@@ -207,7 +208,7 @@ func (w *World) beginImpCastSkill(n *npc, target *player) bool {
 	if ability.Locomotion != abilitydef.LocomotionMovable && len(n.remaining) > 0 {
 		w.assignNPCHalt(n)
 	}
-	if rej := w.castAbility(n, ImpSkillID, target.id); rej != nil {
+	if rej := w.castAbility(n, skillID, target.id); rej != nil {
 		return false
 	}
 	n.phase = phaseCombat
@@ -228,7 +229,7 @@ func (w *World) stepImpCastSkill(n *npc) {
 }
 
 func (w *World) impMustLeash(n *npc) bool {
-	if distanceBetween(n.pos, n.home) > ImpLeashRange {
+	if distanceBetween(n.pos, n.home) > w.impArchetype().Leash {
 		w.beginImpLeash(n)
 		return true
 	}
@@ -281,8 +282,9 @@ func (w *World) resetImpCombat(n *npc) {
 
 func (w *World) beginImpIdle(n *npc) {
 	n.phase = phaseIdle
-	span := ImpIdleMaxTicks - ImpIdleMinTicks + 1
-	n.idleRemain = ImpIdleMinTicks + w.intN(span)
+	arch := w.impArchetype()
+	span := arch.IdleMaxTicks - arch.IdleMinTicks + 1
+	n.idleRemain = arch.IdleMinTicks + w.intN(span)
 }
 
 func (w *World) stepImpIdle(n *npc) {
@@ -296,7 +298,7 @@ func (w *World) stepImpIdle(n *npc) {
 }
 
 func (w *World) beginImpWander(n *npc) {
-	dest := w.pointInRadius(n.home, ImpWanderRadius)
+	dest := w.pointInRadius(n.home, w.impArchetype().Wander)
 	if distanceBetween(n.pos, dest) < MinPathLength {
 		w.beginImpIdle(n)
 		return
