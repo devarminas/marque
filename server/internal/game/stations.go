@@ -33,35 +33,89 @@ func stationRecipe(stationKind, consumeKind string) (string, bool) {
 	return "", false
 }
 
+func (p *player) hasPendingUse() bool {
+	return p.pendingUseOn != 0
+}
+
+func (w *World) clearPendingUse(p *player) {
+	p.pendingUseSlot = 0
+	p.pendingUseOn = 0
+	p.pendingUseSeq = 0
+}
+
+func (w *World) armPendingUse(p *player) {
+	w.clearPendingUse(p)
+	p.pending = 0
+	w.clearPendingTalk(p)
+	w.cancelGather(p)
+	w.cancelAttack(p, CauseUse)
+	w.cancelCast(p, CauseUse)
+	p.clearSteer()
+}
+
 func (w *World) useOnStation(p *player, msg mnet.Use, seq mnet.Seq) {
+	station, consumeKind, produceKind, rejection := w.stationUsePrep(p, msg)
+	if rejection != nil {
+		w.refuse(p, rejection)
+		return
+	}
+
+	w.armPendingUse(p)
+	dest := Point{X: station.x, Z: station.z}
+	if distanceBetween(p.pos, dest) > StationRange {
+		p.pendingUseSlot = msg.Slot
+		p.pendingUseOn = msg.On
+		p.pendingUseSeq = seq
+		w.steerToward(p, dest)
+		return
+	}
+
+	w.completeStationUse(p, msg, station, consumeKind, produceKind, seq)
+}
+
+func (w *World) resolveUse(p *player) {
+	if !p.hasPendingUse() {
+		return
+	}
+	msg := mnet.Use{Slot: p.pendingUseSlot, On: p.pendingUseOn}
+	station, consumeKind, produceKind, rejection := w.stationUsePrep(p, msg)
+	if rejection != nil {
+		w.clearPendingUse(p)
+		p.clearSteer()
+		w.refuse(p, rejection)
+		return
+	}
+	if distanceBetween(p.pos, Point{X: station.x, Z: station.z}) > StationRange {
+		return
+	}
+	seq := p.pendingUseSeq
+	w.clearPendingUse(p)
+	if p.steering() {
+		p.clearSteer()
+	}
+	w.completeStationUse(p, msg, station, consumeKind, produceKind, seq)
+}
+
+func (w *World) stationUsePrep(
+	p *player, msg mnet.Use,
+) (*resourceNode, string, string, *mnet.RejectError) {
 	station, live := w.nodes[mnet.NodeID(msg.On)]
 	if !live || !isStation(station.kind) {
-		w.refuse(p, &mnet.RejectError{
+		return nil, "", "", &mnet.RejectError{
 			Reason:      mnet.ReasonNoRecipe,
 			Detail:      "that cannot be crafted",
 			Re:          mnet.MsgUse,
 			Disposition: mnet.ReplyError,
-		})
-		return
-	}
-	if distanceBetween(p.pos, Point{X: station.x, Z: station.z}) > StationRange {
-		w.refuse(p, &mnet.RejectError{
-			Reason:      mnet.ReasonOutOfRange,
-			Detail:      "too far from that station",
-			Re:          mnet.MsgUse,
-			Disposition: mnet.ReplyError,
-		})
-		return
+		}
 	}
 
 	if msg.Slot < 0 || msg.Slot >= InventorySize {
-		w.refuse(p, &mnet.RejectError{
+		return nil, "", "", &mnet.RejectError{
 			Reason:      mnet.ReasonNoSuchSlot,
 			Detail:      fmt.Sprintf("no such slot: %d is outside 0 to %d", msg.Slot, InventorySize-1),
 			Re:          mnet.MsgUse,
 			Disposition: mnet.ReplyError,
-		})
-		return
+		}
 	}
 
 	consumeKind := ""
@@ -72,26 +126,33 @@ func (w *World) useOnStation(p *player, msg mnet.Use, seq mnet.Seq) {
 		}
 	}
 	if consumeKind == "" {
-		w.refuse(p, &mnet.RejectError{
+		return nil, "", "", &mnet.RejectError{
 			Reason:      mnet.ReasonEmptySlot,
 			Detail:      "that slot is empty",
 			Re:          mnet.MsgUse,
 			Disposition: mnet.ReplyError,
-		})
-		return
+		}
 	}
 
 	produceKind, ok := stationRecipe(station.kind, consumeKind)
 	if !ok {
-		w.refuse(p, &mnet.RejectError{
+		return nil, "", "", &mnet.RejectError{
 			Reason:      mnet.ReasonNoRecipe,
 			Detail:      "that cannot be crafted",
 			Re:          mnet.MsgUse,
 			Disposition: mnet.ReplyError,
-		})
-		return
+		}
 	}
+	return station, consumeKind, produceKind, nil
+}
 
+func (w *World) completeStationUse(
+	p *player,
+	msg mnet.Use,
+	station *resourceNode,
+	consumeKind, produceKind string,
+	seq mnet.Seq,
+) {
 	done, err := w.items.CraftInventorySlot(p.id, msg.Slot, consumeKind, produceKind)
 	if err != nil {
 		w.refuseCraft(p, msg.Slot, err)

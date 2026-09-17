@@ -87,6 +87,7 @@ func (w *World) applyWish(p *player, msg mnet.Move) {
 	w.clearPendingTalk(p)
 	w.closeDialog(p)
 	w.cancelGather(p)
+	w.clearPendingUse(p)
 	p.attackApproaching = false
 	w.interruptCastOnMove(p, CauseMove)
 	p.steerDX = msg.DX / length

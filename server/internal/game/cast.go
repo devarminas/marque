@@ -197,6 +197,7 @@ func (w *World) preparePlayerCast(p *player, ability abilitydef.Ability) {
 	w.clearPendingTalk(p)
 	w.closeDialog(p)
 	w.cancelGather(p)
+	w.clearPendingUse(p)
 	w.cancelAttack(p, CauseReplaced)
 	if ability.Locomotion != abilitydef.LocomotionMovable {
 		p.clearSteer()

@@ -1,4 +1,4 @@
-﻿package game
+package game
 
 import (
 	"errors"
@@ -62,6 +62,7 @@ func (w *World) talk(p *player, msg mnet.Talk, seq mnet.Seq) {
 	p.pendingTalk = n.id
 	p.pending = 0
 	w.cancelGather(p)
+	w.clearPendingUse(p)
 	w.cancelAttack(p, CauseTalk)
 	p.clearSteer()
 

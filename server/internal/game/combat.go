@@ -16,6 +16,7 @@ const (
 	CauseMove          = "move"
 	CausePickup        = "pickup"
 	CauseGather        = "gather"
+	CauseUse           = "use"
 	CauseReplaced      = "replaced"
 	CauseAttackerDied  = "attacker_died"
 	CauseLeaveCombat   = "leave_combat"
@@ -201,6 +202,7 @@ func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, 
 	p.pending = 0
 	w.clearPendingTalk(p)
 	w.cancelGather(p)
+	w.clearPendingUse(p)
 	w.cancelAttack(p, CauseReplaced)
 	w.cancelCast(p, CauseReplaced)
 	p.clearSteer()
@@ -365,6 +367,7 @@ func (w *World) kill(victim *player, killer mnet.PlayerID) {
 	w.clearPendingTalk(victim)
 	w.closeDialog(victim)
 	w.cancelGather(victim)
+	w.clearPendingUse(victim)
 	w.cancelAttack(victim, CauseAttackerDied)
 	w.cancelCast(victim, CauseAttackerDied)
 	w.clearAttacksOn(victim.id)

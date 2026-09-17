@@ -182,6 +182,10 @@ type player struct {
 	gatherNode     mnet.NodeID
 	gatherProgress int
 
+	pendingUseSlot int
+	pendingUseOn   int
+	pendingUseSeq  mnet.Seq
+
 	pendingTalk       mnet.PlayerID
 	dialogNPC         mnet.PlayerID
 	quests            map[string]questStatus
@@ -415,6 +419,9 @@ func (w *World) step() {
 		}
 		if p.gatherNode != 0 {
 			w.resolveGather(p)
+		}
+		if p.hasPendingUse() {
+			w.resolveUse(p)
 		}
 		if p.pendingTalk != 0 {
 			w.resolveTalk(p)
