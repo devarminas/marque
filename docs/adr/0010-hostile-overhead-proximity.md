@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted (Enemy combat v1 / ARM-264).
+Accepted (Enemy combat v1).
 
 ## Context
 
-Hostile NPCs need an overhead name and HP readout that appears when the local player is near, without replacing the target-frame HUD (ARM-263). Clicking that readout must select the same target as clicking the body capsule. Server `hp` / `max_hp` (and optional `name` from ARM-268) are the only facts shown.
+Hostile NPCs need an overhead name and HP readout that appears when the local player is near, without replacing the target-frame HUD. Clicking that readout must select the same target as clicking the body capsule. Server `hp` / `max_hp` (and optional `name` from the NPC spawn wire) are the only facts shown.
 
 ## Decision
 
@@ -23,6 +23,6 @@ Hostile NPCs need an overhead name and HP readout that appears when the local pl
 
 ## Non-goals
 
-- Target-frame HUD (ARM-263).
+- Target-frame HUD.
 - Client-invented names or HP.
 - Player-vs-player overhead chrome.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (M13f / ARM-238). Implements the ability locomotion hooks locked by `docs/adr/0001-movement-authority.md` §16. Cast grace wall-clock stays as locked by `docs/adr/0002-sim-tick-and-cast-timing.md`.
+Accepted (M13f). Implements the ability locomotion hooks locked by `docs/adr/0001-movement-authority.md` §16. Cast grace wall-clock stays as locked by `docs/adr/0002-sim-tick-and-cast-timing.md`.
 
 ## Decision
 
@@ -38,5 +38,5 @@ Accepted (M13f / ARM-238). Implements the ability locomotion hooks locked by `do
 - New spell content.
 - Animation graph polish.
 - Jump gating by locomotion (may amend later).
-- Player polyline retirement (ARM-239).
+- Player polyline retirement.
 - PROTOCOL.md / NOTES.md.

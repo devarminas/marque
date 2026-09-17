@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (Prototype art / ARM-271). Extended with the airborne and cast clips (ARM-276) and the world props (ARM-270).
+Accepted (Prototype art). Extended with the airborne and cast clips and the world props.
 
 ## Context
 

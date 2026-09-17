@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted (Enemy combat v1 / ARM-267).
+Accepted (Enemy combat v1).
 
 ## Context
 
-Players have no server in-combat / out-of-combat flag. Imp aggro walks `w.order` and takes the first living player in `ImpThreatRange`, so multi-player fights are join-order lottery. Hard leash to spawn (`ImpLeashRange`) already works and stays. Threat tables and taunt stay out of v1. ARM-261 may replace the enemy combat FSM later; this ADR does not rewrite it.
+Players have no server in-combat / out-of-combat flag. Imp aggro walks `w.order` and takes the first living player in `ImpThreatRange`, so multi-player fights are join-order lottery. Hard leash to spawn (`ImpLeashRange`) already works and stays. Threat tables and taunt stay out of v1. The enemy combat FSM may be replaced later; this ADR does not rewrite it.
 
 ## Decision
 
@@ -19,10 +19,10 @@ Players have no server in-combat / out-of-combat flag. Imp aggro walks `w.order`
 
 - Two players in threat range: the closer one gets aggro, not the earlier joiner.
 - In-combat is refreshable; continuous hits keep the flag set.
-- ARM-261 may reshape enemy states; keep aggro selection and player combat timeout as small hooks, not a second combat brain.
+- The enemy combat FSM may reshape enemy states; keep aggro selection and player combat timeout as small hooks, not a second combat brain.
 
 ## Non-goals
 
 - Threat tables, taunt, or sticky threat.
-- Replacing the imp idle/combat/return tick machine (ARM-261).
+- Replacing the imp idle/combat/return tick machine.
 - Client UX chrome for the combat flag (deferred until needed).
