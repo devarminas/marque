@@ -11,7 +11,7 @@ const (
 )
 
 func (w *World) broadcastMana(p *player) {
-	w.broadcast(mnet.Mana{ID: p.id, Mana: p.mana, MaxMana: MaxMana}, nil)
+	w.broadcast(mnet.Mana{ID: p.id, Mana: p.mana, MaxMana: p.attrs.maxMana()}, nil)
 }
 
 func (w *World) spendMana(p *player, amount int) bool {
@@ -33,8 +33,8 @@ func (w *World) refundMana(p *player, amount int) {
 		return
 	}
 	p.mana += amount
-	if p.mana > MaxMana {
-		p.mana = MaxMana
+	if p.mana > p.attrs.maxMana() {
+		p.mana = p.attrs.maxMana()
 	}
 	w.broadcastMana(p)
 	w.log.Event(w.tick, EvManaRefund, gamelog.Fields{
@@ -46,13 +46,13 @@ func (w *World) refundMana(p *player, amount int) {
 
 func (w *World) regenMana() {
 	for _, p := range w.order {
-		if p.dead() || p.mana >= MaxMana {
+		if p.dead() || p.mana >= p.attrs.maxMana() {
 			continue
 		}
 		before := p.mana
 		p.mana += ManaRegenPerTick
-		if p.mana > MaxMana {
-			p.mana = MaxMana
+		if p.mana > p.attrs.maxMana() {
+			p.mana = p.attrs.maxMana()
 		}
 		if p.mana == before {
 			continue

@@ -33,6 +33,9 @@ type castTarget struct {
 func (t *castTarget) applyHeal(amount int) {
 	*t.hp += amount
 	maxHP := MaxHP
+	if t.plyr != nil {
+		maxHP = t.plyr.attrs.maxHP()
+	}
 	if t.npc != nil {
 		maxHP = t.npc.maxHP
 	}
@@ -271,6 +274,12 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 	w.broadcast(mnet.CastPhase{ID: c.combatID(), Ability: ability.ID, Target: target.id, Phase: mnet.CastPhaseResolve}, nil)
 
 	amount := int(math.Round(ability.Effect.Amount))
+	if ability.Effect.Kind == abilitydef.EffectDamage {
+		amount += combatSP(c)
+		if amount < 1 {
+			amount = 1
+		}
+	}
 	fields := withSeq(gamelog.Fields{
 		"ability": ability.ID,
 		"target":  target.id,

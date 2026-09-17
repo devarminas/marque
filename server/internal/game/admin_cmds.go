@@ -135,8 +135,8 @@ func adminHeal(w *World, p *player, args []string) (string, *mnet.RejectError) {
 			return "", rerr
 		}
 	}
-	target.hp = MaxHP
-	target.mana = MaxMana
+	target.hp = target.attrs.maxHP()
+	target.mana = target.attrs.maxMana()
 	w.broadcastHP(target)
 	w.broadcastMana(target)
 	if target.id == p.id {
