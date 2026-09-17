@@ -41,6 +41,7 @@ func _ready() -> void:
 	_test_prop_authors_avatar_and_camera()
 	await _test_wish_walk_plays_walk_anim_and_camera_follows()
 	await _test_approach_pose_stream_walks_then_idles()
+	await _test_approach_pose_stream_idles_when_poses_stop()
 	await _test_jump_height_presentation()
 	_test_settle_idle()
 
@@ -156,6 +157,37 @@ func _test_approach_pose_stream_walks_then_idles() -> void:
 	_assertions.check(
 		animation != null and animation.current_animation == _clip("idle"),
 		"approach settle plays idle anim, got \"%s\""
+		% ("" if animation == null else animation.current_animation),
+	)
+
+
+func _test_approach_pose_stream_idles_when_poses_stop() -> void:
+	var avatar := _avatar()
+	var mover := LocalMover.new()
+	mover.reset_at(0, 0.0, 0.0)
+	avatar.teleport_to(0.0, 0.0)
+	mover.apply_wish(0.0, 0.0)
+
+	var tick := 1
+	var z := 0.0
+	for _step in range(6):
+		z += SteerIntegrate.STEP_DISTANCE
+		mover.reconcile_server_pose(tick, 0.0, z, 0.0)
+		tick += 1
+		var ground := mover.display_xz()
+		avatar.present_at(ground.x, ground.y, mover.moving(), mover.display_height())
+		await get_tree().process_frame
+	_assertions.check(mover.moving(), "last approach pose leaves LocalMover moving")
+
+	mover.advance_to_tick(tick + 16)
+	var settled := mover.display_xz()
+	avatar.present_at(settled.x, settled.y, mover.moving(), mover.display_height())
+	await get_tree().process_frame
+	_assertions.check(not mover.moving(), "stopped pose stream clears moving")
+	var animation := _animation()
+	_assertions.check(
+		animation != null and animation.current_animation == _clip("idle"),
+		"stopped pose stream plays idle anim, got \"%s\""
 		% ("" if animation == null else animation.current_animation),
 	)
 

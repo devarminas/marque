@@ -14,6 +14,7 @@ func run(assertions: Assertions) -> void:
 	_test_reconcile_hard_snaps_large_error(assertions)
 	_test_reconcile_keeps_sim_on_server_pose(assertions)
 	_test_approach_poses_report_moving(assertions)
+	_test_approach_settles_when_poses_stop(assertions)
 	_test_jump_predicts_height(assertions)
 	_test_mid_air_jump_ignored_locally(assertions)
 	_test_jump_while_walking(assertions)
@@ -80,6 +81,18 @@ func _test_approach_poses_report_moving(assertions: Assertions) -> void:
 	assertions.check(mover.moving(), "server approach step reports moving without wish")
 	mover.reconcile_server_pose(2, 0.0, SteerIntegrate.STEP_DISTANCE)
 	assertions.check(not mover.moving(), "identical pose clears pose-driven moving")
+
+
+func _test_approach_settles_when_poses_stop(assertions: Assertions) -> void:
+	var mover := LocalMover.new()
+	mover.reset_at(0, 0.0, 0.0)
+	mover.apply_wish(0.0, 0.0)
+	mover.reconcile_server_pose(1, 0.0, SteerIntegrate.STEP_DISTANCE)
+	assertions.check(mover.moving(), "last approach step reports moving without a stop pose")
+	mover.advance_to_tick(2)
+	assertions.check(mover.moving(), "one tick without a pose still walks")
+	mover.advance_to_tick(20)
+	assertions.check(not mover.moving(), "ticks without a new pose clear pose-driven moving")
 
 
 func _test_jump_predicts_height(assertions: Assertions) -> void:

@@ -7,6 +7,7 @@ const MapCfg := preload("res://scripts/map_cfg.gd")
 const SOFT_ERROR_M := 0.35
 const HARD_ERROR_M := 2.0
 const SOFT_BLEND_PER_SEC := 12.0
+const POSE_SETTLE_TICKS := 2
 
 var sim_tick := 0
 var sim_x := 0.0
@@ -21,6 +22,7 @@ var half_extent := MapCfg.WORLD_HALF_EXTENT
 var flat_ground_y := 0.0
 var nav = null
 var _server_xz_moving := false
+var _last_pose_tick := 0
 
 
 func configure_map(map_id: String) -> void:
@@ -49,6 +51,7 @@ func reset_at(tick: int, x: float, z: float, height = null) -> void:
 	disp_z = z
 	disp_h = sim_h
 	_server_xz_moving = false
+	_last_pose_tick = tick
 
 
 func apply_wish(dx: float, dz: float) -> void:
@@ -64,6 +67,7 @@ func apply_jump(jump: bool) -> void:
 func advance_to_tick(target_tick: int) -> void:
 	while sim_tick < target_tick:
 		_step_once()
+	_settle_pose_moving()
 
 
 func soft_pull_display(delta_sec: float) -> void:
@@ -91,6 +95,7 @@ func reconcile_server_pose(server_tick: int, x: float, z: float, height: float =
 	if server_tick > target_tick:
 		target_tick = server_tick
 	var ground_delta := Vector2(x - sim_x, z - sim_z).length()
+	_last_pose_tick = server_tick
 	_server_xz_moving = ground_delta >= SteerIntegrate.MIN_PATH_LENGTH
 	sim_x = x
 	sim_z = z
@@ -139,6 +144,11 @@ func ground_y_at(x: float, z: float, near_y = null) -> float:
 		if bool(sample["ok"]):
 			return float(sample["y"])
 	return flat_ground_y
+
+
+func _settle_pose_moving() -> void:
+	if sim_tick >= _last_pose_tick + POSE_SETTLE_TICKS:
+		_server_xz_moving = false
 
 
 func _step_once() -> void:
