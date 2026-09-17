@@ -132,6 +132,14 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			want: `{"cast_phase":{"id":1000005,"ability":"fireball","target":1,"phase":"resolve","amount":22,"effect":"damage"}}`,
 		},
 		{
+			name: "cast_phase resolve that moved no hp",
+			msg: mnet.CastPhase{
+				ID: 1000005, Ability: "heal", Target: 1, Phase: mnet.CastPhaseResolve,
+				Amount: 0, Effect: "heal",
+			},
+			want: `{"cast_phase":{"id":1000005,"ability":"heal","target":1,"phase":"resolve","effect":"heal"}}`,
+		},
+		{
 			name: "gather",
 			msg:  mnet.GatherStarted{ID: 1, Node: 3},
 			want: `{"gather":{"id":1,"node":3}}`,
