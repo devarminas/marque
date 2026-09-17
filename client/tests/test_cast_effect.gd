@@ -29,7 +29,7 @@ func get_assertion_count() -> int:
 
 
 func _ready() -> void:
-	print("== cast effect: server mana confirm plays VFX on target ==")
+	print("== cast effect: a cast resolve plays VFX on its target ==")
 
 	_root = MainScene.instantiate() as Node3D
 	_root.name = "CastFxClient"
@@ -48,11 +48,12 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	_test_success_plays_on_target()
+	_test_resolve_after_the_real_frame_order()
 	_test_self_target_plays_on_local()
+	_test_begin_and_cancel_play_nothing()
+	_test_other_actor_resolve_plays_nothing()
 	_test_refuse_plays_nothing()
 	_test_missing_host_emits_nothing()
-	_test_caster_mana_without_pending_plays_nothing()
 
 	print(
 		"CAST EFFECT RAN: %d assertions, %d failed"
@@ -73,16 +74,26 @@ func _feed_welcome_with_npcs() -> void:
 	)
 
 
-func _test_success_plays_on_target() -> void:
+func _test_resolve_after_the_real_frame_order() -> void:
 	_effects.clear()
-	_session.await_mana_for_cast("fireball", 1000002)
-	_check(_session.casts_awaiting_mana_count() == 1, "pending cast recorded before mana")
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":3,"ability":"fireball","target":1000002,"phase":"begin"}}'
+	)
+	_net.ingest_text_frame(
+		'{"casting":{"ability":"fireball","progress":38,"total":38}}'
+	)
+	# The server clears the cast bar before it spends the mana, which is the order
+	# that used to swallow the pending cast and leave the target unflashed.
+	_net.ingest_text_frame('{"casting":{"ability":"","progress":0,"total":0}}')
 	_net.ingest_text_frame('{"mana":{"id":3,"mana":80,"max_mana":100}}')
-	_check(_effects.size() == 1, "mana drop plays one cast effect")
+	_check(_effects.size() == 0, "a cast bar clear and a mana spend play no effect")
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":3,"ability":"fireball","target":1000002,"phase":"resolve"}}'
+	)
+	_check(_effects.size() == 1, "the resolve plays one cast effect")
 	if _effects.size() == 1:
 		_check(_effects[0]["target"] == 1000002, "effect targets the fireball dummy")
 		_check(_effects[0]["ability"] == "fireball", "effect names fireball")
-	_check(_session.casts_awaiting_mana_count() == 0, "pending cleared after success")
 	var npcs: Dictionary = _session.get("_npcs")
 	var hostile: NpcDummyScript = npcs.get(1000002)
 	_check(hostile != null, "hostile dummy exists")
@@ -100,8 +111,9 @@ func _test_success_plays_on_target() -> void:
 func _test_self_target_plays_on_local() -> void:
 	_effects.clear()
 	var you := _session.own_id()
-	_session.await_mana_for_cast("heal", you)
-	_net.ingest_text_frame('{"mana":{"id":3,"mana":60,"max_mana":100}}')
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":3,"ability":"heal","target":%d,"phase":"resolve"}}' % you
+	)
 	_check(_effects.size() == 1, "self heal plays one cast effect")
 	if _effects.size() == 1:
 		_check(_effects[0]["target"] == you, "self heal targets own id")
@@ -114,29 +126,38 @@ func _test_self_target_plays_on_local() -> void:
 		)
 
 
+func _test_begin_and_cancel_play_nothing() -> void:
+	_effects.clear()
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":3,"ability":"fireball","target":1000002,"phase":"begin"}}'
+	)
+	_check(_effects.size() == 0, "a begin frame plays no effect")
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":3,"ability":"fireball","target":1000002,"phase":"cancel"}}'
+	)
+	_check(_effects.size() == 0, "a cancelled cast plays no effect")
+
+
+func _test_other_actor_resolve_plays_nothing() -> void:
+	_effects.clear()
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":1000002,"ability":"fireball","target":3,"phase":"resolve"}}'
+	)
+	_check(_effects.size() == 0, "another actor's resolve plays no local effect")
+
+
 func _test_refuse_plays_nothing() -> void:
 	_effects.clear()
-	_session.await_mana_for_cast("heal", 1000001)
-	_check(_session.casts_awaiting_mana_count() == 1, "pending cast before refuse")
 	_net.ingest_text_frame('{"error":{"re":"cast","msg":"target out of range"}}')
 	_check(_effects.size() == 0, "refused cast plays no effect")
-	_check(_session.casts_awaiting_mana_count() == 0, "refuse clears pending")
-	_net.ingest_text_frame('{"mana":{"id":3,"mana":50,"max_mana":100}}')
-	_check(_effects.size() == 0, "mana after refuse without pending plays nothing")
 
 
 func _test_missing_host_emits_nothing() -> void:
 	_effects.clear()
-	_session.await_mana_for_cast("fireball", 999999)
-	_net.ingest_text_frame('{"mana":{"id":3,"mana":40,"max_mana":100}}')
+	_net.ingest_text_frame(
+		'{"cast_phase":{"id":3,"ability":"fireball","target":999999,"phase":"resolve"}}'
+	)
 	_check(_effects.size() == 0, "missing target host emits no cast_effect_played")
-	_check(_session.casts_awaiting_mana_count() == 0, "missing host still clears queue")
-
-
-func _test_caster_mana_without_pending_plays_nothing() -> void:
-	_effects.clear()
-	_net.ingest_text_frame('{"mana":{"id":3,"mana":30,"max_mana":100}}')
-	_check(_effects.size() == 0, "unsolicited mana drop plays no cast effect")
 
 
 func _check(cond: bool, msg: String) -> void:
