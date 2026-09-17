@@ -75,6 +75,16 @@ func _test_swing(assertions: Assertions, recorder: Recorder) -> void:
 		events == [{"signal": "swing_observed", "id": 7, "target": 1000004, "weapon": "sword"}],
 		"a swing without the hit facts still animates and forwards nothing extra, got %s" % [events],
 	)
+	events = recorder.feed(
+		'{"swing":{"id":7,"target":1000004,"weapon":"sword","amount":0,"crit":false,"miss":true}}'
+	)
+	assertions.check(
+		events == [
+			{"signal": "swing_observed", "id": 7, "target": 1000004, "weapon": "sword"},
+			{"signal": "swing_hit_observed", "id": 7, "amount": 0, "crit": false, "miss": true},
+		],
+		"a swing frame reporting a miss carries miss=true, got %s" % [events],
+	)
 	print("  (the ERROR line below is a fail-closed path under test)")
 	events = recorder.feed('{"swing":{"id":7,"target":1000004}}')
 	assertions.check(events.is_empty(), "a swing without a weapon emits nothing, got %s" % [events])
