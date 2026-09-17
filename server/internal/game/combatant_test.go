@@ -7,7 +7,7 @@ import (
 func TestNPCCombatantInstantHealSelf(t *testing.T) {
 	pw := newProbeWorld(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
-	if err := pw.w.seedNPC(KindImp, FactionHostile, 5, 5, ImpMaxHP); err != nil {
+	if err := pw.w.seedNPC(KindImp, FactionHostile, 5, 5, pw.impArch().MaxHP); err != nil {
 		t.Fatalf("seed imp: %v", err)
 	}
 	imp := pw.w.npcByKind(KindImp)

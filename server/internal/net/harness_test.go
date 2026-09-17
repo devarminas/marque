@@ -21,6 +21,7 @@ import (
 	"github.com/devarminas/marque/server/internal/game"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/npcdef"
 	"github.com/devarminas/marque/server/internal/questdef"
 	"github.com/devarminas/marque/server/internal/weapondef"
 )
@@ -100,6 +101,16 @@ func mustResolveWeapons(t *testing.T) string {
 	return filepath.Join(root, filepath.FromSlash(weapondef.RelPath))
 }
 
+func mustResolveNPCArchetypes(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	return filepath.Join(root, filepath.FromSlash(npcdef.RelPath))
+}
+
 func newHarness(t *testing.T, seeds ...seed) *harness {
 	t.Helper()
 	return newHarnessWith(t, game.ResumeGraceTicks, nil, seeds...)
@@ -146,6 +157,11 @@ func newHarnessConfigured(t *testing.T, grace int64, kit []string, setup func(*g
 		t.Fatalf("load weapons: %v", err)
 	}
 	world.SetWeapons(weapons)
+	npcs, err := npcdef.Load(mustResolveNPCArchetypes(t))
+	if err != nil {
+		t.Fatalf("load npc archetypes: %v", err)
+	}
+	world.SetNPCArchetypes(npcs)
 	quests, err := questdef.Load(mustResolveQuests(t), classes)
 	if err != nil {
 		t.Fatalf("load quests: %v", err)
@@ -370,27 +386,27 @@ type client struct {
 }
 
 type frame struct {
-	Welcome     *mnet.Welcome     `json:"welcome"`
-	Spawn       *mnet.Spawn       `json:"spawn"`
-	Despawn     *mnet.Despawn     `json:"despawn"`
-	Path        *mnet.Path        `json:"path"`
-	Pose        *mnet.Pose        `json:"pose"`
-	Error       *mnet.Error       `json:"error"`
-	ItemSpawn   *mnet.ItemSpawn   `json:"item_spawn"`
-	ItemDespawn *mnet.ItemDespawn `json:"item_despawn"`
-	NodeSpawn   *mnet.NodeSpawn   `json:"node_spawn"`
-	NodeDespawn *mnet.NodeDespawn `json:"node_despawn"`
-	NodeState   *mnet.NodeUpdate  `json:"node_state"`
-	NpcSpawn    *mnet.NpcSpawn    `json:"npc_spawn"`
-	Inventory   *mnet.Inventory   `json:"inventory"`
-	Equipment   *mnet.Equipment   `json:"equipment"`
-	Class       *mnet.Class       `json:"class"`
-	Skills      *mnet.Skills      `json:"skills"`
-	Dialog      *mnet.Dialog      `json:"dialog"`
-	QuestLog    *mnet.QuestLog    `json:"quest_log"`
-	HP          *mnet.HP          `json:"hp"`
-	Mana        *mnet.Mana        `json:"mana"`
-	Tick        *mnet.Tick        `json:"tick"`
+	Welcome     *mnet.Welcome       `json:"welcome"`
+	Spawn       *mnet.Spawn         `json:"spawn"`
+	Despawn     *mnet.Despawn       `json:"despawn"`
+	Path        *mnet.Path          `json:"path"`
+	Pose        *mnet.Pose          `json:"pose"`
+	Error       *mnet.Error         `json:"error"`
+	ItemSpawn   *mnet.ItemSpawn     `json:"item_spawn"`
+	ItemDespawn *mnet.ItemDespawn   `json:"item_despawn"`
+	NodeSpawn   *mnet.NodeSpawn     `json:"node_spawn"`
+	NodeDespawn *mnet.NodeDespawn   `json:"node_despawn"`
+	NodeState   *mnet.NodeUpdate    `json:"node_state"`
+	NpcSpawn    *mnet.NpcSpawn      `json:"npc_spawn"`
+	Inventory   *mnet.Inventory     `json:"inventory"`
+	Equipment   *mnet.Equipment     `json:"equipment"`
+	Class       *mnet.Class         `json:"class"`
+	Skills      *mnet.Skills        `json:"skills"`
+	Dialog      *mnet.Dialog        `json:"dialog"`
+	QuestLog    *mnet.QuestLog      `json:"quest_log"`
+	HP          *mnet.HP            `json:"hp"`
+	Mana        *mnet.Mana          `json:"mana"`
+	Tick        *mnet.Tick          `json:"tick"`
 	Swing       *mnet.Swing         `json:"swing"`
 	CastPhase   *mnet.CastPhase     `json:"cast_phase"`
 	Gather      *mnet.GatherStarted `json:"gather"`

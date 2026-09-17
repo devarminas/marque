@@ -37,8 +37,8 @@ func TestSeedImpCampWelcome(t *testing.T) {
 		if s.Name != "Imp" {
 			t.Fatalf("name=%q, want Imp", s.Name)
 		}
-		if s.HP != ImpMaxHP || s.MaxHP != ImpMaxHP {
-			t.Fatalf("hp=%d/%d, want %d", s.HP, s.MaxHP, ImpMaxHP)
+		if s.HP != pw.impArch().MaxHP || s.MaxHP != pw.impArch().MaxHP {
+			t.Fatalf("hp=%d/%d, want %d", s.HP, s.MaxHP, pw.impArch().MaxHP)
 		}
 		pos := Point{X: s.X, Z: s.Z}
 		if distanceBetween(pos, c.content.Center) > c.content.Radius+1e-9 {
@@ -192,7 +192,7 @@ func TestCampRespawnBroadcastsNpcSpawn(t *testing.T) {
 	if spawn.Name != "Imp" {
 		t.Fatalf("npc_spawn name=%q, want Imp", spawn.Name)
 	}
-	if spawn.HP != ImpMaxHP || spawn.MaxHP != ImpMaxHP {
+	if spawn.HP != pw.impArch().MaxHP || spawn.MaxHP != pw.impArch().MaxHP {
 		t.Fatalf("npc_spawn hp=%d/%d", spawn.HP, spawn.MaxHP)
 	}
 	pos := Point{X: spawn.X, Z: spawn.Z}

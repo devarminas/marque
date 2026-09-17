@@ -12,6 +12,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/npcdef"
 	"github.com/devarminas/marque/server/internal/weapondef"
 )
 
@@ -38,12 +39,40 @@ func loadSharedWeapons(t *testing.T) *weapondef.Catalog {
 	return cat
 }
 
+func loadSharedNPCArchetypes(t *testing.T) *npcdef.Catalog {
+	t.Helper()
+	path, err := npcdef.ResolvePath()
+	if err != nil {
+		t.Fatalf("resolve npc archetypes: %v", err)
+	}
+	cat, err := npcdef.Load(path)
+	if err != nil {
+		t.Fatalf("load npc archetypes: %v", err)
+	}
+	return cat
+}
+
+func loadSharedImp(t *testing.T) npcdef.Archetype {
+	t.Helper()
+	imp, ok := loadSharedNPCArchetypes(t).Get(npcdef.Imp)
+	if !ok {
+		t.Fatal("missing imp archetype")
+	}
+	return imp
+}
+
+func (pw *probeWorld) impArch() npcdef.Archetype {
+	pw.t.Helper()
+	return pw.w.impArchetype()
+}
+
 func newProbeWorld(t *testing.T) *probeWorld {
 	t.Helper()
 	logs := &bytes.Buffer{}
 	hub := mnet.NewHub()
 	w := NewWorld(hub, gamelog.New(logs, true), NewMemoryStore(testWearables(t)), probeGrace, nil)
 	w.SetWeapons(loadSharedWeapons(t))
+	w.SetNPCArchetypes(loadSharedNPCArchetypes(t))
 	srv := httptest.NewServer(hub)
 	t.Cleanup(func() {
 		hub.Close()

@@ -21,6 +21,7 @@ import (
 	"github.com/devarminas/marque/server/internal/gamelog"
 	"github.com/devarminas/marque/server/internal/navmesh"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/npcdef"
 	"github.com/devarminas/marque/server/internal/questdef"
 	"github.com/devarminas/marque/server/internal/weapondef"
 )
@@ -122,6 +123,7 @@ func run() error {
 	mapID := flag.String("map", game.MapVillage, "active map id (village or arena_ring_of_trials); must match client play-path selection")
 	abilitiesPath := flag.String("abilities", "", "path to shared/abilities.json (default: search from cwd, or MARQUE_ABILITIES)")
 	weaponsPath := flag.String("weapons", "", "path to shared/weapons.json (default: search from cwd, or MARQUE_WEAPONS)")
+	npcArchetypesPath := flag.String("npc-archetypes", "", "path to shared/npc_archetypes.json (default: search from cwd, or MARQUE_NPC_ARCHETYPES)")
 	questsPath := flag.String("quests", "", "path to shared/quests.json (default: search from cwd, or MARQUE_QUESTS)")
 	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
 	seedClassKits := flag.Bool("seed-class-kits", false, "retired: hard-errors; use -admin and /give instead")
@@ -169,6 +171,19 @@ func run() error {
 		return err
 	}
 
+	npath := strings.TrimSpace(*npcArchetypesPath)
+	if npath == "" {
+		resolved, err := npcdef.ResolvePath()
+		if err != nil {
+			return err
+		}
+		npath = resolved
+	}
+	npcArchetypes, err := npcdef.Load(npath)
+	if err != nil {
+		return err
+	}
+
 	classes, err := classdef.LoadAll()
 	if err != nil {
 		return err
@@ -208,6 +223,7 @@ func run() error {
 	}
 	world.SetAbilities(abilities)
 	world.SetWeapons(weapons)
+	world.SetNPCArchetypes(npcArchetypes)
 	world.SetClasses(classes)
 	world.SetQuests(quests)
 	acl := game.AdminACL{DevAdmin: *devAdmin}
@@ -230,25 +246,27 @@ func run() error {
 	srv := &http.Server{Handler: mux}
 
 	started := gamelog.Fields{
-		"addr":              listener.Addr().String(),
-		"path":              wsPath,
-		"tick_ms":           int(game.TickDuration.Milliseconds()),
-		"walk_speed":        game.WalkSpeed,
-		"map":               world.MapID(),
-		"world_half_extent": world.HalfExtent(),
-		"inventory_size":    game.InventorySize,
-		"resume_grace":      game.ResumeGraceTicks,
-		"seeded_items":      len(seeds),
-		"join_kit":          joinKit,
-		"worn_slots":        game.WornSlots,
-		"abilities":         abilities.Len(),
-		"abilities_path":    path,
-		"quests":            quests.Len(),
-		"quests_path":       qpath,
-		"classes":           classes.ClassLen(),
-		"skills":            classes.SkillLen(),
-		"admin":             *devAdmin,
-		"admin_players":     adminPlayers,
+		"addr":                listener.Addr().String(),
+		"path":                wsPath,
+		"tick_ms":             int(game.TickDuration.Milliseconds()),
+		"walk_speed":          game.WalkSpeed,
+		"map":                 world.MapID(),
+		"world_half_extent":   world.HalfExtent(),
+		"inventory_size":      game.InventorySize,
+		"resume_grace":        game.ResumeGraceTicks,
+		"seeded_items":        len(seeds),
+		"join_kit":            joinKit,
+		"worn_slots":          game.WornSlots,
+		"abilities":           abilities.Len(),
+		"abilities_path":      path,
+		"npc_archetypes":      npcArchetypes.Len(),
+		"npc_archetypes_path": npath,
+		"quests":              quests.Len(),
+		"quests_path":         qpath,
+		"classes":             classes.ClassLen(),
+		"skills":              classes.SkillLen(),
+		"admin":               *devAdmin,
+		"admin_players":       adminPlayers,
 	}
 	log.Event(0, game.EvServerStarted, started)
 

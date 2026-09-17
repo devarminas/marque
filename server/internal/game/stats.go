@@ -1,5 +1,7 @@
 package game
 
+import "github.com/devarminas/marque/server/internal/npcdef"
+
 const (
 	AttrBaseline = 10
 	HPPerCON     = 10
@@ -25,15 +27,8 @@ func defaultPlayerAttrs() attributes {
 	return attributes{STR: AttrBaseline, DEX: AttrBaseline, CON: AttrBaseline, INT: AttrBaseline}
 }
 
-func defaultImpAttrs() attributes {
-	return attributes{STR: AttrBaseline, DEX: AttrBaseline, CON: 5, INT: AttrBaseline}
-}
-
-func defaultNPCAttrs(kind string) attributes {
-	if kind == KindImp {
-		return defaultImpAttrs()
-	}
-	return defaultPlayerAttrs()
+func attrsFromArchetype(a npcdef.Archetype) attributes {
+	return attributes{STR: a.STR, DEX: a.DEX, CON: a.CON, INT: a.INT}
 }
 
 func (a attributes) maxHP() int {

@@ -24,7 +24,7 @@ func TestImpWandersNearHome(t *testing.T) {
 		if imp.pos == start && len(imp.remaining) == 0 {
 			t.Fatal("imp never left idle at home")
 		}
-		if distanceBetween(imp.pos, imp.home) > ImpWanderRadius+0.5 {
+		if distanceBetween(imp.pos, imp.home) > pw.impArch().Wander+0.5 {
 			t.Fatalf("imp wandered too far: pos=%v home=%v", imp.pos, imp.home)
 		}
 		paths := pw.events(EvPathAssigned)
@@ -108,7 +108,7 @@ func TestImpNoAggroOutsideThreatRange(t *testing.T) {
 	imp := pw.w.npcByKind(KindImp)
 	despawnOtherImps(pw.w, imp)
 	imp.remaining = nil
-	alice.pos = Point{X: imp.home.X + ImpThreatRange + 1, Z: imp.home.Z}
+	alice.pos = Point{X: imp.home.X + pw.impArch().Threat + 1, Z: imp.home.Z}
 
 	pw.w.step()
 	if impInCombatBrain(imp) {
@@ -128,7 +128,7 @@ func TestImpLeashClearsCombatAndReturnsHome(t *testing.T) {
 	imp.phase = phaseCombat
 	imp.combatBeat = combatSwing
 	imp.attackTarget = alice.id
-	imp.pos = Point{X: imp.home.X + ImpLeashRange + 1, Z: imp.home.Z}
+	imp.pos = Point{X: imp.home.X + pw.impArch().Leash + 1, Z: imp.home.Z}
 	imp.remaining = nil
 
 	pw.w.step()
@@ -376,7 +376,7 @@ func TestCombatClassCanAttackImp(t *testing.T) {
 	for range pw.playerPeriod(alice) {
 		pw.w.step()
 	}
-	pw.assertWhiteHit(ImpMaxHP, imp.hp, pw.w.playerWeaponID(alice))
+	pw.assertWhiteHit(pw.impArch().MaxHP, imp.hp, pw.w.playerWeaponID(alice))
 }
 
 func TestGatheringClassCannotAttackImp(t *testing.T) {
@@ -399,17 +399,19 @@ func TestGatheringClassCannotAttackImp(t *testing.T) {
 }
 
 func TestImpWanderRadiusLessThanLeash(t *testing.T) {
-	if ImpWanderRadius >= ImpLeashRange {
-		t.Fatalf("wander_radius=%v must be < leash=%v", ImpWanderRadius, ImpLeashRange)
+	imp := loadSharedImp(t)
+	if imp.Wander >= imp.Leash {
+		t.Fatalf("wander_radius=%v must be < leash=%v", imp.Wander, imp.Leash)
 	}
 }
 
 func TestImpIdleDwellIsTwoToSixSeconds(t *testing.T) {
-	if ImpIdleMinTicks != int(2*time.Second/TickDuration) {
-		t.Fatalf("idle min ticks=%d, want 2s", ImpIdleMinTicks)
+	impArch := loadSharedImp(t)
+	if impArch.IdleMinTicks != int(2*time.Second/TickDuration) {
+		t.Fatalf("idle min ticks=%d, want 2s", impArch.IdleMinTicks)
 	}
-	if ImpIdleMaxTicks != int(6*time.Second/TickDuration) {
-		t.Fatalf("idle max ticks=%d, want 6s", ImpIdleMaxTicks)
+	if impArch.IdleMaxTicks != int(6*time.Second/TickDuration) {
+		t.Fatalf("idle max ticks=%d, want 6s", impArch.IdleMaxTicks)
 	}
 	pw := newProbeWorld(t)
 	seedDeterministicCamp(t, pw.w)
@@ -418,8 +420,8 @@ func TestImpIdleDwellIsTwoToSixSeconds(t *testing.T) {
 	if imp.phase != phaseIdle {
 		t.Fatalf("phase=%d at spawn, want Idle", imp.phase)
 	}
-	if imp.idleRemain < ImpIdleMinTicks || imp.idleRemain > ImpIdleMaxTicks {
-		t.Fatalf("idleRemain=%d, want %d..%d", imp.idleRemain, ImpIdleMinTicks, ImpIdleMaxTicks)
+	if imp.idleRemain < pw.impArch().IdleMinTicks || imp.idleRemain > pw.impArch().IdleMaxTicks {
+		t.Fatalf("idleRemain=%d, want %d..%d", imp.idleRemain, pw.impArch().IdleMinTicks, pw.impArch().IdleMaxTicks)
 	}
 	hold := imp.idleRemain
 	for range hold - 1 {
@@ -451,7 +453,7 @@ func TestImpWanderIsRandomDiskNotLinePatrol(t *testing.T) {
 		dest := imp.remaining[len(imp.remaining)-1]
 		xs = append(xs, dest.X)
 		zs = append(zs, dest.Z)
-		if distanceBetween(dest, imp.home) > ImpWanderRadius+0.01 {
+		if distanceBetween(dest, imp.home) > pw.impArch().Wander+0.01 {
 			t.Fatalf("wander dest %v outside radius of home %v", dest, imp.home)
 		}
 	}
@@ -473,7 +475,7 @@ func TestImpWanderIsRandomDiskNotLinePatrol(t *testing.T) {
 	}
 	linePlusX := true
 	for i := range xs {
-		if zs[i] != imp.home.Z || xs[i] != imp.home.X+ImpWanderRadius {
+		if zs[i] != imp.home.Z || xs[i] != imp.home.X+pw.impArch().Wander {
 			linePlusX = false
 			break
 		}
@@ -496,7 +498,7 @@ func TestImpReturnRestoresHPAndClearsCombat(t *testing.T) {
 	imp.thinkProgress = 1
 	imp.thinkCount = 3
 	imp.attackTarget = alice.id
-	imp.pos = Point{X: imp.home.X + ImpLeashRange + 1, Z: imp.home.Z}
+	imp.pos = Point{X: imp.home.X + pw.impArch().Leash + 1, Z: imp.home.Z}
 	imp.remaining = nil
 
 	pw.w.step()
@@ -512,8 +514,8 @@ func TestImpReturnRestoresHPAndClearsCombat(t *testing.T) {
 	if imp.phase != phaseIdle {
 		t.Fatalf("phase=%d after return, want Idle", imp.phase)
 	}
-	if imp.hp != imp.maxHP || imp.hp != ImpMaxHP {
-		t.Fatalf("hp=%d after return, want max %d", imp.hp, ImpMaxHP)
+	if imp.hp != imp.maxHP || imp.hp != pw.impArch().MaxHP {
+		t.Fatalf("hp=%d after return, want max %d", imp.hp, pw.impArch().MaxHP)
 	}
 	if imp.attackTarget != 0 || imp.thinkProgress != 0 || imp.thinkCount != 0 || imp.casting() {
 		t.Fatalf("combat leftover after return: target=%d think=%d/%d casting=%v", imp.attackTarget, imp.thinkProgress, imp.thinkCount, imp.casting())

@@ -139,13 +139,13 @@ func TestWhitesKillImpFromFull(t *testing.T) {
 	seedDeterministicCamp(t, pw.w)
 	hostile := pw.w.npcByKind(KindImp)
 	despawnOtherImps(pw.w, hostile)
-	hostile.hp = ImpMaxHP
+	hostile.hp = pw.impArch().MaxHP
 	hostile.pos = Point{X: 1, Z: 0}
 	alice.pos = Point{X: 0, Z: 0}
 	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
 	sword := pw.weapon(pw.w.playerWeaponID(alice))
-	minHits := (ImpMaxHP + sword.DamageMax - 1) / sword.DamageMax
-	maxHits := (ImpMaxHP + sword.DamageMin - 1) / sword.DamageMin
+	minHits := (pw.impArch().MaxHP + sword.DamageMax - 1) / sword.DamageMax
+	maxHits := (pw.impArch().MaxHP + sword.DamageMin - 1) / sword.DamageMin
 
 	hits := 0
 	for i := 0; i < 400 && !hostile.dead(); i++ {
@@ -160,7 +160,7 @@ func TestWhitesKillImpFromFull(t *testing.T) {
 	}
 	if hits < minHits || hits > maxHits {
 		t.Fatalf("hits=%d, want %d..%d for %s [%d,%d] vs %d hp",
-			hits, minHits, maxHits, sword.ID, sword.DamageMin, sword.DamageMax, ImpMaxHP)
+			hits, minHits, maxHits, sword.ID, sword.DamageMin, sword.DamageMax, pw.impArch().MaxHP)
 	}
 	if alice.attackTarget != 0 {
 		t.Fatalf("attacker still pending on corpse: %d", alice.attackTarget)

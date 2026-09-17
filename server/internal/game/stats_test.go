@@ -22,10 +22,13 @@ func TestDefaultPlayerAttrsMatchLegacyCaps(t *testing.T) {
 	}
 }
 
-func TestDefaultImpAttrsMatchImpMaxHP(t *testing.T) {
-	a := defaultImpAttrs()
-	if a.maxHP() != ImpMaxHP {
-		t.Fatalf("imp maxHP=%d, want %d", a.maxHP(), ImpMaxHP)
+func TestSharedImpArchetypeMatchesCONMaxHP(t *testing.T) {
+	a := attrsFromArchetype(loadSharedImp(t))
+	if a.maxHP() != loadSharedImp(t).MaxHP {
+		t.Fatalf("imp maxHP=%d, want %d", a.maxHP(), loadSharedImp(t).MaxHP)
+	}
+	if a.CON != 5 || a.maxHP() != 50 {
+		t.Fatalf("imp CON/HP=%d/%d, want 5/50", a.CON, a.maxHP())
 	}
 }
 
@@ -164,15 +167,16 @@ func TestSpellDamageAddsSP(t *testing.T) {
 
 func TestSeededImpUsesCONForMaxHP(t *testing.T) {
 	pw := newProbeWorld(t)
-	if err := pw.w.seedNPC(KindImp, FactionHostile, 5, 5, ImpMaxHP); err != nil {
+	if err := pw.w.seedNPC(KindImp, FactionHostile, 5, 5, pw.impArch().MaxHP); err != nil {
 		t.Fatal(err)
 	}
 	imp := pw.w.npcByKind(KindImp)
-	if imp.attrs != defaultImpAttrs() {
-		t.Fatalf("imp attrs=%+v", imp.attrs)
+	want := attrsFromArchetype(pw.impArch())
+	if imp.attrs != want {
+		t.Fatalf("imp attrs=%+v, want %+v", imp.attrs, want)
 	}
-	if imp.maxHP != ImpMaxHP || imp.hp != ImpMaxHP {
-		t.Fatalf("imp hp=%d/%d, want %d from CON 5", imp.hp, imp.maxHP, ImpMaxHP)
+	if imp.maxHP != pw.impArch().MaxHP || imp.hp != pw.impArch().MaxHP {
+		t.Fatalf("imp hp=%d/%d, want %d from CON 5", imp.hp, imp.maxHP, pw.impArch().MaxHP)
 	}
 }
 

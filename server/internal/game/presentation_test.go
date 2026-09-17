@@ -235,12 +235,12 @@ func TestImpFireballBeginsThenResolves(t *testing.T) {
 	imp.remaining = nil
 	obs.flush()
 
-	if rej := pw.w.castAbility(imp, ImpSkillID, alice.id); rej != nil {
+	if rej := pw.w.castAbility(imp, pw.impArch().SkillID(), alice.id); rej != nil {
 		t.Fatalf("castAbility: %+v", rej)
 	}
 	pw.w.stepNForTest(imp.castTotal)
 
-	begin := mnet.CastPhase{ID: imp.id, Ability: ImpSkillID, Target: alice.id, Phase: mnet.CastPhaseBegin}
+	begin := mnet.CastPhase{ID: imp.id, Ability: pw.impArch().SkillID(), Target: alice.id, Phase: mnet.CastPhaseBegin}
 	resolve := begin
 	resolve.Phase = mnet.CastPhaseResolve
 	if got := castPhasesOf(t, obs.flush(), imp.id); !slices.Equal(got, []mnet.CastPhase{begin, resolve}) {
@@ -330,21 +330,21 @@ func TestImpFireballCancelsOnceOnLeash(t *testing.T) {
 	imp := pw.w.npcByKind(KindImp)
 	despawnOtherImps(pw.w, imp)
 	imp.home = Point{X: 0, Z: 0}
-	imp.pos = Point{X: ImpLeashRange + 1, Z: 0}
-	alice.pos = Point{X: ImpLeashRange + 1, Z: 1}
+	imp.pos = Point{X: pw.impArch().Leash + 1, Z: 0}
+	alice.pos = Point{X: pw.impArch().Leash + 1, Z: 1}
 	imp.phase = phaseCombat
 	imp.combatBeat = combatCast
 	imp.attackTarget = alice.id
 	imp.remaining = nil
 	obs.flush()
 
-	if rej := pw.w.castAbility(imp, ImpSkillID, alice.id); rej != nil {
+	if rej := pw.w.castAbility(imp, pw.impArch().SkillID(), alice.id); rej != nil {
 		t.Fatalf("castAbility: %+v", rej)
 	}
 	total := imp.castTotal
 	pw.w.stepNForTest(total)
 
-	begin := mnet.CastPhase{ID: imp.id, Ability: ImpSkillID, Target: alice.id, Phase: mnet.CastPhaseBegin}
+	begin := mnet.CastPhase{ID: imp.id, Ability: pw.impArch().SkillID(), Target: alice.id, Phase: mnet.CastPhaseBegin}
 	assertCastCancelledOnce(t, pw.probeWorld, obs.flush(), begin, CauseLeash)
 }
 
@@ -365,7 +365,7 @@ func TestImpFireballCancelsOnceWhenTheImpDies(t *testing.T) {
 	imp.hp = 1
 	obs.flush()
 
-	if rej := pw.w.castAbility(imp, ImpSkillID, alice.id); rej != nil {
+	if rej := pw.w.castAbility(imp, pw.impArch().SkillID(), alice.id); rej != nil {
 		t.Fatalf("castAbility: %+v", rej)
 	}
 	total := imp.castTotal
@@ -377,7 +377,7 @@ func TestImpFireballCancelsOnceWhenTheImpDies(t *testing.T) {
 	}
 	pw.w.stepNForTest(total)
 
-	begin := mnet.CastPhase{ID: imp.id, Ability: ImpSkillID, Target: alice.id, Phase: mnet.CastPhaseBegin}
+	begin := mnet.CastPhase{ID: imp.id, Ability: pw.impArch().SkillID(), Target: alice.id, Phase: mnet.CastPhaseBegin}
 	assertCastCancelledOnce(t, pw.probeWorld, obs.flush(), begin, CauseAttackerDied)
 }
 

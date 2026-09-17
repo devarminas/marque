@@ -14,6 +14,7 @@ import (
 	"github.com/devarminas/marque/server/internal/gamelog"
 	"github.com/devarminas/marque/server/internal/navmesh"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/npcdef"
 	"github.com/devarminas/marque/server/internal/questdef"
 	"github.com/devarminas/marque/server/internal/weapondef"
 )
@@ -232,6 +233,8 @@ type World struct {
 
 	weapons *weapondef.Catalog
 
+	npcArchetypes *npcdef.Catalog
+
 	players map[mnet.PlayerID]*player
 
 	parties     map[mnet.PartyID]*party
@@ -317,6 +320,21 @@ func (w *World) SetQuests(c *questdef.Catalog) {
 
 func (w *World) SetWeapons(c *weapondef.Catalog) {
 	w.weapons = c
+}
+
+func (w *World) SetNPCArchetypes(c *npcdef.Catalog) {
+	w.npcArchetypes = c
+}
+
+func (w *World) impArchetype() npcdef.Archetype {
+	if w.npcArchetypes == nil {
+		panic("game: npc archetypes catalog is not loaded")
+	}
+	a, ok := w.npcArchetypes.Get(KindImp)
+	if !ok {
+		panic("game: npc archetypes catalog missing imp")
+	}
+	return a
 }
 
 func (w *World) SetNav(m *navmesh.Mesh) {

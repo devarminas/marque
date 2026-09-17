@@ -129,7 +129,7 @@ func (w *World) spawnCampMember(c *camp) error {
 	if c.content.Kind != KindImp {
 		return fmt.Errorf("seed camp %q: unsupported kind %q", c.content.ID, c.content.Kind)
 	}
-	if err := w.seedNPCAt(c.content.Kind, FactionHostile, pos.X, pos.Z, ImpMaxHP, c.content.ID); err != nil {
+	if err := w.seedNPCAt(c.content.Kind, FactionHostile, pos.X, pos.Z, 1, c.content.ID); err != nil {
 		return err
 	}
 	n := w.npcs[w.npcOrder[len(w.npcOrder)-1]]

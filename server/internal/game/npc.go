@@ -3,10 +3,10 @@ package game
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/npcdef"
 	"github.com/devarminas/marque/server/internal/weapondef"
 )
 
@@ -36,15 +36,8 @@ const (
 	DummyMaxHP = 100000
 	DummyMinHP = 1
 
-	ImpMaxHP        = 50
-	ImpThreatRange  = 8.0
-	ImpLeashRange   = 16.0
-	ImpWanderRadius = 3.0
-	ImpIdleMinTicks = int(2 * time.Second / TickDuration)
-	ImpIdleMaxTicks = int(6 * time.Second / TickDuration)
-	ImpThinkTicks   = 2
-	ImpCastEvery    = 2
-	ImpSkillID      = "fireball"
+	ImpThinkTicks = 2
+	ImpCastEvery  = 2
 
 	practiceNpcIDBand mnet.PlayerID = 1_000_000
 
@@ -154,13 +147,15 @@ func (w *World) seedNPC(kind, faction string, x, z float64, maxHP int) error {
 	return w.seedNPCAt(kind, faction, x, z, maxHP, "")
 }
 
-func npcArchetypeWeapon(kind string) string {
-	switch kind {
-	case KindImp:
-		return weapondef.ImpClaw
-	default:
-		return weapondef.Unarmed
+func (w *World) lookupImpArchetype() (npcdef.Archetype, error) {
+	if w.npcArchetypes == nil {
+		return npcdef.Archetype{}, errors.New("seed npc: npc archetypes catalog is not loaded")
 	}
+	a, ok := w.npcArchetypes.Get(KindImp)
+	if !ok {
+		return npcdef.Archetype{}, errors.New("seed npc: missing imp archetype")
+	}
+	return a, nil
 }
 
 func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp string) error {
@@ -176,22 +171,29 @@ func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp st
 	if reason, detail := w.checkCoordinates(x, z); reason != "" {
 		return fmt.Errorf("seed npc %q at (%v, %v): %s", kind, x, z, detail)
 	}
+	attrs := defaultPlayerAttrs()
+	weapon := weapondef.Unarmed
+	if kind == KindImp {
+		arch, err := w.lookupImpArchetype()
+		if err != nil {
+			return err
+		}
+		attrs = attrsFromArchetype(arch)
+		weapon = arch.WeaponID
+		maxHP = arch.MaxHP
+	}
 	w.nextNpcID++
 	n := &npc{
 		id:      practiceNpcIDBand + w.nextNpcID,
 		kind:    kind,
 		faction: faction,
-		weapon:  npcArchetypeWeapon(kind),
+		weapon:  weapon,
 		pos:     Point{X: x, Z: z},
 		home:    Point{X: x, Z: z},
-		attrs:   defaultNPCAttrs(kind),
+		attrs:   attrs,
 		hp:      maxHP,
 		maxHP:   maxHP,
 		camp:    camp,
-	}
-	if kind == KindImp {
-		n.maxHP = n.attrs.maxHP()
-		n.hp = n.maxHP
 	}
 	w.npcs[n.id] = n
 	w.npcOrder = append(w.npcOrder, n.id)
