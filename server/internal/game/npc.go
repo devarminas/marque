@@ -36,13 +36,12 @@ const (
 	DummyMinHP = 1
 
 	ImpMaxHP        = 50
-	ImpDamage       = 5
 	ImpThreatRange  = 8.0
 	ImpLeashRange   = 16.0
 	ImpPatrolRadius = 3.0
-	ImpThinkTicks = 2
-	ImpCastEvery  = 2
-	ImpSkillID    = "fireball"
+	ImpThinkTicks   = 2
+	ImpCastEvery    = 2
+	ImpSkillID      = "fireball"
 
 	practiceNpcIDBand mnet.PlayerID = 1_000_000
 

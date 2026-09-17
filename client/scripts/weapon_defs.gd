@@ -30,6 +30,10 @@ static func parse_attack_period_ticks(text: String, source: String) -> Dictionar
 			or typeof(entry.get("id")) != TYPE_STRING
 			or typeof(entry.get("attack_period_ticks")) != TYPE_FLOAT
 			or entry["attack_period_ticks"] < 1.0
+			or typeof(entry.get("damage_min")) != TYPE_FLOAT
+			or typeof(entry.get("damage_max")) != TYPE_FLOAT
+			or entry["damage_min"] < 1.0
+			or entry["damage_max"] < entry["damage_min"]
 		):
 			push_error("weapon_defs: %s has a malformed weapon %s" % [source, JSON.stringify(entry)])
 			return {}

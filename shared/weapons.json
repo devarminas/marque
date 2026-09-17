@@ -2,23 +2,33 @@
   "weapons": [
     {
       "id": "unarmed",
-      "attack_period_ticks": 4
+      "attack_period_ticks": 50,
+      "damage_min": 3,
+      "damage_max": 5
     },
     {
       "id": "sword",
-      "attack_period_ticks": 4
+      "attack_period_ticks": 45,
+      "damage_min": 8,
+      "damage_max": 12
     },
     {
       "id": "staff",
-      "attack_period_ticks": 4
+      "attack_period_ticks": 55,
+      "damage_min": 6,
+      "damage_max": 9
     },
     {
       "id": "bow",
-      "attack_period_ticks": 4
+      "attack_period_ticks": 40,
+      "damage_min": 5,
+      "damage_max": 8
     },
     {
       "id": "imp_claw",
-      "attack_period_ticks": 4
+      "attack_period_ticks": 70,
+      "damage_min": 2,
+      "damage_max": 4
     }
   ]
 }

@@ -1,6 +1,7 @@
 package game
 
 import (
+	mrand "math/rand/v2"
 	"testing"
 
 	mnet "github.com/devarminas/marque/server/internal/net"
@@ -56,9 +57,7 @@ func TestAttackOutOfRangeSteersInThenHitsOnPeriod(t *testing.T) {
 	for alice.attackProgress > 0 && hostile.hp == DummyMaxHP {
 		pw.w.step()
 	}
-	if hostile.hp != DummyMaxHP-AttackDamage {
-		t.Fatalf("hp=%d after first period, want %d", hostile.hp, DummyMaxHP-AttackDamage)
-	}
+	pw.assertWhiteHit(DummyMaxHP, hostile.hp, pw.w.playerWeaponID(alice))
 	if got := pw.events(EvAttackHit); len(got) != 1 {
 		t.Fatalf("logged %d attack_hit, want 1", len(got))
 	}
@@ -110,11 +109,10 @@ func TestAttackPeriodPausesOffRange(t *testing.T) {
 	hostile.pos = Point{X: 1, Z: 0}
 	alice.clearSteer()
 	alice.pos = Point{X: 0, Z: 0}
-	pw.w.step()
-	pw.w.step()
-	if hostile.hp != DummyMaxHP-AttackDamage {
-		t.Fatalf("hp=%d after resume to period, want %d", hostile.hp, DummyMaxHP-AttackDamage)
+	for i := 0; i < 200 && hostile.hp == DummyMaxHP; i++ {
+		pw.w.step()
 	}
+	pw.assertWhiteHit(DummyMaxHP, hostile.hp, pw.w.playerWeaponID(alice))
 }
 
 func TestMoveKeepsStickyAutoAttack(t *testing.T) {
@@ -135,7 +133,7 @@ func TestMoveKeepsStickyAutoAttack(t *testing.T) {
 	}
 }
 
-func TestTenHitsKillImpFromFull(t *testing.T) {
+func TestWhitesKillImpFromFull(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	seedDeterministicCamp(t, pw.w)
@@ -145,9 +143,12 @@ func TestTenHitsKillImpFromFull(t *testing.T) {
 	hostile.pos = Point{X: 1, Z: 0}
 	alice.pos = Point{X: 0, Z: 0}
 	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+	sword := pw.weapon(pw.w.playerWeaponID(alice))
+	minHits := (ImpMaxHP + sword.DamageMax - 1) / sword.DamageMax
+	maxHits := (ImpMaxHP + sword.DamageMin - 1) / sword.DamageMin
 
 	hits := 0
-	for i := 0; i < 200 && !hostile.dead(); i++ {
+	for i := 0; i < 400 && !hostile.dead(); i++ {
 		before := hostile.hp
 		pw.w.step()
 		if hostile.hp < before {
@@ -157,8 +158,9 @@ func TestTenHitsKillImpFromFull(t *testing.T) {
 	if !hostile.dead() {
 		t.Fatalf("imp survived with hp=%d after %d hits", hostile.hp, hits)
 	}
-	if hits != ImpMaxHP/AttackDamage {
-		t.Fatalf("hits=%d, want %d", hits, ImpMaxHP/AttackDamage)
+	if hits < minHits || hits > maxHits {
+		t.Fatalf("hits=%d, want %d..%d for %s [%d,%d] vs %d hp",
+			hits, minHits, maxHits, sword.ID, sword.DamageMin, sword.DamageMax, ImpMaxHP)
 	}
 	if alice.attackTarget != 0 {
 		t.Fatalf("attacker still pending on corpse: %d", alice.attackTarget)
@@ -169,7 +171,7 @@ func TestPracticeDummySurvivesLethalVolley(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")
 	hostile := pw.seedHostile()
-	hostile.hp = AttackDamage
+	hostile.hp = 1
 	hostile.pos = Point{X: 1, Z: 0}
 	alice.pos = Point{X: 0, Z: 0}
 	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
@@ -259,7 +261,7 @@ func TestSameTickMultiAttackerJoinOrder(t *testing.T) {
 	seedDeterministicCamp(t, pw.w)
 	hostile := pw.w.npcByKind(KindImp)
 	despawnOtherImps(pw.w, hostile)
-	hostile.hp = AttackDamage
+	hostile.hp = 1
 	hostile.pos = Point{X: 1, Z: 0}
 	alice.pos = Point{X: 0, Z: 0}
 	bob.pos = Point{X: 0.5, Z: 0}
@@ -359,22 +361,16 @@ func TestAttackIgnoresWeapon(t *testing.T) {
 	for range pw.playerPeriod(alice) {
 		pw.w.step()
 	}
-	if hostile.hp != DummyMaxHP-AttackDamage {
-		t.Fatalf("knight hit failed: hp=%d", hostile.hp)
-	}
+	pw.assertWhiteHit(DummyMaxHP, hostile.hp, pw.w.playerWeaponID(alice))
 }
 
 func TestPlayerAttackPeriodFromEquippedWeapon(t *testing.T) {
 	pw := newClassProbe(t)
-	cat, err := weapondef.Parse([]byte(`{"weapons":[
-		{"id":"unarmed","attack_period_ticks":7},
-		{"id":"sword","attack_period_ticks":3},
-		{"id":"imp_claw","attack_period_ticks":4}
+	pw.w.SetWeapons(parseWeapons(t, `{"weapons":[
+		{"id":"unarmed","attack_period_ticks":7,"damage_min":4,"damage_max":4},
+		{"id":"sword","attack_period_ticks":3,"damage_min":9,"damage_max":9},
+		{"id":"imp_claw","attack_period_ticks":4,"damage_min":2,"damage_max":2}
 	]}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	pw.w.SetWeapons(cat)
 	alice := pw.joinWithClass("knight")
 	if got := pw.w.playerWeaponID(alice); got != weapondef.Sword {
 		t.Fatalf("weapon=%q, want sword", got)
@@ -393,23 +389,17 @@ func TestPlayerAttackPeriodFromEquippedWeapon(t *testing.T) {
 		t.Fatalf("hit before sword period: hp=%d", hostile.hp)
 	}
 	pw.w.step()
-	if hostile.hp != DummyMaxHP-AttackDamage {
-		t.Fatalf("hp=%d after sword period, want %d", hostile.hp, DummyMaxHP-AttackDamage)
-	}
+	pw.assertWhiteHit(DummyMaxHP, hostile.hp, weapondef.Sword)
 }
 
 func TestPlayerAndNPCShareWeaponDefPeriod(t *testing.T) {
 	pw := newClassProbe(t)
 	const sharedPeriod = 2
-	cat, err := weapondef.Parse([]byte(`{"weapons":[
-		{"id":"unarmed","attack_period_ticks":4},
-		{"id":"sword","attack_period_ticks":2},
-		{"id":"imp_claw","attack_period_ticks":9}
+	pw.w.SetWeapons(parseWeapons(t, `{"weapons":[
+		{"id":"unarmed","attack_period_ticks":4,"damage_min":3,"damage_max":3},
+		{"id":"sword","attack_period_ticks":2,"damage_min":11,"damage_max":11},
+		{"id":"imp_claw","attack_period_ticks":9,"damage_min":2,"damage_max":2}
 	]}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	pw.w.SetWeapons(cat)
 
 	alice := pw.joinWithClass("knight")
 	if got := pw.w.playerWeaponID(alice); got != weapondef.Sword {
@@ -428,9 +418,7 @@ func TestPlayerAndNPCShareWeaponDefPeriod(t *testing.T) {
 		t.Fatalf("player hit on tick 1: hp=%d", hostile.hp)
 	}
 	pw.w.step()
-	if hostile.hp != DummyMaxHP-AttackDamage {
-		t.Fatalf("player hp=%d after shared period, want %d", hostile.hp, DummyMaxHP-AttackDamage)
-	}
+	pw.assertWhiteHit(DummyMaxHP, hostile.hp, weapondef.Sword)
 
 	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
@@ -455,23 +443,17 @@ func TestPlayerAndNPCShareWeaponDefPeriod(t *testing.T) {
 		t.Fatalf("npc hit on tick 1: hp=%d", bob.hp)
 	}
 	pw.w.step()
-	if bob.hp != before-ImpDamage {
-		t.Fatalf("npc hp=%d after shared sword period, want %d", bob.hp, before-ImpDamage)
-	}
+	pw.assertWhiteHit(before, bob.hp, weapondef.Sword)
 }
 
 func TestImpArchetypeUsesImpClawPeriod(t *testing.T) {
 	pw := newClassProbe(t)
 	const clawPeriod = 3
-	cat, err := weapondef.Parse([]byte(`{"weapons":[
-		{"id":"unarmed","attack_period_ticks":8},
-		{"id":"sword","attack_period_ticks":8},
-		{"id":"imp_claw","attack_period_ticks":3}
+	pw.w.SetWeapons(parseWeapons(t, `{"weapons":[
+		{"id":"unarmed","attack_period_ticks":8,"damage_min":3,"damage_max":3},
+		{"id":"sword","attack_period_ticks":8,"damage_min":8,"damage_max":8},
+		{"id":"imp_claw","attack_period_ticks":3,"damage_min":2,"damage_max":2}
 	]}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	pw.w.SetWeapons(cat)
 	seedDeterministicCamp(t, pw.w)
 	imp := pw.w.npcByKind(KindImp)
 	despawnOtherImps(pw.w, imp)
@@ -496,23 +478,17 @@ func TestImpArchetypeUsesImpClawPeriod(t *testing.T) {
 		t.Fatalf("imp hit before claw period: hp=%d", alice.hp)
 	}
 	pw.w.step()
-	if alice.hp != before-ImpDamage {
-		t.Fatalf("hp=%d after imp_claw period, want %d", alice.hp, before-ImpDamage)
-	}
+	pw.assertWhiteHit(before, alice.hp, weapondef.ImpClaw)
 }
 
 func TestPlayerUnarmedFallbackPeriod(t *testing.T) {
 	pw := newClassProbe(t)
 	const unarmedPeriod = 3
-	cat, err := weapondef.Parse([]byte(`{"weapons":[
-		{"id":"unarmed","attack_period_ticks":3},
-		{"id":"sword","attack_period_ticks":9},
-		{"id":"imp_claw","attack_period_ticks":9}
+	pw.w.SetWeapons(parseWeapons(t, `{"weapons":[
+		{"id":"unarmed","attack_period_ticks":3,"damage_min":4,"damage_max":4},
+		{"id":"sword","attack_period_ticks":9,"damage_min":8,"damage_max":8},
+		{"id":"imp_claw","attack_period_ticks":9,"damage_min":2,"damage_max":2}
 	]}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	pw.w.SetWeapons(cat)
 	alice := pw.join()
 	if got := pw.w.playerWeaponID(alice); got != weapondef.Unarmed {
 		t.Fatalf("weapon=%q, want unarmed", got)
@@ -533,9 +509,7 @@ func TestPlayerUnarmedFallbackPeriod(t *testing.T) {
 		t.Fatalf("hit before unarmed period: hp=%d", hostile.hp)
 	}
 	pw.w.step()
-	if hostile.hp != DummyMaxHP-AttackDamage {
-		t.Fatalf("hp=%d after unarmed period, want %d", hostile.hp, DummyMaxHP-AttackDamage)
-	}
+	pw.assertWhiteHit(DummyMaxHP, hostile.hp, weapondef.Unarmed)
 }
 
 func TestAttackPeriodTicksPanicsWithoutCatalog(t *testing.T) {
@@ -562,6 +536,33 @@ func TestAttackPeriodTicksPanicsWithoutUnarmed(t *testing.T) {
 	_ = pw.w.attackPeriodTicks("missing_weapon")
 }
 
+func TestWhiteDamageUsesEquippedWeaponRange(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetWeapons(parseWeapons(t, `{"weapons":[
+		{"id":"unarmed","attack_period_ticks":4,"damage_min":1,"damage_max":1},
+		{"id":"sword","attack_period_ticks":1,"damage_min":6,"damage_max":9},
+		{"id":"imp_claw","attack_period_ticks":4,"damage_min":1,"damage_max":1}
+	]}`))
+	pw.w.rng = mrand.New(mrand.NewPCG(11, 22))
+	alice := pw.joinWithClass("knight")
+	hostile := pw.seedHostile()
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+	seen := map[int]bool{}
+	for range 40 {
+		before := hostile.hp
+		pw.w.step()
+		if hostile.hp == before {
+			continue
+		}
+		pw.assertWhiteHit(before, hostile.hp, weapondef.Sword)
+		seen[before-hostile.hp] = true
+	}
+	if len(seen) < 2 {
+		t.Fatalf("expected more than one roll in [6,9], got %v", seen)
+	}
+}
 
 func TestStickyAutoAttackRepeatsAtWeaponPeriod(t *testing.T) {
 	pw := newClassProbe(t)
@@ -738,17 +739,31 @@ func TestStickyAutoAttackContinuesWhileMovingInRange(t *testing.T) {
 
 	period := pw.playerPeriod(alice)
 	pw.w.move(alice, mnet.Move{DX: 0, DZ: 1}, 0)
-	for range period {
+	moveTicks := 8
+	if moveTicks >= period {
+		moveTicks = period - 1
+	}
+	for range moveTicks {
 		pw.w.step()
+		if distanceBetween(alice.pos, hostile.pos) > AttackRange {
+			t.Fatalf("walked out of range at pos=%v target=%v", alice.pos, hostile.pos)
+		}
 	}
 	if alice.attackTarget != hostile.id {
 		t.Fatalf("sticky AA cleared while moving in range: %d", alice.attackTarget)
 	}
-	if got := len(pw.events(EvAttackHit)); got != 1 {
-		t.Fatalf("hits=%d, want 1 while moving in range", got)
-	}
 	if !alice.steering() {
 		t.Fatal("in-range sticky AA halted player wish")
+	}
+	alice.clearSteer()
+	for range period - moveTicks {
+		pw.w.step()
+	}
+	if alice.attackTarget != hostile.id {
+		t.Fatalf("sticky AA cleared after in-range move: %d", alice.attackTarget)
+	}
+	if got := len(pw.events(EvAttackHit)); got != 1 {
+		t.Fatalf("hits=%d, want 1 after a period that included in-range movement", got)
 	}
 }
 

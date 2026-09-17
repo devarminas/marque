@@ -158,7 +158,7 @@ func probeKillQuest(t *testing.T, q questdef.Quest) {
 			t.Fatalf("seed imp camp: %v", err)
 		}
 		// One-hit kills so solo wire progress finishes before the camp swarm.
-		if err := w.SetHostileKindHitPoints(q.Kill.Kind, game.AttackDamage); err != nil {
+		if err := w.SetHostileKindHitPoints(q.Kill.Kind, 1); err != nil {
 			t.Fatalf("soften kill targets: %v", err)
 		}
 	})

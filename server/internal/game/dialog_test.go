@@ -252,7 +252,7 @@ func TestDeathClearsPendingTalkAndDialog(t *testing.T) {
 		t.Fatalf("dialogNPC=%d", alice.dialogNPC)
 	}
 	bob.pos = alice.pos
-	alice.hp = AttackDamage
+	alice.hp = 1
 	pw.w.beginAttack(bob, alice.id, alice.pos, 2)
 	pw.stepN(pw.playerPeriod(bob))
 	if !alice.dead() {

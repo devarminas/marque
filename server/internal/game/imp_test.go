@@ -1,9 +1,10 @@
-﻿package game
+package game
 
 import (
 	"testing"
 
 	mnet "github.com/devarminas/marque/server/internal/net"
+	"github.com/devarminas/marque/server/internal/weapondef"
 )
 
 func TestImpPatrolsNearHome(t *testing.T) {
@@ -241,9 +242,7 @@ func TestImpMeleeDamagesPlayer(t *testing.T) {
 	for range pw.npcPeriod(imp) {
 		pw.w.step()
 	}
-	if alice.hp != before-ImpDamage {
-		t.Fatalf("hp=%d, want %d", alice.hp, before-ImpDamage)
-	}
+	pw.assertWhiteHit(before, alice.hp, weapondef.ImpClaw)
 	if imp.phase != phaseThink {
 		t.Fatalf("phase=%d after swing, want Think", imp.phase)
 	}
@@ -251,7 +250,7 @@ func TestImpMeleeDamagesPlayer(t *testing.T) {
 	if len(hits) != 1 {
 		t.Fatalf("attack_hit=%v", hits)
 	}
-	if hits[0]["damage"] != float64(ImpDamage) || hits[0]["npc"] != float64(imp.id) {
+	if hits[0]["npc"] != float64(imp.id) {
 		t.Fatalf("hit fields=%v", hits[0])
 	}
 }
@@ -271,20 +270,19 @@ func TestImpAttackGatedByThink(t *testing.T) {
 	for range pw.npcPeriod(imp) {
 		pw.w.step()
 	}
-	if alice.hp != before-ImpDamage {
-		t.Fatalf("first swing hp=%d, want %d", alice.hp, before-ImpDamage)
-	}
+	pw.assertWhiteHit(before, alice.hp, weapondef.ImpClaw)
 	if imp.phase != phaseThink {
 		t.Fatalf("phase=%d, want Think after Attack", imp.phase)
 	}
 
+	afterSwing := alice.hp
 	for range ImpThinkTicks - 1 {
 		pw.w.step()
 		if imp.phase != phaseThink {
 			t.Fatalf("left Think early: phase=%d", imp.phase)
 		}
 	}
-	if alice.hp != before-ImpDamage {
+	if alice.hp != afterSwing {
 		t.Fatalf("swung during Think: hp=%d", alice.hp)
 	}
 }
@@ -369,9 +367,7 @@ func TestCombatClassCanAttackImp(t *testing.T) {
 	for range pw.playerPeriod(alice) {
 		pw.w.step()
 	}
-	if imp.hp != ImpMaxHP-AttackDamage {
-		t.Fatalf("imp hp=%d, want %d", imp.hp, ImpMaxHP-AttackDamage)
-	}
+	pw.assertWhiteHit(ImpMaxHP, imp.hp, pw.w.playerWeaponID(alice))
 }
 
 func TestGatheringClassCannotAttackImp(t *testing.T) {
@@ -411,4 +407,3 @@ func impInCombatBrain(n *npc) bool {
 		return false
 	}
 }
-

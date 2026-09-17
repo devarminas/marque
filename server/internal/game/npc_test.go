@@ -195,9 +195,7 @@ func TestAttackHostileDummyEngagesAndHits(t *testing.T) {
 	for range pw.playerPeriod(alice) {
 		pw.w.step()
 	}
-	if hostile.hp != DummyMaxHP-AttackDamage {
-		t.Fatalf("hostile hp=%d, want %d", hostile.hp, DummyMaxHP-AttackDamage)
-	}
+	pw.assertWhiteHit(DummyMaxHP, hostile.hp, pw.w.playerWeaponID(alice))
 	if got := pw.events(EvAttackHit); len(got) != 1 {
 		t.Fatalf("attack_hit=%v, want one", got)
 	}

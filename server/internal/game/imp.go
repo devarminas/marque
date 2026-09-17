@@ -132,8 +132,10 @@ func (w *World) stepImpAttack(n *npc) {
 	}
 	n.attackProgress = 0
 
-	w.broadcast(mnet.Swing{ID: n.id, Target: target.id, Weapon: w.npcWeaponID(n)}, nil)
-	target.hp -= ImpDamage
+	weaponID := w.npcWeaponID(n)
+	damage := w.rollWhiteDamage(weaponID)
+	w.broadcast(mnet.Swing{ID: n.id, Target: target.id, Weapon: weaponID}, nil)
+	target.hp -= damage
 	if target.hp < 0 {
 		target.hp = 0
 	}
@@ -141,7 +143,7 @@ func (w *World) stepImpAttack(n *npc) {
 	fields := gamelog.Fields{
 		"npc":       n.id,
 		"target":    target.id,
-		"damage":    ImpDamage,
+		"damage":    damage,
 		"target_hp": target.hp,
 	}
 	w.log.Event(w.tick, EvAttackHit, fields)
