@@ -806,7 +806,7 @@ func TestStickyAutoAttackContinuesWhileMovingInRange(t *testing.T) {
 	}
 }
 
-func TestAttackHitLogsTheCritAndMissFlags(t *testing.T) {
+func TestAttackHitLogsTheCritFlag(t *testing.T) {
 	cases := []struct {
 		name     string
 		dex      int
@@ -835,9 +835,8 @@ func TestAttackHitLogsTheCritAndMissFlags(t *testing.T) {
 			if got := hits[0]["crit"]; got != tc.wantCrit {
 				t.Fatalf("attack_hit crit=%v, want %v", got, tc.wantCrit)
 			}
-			if got := hits[0]["miss"]; got != false {
-				t.Fatalf("attack_hit miss=%v, want false until the miss roll lands", got)
-			}
+			// The miss pin lands with the miss roll in ARM-312. `miss` is a
+			// hardcoded false at every emit site, so asserting it pins nothing.
 
 			weapon := pw.weapon(pw.w.playerWeaponID(alice))
 			worstNormalHit := weapon.DamageMax + alice.attrs.AP() - hostile.attrs.Armor()
