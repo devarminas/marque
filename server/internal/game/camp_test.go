@@ -137,6 +137,14 @@ func TestCampRespawnAfterDeathTimer(t *testing.T) {
 	if distanceBetween(pos, c.content.Center) > c.content.Radius+1e-9 {
 		t.Fatalf("respawn outside radius: %v", pos)
 	}
+	imps := campImps(pw.w, c.content.ID)
+	for i := 0; i < len(imps); i++ {
+		for j := i + 1; j < len(imps); j++ {
+			if d := distanceBetween(imps[i].home, imps[j].home); d < ImpCampMinSpacing {
+				t.Fatalf("respawn home dist=%v < min_spacing %v", d, ImpCampMinSpacing)
+			}
+		}
+	}
 }
 
 func TestCampRespawnBroadcastsNpcSpawn(t *testing.T) {
@@ -194,6 +202,83 @@ func TestCampRespawnBroadcastsNpcSpawn(t *testing.T) {
 	if _, ok := pw.w.npcs[spawn.ID]; !ok {
 		t.Fatalf("npc_spawn id %d missing from world", spawn.ID)
 	}
+}
+
+func TestCampHomesHonorMinSpacingAndFillPool(t *testing.T) {
+	pw := newProbeWorld(t)
+	c := seedDeterministicCamp(t, pw.w)
+	if c.content.MinSpacing != ImpCampMinSpacing {
+		t.Fatalf("min_spacing=%v, want %v", c.content.MinSpacing, ImpCampMinSpacing)
+	}
+	if c.content.Radius != ImpCampRadius {
+		t.Fatalf("radius=%v, want %v", c.content.Radius, ImpCampRadius)
+	}
+	if !campDiskFits(c.content.Radius, c.content.MinSpacing, c.content.PoolMax) {
+		t.Fatal("authored camp cannot pack pool under min_spacing")
+	}
+	imps := campImps(pw.w, c.content.ID)
+	if len(imps) != ImpCampPoolMax {
+		t.Fatalf("live=%d, want full pool %d", len(imps), ImpCampPoolMax)
+	}
+	for i := 0; i < len(imps); i++ {
+		for j := i + 1; j < len(imps); j++ {
+			d := distanceBetween(imps[i].home, imps[j].home)
+			if d < ImpCampMinSpacing {
+				t.Fatalf("homes %d and %d dist=%v < min_spacing %v", imps[i].id, imps[j].id, d, ImpCampMinSpacing)
+			}
+		}
+	}
+}
+
+func TestCampIdleClocksAreDesynced(t *testing.T) {
+	pw := newProbeWorld(t)
+	c := seedDeterministicCamp(t, pw.w)
+	seen := map[int]int{}
+	for _, n := range campImps(pw.w, c.content.ID) {
+		if n.phase != phaseIdle {
+			t.Fatalf("npc %d phase=%d, want Idle at spawn", n.id, n.phase)
+		}
+		seen[n.idleRemain]++
+	}
+	if len(seen) < 2 {
+		t.Fatalf("idleRemain clocks synced: %v", seen)
+	}
+}
+
+func TestCampMinSpacingRejectsCloseRetry(t *testing.T) {
+	pw := newProbeWorld(t)
+	c := seedDeterministicCamp(t, pw.w)
+	first := campImps(pw.w, c.content.ID)[0]
+	if pw.w.campHomeClear(c, first.home) {
+		t.Fatal("existing home should fail min_spacing against itself")
+	}
+	away := Point{X: c.content.Center.X + c.content.Radius + ImpCampMinSpacing + 1, Z: c.content.Center.Z}
+	if !pw.w.campHomeClear(c, away) {
+		t.Fatalf("home %v far from camp members should be clear", away)
+	}
+}
+
+func TestCampDiskFitsMatchesStarterCamp(t *testing.T) {
+	if ImpCampMinSpacing < 2 || ImpCampMinSpacing > 3 {
+		t.Fatalf("min_spacing=%v, want ~2-3m", ImpCampMinSpacing)
+	}
+	if !campDiskFits(ImpCampRadius, ImpCampMinSpacing, ImpCampPoolMax) {
+		t.Fatalf("radius %v cannot place pool %d at spacing %v", ImpCampRadius, ImpCampPoolMax, ImpCampMinSpacing)
+	}
+	if campDiskFits(1.0, 2.5, 5) {
+		t.Fatal("tiny radius must fail closed for pool 5 / 2.5m")
+	}
+}
+
+func campImps(w *World, campID string) []*npc {
+	var out []*npc
+	for _, id := range w.npcOrder {
+		n := w.npcs[id]
+		if n != nil && n.camp == campID && n.kind == KindImp {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func awaitWireKind(t *testing.T, ws *websocket.Conn, want string, within time.Duration) json.RawMessage {

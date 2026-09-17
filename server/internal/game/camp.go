@@ -11,10 +11,13 @@ import (
 const (
 	CampStarterTownImps = "starter_town_imps"
 
-	ImpCampRadius          = 4.0
-	ImpCampPoolMax         = 5
-	ImpCampDeathTimerTicks = 40
-	ImpCampJitterTicks     = 20
+	ImpCampRadius           = 8.0
+	ImpCampPoolMax          = 5
+	ImpCampMinSpacing       = 2.5
+	ImpCampPlaceTries       = 64
+	ImpCampPhaseStrideTicks = 12
+	ImpCampDeathTimerTicks  = 40
+	ImpCampJitterTicks      = 20
 
 	EvNPCDespawned = "npc_despawned"
 )
@@ -29,6 +32,7 @@ type CampContent struct {
 	PoolMax         int
 	DeathTimerTicks int64
 	JitterTicks     int64
+	MinSpacing      float64
 }
 
 // StarterTownImpCamp is the single M11 starter-town Imp pool.
@@ -40,6 +44,7 @@ var StarterTownImpCamp = CampContent{
 	PoolMax:         ImpCampPoolMax,
 	DeathTimerTicks: ImpCampDeathTimerTicks,
 	JitterTicks:     ImpCampJitterTicks,
+	MinSpacing:      ImpCampMinSpacing,
 }
 
 type camp struct {
@@ -84,17 +89,43 @@ func validateCampContent(c CampContent) error {
 	if c.JitterTicks < 0 {
 		return fmt.Errorf("seed camp %q: jitter %d must be >= 0", c.ID, c.JitterTicks)
 	}
+	if c.MinSpacing < 0 {
+		return fmt.Errorf("seed camp %q: min spacing %v must be >= 0", c.ID, c.MinSpacing)
+	}
+	if !campDiskFits(c.Radius, c.MinSpacing, c.PoolMax) {
+		return fmt.Errorf(
+			"seed camp %q: pool %d cannot fit min_spacing %v in radius %v",
+			c.ID, c.PoolMax, c.MinSpacing, c.Radius,
+		)
+	}
 	if reason, detail := (&World{mapCfg: VillageMap}).checkCoordinates(c.Center.X, c.Center.Z); reason != "" {
 		return fmt.Errorf("seed camp %q at (%v, %v): %s", c.ID, c.Center.X, c.Center.Z, detail)
 	}
 	return nil
 }
 
+func campDiskFits(radius, spacing float64, pool int) bool {
+	if pool <= 1 || spacing <= 0 {
+		return true
+	}
+	if radius < 0 {
+		return false
+	}
+	need := spacing / (2 * math.Sin(math.Pi/float64(pool)))
+	return need <= radius+1e-9
+}
+
 func (w *World) spawnCampMember(c *camp) error {
 	if w.campLiveCount(c) >= c.content.PoolMax {
 		return nil
 	}
-	pos := w.pointInCamp(c.content)
+	pos, ok := w.placeCampHome(c)
+	if !ok {
+		return fmt.Errorf(
+			"seed camp %q: no home with min_spacing %v in radius %v after %d tries",
+			c.content.ID, c.content.MinSpacing, c.content.Radius, ImpCampPlaceTries,
+		)
+	}
 	if c.content.Kind != KindImp {
 		return fmt.Errorf("seed camp %q: unsupported kind %q", c.content.ID, c.content.Kind)
 	}
@@ -103,7 +134,42 @@ func (w *World) spawnCampMember(c *camp) error {
 	}
 	n := w.npcs[w.npcOrder[len(w.npcOrder)-1]]
 	n.home = pos
+	w.offsetCampIdle(n, w.campLiveCount(c)-1)
 	return nil
+}
+
+func (w *World) placeCampHome(c *camp) (Point, bool) {
+	for range ImpCampPlaceTries {
+		pos := w.pointInCamp(c.content)
+		if w.campHomeClear(c, pos) {
+			return pos, true
+		}
+	}
+	return Point{}, false
+}
+
+func (w *World) campHomeClear(c *camp, pos Point) bool {
+	spacing := c.content.MinSpacing
+	if spacing <= 0 {
+		return true
+	}
+	for _, id := range w.npcOrder {
+		n := w.npcs[id]
+		if n == nil || n.camp != c.content.ID || n.dead() {
+			continue
+		}
+		if distanceBetween(n.home, pos) < spacing {
+			return false
+		}
+	}
+	return true
+}
+
+func (w *World) offsetCampIdle(n *npc, index int) {
+	if n == nil || index <= 0 || ImpCampPhaseStrideTicks <= 0 {
+		return
+	}
+	n.idleRemain += index * ImpCampPhaseStrideTicks
 }
 
 func (w *World) pointInCamp(c CampContent) Point {
