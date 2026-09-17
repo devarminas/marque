@@ -18,14 +18,14 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 ### Arm the program
 
-- [ ] State the protocol and this plan to the operator, then stop. Start execution only on her explicit go.
-- [ ] On her go, record a standing goal with this exact text. "docs/hit-cadence-feedback-plan.md. PR order ARM-311, ARM-312, ARM-315, ARM-314, ARM-313, ARM-316, ARM-318. Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Operator lands the stack. Done when every PR box is checked and the stack tip is merge-ready."
-- [ ] Read these at program start. Re-read them at every tick.
-  - [ ] `git show origin/main:.cursor/skills/verify-marque/SKILL.md`
-  - [ ] `git show origin/main:.cursor/skills/verify-marque/demo-allowlist.txt`
-  - [ ] Read the four pstack skills from their installed path, since pstack is not vendored in this repo. `~/.pi/agent/npm/node_modules/@zenspc/pi-pstack/skills/poteto-mode/playbooks/autopilot-stack.md`, `~/.pi/agent/npm/node_modules/@zenspc/pi-pstack/skills/swarm/SKILL.md`, `~/.pi/agent/npm/node_modules/@zenspc/pi-pstack/skills/poteto-mode/playbooks/opening-a-pr.md`, and `~/.pi/agent/npm/node_modules/@zenspc/pi-pstack/skills/deslop/SKILL.md`.
-- [ ] Arm the 30-minute audit tick. In a local session, a real terminal with a recurring wake. Never leave the cadence to memory or to a lossy completion notification.
-- [ ] Use this tick prompt, verbatim. "Re-read the execution playbook and the standing goal. Audit the operation against both and fix drift in this tick. Probe every active lane and judge progress by side effects only. Stand down a stuck lane and dispatch its replacement now. Then send the operator a status message, whether or not anything changed, with the queue table of PR, owner, state, and head SHA, the verdicts since the last tick, what merged, open operator gates, and blockers."
+- [x] State the protocol and this plan to the operator, then stop. Start execution only on her explicit go.
+- [x] On her go, record a standing goal with this exact text. "docs/hit-cadence-feedback-plan.md. PR order ARM-311, ARM-312, ARM-315, ARM-314, ARM-313, ARM-316, ARM-318. Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Operator lands the stack. Done when every PR box is checked and the stack tip is merge-ready."
+- [x] Read these at program start. Re-read them at every tick.
+  - [x] `git show origin/main:.cursor/skills/verify-marque/SKILL.md`
+  - [x] `git show origin/main:.cursor/skills/verify-marque/demo-allowlist.txt`
+  - [x] Read the four pstack skills from their installed path, since pstack is not vendored in this repo. `~/.pi/agent/npm/node_modules/@zenspc/pi-pstack/skills/poteto-mode/playbooks/autopilot-stack.md`, `~/.pi/agent/npm/node_modules/@zenspc/pi-pstack/skills/swarm/SKILL.md`, `~/.pi/agent/npm/node_modules/@zenspc/pi-pstack/skills/poteto-mode/playbooks/opening-a-pr.md`, and `~/.pi/agent/npm/node_modules/@zenspc/pi-pstack/skills/deslop/SKILL.md`.
+- [x] Arm the 30-minute audit tick. In a local session, a real terminal with a recurring wake. Never leave the cadence to memory or to a lossy completion notification.
+- [x] Use this tick prompt, verbatim. "Re-read the execution playbook and the standing goal. Audit the operation against both and fix drift in this tick. Probe every active lane and judge progress by side effects only. Stand down a stuck lane and dispatch its replacement now. Then send the operator a status message, whether or not anything changed, with the queue table of PR, owner, state, and head SHA, the verdicts since the last tick, what merged, open operator gates, and blockers."
 - [ ] On the operator's hold or stand-down, send every owner a zero-writes order at once.
 
 ### Spawn owners
