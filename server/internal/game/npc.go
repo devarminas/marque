@@ -80,6 +80,7 @@ type npc struct {
 	pos     Point
 	hp      int
 	maxHP   int
+	attrs   attributes
 
 	camp      string
 	home      Point
@@ -183,9 +184,14 @@ func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp st
 		weapon:  npcArchetypeWeapon(kind),
 		pos:     Point{X: x, Z: z},
 		home:    Point{X: x, Z: z},
+		attrs:   defaultNPCAttrs(kind),
 		hp:      maxHP,
 		maxHP:   maxHP,
 		camp:    camp,
+	}
+	if kind == KindImp {
+		n.maxHP = n.attrs.maxHP()
+		n.hp = n.maxHP
 	}
 	w.npcs[n.id] = n
 	w.npcOrder = append(w.npcOrder, n.id)

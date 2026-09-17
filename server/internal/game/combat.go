@@ -46,9 +46,9 @@ func (w *World) playerState(p *player) mnet.PlayerState {
 		Y:       p.y,
 		Z:       p.pos.Z,
 		HP:      p.hp,
-		MaxHP:   MaxHP,
+		MaxHP:   p.attrs.maxHP(),
 		Mana:    p.mana,
-		MaxMana: MaxMana,
+		MaxMana: p.attrs.maxMana(),
 		Worn:    w.wornSlots(p),
 	}
 }
@@ -167,13 +167,26 @@ func (w *World) attackPeriodTicks(weaponID string) int {
 	return w.weaponDef(weaponID).AttackPeriodTicks
 }
 
-func (w *World) rollWhiteDamage(weaponID string) int {
+func (w *World) rollWhiteDamage(weaponID string, ap, crit, armor int) int {
 	weapon := w.weaponDef(weaponID)
 	span := weapon.DamageMax - weapon.DamageMin
-	if span <= 0 {
-		return weapon.DamageMin
+	dmg := weapon.DamageMin
+	if span > 0 {
+		dmg += w.intN(span + 1)
 	}
-	return weapon.DamageMin + w.intN(span+1)
+	dmg += ap
+	if crit > 0 && w.intN(100) < crit {
+		dmg *= 2
+	}
+	dmg -= armor
+	if dmg < 1 {
+		dmg = 1
+	}
+	return dmg
+}
+
+func (w *World) rollWhite(weaponID string, atk, def attributes) int {
+	return w.rollWhiteDamage(weaponID, atk.AP(), atk.CritChance(), def.Armor())
 }
 
 func (w *World) playerAttackPeriod(p *player) int {
@@ -219,8 +232,8 @@ func (w *World) respawnPlayer(p *player, seq mnet.Seq) {
 		return
 	}
 
-	p.hp = MaxHP
-	p.mana = MaxMana
+	p.hp = p.attrs.maxHP()
+	p.mana = p.attrs.maxMana()
 	p.pos = Point{X: w.mapCfg.SpawnX, Z: w.mapCfg.SpawnZ}
 	p.y = w.mapCfg.SpawnY
 	p.vy = 0
@@ -265,7 +278,7 @@ func (w *World) resolveAttack(p *player) {
 
 	p.attackProgress = 0
 	weaponID := w.playerWeaponID(p)
-	damage := w.rollWhiteDamage(weaponID)
+	damage := w.rollWhite(weaponID, p.attrs, target.attrs)
 	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: weaponID}, nil)
 	target.hp -= damage
 	if target.hp < 0 {
@@ -303,7 +316,7 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 
 	p.attackProgress = 0
 	weaponID := w.playerWeaponID(p)
-	damage := w.rollWhiteDamage(weaponID)
+	damage := w.rollWhite(weaponID, p.attrs, target.attrs)
 	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: weaponID}, nil)
 	target.hp -= damage
 	if target.kind == KindDummy {
@@ -393,7 +406,7 @@ func (w *World) clearAttack(p *player) {
 }
 
 func (w *World) broadcastHP(p *player) {
-	w.broadcast(mnet.HP{ID: p.id, HP: p.hp, MaxHP: MaxHP}, nil)
+	w.broadcast(mnet.HP{ID: p.id, HP: p.hp, MaxHP: p.attrs.maxHP()}, nil)
 }
 
 func (w *World) refuseIfDead(p *player, re string) bool {

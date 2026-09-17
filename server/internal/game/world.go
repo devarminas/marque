@@ -192,8 +192,9 @@ type player struct {
 	swingRuntime
 	castRuntime
 
-	hp   int
-	mana int
+	hp    int
+	mana  int
+	attrs attributes
 
 	skillXP map[string]int64
 
@@ -492,8 +493,9 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		conn:              conn,
 		pos:               Point{X: w.mapCfg.SpawnX, Z: w.mapCfg.SpawnZ},
 		y:                 w.mapCfg.SpawnY,
-		hp:                MaxHP,
-		mana:              MaxMana,
+		attrs:             defaultPlayerAttrs(),
+		hp:                defaultPlayerAttrs().maxHP(),
+		mana:              defaultPlayerAttrs().maxMana(),
 		lastPoseTick:      w.tick,
 		quests:            make(map[string]questStatus),
 		questKillProgress: make(map[string]int),
