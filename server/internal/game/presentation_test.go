@@ -233,6 +233,73 @@ func TestSwingCritFlagReportsTheDoubledRoll(t *testing.T) {
 	}
 }
 
+func TestSwingAmountClampsBelowTheRolledDamage(t *testing.T) {
+	cases := []struct {
+		name string
+		run  func(t *testing.T, pw *classProbe, alice *player, obs *observer)
+	}{
+		{
+			name: "player on player at lethal hp",
+			run: func(t *testing.T, pw *classProbe, alice *player, obs *observer) {
+				bob := pw.joinBare()
+				bob.hp = 1
+				bob.pos = Point{X: alice.pos.X + 1, Z: alice.pos.Z}
+				obs.flush()
+				alice.attackTarget = bob.id
+				pw.stepN(pw.playerPeriod(alice))
+				if !bob.dead() {
+					t.Fatalf("the lethal target survived with hp=%d", bob.hp)
+				}
+			},
+		},
+		{
+			name: "imp on player at lethal hp",
+			run: func(t *testing.T, pw *classProbe, alice *player, obs *observer) {
+				seedDeterministicCamp(t, pw.w)
+				imp := pw.w.npcByKind(KindImp)
+				despawnOtherImps(pw.w, imp)
+				alice.hp = 1
+				alice.pos = imp.pos
+				imp.phase = phaseCombat
+				imp.combatBeat = combatSwing
+				imp.attackTarget = alice.id
+				imp.remaining = nil
+				obs.flush()
+				pw.stepN(pw.npcPeriod(imp))
+				if !alice.dead() {
+					t.Fatalf("the lethal target survived with hp=%d", alice.hp)
+				}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pw := newClassProbe(t)
+			alice := pw.joinWithClass("knight")
+			obs := pw.observe()
+			tc.run(t, pw, alice, obs)
+
+			// The target sat at 1 hp, so the clamp bites: the frame carries the 1
+			// the target moved while the roll behind it is larger.
+			swings := decodeFrames[mnet.Swing](t, obs.flush(), "swing")
+			if len(swings) != 1 || swings[0].Amount != 1 {
+				t.Fatalf("swing frames=%+v, want one with amount=1", swings)
+			}
+			hits := pw.events(EvAttackHit)
+			if len(hits) != 1 {
+				t.Fatalf("logged %d attack_hit, want 1", len(hits))
+			}
+			damage, ok := hits[0]["damage"].(float64)
+			if !ok {
+				t.Fatalf("damage=%v", hits[0]["damage"])
+			}
+			if damage <= 1 {
+				t.Fatalf("attack_hit damage=%v, want more than the 1 the clamped target moved", damage)
+			}
+		})
+	}
+}
+
 func TestPlayerFireballBeginsThenResolves(t *testing.T) {
 	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
