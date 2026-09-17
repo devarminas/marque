@@ -3,6 +3,7 @@ package game
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
@@ -38,7 +39,9 @@ const (
 	ImpMaxHP        = 50
 	ImpThreatRange  = 8.0
 	ImpLeashRange   = 16.0
-	ImpPatrolRadius = 3.0
+	ImpWanderRadius = 3.0
+	ImpIdleMinTicks = int(2 * time.Second / TickDuration)
+	ImpIdleMaxTicks = int(6 * time.Second / TickDuration)
 	ImpThinkTicks   = 2
 	ImpCastEvery    = 2
 	ImpSkillID      = "fireball"
@@ -53,13 +56,20 @@ const (
 type npcPhase uint8
 
 const (
-	phasePatrol npcPhase = iota
-	phaseAggro
-	phaseApproach
-	phaseAttack
-	phaseThink
-	phaseCastSkill
+	phaseIdle npcPhase = iota
+	phaseWander
+	phaseChase
+	phaseCombat
 	phaseReturn
+	phaseDead
+)
+
+type npcCombatBeat uint8
+
+const (
+	combatSwing npcCombatBeat = iota
+	combatThink
+	combatCast
 )
 
 type npc struct {
@@ -79,7 +89,8 @@ type npc struct {
 	castRuntime
 	thinkProgress int
 	thinkCount    int
-	patrolOut     bool
+	idleRemain    int
+	combatBeat    npcCombatBeat
 }
 
 func (n *npc) dead() bool { return n.hp == 0 }
@@ -178,6 +189,9 @@ func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp st
 	}
 	w.npcs[n.id] = n
 	w.npcOrder = append(w.npcOrder, n.id)
+	if kind == KindImp {
+		w.beginImpIdle(n)
+	}
 	fields := gamelog.Fields{
 		"npc":     n.id,
 		"kind":    n.kind,
