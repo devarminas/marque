@@ -194,12 +194,6 @@ func (w *World) rollWhiteDamage(weaponID string, ap, crit, armor int) whiteRoll 
 	return whiteRoll{damage: dmg, crit: critHit}
 }
 
-// rollWhite is the damage-only view; callers that need the crit flag use
-// rollWhiteDamage directly.
-func (w *World) rollWhite(weaponID string, atk, def attributes) int {
-	return w.rollWhiteDamage(weaponID, atk.AP(), atk.CritChance(), def.Armor()).damage
-}
-
 func (w *World) playerAttackPeriod(p *player) int {
 	return w.attackPeriodTicks(w.playerWeaponID(p))
 }
