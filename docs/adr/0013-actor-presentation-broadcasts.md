@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (Prototype art contract / ARM-272).
+Accepted (Prototype art contract).
 
 ## Context
 
