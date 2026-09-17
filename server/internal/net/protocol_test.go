@@ -105,13 +105,31 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 		},
 		{
 			name: "swing",
-			msg:  mnet.Swing{ID: 1, Target: 1000005, Weapon: "sword"},
-			want: `{"swing":{"id":1,"target":1000005,"weapon":"sword"}}`,
+			msg:  mnet.Swing{ID: 1, Target: 1000005, Weapon: "sword", Amount: 7},
+			want: `{"swing":{"id":1,"target":1000005,"weapon":"sword","amount":7,"crit":false,"miss":false}}`,
 		},
 		{
-			name: "cast_phase",
+			name: "swing that crit",
+			msg:  mnet.Swing{ID: 1, Target: 1000005, Weapon: "sword", Amount: 14, Crit: true},
+			want: `{"swing":{"id":1,"target":1000005,"weapon":"sword","amount":14,"crit":true,"miss":false}}`,
+		},
+		{
+			name: "cast_phase begin stays lean",
 			msg:  mnet.CastPhase{ID: 1000005, Ability: "fireball", Target: 1, Phase: mnet.CastPhaseBegin},
 			want: `{"cast_phase":{"id":1000005,"ability":"fireball","target":1,"phase":"begin"}}`,
+		},
+		{
+			name: "cast_phase cancel stays lean",
+			msg:  mnet.CastPhase{ID: 1000005, Ability: "fireball", Target: 1, Phase: mnet.CastPhaseCancel},
+			want: `{"cast_phase":{"id":1000005,"ability":"fireball","target":1,"phase":"cancel"}}`,
+		},
+		{
+			name: "cast_phase resolve",
+			msg: mnet.CastPhase{
+				ID: 1000005, Ability: "fireball", Target: 1, Phase: mnet.CastPhaseResolve,
+				Amount: 22, Effect: "damage",
+			},
+			want: `{"cast_phase":{"id":1000005,"ability":"fireball","target":1,"phase":"resolve","amount":22,"effect":"damage"}}`,
 		},
 		{
 			name: "gather",

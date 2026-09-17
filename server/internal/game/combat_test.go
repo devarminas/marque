@@ -769,6 +769,53 @@ func TestStickyAutoAttackContinuesWhileMovingInRange(t *testing.T) {
 	}
 }
 
+func TestAttackHitLogsTheCritAndMissFlags(t *testing.T) {
+	cases := []struct {
+		name     string
+		dex      int
+		wantCrit bool
+	}{
+		{name: "baseline roll", dex: AttrBaseline},
+		{name: "guaranteed crit", dex: AttrBaseline + 100, wantCrit: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pw := newClassProbe(t)
+			alice := pw.joinWithClass("knight")
+			hostile := pw.seedHostile()
+			hostile.pos = Point{X: 1, Z: 0}
+			alice.pos = Point{X: 0, Z: 0}
+			alice.attrs.DEX = tc.dex
+
+			pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+			for i := 0; i < 50 && hostile.hp == DummyMaxHP; i++ {
+				pw.w.step()
+			}
+			hits := pw.events(EvAttackHit)
+			if len(hits) != 1 {
+				t.Fatalf("logged %d attack_hit, want 1", len(hits))
+			}
+			if got := hits[0]["crit"]; got != tc.wantCrit {
+				t.Fatalf("attack_hit crit=%v, want %v", got, tc.wantCrit)
+			}
+			if got := hits[0]["miss"]; got != false {
+				t.Fatalf("attack_hit miss=%v, want false until the miss roll lands", got)
+			}
+
+			weapon := pw.weapon(pw.w.playerWeaponID(alice))
+			worstNormalHit := weapon.DamageMax + alice.attrs.AP() - hostile.attrs.Armor()
+			damage, ok := hits[0]["damage"].(float64)
+			if !ok {
+				t.Fatalf("damage=%v", hits[0]["damage"])
+			}
+			beatsEveryNormalRoll := int(damage) > worstNormalHit
+			if beatsEveryNormalRoll != tc.wantCrit {
+				t.Fatalf("attack_hit damage=%d, crit=%v, worst normal hit=%d", int(damage), tc.wantCrit, worstNormalHit)
+			}
+		})
+	}
+}
+
 func (pw *probeWorld) join() *player {
 	pw.t.Helper()
 	pw.dial("")

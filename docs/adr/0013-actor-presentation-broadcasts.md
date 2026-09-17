@@ -14,8 +14,8 @@ Every client animates every actor, players and imps alike, from server facts. Be
 
    | Key | Body | Sent when |
    |---|---|---|
-   | `swing` | `{id, target, weapon}` | A melee hit resolves: player on player, player on NPC, or imp on player. The server sends it before the `hp` broadcast for that hit. `weapon` is the attacker's weapon id from `shared/weapons.json`, or `unarmed`. |
-   | `cast_phase` | `{id, ability, target, phase}` | `phase` is `begin` when a timed cast starts, `resolve` when an ability applies, and `cancel` when a pending cast ends without applying. Players and NPCs both send it. |
+   | `swing` | `{id, target, weapon, amount, crit, miss}` | A melee hit resolves: player on player, player on NPC, or imp on player. The server sends it before the `hp` broadcast for that hit. `weapon` is the attacker's weapon id from `shared/weapons.json`, or `unarmed`. `amount` is how much HP the target lost after its clamp, not the rolled damage. `crit` says the white roll doubled the pre-armor amount. `miss` reports a miss and is always `false` until the miss roll lands. All three are always on the frame, so absence never carries meaning. |
+   | `cast_phase` | `{id, ability, target, phase, amount, effect}` | `phase` is `begin` when a timed cast starts, `resolve` when an ability applies, and `cancel` when a pending cast ends without applying. A `resolve` also carries `amount`, how much HP the target gained or lost after its clamp, and `effect`, the ability's effect kind (`heal` or `damage`). `begin` and `cancel` carry neither, so they keep their earlier bytes. Players and NPCs both send it. |
    | `gather` | `{id, node}` | A gather channel starts: the gatherer is in range and the first gather tick counts. |
    | `worn` | `{id, slots}` | A player equips or unequips. `slots` has the shape of `equipment.slots`. |
 
@@ -31,6 +31,7 @@ Every client animates every actor, players and imps alike, from server facts. Be
 
 - `server/internal/game/presentation_test.go` covers each emit site and the one-end rule for every cancel cause.
 - A client older than the routing unit logs a warning for each new key and ignores it. `PlayerState.worn` is an extra field that the current parser does not read.
+- A resolve frame reports the HP the target actually moved, so the `cast_effect` GAMELOG keeps the rolled amount and the frame carries the clamped delta. `attack_hit` carries `crit` and `miss` beside `damage` and `target_hp`.
 
 ## Non-goals
 

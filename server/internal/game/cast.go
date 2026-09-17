@@ -30,7 +30,9 @@ type castTarget struct {
 	plyr *player
 }
 
-func (t *castTarget) applyHeal(amount int) {
+// applyHeal raises the target's HP and returns the HP it gained after its clamp.
+func (t *castTarget) applyHeal(amount int) int {
+	before := *t.hp
 	*t.hp += amount
 	maxHP := MaxHP
 	if t.plyr != nil {
@@ -42,17 +44,21 @@ func (t *castTarget) applyHeal(amount int) {
 	if *t.hp > maxHP {
 		*t.hp = maxHP
 	}
+	return *t.hp - before
 }
 
-func (t *castTarget) applyDamage(amount int) {
+// applyDamage lowers the target's HP and returns the HP it lost after its clamp.
+func (t *castTarget) applyDamage(amount int) int {
+	before := *t.hp
 	*t.hp -= amount
 	if t.npc != nil && t.npc.kind == KindDummy {
 		t.npc.floorPracticeHP()
-		return
+		return before - *t.hp
 	}
 	if *t.hp < 0 {
 		*t.hp = 0
 	}
+	return before - *t.hp
 }
 
 func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
@@ -272,8 +278,6 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 	if p := playerCombatant(c); p != nil && !w.spendMana(p, cost) {
 		panic(fmt.Sprintf("game: player %d cannot pay %d mana for %q after its cast checks passed", p.id, cost, ability.ID))
 	}
-	w.broadcast(mnet.CastPhase{ID: c.combatID(), Ability: ability.ID, Target: target.id, Phase: mnet.CastPhaseResolve}, nil)
-
 	amount := int(math.Round(ability.Effect.Amount))
 	if ability.Effect.Kind == abilitydef.EffectDamage {
 		amount += combatSP(c)
@@ -290,11 +294,12 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 	mergeCasterFields(fields, c)
 	w.log.Event(w.tick, EvCast, fields)
 
+	var applied int
 	switch ability.Effect.Kind {
 	case abilitydef.EffectHeal:
-		target.applyHeal(amount)
+		applied = target.applyHeal(amount)
 	case abilitydef.EffectDamage:
-		target.applyDamage(amount)
+		applied = target.applyDamage(amount)
 		if p := playerCombatant(c); p != nil {
 			w.markCombat(p)
 		}
@@ -304,6 +309,14 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 	default:
 		panic(fmt.Sprintf("game: ability %q has effect kind %q, which the catalog rejects", ability.ID, ability.Effect.Kind))
 	}
+	w.broadcast(mnet.CastPhase{
+		ID:      c.combatID(),
+		Ability: ability.ID,
+		Target:  target.id,
+		Phase:   mnet.CastPhaseResolve,
+		Amount:  applied,
+		Effect:  string(ability.Effect.Kind),
+	}, nil)
 
 	effectFields := gamelog.Fields{
 		"ability":   ability.ID,
