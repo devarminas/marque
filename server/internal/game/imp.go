@@ -149,11 +149,12 @@ func (w *World) stepImpAttack(n *npc) {
 	if target.hp < 0 {
 		target.hp = 0
 	}
+	applied := hpBefore - target.hp
 	w.broadcast(mnet.Swing{
 		ID:     n.id,
 		Target: target.id,
 		Weapon: weaponID,
-		Amount: hpBefore - target.hp,
+		Amount: applied,
 		Crit:   hit.crit,
 	}, nil)
 	w.markCombat(target)
@@ -161,6 +162,7 @@ func (w *World) stepImpAttack(n *npc) {
 		"npc":       n.id,
 		"target":    target.id,
 		"damage":    hit.damage,
+		"applied":   applied,
 		"target_hp": target.hp,
 		"crit":      hit.crit,
 		"miss":      false,

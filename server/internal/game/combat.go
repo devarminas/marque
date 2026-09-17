@@ -290,17 +290,19 @@ func (w *World) resolveAttack(p *player) {
 	if target.hp < 0 {
 		target.hp = 0
 	}
+	applied := hpBefore - target.hp
 	w.broadcast(mnet.Swing{
 		ID:     p.id,
 		Target: target.id,
 		Weapon: weaponID,
-		Amount: hpBefore - target.hp,
+		Amount: applied,
 		Crit:   hit.crit,
 	}, nil)
 	w.markCombat(p)
 	w.markCombat(target)
 	fields := playerTargetFields(p.id, target.id)
 	fields["damage"] = hit.damage
+	fields["applied"] = applied
 	fields["target_hp"] = target.hp
 	fields["crit"] = hit.crit
 	fields["miss"] = false
@@ -339,16 +341,18 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 	} else if target.hp < 0 {
 		target.hp = 0
 	}
+	applied := hpBefore - target.hp
 	w.broadcast(mnet.Swing{
 		ID:     p.id,
 		Target: target.id,
 		Weapon: weaponID,
-		Amount: hpBefore - target.hp,
+		Amount: applied,
 		Crit:   hit.crit,
 	}, nil)
 	w.markCombat(p)
 	fields := playerTargetFields(p.id, target.id)
 	fields["damage"] = hit.damage
+	fields["applied"] = applied
 	fields["target_hp"] = target.hp
 	fields["crit"] = hit.crit
 	fields["miss"] = false

@@ -292,7 +292,6 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 		"effect":  ability.Effect.Kind,
 	}, seq)
 	mergeCasterFields(fields, c)
-	w.log.Event(w.tick, EvCast, fields)
 
 	var applied int
 	switch ability.Effect.Kind {
@@ -309,6 +308,9 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 	default:
 		panic(fmt.Sprintf("game: ability %q has effect kind %q, which the catalog rejects", ability.ID, ability.Effect.Kind))
 	}
+	// Logged after the apply, because `applied` is the post-clamp delta.
+	fields["applied"] = applied
+	w.log.Event(w.tick, EvCast, fields)
 	w.broadcast(mnet.CastPhase{
 		ID:      c.combatID(),
 		Ability: ability.ID,
@@ -323,6 +325,7 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 		"target":    target.id,
 		"effect":    ability.Effect.Kind,
 		"amount":    amount,
+		"applied":   applied,
 		"target_hp": *target.hp,
 	}
 	mergeCasterFields(effectFields, c)
