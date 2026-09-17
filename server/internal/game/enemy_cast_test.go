@@ -15,7 +15,8 @@ func TestImpThinkCastSkillFireballDamagesPlayer(t *testing.T) {
 	imp.pos = Point{X: 0, Z: 0}
 	imp.home = imp.pos
 	alice.pos = Point{X: 4, Z: 0}
-	imp.phase = phaseThink
+	imp.phase = phaseCombat
+	imp.combatBeat = combatThink
 	imp.attackTarget = alice.id
 	imp.thinkProgress = 0
 	imp.thinkCount = ImpCastEvery - 1
@@ -25,8 +26,8 @@ func TestImpThinkCastSkillFireballDamagesPlayer(t *testing.T) {
 	for range ImpThinkTicks {
 		pw.w.step()
 	}
-	if imp.phase != phaseCastSkill {
-		t.Fatalf("phase=%d after Think, want CastSkill", imp.phase)
+	if imp.phase != phaseCombat || imp.combatBeat != combatCast {
+		t.Fatalf("phase=%d beat=%d after Think, want Combat/cast", imp.phase, imp.combatBeat)
 	}
 	if !imp.casting() || imp.castAbility != ImpSkillID {
 		t.Fatalf("casting=%v ability=%q, want %s", imp.casting(), imp.castAbility, ImpSkillID)
@@ -47,8 +48,8 @@ func TestImpThinkCastSkillFireballDamagesPlayer(t *testing.T) {
 		t.Fatal("cast survived resolve")
 	}
 	pw.w.step()
-	if imp.phase != phaseThink {
-		t.Fatalf("phase=%d after cast, want Think", imp.phase)
+	if imp.phase != phaseCombat || imp.combatBeat != combatThink {
+		t.Fatalf("phase=%d beat=%d after cast, want Combat/think", imp.phase, imp.combatBeat)
 	}
 	if len(pw.events(EvCastEffect)) != 1 {
 		t.Fatalf("cast_effect=%d, want 1", len(pw.events(EvCastEffect)))
@@ -69,7 +70,8 @@ func TestImpLeashCancelsPendingCast(t *testing.T) {
 	imp.home = Point{X: 0, Z: 0}
 	imp.pos = Point{X: ImpLeashRange + 1, Z: 0}
 	alice.pos = Point{X: ImpLeashRange + 1, Z: 1}
-	imp.phase = phaseCastSkill
+	imp.phase = phaseCombat
+	imp.combatBeat = combatCast
 	imp.attackTarget = alice.id
 	imp.remaining = nil
 	if rej := pw.w.castAbility(imp, ImpSkillID, alice.id); rej != nil {
@@ -106,7 +108,8 @@ func TestImpPathMoveInterruptsCast(t *testing.T) {
 	imp.home = Point{X: 0, Z: 0}
 	imp.pos = Point{X: 0, Z: 0}
 	alice.pos = Point{X: 3, Z: 0}
-	imp.phase = phaseCastSkill
+	imp.phase = phaseCombat
+	imp.combatBeat = combatCast
 	imp.attackTarget = alice.id
 	if rej := pw.w.castAbility(imp, ImpSkillID, alice.id); rej != nil {
 		t.Fatalf("castAbility: %+v", rej)

@@ -49,7 +49,7 @@ func TestImpChaseDoesNotTunnelHole(t *testing.T) {
 		hp:           ImpMaxHP,
 		home:         Point{X: -22, Z: 5},
 		pos:          Point{X: -22, Z: 5},
-		phase:        phaseApproach,
+		phase:        phaseChase,
 		attackTarget: alice.id,
 	}
 	pw.w.npcs[imp.id] = imp
@@ -131,7 +131,7 @@ func TestImpCannotReachThroughOffMeshGap(t *testing.T) {
 		hp:           ImpMaxHP,
 		home:         Point{X: 6, Z: 6},
 		pos:          Point{X: 6, Z: 6},
-		phase:        phaseApproach,
+		phase:        phaseChase,
 		attackTarget: alice.id,
 	}
 	pw.w.npcs[imp.id] = imp

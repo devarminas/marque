@@ -107,14 +107,18 @@ func (w *World) spawnCampMember(c *camp) error {
 }
 
 func (w *World) pointInCamp(c CampContent) Point {
-	if c.Radius == 0 {
-		return c.Center
+	return w.pointInRadius(c.Center, c.Radius)
+}
+
+func (w *World) pointInRadius(center Point, radius float64) Point {
+	if radius == 0 {
+		return center
 	}
-	r := c.Radius * math.Sqrt(w.float64())
+	r := radius * math.Sqrt(w.float64())
 	theta := w.float64() * 2 * math.Pi
 	return Point{
-		X: c.Center.X + r*math.Cos(theta),
-		Z: c.Center.Z + r*math.Sin(theta),
+		X: center.X + r*math.Cos(theta),
+		Z: center.Z + r*math.Sin(theta),
 	}
 }
 

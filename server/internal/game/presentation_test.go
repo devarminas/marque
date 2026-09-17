@@ -173,7 +173,8 @@ func TestSwingImpOnPlayerBroadcastsBeforeHP(t *testing.T) {
 	imp := pw.w.npcByKind(KindImp)
 	despawnOtherImps(pw.w, imp)
 	alice.pos = imp.pos
-	imp.phase = phaseAttack
+	imp.phase = phaseCombat
+	imp.combatBeat = combatSwing
 	imp.attackTarget = alice.id
 	imp.remaining = nil
 	obs.flush()
@@ -228,7 +229,8 @@ func TestImpFireballBeginsThenResolves(t *testing.T) {
 	imp.pos = Point{X: 0, Z: 0}
 	imp.home = imp.pos
 	alice.pos = Point{X: 4, Z: 0}
-	imp.phase = phaseCastSkill
+	imp.phase = phaseCombat
+	imp.combatBeat = combatCast
 	imp.attackTarget = alice.id
 	imp.remaining = nil
 	obs.flush()
@@ -330,7 +332,8 @@ func TestImpFireballCancelsOnceOnLeash(t *testing.T) {
 	imp.home = Point{X: 0, Z: 0}
 	imp.pos = Point{X: ImpLeashRange + 1, Z: 0}
 	alice.pos = Point{X: ImpLeashRange + 1, Z: 1}
-	imp.phase = phaseCastSkill
+	imp.phase = phaseCombat
+	imp.combatBeat = combatCast
 	imp.attackTarget = alice.id
 	imp.remaining = nil
 	obs.flush()
@@ -355,7 +358,8 @@ func TestImpFireballCancelsOnceWhenTheImpDies(t *testing.T) {
 	despawnOtherImps(pw.w, imp)
 	imp.home = imp.pos
 	alice.pos = Point{X: imp.pos.X + 1, Z: imp.pos.Z}
-	imp.phase = phaseCastSkill
+	imp.phase = phaseCombat
+	imp.combatBeat = combatCast
 	imp.attackTarget = alice.id
 	imp.remaining = nil
 	imp.hp = 1

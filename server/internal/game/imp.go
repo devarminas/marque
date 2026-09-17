@@ -9,7 +9,7 @@ import (
 func (w *World) stepNPCs(distance float64) {
 	for _, id := range append([]mnet.PlayerID(nil), w.npcOrder...) {
 		n := w.npcs[id]
-		if n == nil || !n.mobile() || n.dead() {
+		if n == nil || !n.mobile() || n.dead() || n.phase == phaseDead {
 			continue
 		}
 		w.stepImp(n, distance)
@@ -33,25 +33,22 @@ func (w *World) stepImp(n *npc, distance float64) {
 		if w.stepImpReturn(n) {
 			arrived = true
 		}
-	case phaseAggro:
-		w.stepImpAggro(n)
-	case phaseApproach:
-		w.stepImpApproach(n)
-	case phaseAttack:
-		w.stepImpAttack(n)
-	case phaseThink:
-		w.stepImpThink(n)
-	case phaseCastSkill:
-		w.stepImpCastSkill(n)
-	default:
+	case phaseChase:
+		w.stepImpChase(n)
+	case phaseCombat:
+		w.stepImpCombat(n)
+	case phaseWander:
 		if target := w.nearestLivingPlayerInRange(n.pos, ImpThreatRange); target != nil {
-			w.beginImpAggro(n, target)
-			if arrived {
-				w.logNPCArrived(n)
-			}
-			return
+			w.beginImpChase(n, target)
+		} else {
+			w.stepImpWander(n)
 		}
-		w.stepImpPatrol(n)
+	case phaseIdle:
+		if target := w.nearestLivingPlayerInRange(n.pos, ImpThreatRange); target != nil {
+			w.beginImpChase(n, target)
+		} else {
+			w.stepImpIdle(n)
+		}
 	}
 	if walking && len(n.remaining) == 0 {
 		arrived = true
@@ -73,9 +70,7 @@ func (w *World) stepImpReturn(n *npc) (snapped bool) {
 	if distanceBetween(n.pos, n.home) <= MinPathLength {
 		n.pos = n.home
 		n.remaining = nil
-		w.resetImpCombat(n)
-		n.phase = phasePatrol
-		n.patrolOut = false
+		w.finishImpReturn(n)
 		return true
 	}
 	if len(n.remaining) == 0 {
@@ -84,15 +79,18 @@ func (w *World) stepImpReturn(n *npc) (snapped bool) {
 	return false
 }
 
-func (w *World) stepImpAggro(n *npc) {
-	if w.impMustLeash(n) {
-		return
+func (w *World) finishImpReturn(n *npc) {
+	n.attackTarget = 0
+	w.cancelCast(n, CauseLeash)
+	w.resetImpCombat(n)
+	if n.hp != n.maxHP {
+		n.hp = n.maxHP
+		w.broadcastNPCHP(n)
 	}
-	n.phase = phaseApproach
-	w.stepImpApproach(n)
+	w.beginImpIdle(n)
 }
 
-func (w *World) stepImpApproach(n *npc) {
+func (w *World) stepImpChase(n *npc) {
 	if w.impMustLeash(n) {
 		return
 	}
@@ -102,12 +100,24 @@ func (w *World) stepImpApproach(n *npc) {
 		if len(n.remaining) > 0 {
 			w.assignNPCHalt(n)
 		}
-		n.phase = phaseAttack
+		n.phase = phaseCombat
+		n.combatBeat = combatSwing
 		n.attackProgress = 0
-		w.stepImpAttack(n)
+		w.stepImpCombat(n)
 		return
 	}
 	w.assignNPCPath(n, target.pos)
+}
+
+func (w *World) stepImpCombat(n *npc) {
+	switch n.combatBeat {
+	case combatThink:
+		w.stepImpThink(n)
+	case combatCast:
+		w.stepImpCastSkill(n)
+	default:
+		w.stepImpAttack(n)
+	}
 }
 
 func (w *World) stepImpAttack(n *npc) {
@@ -118,7 +128,7 @@ func (w *World) stepImpAttack(n *npc) {
 	dist := distanceBetween(n.pos, target.pos)
 	if dist > AttackRange {
 		n.attackProgress = 0
-		n.phase = phaseApproach
+		n.phase = phaseChase
 		w.assignNPCPath(n, target.pos)
 		return
 	}
@@ -153,7 +163,8 @@ func (w *World) stepImpAttack(n *npc) {
 		w.beginImpLeash(n)
 		return
 	}
-	n.phase = phaseThink
+	n.phase = phaseCombat
+	n.combatBeat = combatThink
 	n.thinkProgress = 0
 }
 
@@ -173,11 +184,12 @@ func (w *World) stepImpThink(n *npc) {
 		return
 	}
 	if distanceBetween(n.pos, target.pos) > AttackRange {
-		n.phase = phaseApproach
+		n.phase = phaseChase
 		w.assignNPCPath(n, target.pos)
 		return
 	}
-	n.phase = phaseAttack
+	n.phase = phaseCombat
+	n.combatBeat = combatSwing
 	n.attackProgress = 0
 }
 
@@ -198,7 +210,8 @@ func (w *World) beginImpCastSkill(n *npc, target *player) bool {
 	if rej := w.castAbility(n, ImpSkillID, target.id); rej != nil {
 		return false
 	}
-	n.phase = phaseCastSkill
+	n.phase = phaseCombat
+	n.combatBeat = combatCast
 	return true
 }
 
@@ -209,7 +222,8 @@ func (w *World) stepImpCastSkill(n *npc) {
 	if n.casting() {
 		return
 	}
-	n.phase = phaseThink
+	n.phase = phaseCombat
+	n.combatBeat = combatThink
 	n.thinkProgress = 0
 }
 
@@ -226,8 +240,8 @@ func (w *World) impMustLeash(n *npc) bool {
 	return false
 }
 
-func (w *World) beginImpAggro(n *npc, target *player) {
-	n.phase = phaseAggro
+func (w *World) beginImpChase(n *npc, target *player) {
+	n.phase = phaseChase
 	n.attackTarget = target.id
 	w.resetImpCombat(n)
 	w.markCombat(target)
@@ -236,7 +250,7 @@ func (w *World) beginImpAggro(n *npc, target *player) {
 		"kind":   n.kind,
 		"target": target.id,
 	})
-	w.stepImpAggro(n)
+	w.stepImpChase(n)
 }
 
 func (w *World) beginImpLeash(n *npc) {
@@ -262,21 +276,43 @@ func (w *World) resetImpCombat(n *npc) {
 	n.attackProgress = 0
 	n.thinkProgress = 0
 	n.thinkCount = 0
+	n.combatBeat = combatSwing
 }
 
-func (w *World) stepImpPatrol(n *npc) {
+func (w *World) beginImpIdle(n *npc) {
+	n.phase = phaseIdle
+	span := ImpIdleMaxTicks - ImpIdleMinTicks + 1
+	n.idleRemain = ImpIdleMinTicks + w.intN(span)
+}
+
+func (w *World) stepImpIdle(n *npc) {
+	if n.idleRemain > 0 {
+		n.idleRemain--
+	}
+	if n.idleRemain > 0 {
+		return
+	}
+	w.beginImpWander(n)
+}
+
+func (w *World) beginImpWander(n *npc) {
+	dest := w.pointInRadius(n.home, ImpWanderRadius)
+	if distanceBetween(n.pos, dest) < MinPathLength {
+		w.beginImpIdle(n)
+		return
+	}
+	n.phase = phaseWander
+	w.assignNPCPath(n, dest)
+	if n.phase == phaseWander && len(n.remaining) == 0 && distanceBetween(n.pos, dest) >= MinPathLength {
+		w.beginImpIdle(n)
+	}
+}
+
+func (w *World) stepImpWander(n *npc) {
 	if len(n.remaining) > 0 {
 		return
 	}
-	dest := n.home
-	if !n.patrolOut {
-		dest = Point{X: n.home.X + ImpPatrolRadius, Z: n.home.Z}
-	}
-	n.patrolOut = !n.patrolOut
-	if distanceBetween(n.pos, dest) < MinPathLength {
-		return
-	}
-	w.assignNPCPath(n, dest)
+	w.beginImpIdle(n)
 }
 
 func (w *World) nearestLivingPlayerInRange(origin Point, radius float64) *player {
@@ -342,7 +378,7 @@ func (w *World) npcDestinationPath(n *npc, dest Point) (points []Point, assign b
 }
 
 func (w *World) killImp(n *npc, killer mnet.PlayerID) {
-	n.phase = phasePatrol
+	n.phase = phaseDead
 	n.attackTarget = 0
 	w.resetImpCombat(n)
 	n.remaining = nil
