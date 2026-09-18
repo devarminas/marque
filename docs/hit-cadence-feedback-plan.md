@@ -31,6 +31,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 ### Spawn owners
 
 - [ ] Spawn one owner per PR with the full lifecycle the execution playbook names, build to first push, ready PR, self-proof, Bugbot triage, deslop, no-comments, babysit.
+- [ ] Base the stack on `bug/ARM-346`, PR #220. It lands first and ARM-311 stacks above it.
 - [ ] Follow this dependency graph. Start dependent work only after its parent merges, or base it on the parent branch, which this program does.
   - [ ] ARM-311 is first and branches from `main`.
   - [ ] ARM-312 after ARM-311. It needs the swing fields on the wire.
