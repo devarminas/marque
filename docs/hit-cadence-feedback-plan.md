@@ -48,6 +48,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Resolve the forge once. Default to `gh`, which is what this repo has. `command -v origin` fails here, so record the fallback to `gh` and use it for create, edit, view, watch, and merge. Never require `gt`.
 - [ ] Open the PR ready, never draft, with `gh pr create --base <base-branch>`. A stack child targets its parent branch.
 - [ ] Run the repo's gates once before the PR-facing push. From `server/`, `CGO_ENABLED=1 go test -race ./...`. From the repo root, `godot --headless --path client --script res://tests/run_tests.gd`. Push with hooks on.
+- [ ] A receipt must be the output of a command that ran, never a paste of a source literal or an expectation.
 - [ ] Run `/skill:deslop` before each commit and `/skill:no-comments` before review.
 - [ ] Triage every Bugbot and security-reviewer comment per `../references/bugbot-triage.md`.
 - [ ] Rebase onto current trunk before babysit and again before the merge-ready report. This repo has no CI workflow tree, so `doctor.ps1` is the gate.
