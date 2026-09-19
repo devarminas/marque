@@ -192,7 +192,10 @@ func TestPracticeDummyFloorHitLogsTheAppliedDelta(t *testing.T) {
 	alice := pw.joinWithClass("knight")
 	obs := pw.observe()
 	hostile := pw.seedHostile()
-	hostile.hp = DummyMinHP
+	// Seat the dummy above its floor so the clamp has to bite. A dummy sitting on
+	// the floor takes nothing, so a frame amount hardcoded to zero would pass here.
+	const floorGap = 3
+	hostile.hp = DummyMinHP + floorGap
 	hostile.pos = Point{X: 1, Z: 0}
 	alice.pos = Point{X: 0, Z: 0}
 	obs.flush()
@@ -212,15 +215,18 @@ func TestPracticeDummyFloorHitLogsTheAppliedDelta(t *testing.T) {
 	if !ok {
 		t.Fatalf("attack_hit applied=%v, want the HP the target moved", hits[0]["applied"])
 	}
-	if want := float64(hostile.hp - DummyMinHP); applied != want {
-		t.Fatalf("attack_hit applied=%v, want %v (the floored dummy did not move)", applied, want)
+	if want := float64(floorGap); applied != want {
+		t.Fatalf("attack_hit applied=%v, want %v (the dummy took the roll down to its floor of %d)", applied, want, DummyMinHP)
 	}
 	if damage <= applied {
 		t.Fatalf("attack_hit damage=%v, applied=%v: the roll must stay readable beside the clamped delta", damage, applied)
 	}
 	swings := decodeFrames[mnet.Swing](t, obs.flush(), "swing")
-	if len(swings) != 1 || swings[0].Amount != int(applied) {
-		t.Fatalf("swing frames=%+v, want one with amount=%d", swings, int(applied))
+	if len(swings) != 1 || swings[0].Amount != floorGap {
+		t.Fatalf("swing frames=%+v, want one with amount=%d", swings, floorGap)
+	}
+	if float64(swings[0].Amount) >= damage {
+		t.Fatalf("swing amount=%d, damage=%v: the frame must carry the clamped delta, not the roll", swings[0].Amount, damage)
 	}
 }
 
