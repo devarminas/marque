@@ -79,7 +79,11 @@ signal worn_changed(id: int, slot_names: PackedStringArray, slot_kinds: PackedSt
 
 signal swing_observed(id: int, target: int, weapon: String)
 
+signal swing_hit_observed(id: int, amount: int, crit: bool, miss: bool)
+
 signal cast_phase_observed(id: int, ability: String, target: int, phase: String)
+
+signal cast_effect_observed(id: int, amount: int, effect: String)
 
 signal gather_observed(id: int, node: int)
 
@@ -923,7 +927,16 @@ func _on_swing(body: Dictionary, text: String) -> void:
 	if typeof(body.get("weapon")) != TYPE_STRING:
 		push_error("net_client: swing has no weapon string: %s" % text)
 		return
-	swing_observed.emit(int(body["id"]), int(body["target"]), body["weapon"])
+	var id := int(body["id"])
+	swing_observed.emit(id, int(body["target"]), body["weapon"])
+	if not body.has("amount"):
+		return
+	swing_hit_observed.emit(
+		id,
+		_optional_int(body, "amount", text),
+		_optional_flag(body, "crit", text),
+		_optional_flag(body, "miss", text),
+	)
 
 
 func _on_cast_phase(body: Dictionary, text: String) -> void:
@@ -932,7 +945,11 @@ func _on_cast_phase(body: Dictionary, text: String) -> void:
 	if typeof(body.get("ability")) != TYPE_STRING or not CAST_PHASES.has(body.get("phase")):
 		push_error("net_client: cast_phase needs an ability string and a phase in %s: %s" % [CAST_PHASES, text])
 		return
-	cast_phase_observed.emit(int(body["id"]), body["ability"], int(body["target"]), body["phase"])
+	var id := int(body["id"])
+	cast_phase_observed.emit(id, body["ability"], int(body["target"]), body["phase"])
+	if not body.has("effect"):
+		return
+	cast_effect_observed.emit(id, _optional_int(body, "amount", text), _optional_text(body, "effect", text))
 
 
 func _on_gather(body: Dictionary, text: String) -> void:
@@ -1391,3 +1408,34 @@ func _has_numbers(body: Dictionary, keys: Array, text: String) -> bool:
 static func _is_number(value: Variant) -> bool:
 	var kind := typeof(value)
 	return kind == TYPE_FLOAT or kind == TYPE_INT
+
+
+# The hit facts ride only the frames that carry them: a begin or cancel frame has
+# neither, and a server older than ARM-311 omits them on a swing. A frame without
+# its anchor key (swing `amount`, cast_phase `effect`) forwards nothing extra, and
+# a malformed value reads as the zero value with an error.
+static func _optional_int(body: Dictionary, key: String, text: String) -> int:
+	if not body.has(key):
+		return 0
+	if not _is_number(body[key]):
+		push_error("net_client: %s is not a number: %s" % [key, text])
+		return 0
+	return int(body[key])
+
+
+static func _optional_text(body: Dictionary, key: String, text: String) -> String:
+	if not body.has(key):
+		return ""
+	if typeof(body[key]) != TYPE_STRING:
+		push_error("net_client: %s is not a string: %s" % [key, text])
+		return ""
+	return body[key]
+
+
+static func _optional_flag(body: Dictionary, key: String, text: String) -> bool:
+	if not body.has(key):
+		return false
+	if typeof(body[key]) != TYPE_BOOL:
+		push_error("net_client: %s is not a bool: %s" % [key, text])
+		return false
+	return body[key]

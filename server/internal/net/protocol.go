@@ -226,10 +226,17 @@ type Casting struct {
 	Total    int    `json:"total"`
 }
 
+// Swing is a melee hit that resolved. Amount is the HP the target lost after its
+// clamp, not the rolled damage. Crit says the white roll doubled the pre-armor
+// amount. Miss is always false until the miss roll lands, and all three are
+// always on the frame so absence never carries meaning.
 type Swing struct {
 	ID     PlayerID `json:"id"`
 	Target PlayerID `json:"target"`
 	Weapon string   `json:"weapon"`
+	Amount int      `json:"amount"`
+	Crit   bool     `json:"crit"`
+	Miss   bool     `json:"miss"`
 }
 
 type CastPhaseKind string
@@ -240,11 +247,16 @@ const (
 	CastPhaseCancel  CastPhaseKind = "cancel"
 )
 
+// CastPhase is one end of a cast. Amount is the HP the target gained or lost
+// after its clamp and Effect is the ability's effect kind; only a resolve frame
+// carries them, so begin and cancel frames keep their earlier bytes.
 type CastPhase struct {
 	ID      PlayerID      `json:"id"`
 	Ability string        `json:"ability"`
 	Target  PlayerID      `json:"target"`
 	Phase   CastPhaseKind `json:"phase"`
+	Amount  int           `json:"amount,omitempty"`
+	Effect  string        `json:"effect,omitempty"`
 }
 
 type GatherStarted struct {
