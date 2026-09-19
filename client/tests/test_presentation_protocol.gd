@@ -117,6 +117,18 @@ func _test_cast_phase_and_gather_parse_without_warning(assertions: Assertions, r
 		],
 		"a resolve that moved no HP omits amount and still forwards its effect, got %s" % [zero_delta],
 	)
+	# An absent amount means the applied delta was zero, so ARM-315 renders no float
+	# for it. The wire carries no sentinel for the case and the client adds none.
+	var explicit_zero := recorder.feed(
+		'{"cast_phase":{"id":1000004,"ability":"heal","target":7,"phase":"resolve","amount":0,"effect":"heal"}}'
+	)
+	assertions.check(
+		explicit_zero == [
+			{"signal": "cast_phase_observed", "id": 1000004, "ability": "heal", "target": 7, "phase": "resolve"},
+			{"signal": "cast_effect_observed", "id": 1000004, "amount": 0, "effect": "heal"},
+		] and explicit_zero == zero_delta,
+		"a resolve that omits amount and one that says 0 are the same fact for ARM-315, which floats no number for either, got %s and %s" % [zero_delta, explicit_zero],
+	)
 	print("  (the ERROR line below is a fail-closed path under test)")
 	var bad := recorder.feed('{"cast_phase":{"id":1000004,"ability":"fireball","target":7,"phase":"windup"}}')
 	assertions.check(bad.is_empty(), "an unknown cast phase emits nothing, got %s" % [bad])
