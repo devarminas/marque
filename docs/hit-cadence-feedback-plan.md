@@ -73,7 +73,7 @@ Run live lanes serially in a clean worktree at the PR head. Reuse a worktree onl
 
 ## Wire hit facts on swing and cast resolve (ARM-311)
 
-**Depends on.** None. Branches from `main`.
+**Depends on.** `bug/ARM-346`, PR #220. This is the first milestone PR and targets that chain root, which branches from `main`.
 
 **Files.**
 
