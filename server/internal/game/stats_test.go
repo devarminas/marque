@@ -190,7 +190,7 @@ func TestRollWhiteUsesWeaponRangeAndAP(t *testing.T) {
 	atk := attributes{STR: 12, DEX: AttrBaseline, CON: AttrBaseline, INT: AttrBaseline}
 	def := defaultPlayerAttrs()
 	for range 20 {
-		d := pw.w.rollWhite(weapondef.Sword, atk, def)
+		d := pw.w.rollWhiteDamage(weapondef.Sword, atk.AP(), atk.CritChance(), def.Armor()).damage
 		if d < 9 || d > 13 {
 			t.Fatalf("sword+AP1=%d outside [9,13]", d)
 		}

@@ -187,6 +187,49 @@ func TestPracticeDummySurvivesLethalVolley(t *testing.T) {
 	}
 }
 
+func TestPracticeDummyFloorHitLogsTheAppliedDelta(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	obs := pw.observe()
+	hostile := pw.seedHostile()
+	// Seat the dummy above its floor so the clamp has to bite. A dummy sitting on
+	// the floor takes nothing, so a frame amount hardcoded to zero would pass here.
+	const floorGap = 3
+	hostile.hp = DummyMinHP + floorGap
+	hostile.pos = Point{X: 1, Z: 0}
+	alice.pos = Point{X: 0, Z: 0}
+	obs.flush()
+
+	pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+	pw.stepN(pw.playerPeriod(alice))
+
+	hits := pw.events(EvAttackHit)
+	if len(hits) != 1 {
+		t.Fatalf("logged %d attack_hit, want 1", len(hits))
+	}
+	damage, ok := hits[0]["damage"].(float64)
+	if !ok {
+		t.Fatalf("damage=%v", hits[0]["damage"])
+	}
+	applied, ok := hits[0]["applied"].(float64)
+	if !ok {
+		t.Fatalf("attack_hit applied=%v, want the HP the target moved", hits[0]["applied"])
+	}
+	if want := float64(floorGap); applied != want {
+		t.Fatalf("attack_hit applied=%v, want %v (the dummy took the roll down to its floor of %d)", applied, want, DummyMinHP)
+	}
+	if damage <= applied {
+		t.Fatalf("attack_hit damage=%v, applied=%v: the roll must stay readable beside the clamped delta", damage, applied)
+	}
+	swings := decodeFrames[mnet.Swing](t, obs.flush(), "swing")
+	if len(swings) != 1 || swings[0].Amount != floorGap {
+		t.Fatalf("swing frames=%+v, want one with amount=%d", swings, floorGap)
+	}
+	if float64(swings[0].Amount) >= damage {
+		t.Fatalf("swing amount=%d, damage=%v: the frame must carry the clamped delta, not the roll", swings[0].Amount, damage)
+	}
+}
+
 func TestDeadRefusesOrdinaryIntents(t *testing.T) {
 	pw := newProbeWorld(t)
 	alice := pw.join()
@@ -766,6 +809,52 @@ func TestStickyAutoAttackContinuesWhileMovingInRange(t *testing.T) {
 	}
 	if got := len(pw.events(EvAttackHit)); got != 1 {
 		t.Fatalf("hits=%d, want 1 after a period that included in-range movement", got)
+	}
+}
+
+func TestAttackHitLogsTheCritFlag(t *testing.T) {
+	cases := []struct {
+		name     string
+		dex      int
+		wantCrit bool
+	}{
+		{name: "baseline roll", dex: AttrBaseline},
+		{name: "guaranteed crit", dex: AttrBaseline + 100, wantCrit: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pw := newClassProbe(t)
+			alice := pw.joinWithClass("knight")
+			hostile := pw.seedHostile()
+			hostile.pos = Point{X: 1, Z: 0}
+			alice.pos = Point{X: 0, Z: 0}
+			alice.attrs.DEX = tc.dex
+
+			pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
+			for i := 0; i < 50 && hostile.hp == DummyMaxHP; i++ {
+				pw.w.step()
+			}
+			hits := pw.events(EvAttackHit)
+			if len(hits) != 1 {
+				t.Fatalf("logged %d attack_hit, want 1", len(hits))
+			}
+			if got := hits[0]["crit"]; got != tc.wantCrit {
+				t.Fatalf("attack_hit crit=%v, want %v", got, tc.wantCrit)
+			}
+			// The miss pin lands with the miss roll in ARM-312. `miss` is a
+			// hardcoded false at every emit site, so asserting it pins nothing.
+
+			weapon := pw.weapon(pw.w.playerWeaponID(alice))
+			worstNormalHit := weapon.DamageMax + alice.attrs.AP() - hostile.attrs.Armor()
+			damage, ok := hits[0]["damage"].(float64)
+			if !ok {
+				t.Fatalf("damage=%v", hits[0]["damage"])
+			}
+			beatsEveryNormalRoll := int(damage) > worstNormalHit
+			if beatsEveryNormalRoll != tc.wantCrit {
+				t.Fatalf("attack_hit damage=%d, crit=%v, worst normal hit=%d", int(damage), tc.wantCrit, worstNormalHit)
+			}
+		})
 	}
 }
 
