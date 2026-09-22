@@ -209,6 +209,36 @@ func TestSwingImpOnPlayerBroadcastsBeforeHP(t *testing.T) {
 	})
 }
 
+func TestSwingMissHasNoHPFrame(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetWhiteMissPct(100)
+	alice := pw.joinWithClass("knight")
+	obs := pw.observe()
+	dummy := pw.seedHostile()
+	alice.pos = Point{X: dummy.pos.X + 1, Z: dummy.pos.Z}
+	obs.flush()
+
+	pw.w.attack(alice, mnet.Attack{Player: dummy.id}, 0)
+	pw.stepN(pw.playerPeriod(alice))
+	frames := obs.flush()
+	want := mnet.Swing{ID: alice.id, Target: dummy.id, Weapon: KindSword, Miss: true}
+	if got := decodeFrames[mnet.Swing](t, frames, "swing"); !slices.Equal(got, []mnet.Swing{want}) {
+		t.Fatalf("swing=%+v, want %+v", got, want)
+	}
+	for _, frame := range frames {
+		if frame.kind == "npc_hp" || frame.kind == "hp" {
+			t.Fatalf("miss emitted HP frame: %s", frame.body)
+		}
+	}
+	if dummy.hp != DummyMaxHP {
+		t.Fatalf("miss debited dummy hp=%d, want %d", dummy.hp, DummyMaxHP)
+	}
+	hits := pw.events(EvAttackHit)
+	if len(hits) != 1 || hits[0]["miss"] != true || hits[0]["crit"] != false || hits[0]["applied"] != float64(0) {
+		t.Fatalf("miss attack_hit=%v", hits)
+	}
+}
+
 func TestSwingCritFlagReportsTheDoubledRoll(t *testing.T) {
 	pw := newClassProbe(t)
 	alice := pw.joinWithClass("knight")

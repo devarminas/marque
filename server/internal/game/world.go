@@ -21,6 +21,8 @@ import (
 
 const TickDuration = 40 * time.Millisecond
 
+const DefaultWhiteMissPct = 5
+
 const MaxCatchUpTicks = 5
 
 const PoseIdleEveryTicks int64 = 25
@@ -248,8 +250,9 @@ type World struct {
 	npcOrder  []mnet.PlayerID
 	nextNpcID mnet.PlayerID
 
-	camps []*camp
-	rng   *mrand.Rand
+	camps        []*camp
+	rng          *mrand.Rand
+	whiteMissPct int
 
 	byConn map[*mnet.Conn]*player
 
@@ -324,6 +327,13 @@ func (w *World) SetQuests(c *questdef.Catalog) {
 
 func (w *World) SetWeapons(c *weapondef.Catalog) {
 	w.weapons = c
+}
+
+func (w *World) SetWhiteMissPct(pct int) {
+	if pct < 0 || pct > 100 {
+		panic(fmt.Sprintf("game: white miss percentage %d outside [0,100]", pct))
+	}
+	w.whiteMissPct = pct
 }
 
 func (w *World) SetNPCArchetypes(c *npcdef.Catalog) {

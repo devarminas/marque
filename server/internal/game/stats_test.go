@@ -130,6 +130,7 @@ func TestWhiteCritDoublesBeforeArmor(t *testing.T) {
 		{"id":"sword","attack_period_ticks":8,"damage_min":8,"damage_max":8},
 		{"id":"imp_claw","attack_period_ticks":8,"damage_min":2,"damage_max":2}
 	]}`))
+	pw.w.SetWhiteMissPct(0)
 	alice := pw.joinWithClass("knight")
 	hostile := pw.seedHostile()
 	alice.pos = hostile.pos
@@ -194,6 +195,41 @@ func TestRollWhiteUsesWeaponRangeAndAP(t *testing.T) {
 		if d < 9 || d > 13 {
 			t.Fatalf("sword+AP1=%d outside [9,13]", d)
 		}
+	}
+}
+
+func TestWhiteZeroMissKnobKeepsSeededDrawSequence(t *testing.T) {
+	pw := newProbeWorld(t)
+	pw.w.SetWeapons(parseWeapons(t, `{"weapons":[
+		{"id":"unarmed","attack_period_ticks":8,"damage_min":3,"damage_max":3},
+		{"id":"sword","attack_period_ticks":8,"damage_min":8,"damage_max":12},
+		{"id":"imp_claw","attack_period_ticks":8,"damage_min":2,"damage_max":2}
+	]}`))
+	pw.w.SetWhiteMissPct(0)
+	pw.w.rng = mrand.New(mrand.NewPCG(11, 22))
+	baseline := mrand.New(mrand.NewPCG(11, 22))
+	wantDamage := 8 + baseline.IntN(5)
+	_ = baseline.IntN(100)
+	hit := pw.w.rollWhiteDamage(weapondef.Sword, 0, 100, 0)
+	if hit.miss || !hit.crit || hit.damage != wantDamage*2 {
+		t.Fatalf("zero miss roll=%+v, want crit damage=%d", hit, wantDamage*2)
+	}
+	if got, want := pw.w.rng.Uint64(), baseline.Uint64(); got != want {
+		t.Fatalf("next seeded draw=%d, want %d after exactly two draws", got, want)
+	}
+}
+
+func TestWhiteMissConsumesOneDraw(t *testing.T) {
+	pw := newProbeWorld(t)
+	pw.w.rng = mrand.New(mrand.NewPCG(11, 22))
+	pw.w.SetWhiteMissPct(100)
+	baseline := mrand.New(mrand.NewPCG(11, 22))
+	_ = baseline.IntN(100)
+	if hit := pw.w.rollWhiteDamage(weapondef.Sword, 0, 100, 100); hit != (whiteRoll{miss: true}) {
+		t.Fatalf("miss roll=%+v, want only miss", hit)
+	}
+	if got, want := pw.w.rng.Uint64(), baseline.Uint64(); got != want {
+		t.Fatalf("next seeded draw=%d, want %d after exactly one draw", got, want)
 	}
 }
 
@@ -262,6 +298,7 @@ func TestImpSpellDamageAddsSP(t *testing.T) {
 func TestHealDoesNotAddSP(t *testing.T) {
 	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	pw.w.SetWhiteMissPct(100)
 	alice := pw.joinWithClass("mage")
 	alice.hp = 50
 	alice.attrs.INT = 12
