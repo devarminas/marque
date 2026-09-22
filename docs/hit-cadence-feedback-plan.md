@@ -34,7 +34,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Base the stack on `bug/ARM-346`, PR #220. It lands first and ARM-311 stacks above it.
 - [ ] Hold PR #220 as the chain root and as review-gated. Its reviewer media is at comment `5718784298`. It lands before ARM-311.
 - [ ] Follow this dependency graph. Start dependent work only after its parent merges, or base it on the parent branch, which this program does.
-  - [ ] ARM-311 is first and branches from `main`.
+  - [ ] ARM-311 is the first milestone PR and targets `bug/ARM-346`, the chain root off `main`.
   - [ ] ARM-312 after ARM-311. It needs the swing fields on the wire.
   - [ ] ARM-315 after ARM-312. It needs the miss and crit flags to be honest.
   - [ ] ARM-314 has no code dependency. It stacks after ARM-315 in the one linear chain.
@@ -62,14 +62,14 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 ### Boot recipe, for every live lane
 
-Each live lane runs in its own git worktree at the PR head. Drive through `.cursor/skills/verify-marque/SKILL.md`, which is the control skill for this repo.
+Run live lanes serially in a clean worktree at the PR head. Reuse a worktree only when each lane writes separate receipts. Drive through `.cursor/skills/verify-marque/SKILL.md`.
 
 - [ ] `git fetch origin <head-branch> && git checkout <head SHA>`.
 - [ ] Use the PowerShell that is installed but not on PATH. `PWSH=/home/armin/.local/share/mise/installs/powershell/7.6.6/pwsh`. Run `$PWSH -NoProfile -File .cursor/skills/verify-marque/doctor.ps1` and require `DOCTOR OK` before any other lane step.
 - [ ] Keep `DISPLAY=:0`. Windowed Godot needs a real desktop session. Never automate the desktop mouse. The game screenshots itself.
 - [ ] Start marqued only when the lane needs a live server, or let the demo script start it. Readiness is the `server_started` GAMELOG line. Never sleep a guessed interval.
 - [ ] Deliver input only through verify-marque flags or go test. Read DEMO lines, GAMELOG, doctor stdout, and stderr. Read client stderr first when a client failed.
-- [ ] Save every screenshot to `/tmp/swarm-<pr-id>/worker-<n>/<slug>.png` and return the paths with the report.
+- [ ] Save every screenshot under `/home/armin/Work/marque-program/receipts/<pr-id>/worker-<n>/` and return the paths with the report. Do not store a required receipt in `/tmp`, which the machine clears at reboot.
 
 ## Wire hit facts on swing and cast resolve (ARM-311)
 
@@ -119,17 +119,17 @@ Each live lane runs in its own git worktree at the PR head. Drive through `.curs
 - [ ] Lane 2. Player to NPC white hit. Frame rung, run `cd server && CGO_ENABLED=1 go test -v -count=1 -run TestSwing ./internal/game` and lift the player to NPC swing line out of the run, which the presentation suite logs as `WIRE <index> <body>` off a real websocket. Live layer, the `dummy_attack_demo.ps1` run at `runs/dummy_attack_demo-run1/server.stdout.ndjson` line 119, where `attack_hit` carries `applied=9` at the same site. Decode clause, `receipts/arm-311/gate-headless.log` lines 1725 to 1741, where the presentation protocol suite reports `a swing frame emits swing_observed then swing_hit_observed`. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-2-player-npc-frame.txt`. Pass when the captured frame carries a positive `amount` with `crit=false` and `miss=false`, that gate slice decodes the same frame shape, and the live run logs the applied delta at the player to NPC site. The client stdout cannot show an amount until the ARM-315 consumer lands.
 - [ ] Lane 3. NPC to player white hit. Live layer, the camp Imp that aggros in the `dummy_attack_demo.ps1` run, `runs/dummy_attack_demo-run1/server.stdout.ndjson` lines 18 and 120, where Imp 1000007 aggros at `t=81` and its swing logs `attack_hit` with `damage=4` and `applied=4`. Frame rung, run `cd server && CGO_ENABLED=1 go test -v -count=1 -run TestImpMeleeDamagesPlayer ./internal/game`, and read the Imp frame at the Imp to player site out of `lane-8-ordering.log`, where `TestSwingImpOnPlayerBroadcastsBeforeHP` logs `WIRE 7 {"id":1000001,"target":1,"weapon":"imp_claw","amount":4,"crit":false,"miss":false}`. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-3-npc-player.log`. Pass when the GAMELOG and the wire carry an amount on the Imp swing. `enemy_midchase_demo.ps1` is not part of this lane, because both of its runs landed no Imp white at this head.
 - [ ] Lane 4. Fireball resolve. Run `dummy_cast_demo.ps1`. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-4-fireball.log`. Pass when the resolve frame carries `effect=damage` and an amount equal to the target HP delta.
-- [ ] Lane 5. Heal resolve. Run `heal_wounded_demo.ps1`. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-5-heal.log`. Pass when the resolve frame carries `effect=heal` and the amount equals the HP rise.
+- [ ] Lane 5. Heal resolve. Run `heal_wounded_demo.ps1`. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-5-heal.log` and the raw-frame capture at `/home/armin/Work/marque-program/receipts/arm-311-verify3/heal-wire/`. The latter run adds only a `print()` of incoming `cast_phase` bytes in a temporary client worktree; its patch is `logging-only-client.diff`. Pass when that same run shows the friendly dummy rise from 50 to 75, the server logs `applied=25`, and its actual resolve frame has `effect=heal` and `amount=25`.
 - [ ] Lane 6. Begin and cancel stay lean. Run `cast_bar_demo.ps1` and read the interrupt, then read the lean begin and cancel frames from the interrupt suite. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-6-begin-cancel.log`. Pass when the begin and cancel frames contain no `amount` and no `effect` key.
 - [ ] Lane 7. Instant ability with no begin. Run `heal_wounded_demo.ps1` for a target that is actually wounded, and read the resolve frame off the server's own socket. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-7-instant-resolve.txt`. Pass when the resolve arrives with no preceding `begin` frame for that actor and ability, carries `effect=heal`, and carries the applied delta when one applied. A resolve that moved no HP omits the `amount` key and is not a failure.
 - [ ] Lane 8. Swing still precedes HP. Frame rung, run `cd server && CGO_ENABLED=1 go test -v -count=1 -run TestSwing ./internal/game`, which logs the frame index for all three swing sites. Live layer, the same `dummy_attack_demo.ps1` run that lane 2 names, `runs/dummy_attack_demo-run1/server.stdout.ndjson` lines 119 and 120, where the player to NPC swing and the Imp swing each log `attack_hit` with an applied delta. That run prints no frame index, so it carries the live swing facts and the unit run carries the ordering. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-8-ordering.log`. Pass when the swing frame index is below every HP frame for the same target at all three sites, and the live run logs `attack_hit` with `applied` at the player to NPC and the Imp to player site.
-- [ ] Lane 9. Wire table. Frame rung, run `cd server && CGO_ENABLED=1 go test -v -count=1 -run TestEncodeProducesKeyAsTagEnvelope ./internal/net`. This lane has no live layer, because the client prints no wire frame at this head and no demo asserts the byte table. The gates log `receipts/arm-311/gate-server.log` is the record that the same `internal/net` package passes inside the full server gate at this head. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-9-protocol-table.log`. Pass when the exact JSON table passes for both frames and the gates log exits 0.
+- [ ] Lane 9. Wire table. Frame rung, run `cd server && CGO_ENABLED=1 go test -v -count=1 -run TestEncodeProducesKeyAsTagEnvelope ./internal/net`. No demo asserts the byte table, so the serializer test is the lowest falsifying rung for this specific claim. The PR's live requirement is met separately by lanes 1 through 8; it does not make a Go test into live evidence. The gates log `receipts/arm-311/gate-server.log` records that the same package passes inside the full server gate. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-9-protocol-table.log`. Pass when the exact JSON table passes for both frames and the gates log exits 0.
 - [ ] Lane 10. Client decode without branching. Run `godot --headless --path client --editor --quit` then `godot --headless --path client --script res://tests/run_tests.gd`. Save `/home/armin/Work/marque-program/receipts/arm-311/lane-10-client.log`. Pass when the suite exits 0 with its PASS line and the presentation protocol suite covers the two new fields.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [ ] Metric. Wall time of `CGO_ENABLED=1 go test -race ./internal/game -run TestSwing -count=1` and `CGO_ENABLED=1 go test -race ./internal/net -run TestEncodeProducesKeyAsTagEnvelope -count=1`, plus the `ticks_dropped` count in the demo GAMELOG.
-- [ ] Probe. Run both Go commands and `dummy_attack_demo.ps1` at trunk and at head, interleaved trunk, head, trunk, head. Save each Go run to `receipts/arm-311/06-perf-<pkg>-<side>-<n>.log`, where the file carries its command, its worktree and SHA, its output, and its exit.
+- [ ] Probe. Run both Go commands and `dummy_attack_demo.ps1` at trunk and at head, interleaved trunk, head, trunk, head. Save each Go run to `receipts/arm-311/06-perf-<pkg>-<side>-<n>.log`, with its command, worktree, SHA, output, and exit. Save the interleaved demos and a trunk editor import under `/home/armin/Work/marque-program/receipts/arm-311-verify3/perf-live-warm/`; its `receipts.tsv` records four exits, markers, times, and `ticks_dropped` counts. An earlier attempt without a trunk editor import failed to load scenes and does not count.
 - [ ] Baseline. Record the trunk seconds first. The close-out probe measured the two filtered commands at trunk `d918c76` and at head `762e98e`, two runs each, all eight logs named above. Game trunk 1.040 s and 1.042 s against head 1.062 s and 1.064 s. Net trunk 1.019 s and 1.019 s against head 1.019 s and 1.020 s. The full package figures of 4.937 s and 175.441 s stay in Appendix A as prose about a different measurement.
 - [ ] Rule. Head `internal/game` within 1.5x trunk and head `internal/net` within 1.5x trunk. Zero `ticks_dropped` at head. Absolute ceiling of 300 s for the full server suite.
 
@@ -140,7 +140,7 @@ Each live lane runs in its own git worktree at the PR head. Drive through `.curs
 - [ ] Root's clean verdict at the exact head SHA.
 - [ ] Bugbot triage done.
 - [ ] Rebased onto current trunk after the verdict, patch-id unchanged.
-- [ ] The root appends this PR as the stack root. The operator lands it bottom-up.
+- [ ] The root appends this PR above the chain root `bug/ARM-346`, PR #220. The operator lands the chain bottom-up.
 
 ## White miss knob and crit honesty (ARM-312)
 
@@ -204,8 +204,8 @@ Each live lane runs in its own git worktree at the PR head. Drive through `.curs
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2 screenshots into `/tmp/marque-review/arm-312-miss.png`.
-- [ ] Record a 30 to 60 second video of the miss mode on a lane run. Save it as `/tmp/marque-review/arm-312-review.mp4`.
+- [ ] Copy lane 2 screenshots into `/home/armin/Work/marque-program/review/arm-312-miss.png`.
+- [ ] Record a 30 to 60 second video of the miss mode on a lane run. Save it as `/home/armin/Work/marque-program/review/arm-312-review.mp4`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -279,8 +279,8 @@ Each live lane runs in its own git worktree at the PR head. Drive through `.curs
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2, lane 3, and lane 4 screenshots into `/tmp/marque-review/arm-315-float-white.png`, `arm-315-float-crit.png`, and `arm-315-float-miss.png`.
-- [ ] Record a 30 to 60 second video showing a white hit, a crit, and a miss float. Save it as `/tmp/marque-review/arm-315-review.mp4`.
+- [ ] Copy lane 2, lane 3, and lane 4 screenshots into `/home/armin/Work/marque-program/review/arm-315-float-white.png`, `arm-315-float-crit.png`, and `arm-315-float-miss.png`.
+- [ ] Record a 30 to 60 second video showing a white hit, a crit, and a miss float. Save it as `/home/armin/Work/marque-program/review/arm-315-review.mp4`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -355,8 +355,8 @@ Each live lane runs in its own git worktree at the PR head. Drive through `.curs
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2 and lane 4 screenshots into `/tmp/marque-review/arm-314-cd-refuse.png` and `arm-314-after-cd.png`.
-- [ ] Record a 30 to 60 second video of a refused early press and a later successful one. Save it as `/tmp/marque-review/arm-314-review.mp4`.
+- [ ] Copy lane 2 and lane 4 screenshots into `/home/armin/Work/marque-program/review/arm-314-cd-refuse.png` and `arm-314-after-cd.png`.
+- [ ] Record a 30 to 60 second video of a refused early press and a later successful one. Save it as `/home/armin/Work/marque-program/review/arm-314-review.mp4`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -426,8 +426,8 @@ Each live lane runs in its own git worktree at the PR head. Drive through `.curs
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2 and lane 3 screenshots into `/tmp/marque-review/arm-313-sweep.png` and `arm-313-drain.png`.
-- [ ] Record a 30 to 60 second video of a cast and its draining slot. Save it as `/tmp/marque-review/arm-313-review.mp4`.
+- [ ] Copy lane 2 and lane 3 screenshots into `/home/armin/Work/marque-program/review/arm-313-sweep.png` and `arm-313-drain.png`.
+- [ ] Record a 30 to 60 second video of a cast and its draining slot. Save it as `/home/armin/Work/marque-program/review/arm-313-review.mp4`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -503,8 +503,8 @@ Each live lane runs in its own git worktree at the PR head. Drive through `.curs
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2, lane 3, and lane 7 screenshots into `/tmp/marque-review/arm-316-oor.png`, `arm-316-oom.png`, and `arm-316-tint.png`.
-- [ ] Record a 30 to 60 second video of the two refusals and the linger clearing. Save it as `/tmp/marque-review/arm-316-review.mp4`.
+- [ ] Copy lane 2, lane 3, and lane 7 screenshots into `/home/armin/Work/marque-program/review/arm-316-oor.png`, `arm-316-oom.png`, and `arm-316-tint.png`.
+- [ ] Record a 30 to 60 second video of the two refusals and the linger clearing. Save it as `/home/armin/Work/marque-program/review/arm-316-review.mp4`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -580,8 +580,8 @@ Each live lane runs in its own git worktree at the PR head. Drive through `.curs
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2, lane 3, and lane 4 screenshots into `/tmp/marque-review/arm-318-turn.png`, `arm-318-rate.png`, and `arm-318-cast-turn.png`.
-- [ ] Record a 30 to 60 second video of an attack and a cast from a facing away player. Save it as `/tmp/marque-review/arm-318-review.mp4`.
+- [ ] Copy lane 2, lane 3, and lane 4 screenshots into `/home/armin/Work/marque-program/review/arm-318-turn.png`, `arm-318-rate.png`, and `arm-318-cast-turn.png`.
+- [ ] Record a 30 to 60 second video of an attack and a cast from a facing away player. Save it as `/home/armin/Work/marque-program/review/arm-318-review.mp4`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -602,8 +602,8 @@ Each live lane runs in its own git worktree at the PR head. Drive through `.curs
 
 Two empirical checks were run at `main` SHA d918c76 before this plan was written. No design fork needed a prototype.
 
-- Harness venue, run on this machine. `pwsh 7.6.6` is installed by mise at `/home/armin/.local/share/mise/installs/powershell/7.6.6/pwsh` and is not on `PATH`. `doctor.ps1` printed `DOCTOR OK` with `go1.27.1` and `godot 4.7.2`. `scripts/wasd_demo.ps1` then printed `WASD DEMO OK` with exit 0 in 13.3 s against `DISPLAY=:0`, evidence at `/tmp/marque-wasd`. Conclusion, the live lanes run locally with the mise PowerShell, so no cloud venue is needed and the boot recipe names that path.
-- Trunk baselines. `cd server && CGO_ENABLED=1 go test -race ./...` exited 0 in 3 min 10 s, with `internal/game` at 4.937 s and `internal/net` at 175.441 s. `godot --headless --path client --script res://tests/run_tests.gd` exited 0 in 30.4 s after a 39.5 s cache warm-up and its last line read `PASS: 3202 assertion(s) held across 64 suite(s)`. These are the trunk numbers every perf block compares against.
+- Harness venue, run on this machine. `pwsh 7.6.6` is installed by mise at `/home/armin/.local/share/mise/installs/powershell/7.6.6/pwsh` and is not on `PATH`. `doctor.ps1` printed `DOCTOR OK` with `go1.27.1` and `godot 4.7.2`. `scripts/wasd_demo.ps1` then printed `WASD DEMO OK` with exit 0 in 13.3 s against `DISPLAY=:0`. The old `/tmp/marque-wasd` evidence was lost at reboot. The current windowed receipts live under `/home/armin/Work/marque-program/`, so the local venue is demonstrated by the current runs.
+- Historical trunk observations. A prior `cd server && CGO_ENABLED=1 go test -race ./...` was reported to take 3 min 10 s, with `internal/game` at 4.937 s and `internal/net` at 175.441 s. A prior headless client suite was reported as 3202 assertions across 64 suites. No command log survives for either observation, so neither is a perf baseline for a checked box. ARM-311 compares the eight filtered Go receipts and the four interleaved demo runs named in its perf block.
 - Unproven until execution. `-start-mana` and `-white-miss-pct` do not exist yet, so their plumbing is a design read and not a measurement. The miss mode of `dummy_attack_demo` does not exist yet, so the claim that it tolerates a non dropping dummy HP is unproven. The FCT style assertion is claimed as a headless property read, not as pixels, because no demo on this host asserts a pixel and the frame comparison helper returns null off Windows.
 
 ## Appendix B. Alternatives rejected
