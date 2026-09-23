@@ -5,6 +5,7 @@ const SessionScript := preload("res://scripts/session.gd")
 const NetClientScript := preload("res://scripts/net_client.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const FloatingCombatTextScript := preload("res://scripts/floating_combat_text.gd")
+const FloatingCombatTextScene := preload("res://scenes/floating_combat_text.tscn")
 const Assertions := preload("res://tests/assertions.gd")
 
 var _assertions := Assertions.new()
@@ -48,6 +49,7 @@ func _ready() -> void:
 	_test_disabled_no_float()
 	_test_cast_resolve_spawns_spell_float()
 	_test_cast_heal_spawns_heal_float()
+	await _test_lifetime_node_gone_after_expiry()
 
 	print(
 		"FCT SCENE RAN: %d assertions, %d failed"
@@ -154,20 +156,14 @@ func _test_disabled_no_float() -> void:
 	if target == null:
 		return
 
-	# Temporarily disable FCT by modifying the scene default before spawning.
-	# The session checks fct_enabled after instantiation.
-	# We simulate this by feeding a swing and checking the float's fct_enabled.
-	# Instead, we test the gate: instantiate an FCT, set enabled=false, check
-	# that the session's _spawn_fct would skip it.
-	# For a true integration test, we'd need to patch the scene's export.
-	# The tree-free test already covers the style table. Here we verify the
-	# disabled path by checking that the scene's export default is true.
-	var packed := preload("res://scenes/floating_combat_text.tscn")
-	var fct := packed.instantiate() as FloatingCombatTextScript
-	_assertions.check(fct.fct_enabled, "scene default fct_enabled is true")
-	fct.fct_enabled = false
-	_assertions.check(not fct.fct_enabled, "fct_enabled can be set false")
-	fct.queue_free()
+	_clear_fct_children(target)
+	_session.set_fct_disabled(true)
+	_net.ingest_text_frame(
+		'{"swing":{"id":3,"target":1000002,"weapon":"sword","amount":9,"crit":false,"miss":false}}'
+	)
+	var count := _count_fct_children(target)
+	_assertions.check(count == 0, "disabled session spawns no float on swing, got %d" % count)
+	_session.set_fct_disabled(false)
 
 
 func _test_cast_resolve_spawns_spell_float() -> void:
@@ -207,3 +203,20 @@ func _test_cast_heal_spawns_heal_float() -> void:
 		_assertions.check(fct.text == "+25", "heal float text has plus prefix, got '%s'" % fct.text)
 		_assertions.check(fct.last_kind == "heal", "heal float kind is heal, got '%s'" % fct.last_kind)
 		_clear_fct_children(target)
+
+
+func _test_lifetime_node_gone_after_expiry() -> void:
+	var target := _find_npc(1000002)
+	if target == null:
+		return
+
+	_clear_fct_children(target)
+	var fct := FloatingCombatTextScene.instantiate() as FloatingCombatTextScript
+	fct.fct_lifetime_msec = 200
+	target.add_child(fct)
+	fct.show_hit(9, FloatingCombatTextScript.KIND_WHITE, false)
+	var count_before := _count_fct_children(target)
+	_assertions.check(count_before == 1, "float present immediately after add_child+show_hit, got %d" % count_before)
+	await get_tree().create_timer(0.5).timeout
+	var count_after := _count_fct_children(target)
+	_assertions.check(count_after == 0, "float freed after lifetime, got %d" % count_after)

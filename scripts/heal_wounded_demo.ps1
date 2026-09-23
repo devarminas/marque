@@ -103,31 +103,41 @@ try {
 
     $done = $false
     $healOk = $false
-    $healFx = $false
+    $fctHeal = $null
     if (Test-Path $clientOut) {
         foreach ($line in Get-Content $clientOut) {
             if ($line -match '^DEMO healok ') { $healOk = $true }
-            if ($line -match '^DEMO castfx \d+ heal\s*$') { $healFx = $true }
+            if ($line -match '^DEMO fct heal=(\+\d+) scale=\d+ text=\+\d+$') { $fctHeal = $Matches[1] }
             if ($line -match '^DEMO done\s*$') { $done = $true }
             if ($line -match '^DEMO FAIL ') { Add-Failure $line.Trim() }
         }
     }
     if (-not $healOk) { Add-Failure "missing DEMO healok" }
-    if (-not $healFx) { Add-Failure "missing DEMO castfx heal" }
+    if (-not $fctHeal) { Add-Failure "missing DEMO fct heal=+N" }
     if (-not $done) { Add-Failure "missing DEMO done" }
 
     $healEffect = 0
     $hpSeed = 0
+    $healAmount = 0
     if (Test-Path $serverOut) {
         foreach ($line in Get-Content $serverOut) {
             if (-not $line.StartsWith("GAMELOG ")) { continue }
             $ev = ($line.Substring(8) | ConvertFrom-Json)
             if ($ev.ev -eq "npc_hp_seed") { $hpSeed++ }
-            if ($ev.ev -eq "cast_effect" -and $ev.ability -eq "heal") { $healEffect++ }
+            if ($ev.ev -eq "cast_effect" -and $ev.ability -eq "heal") {
+                $healEffect++
+                if ($ev.amount) { $healAmount = [int]$ev.amount }
+            }
         }
     }
     if ($hpSeed -lt 1) { Add-Failure "npc_hp_seed=$hpSeed, want >= 1" }
     if ($healEffect -lt 1) { Add-Failure "cast_effect heal=$healEffect, want >= 1" }
+    if ($fctHeal -and $healAmount -gt 0) {
+        $fctNum = [int]($fctHeal.TrimStart('+'))
+        if ($fctNum -ne $healAmount) {
+            Add-Failure "DEMO fct heal=$fctHeal but GAMELOG cast_effect amount=$healAmount"
+        }
+    }
 
     Show-File "client stdout" $clientOut
     Show-File "client stderr" $clientErr

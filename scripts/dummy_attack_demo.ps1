@@ -5,6 +5,8 @@ param(
     [int] $ReadyTimeoutSeconds = 20,
     [int] $ClientTimeoutSeconds = 90,
     [ValidateRange(0, 100)] [int] $WhiteMissPct = 0,
+    [ValidateRange(0, 100)] [int] $ForceCritPct = 0,
+    [ValidateRange(0, 100)] [int] $ForceCritAfterWhites = 0,
     [switch] $ReviewMovie,
     [switch] $FctOff
 )
@@ -24,6 +26,8 @@ $serverOut = Join-Path $OutDir "server.stdout.ndjson"
 $serverErr = Join-Path $OutDir "server.stderr.log"
 $clientOut = Join-Path $OutDir "client.stdout.log"
 $clientErr = Join-Path $OutDir "client.stderr.log"
+$whiteFctShot = Join-Path $OutDir "fct-white.png"
+$critFctShot = Join-Path $OutDir "fct-crit.png"
 $evidenceMarker = Join-Path $OutDir ".marque-evidence"
 
 $server = $null
@@ -58,11 +62,12 @@ try {
         Pop-Location
     }
 
-    $server = Start-Process -FilePath $binary -ArgumentList @(
-        "-addr", "127.0.0.1:0",
-        "-admin",
-        "-white-miss-pct", "$WhiteMissPct"
-    ) -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr `
+    $serverArgs = @("-addr", "127.0.0.1:0", "-admin", "-white-miss-pct", "$WhiteMissPct")
+    if ($ForceCritPct -gt 0) {
+        $serverArgs += @("-force-crit-pct", "$ForceCritPct", "-force-crit-after-whites", "$ForceCritAfterWhites")
+    }
+    $server = Start-Process -FilePath $binary -ArgumentList $serverArgs `
+        -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr `
         -NoNewWindow -PassThru
 
     $deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
@@ -89,6 +94,9 @@ try {
         if ($ReviewMovie) { $clientArgs += "--miss-review" }
     }
     if ($ReviewMovie -and $WhiteMissPct -ne 100) { throw "-ReviewMovie needs -WhiteMissPct 100" }
+    if ($ForceCritPct -eq 100) {
+        $clientArgs += @("--fct-white-shot", $whiteFctShot, "--fct-crit-shot", $critFctShot)
+    }
     if ($FctOff) { $clientArgs += "--fct-off" }
     $client = Start-Process -FilePath $Godot -ArgumentList $clientArgs `
         -RedirectStandardOutput $clientOut -RedirectStandardError $clientErr -PassThru
@@ -112,7 +120,10 @@ try {
     $missOk = $false
     $missHPOk = $false
     $missFramesOk = $false
+    $missFctOk = $false
     $npcCount = 0
+    $critScales = @()
+    $whiteScales = @()
     if (Test-Path $clientOut) {
         foreach ($line in Get-Content $clientOut) {
             if ($line -match '^DEMO npc ') { $npcCount++ }
@@ -121,6 +132,9 @@ try {
             if ($line -match '^DEMO miss \d+ amount=0 crit=false hp=') { $missOk = $true }
             if ($line -match '^DEMO misshp \d+ unchanged=') { $missHPOk = $true }
             if ($line -match '^DEMO missframes 30$') { $missFramesOk = $true }
+            if ($line -match '^DEMO fct miss text=Miss scale=\d+ color=999999ff$') { $missFctOk = $true }
+            if ($line -match '^DEMO fct crit=\d+ scale=(\d+) text=\d+!$') { $critScales += [int]$Matches[1] }
+            if ($line -match '^DEMO fct white=\d+ scale=(\d+) text=\d+$') { $whiteScales += [int]$Matches[1] }
             if ($line -match '^DEMO done\s*$') { $done = $true }
             if ($line -match '^DEMO FAIL ') { Add-Failure $line.Trim() }
         }
@@ -128,8 +142,16 @@ try {
     if ($npcCount -lt 2) { Add-Failure "DEMO npc lines=$npcCount, want >= 2" }
     if (-not $refuseOk) { Add-Failure "missing DEMO refuse" }
     if ($WhiteMissPct -eq 100) {
-        if (-not $missOk -or -not $missHPOk) { Add-Failure "missing DEMO miss or misshp" }
+        if (-not $missOk -or -not $missHPOk -or -not $missFctOk) { Add-Failure "missing DEMO miss, misshp, or grey Miss float" }
         if ($ReviewMovie -and -not $missFramesOk) { Add-Failure "missing DEMO missframes 30" }
+    } elseif ($ForceCritPct -eq 100) {
+        if ($whiteScales.Count -lt 1) { Add-Failure "no DEMO fct white scale with ForceCritPct=100" }
+        if ($critScales.Count -lt 1) { Add-Failure "no DEMO fct crit scale with ForceCritPct=100" }
+        if ($whiteScales.Count -gt 0 -and $critScales.Count -gt 0 -and $critScales[0] -le $whiteScales[0]) {
+            Add-Failure "observed crit scale $($critScales[0]) must exceed observed white scale $($whiteScales[0])"
+        }
+        if (-not (Test-Path $whiteFctShot)) { Add-Failure "missing game-authored white float screenshot" }
+        if (-not (Test-Path $critFctShot)) { Add-Failure "missing game-authored crit float screenshot" }
     } elseif (-not $attackOk) { Add-Failure "missing DEMO attackok" }
     if (-not $done) { Add-Failure "missing DEMO done" }
 
@@ -138,6 +160,8 @@ try {
     $spawned = 0
     $missHits = 0
     $landedHits = 0
+    $critHits = 0
+    $whiteHits = 0
     if (Test-Path $serverOut) {
         foreach ($line in Get-Content $serverOut) {
             if (-not $line.StartsWith("GAMELOG ")) { continue }
@@ -148,6 +172,9 @@ try {
                 $hits++
                 if ($ev.miss -eq $true -and $ev.crit -eq $false -and $ev.applied -eq 0 -and $ev.damage -eq 0) { $missHits++ }
                 if ($ev.miss -eq $false -and $ev.applied -gt 0) { $landedHits++ }
+                $isPlayerHit = $null -ne $ev.PSObject.Properties["player"]
+                if ($isPlayerHit -and $ev.crit -eq $true -and $ev.miss -eq $false) { $critHits++ }
+                if ($isPlayerHit -and $ev.crit -eq $false -and $ev.miss -eq $false -and $ev.applied -gt 0) { $whiteHits++ }
             }
             if ($ev.ev -eq "attack_rejected") {
                 Add-Failure "unexpected attack_rejected on the happy path: $line"
@@ -158,7 +185,9 @@ try {
     if ($attacks -lt 1) { Add-Failure "attack=$attacks, want >= 1" }
     if ($hits -lt 1) { Add-Failure "attack_hit=$hits, want >= 1" }
     if ($WhiteMissPct -eq 100 -and $missHits -ne $hits) { Add-Failure "honest misses=$missHits, hits=$hits" }
-    if ($WhiteMissPct -ne 100 -and $landedHits -lt 1) { Add-Failure "landed hits=$landedHits, want >= 1" }
+    if ($ForceCritPct -eq 100 -and $critHits -lt 1) { Add-Failure "crit hits=$critHits, want >= 1 with force-crit-pct=100" }
+    if ($ForceCritPct -eq 100 -and $whiteHits -lt 1) { Add-Failure "white hits=$whiteHits, want >= 1 before the forced crit" }
+    if ($WhiteMissPct -ne 100 -and $ForceCritPct -ne 100 -and $landedHits -lt 1) { Add-Failure "landed hits=$landedHits, want >= 1" }
 
     Show-File "client stdout" $clientOut
     Show-File "client stderr" $clientErr

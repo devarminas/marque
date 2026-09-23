@@ -26,7 +26,10 @@ var _refuses: Array = []
 var _swings: Array = []
 
 
-func run(root: Node, session: SessionScript, expect_white_miss: bool = false, shot_path: String = "", review: bool = false) -> int:
+func run(
+	root: Node, session: SessionScript, expect_white_miss: bool = false, shot_path: String = "",
+	review: bool = false, white_shot_path: String = "", crit_shot_path: String = ""
+) -> int:
 	_root = root
 	_tree = root.get_tree()
 	_session = session
@@ -128,6 +131,14 @@ func run(root: Node, session: SessionScript, expect_white_miss: bool = false, sh
 		if not await _wait_hp_drop(hostile_id, hostile_hp_before):
 			return _fail("hostile dummy hp never dropped after right-click attack")
 		print("DEMO attackok %d %d" % [hostile_id, _session.hit_points_for(hostile_id).x])
+		if not white_shot_path.is_empty():
+			if not await _capture(white_shot_path):
+				return _fail("white float screenshot failed")
+		if not crit_shot_path.is_empty():
+			if not await _wait_swing_crit():
+				return _fail("no server crit after forced crit setup")
+			if not await _capture(crit_shot_path):
+				return _fail("crit float screenshot failed")
 
 		var hp_after_first := _session.hit_points_for(hostile_id).x
 		await _wait_msec(6000)
@@ -226,6 +237,16 @@ func _wait_swing_miss() -> bool:
 	return false
 
 
+func _wait_swing_crit() -> bool:
+	var deadline := Time.get_ticks_msec() + HIT_WAIT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		for swing: Dictionary in _swings:
+			if swing["id"] == _session.own_id() and swing["crit"] and not swing["miss"]:
+				return true
+		await _tree.create_timer(SPIN_USEC / 1_000_000.0).timeout
+	return false
+
+
 func _wait_hp_drop(id: int, baseline: int) -> bool:
 	var deadline := Time.get_ticks_msec() + HIT_WAIT_MSEC
 	while Time.get_ticks_msec() < deadline:
@@ -234,6 +255,15 @@ func _wait_hp_drop(id: int, baseline: int) -> bool:
 			return true
 		await _tree.create_timer(SPIN_USEC / 1_000_000.0).timeout
 	return false
+
+
+func _capture(path: String) -> bool:
+	await RenderingServer.frame_post_draw
+	var error := _root.get_viewport().get_texture().get_image().save_png(path)
+	if error != OK:
+		return false
+	print("DEMO fctshot %s" % path)
+	return true
 
 
 func _wait_msec(msec: int) -> void:

@@ -121,6 +121,8 @@ signal admin_requested(line: String)
 
 signal respawn_requested()
 
+signal own_mana_changed(mana: int, max_mana: int)
+
 @export var net: Node
 @export var local_player: Node3D
 @export var remote_players: Node3D
@@ -1911,8 +1913,6 @@ func _on_cast_effect_observed(id: int, amount: int, effect: String) -> void:
 
 func _on_cast_phase_observed(id: int, ability: String, target: int, phase: String) -> void:
 	_record_hostile_cast(id, ability, phase)
-	# A resolve frame settles it. A cancelled cast sends no resolve, and the frame
-	# order against the mana spend and the cast bar clear stops mattering.
 	if phase == "resolve" and id == _you:
 		_last_cast_resolve_target = target
 		_play_cast_effect_on_target(target, ability)
@@ -2002,18 +2002,8 @@ func _spawn_fct(target_id: int, amount: int, kind: String, crit: bool) -> void:
 	if not fct.fct_enabled:
 		fct.queue_free()
 		return
-	fct.show_hit(amount, kind, crit)
 	host.add_child(fct)
-	if kind == FloatingCombatTextScript.KIND_MISS:
-		print("DEMO fct miss")
-	elif kind == FloatingCombatTextScript.KIND_HEAL:
-		print("DEMO fct heal=+%d" % amount)
-	elif kind == FloatingCombatTextScript.KIND_WHITE and crit:
-		print("DEMO fct crit=%d" % amount)
-	elif kind == FloatingCombatTextScript.KIND_WHITE:
-		print("DEMO fct white=%d" % amount)
-	elif kind == FloatingCombatTextScript.KIND_SPELL:
-		print("DEMO fct spell=%d" % amount)
+	fct.show_hit(amount, kind, crit)
 
 
 func _ability_ui_color(ability_id: String) -> String:
@@ -2279,6 +2269,7 @@ func _apply_mana(id: int, mana: int, max_mana: int) -> void:
 	_mana[id] = Vector2i(mana, max_mana)
 	if id != _you:
 		return
+	own_mana_changed.emit(mana, max_mana)
 	if _hp_hud != null:
 		_hp_hud.apply_mana(mana, max_mana)
 

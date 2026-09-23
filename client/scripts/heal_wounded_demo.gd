@@ -28,6 +28,8 @@ var _root: Node
 var _session: SessionScript
 var _prefix: String
 var _effects: Array = []
+var _mana_before_cast := -1
+var _mana_fell := false
 
 
 func run(root: Node, session: SessionScript, prefix: String) -> int:
@@ -36,6 +38,7 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	_session = session
 	_prefix = prefix
 	_session.cast_effect_played.connect(_on_cast_effect)
+	_session.own_mana_changed.connect(_on_own_mana_changed)
 
 	if not await _wait_for_join():
 		return _fail("no welcome with two practice npcs after %dms" % JOIN_TIMEOUT_MSEC)
@@ -76,16 +79,17 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	if not _session.select_player(friendly_id) or _session.selected_player_id() != friendly_id:
 		return _fail("friendly practice dummy %d was not selected for heal" % friendly_id)
 
-	var mana_before_heal := _session.mana_for(_session.own_id()).x
-	if mana_before_heal < 0:
-		mana_before_heal = 100
+	var mana_pair := _session.mana_for(_session.own_id())
+	var mana_before_heal := mana_pair.x if mana_pair.x >= 0 else 100
 	var friendly_hp_before := _session.hit_points_for(friendly_id).x
 	if friendly_hp_before < 0 or friendly_hp_before >= 100:
 		return _fail("friendly dummy hp %d needs to be wounded for heal proof" % friendly_hp_before)
 	_effects.clear()
+	_mana_before_cast = mana_before_heal
+	_mana_fell = false
 	_session.request_cast("heal")
 	print("DEMO cast heal %d" % friendly_id)
-	if not await _wait_mana_drop(mana_before_heal):
+	if not await _wait_mana_fell():
 		return _fail("heal did not spend mana on friendly dummy")
 	if not await _wait_cast_fx(friendly_id, "heal"):
 		return _fail("heal success did not play effect on friendly %d" % friendly_id)
@@ -157,6 +161,11 @@ func _on_cast_effect(target_id: int, ability_id: String) -> void:
 	_effects.append({"target": target_id, "ability": ability_id})
 
 
+func _on_own_mana_changed(mana: int, _max_mana: int) -> void:
+	if _mana_before_cast >= 0 and mana < _mana_before_cast:
+		_mana_fell = true
+
+
 func _wait_for_join() -> bool:
 	var deadline := Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	while Time.get_ticks_msec() < deadline:
@@ -189,11 +198,11 @@ func _wait_hp(id: int, baseline: int, want_raise: bool) -> bool:
 	return false
 
 
-func _wait_mana_drop(baseline: int) -> bool:
+
+func _wait_mana_fell() -> bool:
 	var deadline := Time.get_ticks_msec() + CAST_WAIT_MSEC
 	while Time.get_ticks_msec() < deadline:
-		var mana := _session.mana_for(_session.own_id()).x
-		if mana >= 0 and mana < baseline:
+		if _mana_fell:
 			return true
 		await _tree.create_timer(SPIN_USEC / 1_000_000.0).timeout
 	return false

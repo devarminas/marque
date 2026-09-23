@@ -395,7 +395,8 @@ func _run_dummy_attack_demo(args: Array) -> void:
 	var demo := DummyAttackDemoScript.new()
 	var code: int = await demo.run(
 		self, session, "--expect-white-miss" in args,
-		_argument_after(args, "--miss-shot"), "--miss-review" in args
+		_argument_after(args, "--miss-shot"), "--miss-review" in args,
+		_argument_after(args, "--fct-white-shot"), _argument_after(args, "--fct-crit-shot")
 	)
 	get_tree().quit(code)
 

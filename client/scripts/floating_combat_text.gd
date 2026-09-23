@@ -1,13 +1,8 @@
 extends Label3D
 
 
-## Whether floating combat text spawns at all.
 @export var fct_enabled := true
-
-## How long the float lives before being freed, in milliseconds.
 @export var fct_lifetime_msec := 1200
-
-## Base font size for a normal white hit.
 @export var fct_scale := 64
 
 
@@ -16,10 +11,8 @@ const KIND_MISS := "miss"
 const KIND_SPELL := "spell"
 const KIND_HEAL := "heal"
 
-## Rise distance in world units over the float's lifetime.
 const RISE_DISTANCE := 1.2
 
-## Style table keyed by kind+crit. Each entry: {color, size_mul, prefix, suffix}.
 const STYLES := {
 	"white_false": {"color": Color(1.0, 1.0, 1.0, 1.0), "size_mul": 1.0, "prefix": "", "suffix": ""},
 	"white_true":  {"color": Color(1.0, 0.85, 0.15, 1.0), "size_mul": 1.5, "prefix": "", "suffix": "!"},
@@ -32,10 +25,7 @@ const STYLES := {
 }
 
 
-## The kind that was last shown (for test inspection).
 var last_kind := ""
-
-## The crit flag of the last show_hit call.
 var last_crit := false
 
 
@@ -60,6 +50,7 @@ func show_hit(amount: int, kind: String, crit: bool) -> void:
 	font_size = int(fct_scale * style["size_mul"])
 	billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	visible = true
+	_print_demo()
 
 	var lifetime_sec := fct_lifetime_msec / 1000.0
 	var tween := create_tween()
@@ -67,3 +58,19 @@ func show_hit(amount: int, kind: String, crit: bool) -> void:
 	tween.tween_property(self, "position:y", position.y + RISE_DISTANCE, lifetime_sec)
 	tween.tween_property(self, "modulate:a", 0.0, lifetime_sec)
 	tween.chain().tween_callback(queue_free)
+
+
+func _print_demo() -> void:
+	match last_kind:
+		KIND_MISS:
+			print("DEMO fct miss text=%s scale=%d color=%s" % [text, font_size, modulate.to_html()])
+		KIND_HEAL:
+			print("DEMO fct heal=%s scale=%d text=%s" % [text, font_size, text])
+		KIND_WHITE:
+			var amount := text.trim_suffix("!")
+			if last_crit:
+				print("DEMO fct crit=%s scale=%d text=%s" % [amount, font_size, text])
+			else:
+				print("DEMO fct white=%s scale=%d text=%s" % [amount, font_size, text])
+		KIND_SPELL:
+			print("DEMO fct spell=%s scale=%d text=%s" % [text, font_size, text])
