@@ -153,7 +153,7 @@ Run live lanes serially in a clean worktree at the PR head. Reuse a worktree onl
 - [ ] Edit `server/cmd/marqued/main.go`. Add the `-white-miss-pct` flag.
 - [ ] Edit `server/internal/game/combat_test.go` and `server/internal/game/stats_test.go` for miss, crit, and normal hit.
 - [ ] Edit `server/internal/game/presentation_test.go` for the miss flag on the wire.
-- [ ] Edit `scripts/dummy_attack_demo.ps1` and `client/scripts/dummy_attack_demo.gd` for the miss mode.
+- [ ] Edit `scripts/dummy_attack_demo.ps1`, `client/scripts/dummy_attack_demo.gd`, and `client/scripts/main.gd` for the miss mode. Add `-WhiteMissPct` pass-through to `scripts/dummy_cast_demo.ps1` for the ability-isolation lane.
 - [ ] Edit `docs/adr/0014-weapon-data-white-damage.md` with the miss rule.
 
 **Build.**
@@ -188,8 +188,8 @@ Run live lanes serially in a clean worktree at the PR head. Reuse a worktree onl
 - [ ] Lane 2. Miss at 100 percent. Run `dummy_attack_demo.ps1 -WhiteMissPct 100`. Save `arm-312-lane-2-miss.png`. Pass when `attack_hit` carries `miss=true` and the dummy HP equals its seed.
 - [ ] Lane 3. No crit on a miss. Read the same run. Save `arm-312-lane-3-miss-crit.png`. Pass when the miss event carries `crit=false`.
 - [ ] Lane 4. Crit honesty. Run the seeded Go crit case and read the event. Save `arm-312-lane-4-crit.png`. Pass when `crit=true` and the amount is the doubled pre-armor value minus armor.
-- [ ] Lane 5. Normal hit at the default knob. Run `dummy_attack_demo.ps1` three times with the default 5 percent. Save `arm-312-lane-5-default.png`. Pass when hits land in every run and the miss rate across the runs is at or below 20 percent.
-- [ ] Lane 6. The knob at 0 consumes no extra draw. Run the draw count case at trunk and head. Save `arm-312-lane-6-zero.png`. Pass when both counts are equal and every pre-existing seeded test is unchanged.
+- [ ] Lane 5. Normal hit at the server default knob. Run `dummy_attack_demo.ps1 -WhiteMissPct 5` three times because the demo itself defaults to 0 for deterministic regression runs. Save `arm-312-lane-5-default.png`. Pass when hits land in every run and the miss rate across the runs is at or below 20 percent.
+- [ ] Lane 6. The knob at 0 consumes no extra draw. Run the existing `TestRollWhiteUsesWeaponRangeAndAP` on both ARM-311 and ARM-312, and run `TestWhiteZeroMissKnobKeepsSeededDrawSequence` at ARM-312. Save `arm-312-lane-6-zero.log` with the exits and test output. Save `arm-312-lane-6-zero.png` from the lane 2 demo for review only. ARM-311 has no draw-count test. Compare the ARM-311 `rollWhiteDamage` source's damage and crit draws with the head test's seeded next draw; do not report a trunk draw-count test. Pass when both shared cases pass and the seeded head test consumes exactly the two baseline draws.
 - [ ] Lane 7. Spells are untouched. Run `dummy_cast_demo.ps1 -WhiteMissPct 100`. Save `arm-312-lane-7-spells.png`. Pass when both the heal and the fireball land.
 - [ ] Lane 8. No crit at baseline DEX. Run the seeded case at DEX 10. Save `arm-312-lane-8-nocrit.png`. Pass when `crit=false`.
 - [ ] Lane 9. Armor floor holds on a hit. Run the high-armor case. Save `arm-312-lane-9-floor.png`. Pass when the amount is 1 and `miss=false`.
