@@ -3,7 +3,8 @@ param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
     [string] $OutDir = (Join-Path ([System.IO.Path]::GetTempPath()) "marque-dummy-cast"),
     [int] $ReadyTimeoutSeconds = 20,
-    [int] $ClientTimeoutSeconds = 90
+    [int] $ClientTimeoutSeconds = 90,
+    [ValidateRange(0, 100)] [int] $WhiteMissPct = 0
 )
 
 Set-StrictMode -Version Latest
@@ -57,7 +58,8 @@ try {
 
     $server = Start-Process -FilePath $binary -ArgumentList @(
         "-addr", "127.0.0.1:0",
-        "-admin"
+        "-admin",
+        "-white-miss-pct", "$WhiteMissPct"
     ) -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr `
         -NoNewWindow -PassThru
 
