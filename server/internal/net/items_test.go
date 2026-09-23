@@ -333,7 +333,9 @@ func TestTheLoserIsHaltedAndToldWhy(t *testing.T) {
 	alice.pickup(item)
 	bob.pickup(item)
 
-	halt := alice.awaitPlayerPose(bobWelcome.You)
+	lostEvs := h.awaitEvents(game.EvPickupLost, 1)
+	lostTick := int64(lostEvs[0]["t"].(float64))
+	halt := alice.awaitPlayerPoseAtOrAfterTick(bobWelcome.You, lostTick)
 	carol := h.dial("carol")
 	bobNow := positionOf(t, carol.welcomeFrame(), bobWelcome.You)
 	if math.Abs(halt.X-bobNow.X) > 1e-6 || math.Abs(halt.Z-bobNow.Z) > 1e-6 {

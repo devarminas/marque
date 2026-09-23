@@ -789,6 +789,23 @@ func (c *client) awaitPlayerPose(id mnet.PlayerID) mnet.Pose {
 	return mnet.Pose{}
 }
 
+func (c *client) awaitPlayerPoseAtOrAfterTick(id mnet.PlayerID, minTick int64) mnet.Pose {
+	c.t.Helper()
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(time.Until(deadline))
+		if !ok {
+			break
+		}
+		if f.Pose != nil && f.Pose.ID == id && f.Pose.Tick >= minTick {
+			c.noteSelfPose(*f.Pose)
+			return *f.Pose
+		}
+	}
+	c.t.Fatalf("client %s: no pose for player %d at tick >= %d within %v", c.name, id, minTick, readTimeout)
+	return mnet.Pose{}
+}
+
 func (c *client) spawn() mnet.Spawn {
 	c.t.Helper()
 	f := c.next()

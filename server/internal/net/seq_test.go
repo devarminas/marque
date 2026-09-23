@@ -132,12 +132,14 @@ func TestALowerSequenceNumberIsDroppedAndAGapIsAccepted(t *testing.T) {
 	}
 
 	alice.sendRaw(`{"move":{"dx":0,"dz":1,"seq":10}}`)
-	second := alice.awaitPose()
+	allMoves := h.awaitEvents(game.EvMove, 2)
+	seq10Tick := int64(allMoves[1]["t"].(float64))
+	second := alice.awaitPlayerPoseAtOrAfterTick(alice.id, seq10Tick+1)
 	if second.Tick <= first.Tick {
 		t.Fatalf("pose after gap tick %d, want after %d", second.Tick, first.Tick)
 	}
-	if len(h.eventsNamed(game.EvMove)) != 2 {
-		t.Fatalf("%d %s events after the gap, want 2", len(h.eventsNamed(game.EvMove)), game.EvMove)
+	if len(allMoves) != 2 {
+		t.Fatalf("%d %s events after the gap, want 2", len(allMoves), game.EvMove)
 	}
 }
 
