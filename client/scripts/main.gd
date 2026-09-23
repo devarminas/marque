@@ -390,6 +390,8 @@ func _run_dummy_attack_demo(args: Array) -> void:
 		push_error("main.tscn is missing Session")
 		get_tree().quit(1)
 		return
+	if "--fct-off" in args:
+		session.set_fct_disabled(true)
 	var demo := DummyAttackDemoScript.new()
 	var code: int = await demo.run(
 		self, session, "--expect-white-miss" in args,

@@ -188,6 +188,7 @@ var _avatars := {}
 var _items := {}
 var _nodes := {}
 var _npcs := {}
+var _fct_disabled := false
 var _last_swing_target := 0
 var _last_cast_resolve_target := 0
 var _use_from := -1
@@ -1980,7 +1981,13 @@ func _play_cast_effect_on_target(target_id: int, ability_id: String) -> void:
 	cast_effect_played.emit(target_id, ability_id)
 
 
+func set_fct_disabled(off: bool) -> void:
+	_fct_disabled = off
+
+
 func _spawn_fct(target_id: int, amount: int, kind: String, crit: bool) -> void:
+	if _fct_disabled:
+		return
 	var host: Node3D = _npcs.get(target_id)
 	if host == null:
 		host = _avatars.get(target_id)

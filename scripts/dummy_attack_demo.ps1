@@ -5,7 +5,8 @@ param(
     [int] $ReadyTimeoutSeconds = 20,
     [int] $ClientTimeoutSeconds = 90,
     [ValidateRange(0, 100)] [int] $WhiteMissPct = 0,
-    [switch] $ReviewMovie
+    [switch] $ReviewMovie,
+    [switch] $FctOff
 )
 
 Set-StrictMode -Version Latest
@@ -88,6 +89,7 @@ try {
         if ($ReviewMovie) { $clientArgs += "--miss-review" }
     }
     if ($ReviewMovie -and $WhiteMissPct -ne 100) { throw "-ReviewMovie needs -WhiteMissPct 100" }
+    if ($FctOff) { $clientArgs += "--fct-off" }
     $client = Start-Process -FilePath $Godot -ArgumentList $clientArgs `
         -RedirectStandardOutput $clientOut -RedirectStandardError $clientErr -PassThru
 
