@@ -51,13 +51,23 @@ func show_hit(amount: int, kind: String, crit: bool) -> void:
 	billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	visible = true
 	_print_demo()
+	_print_lifetime("present")
 
 	var lifetime_sec := fct_lifetime_msec / 1000.0
 	var tween := create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(self, "position:y", position.y + RISE_DISTANCE, lifetime_sec)
 	tween.tween_property(self, "modulate:a", 0.0, lifetime_sec)
-	tween.chain().tween_callback(queue_free)
+	tween.chain().tween_callback(_finish_lifetime)
+
+
+func _finish_lifetime() -> void:
+	_print_lifetime("gone")
+	queue_free()
+
+
+func _print_lifetime(state: String) -> void:
+	print("DEMO fct lifetime %s kind=%s text=%s scale=%d" % [state, last_kind, text, font_size])
 
 
 func _print_demo() -> void:

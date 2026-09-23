@@ -7,6 +7,7 @@ param(
     [ValidateRange(0, 100)] [int] $WhiteMissPct = 0,
     [ValidateRange(0, 100)] [int] $ForceCritPct = 0,
     [ValidateRange(0, 100)] [int] $ForceCritAfterWhites = 0,
+    [switch] $ObserveFctLifetime,
     [switch] $ReviewMovie,
     [switch] $FctOff
 )
@@ -124,6 +125,8 @@ try {
     $npcCount = 0
     $critScales = @()
     $whiteScales = @()
+    $fctLifetimePresent = 0
+    $fctLifetimeGone = 0
     if (Test-Path $clientOut) {
         foreach ($line in Get-Content $clientOut) {
             if ($line -match '^DEMO npc ') { $npcCount++ }
@@ -135,6 +138,8 @@ try {
             if ($line -match '^DEMO fct miss text=Miss scale=\d+ color=999999ff$') { $missFctOk = $true }
             if ($line -match '^DEMO fct crit=\d+ scale=(\d+) text=\d+!$') { $critScales += [int]$Matches[1] }
             if ($line -match '^DEMO fct white=\d+ scale=(\d+) text=\d+$') { $whiteScales += [int]$Matches[1] }
+            if ($line -match '^DEMO fct lifetime present ') { $fctLifetimePresent++ }
+            if ($line -match '^DEMO fct lifetime gone ') { $fctLifetimeGone++ }
             if ($line -match '^DEMO done\s*$') { $done = $true }
             if ($line -match '^DEMO FAIL ') { Add-Failure $line.Trim() }
         }
@@ -154,6 +159,9 @@ try {
         if (-not (Test-Path $critFctShot)) { Add-Failure "missing game-authored crit float screenshot" }
     } elseif (-not $attackOk) { Add-Failure "missing DEMO attackok" }
     if (-not $done) { Add-Failure "missing DEMO done" }
+    if ($ObserveFctLifetime -and ($fctLifetimePresent -lt 1 -or $fctLifetimeGone -lt 1)) {
+        Add-Failure "FCT lifetime present=$fctLifetimePresent gone=$fctLifetimeGone, want both"
+    }
 
     $attacks = 0
     $hits = 0
