@@ -1,0 +1,17 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/floating_combat_text.gd" id="1_fct"]
+
+[node name="FloatingCombatText" type="Label3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
+visible = false
+pixel_size = 0.01
+text = ""
+font_size = 64
+outline_size = 12
+modulate = Color(1, 1, 1, 1)
+billboard = 1
+script = ExtResource("1_fct")
+fct_enabled = true
+fct_lifetime_msec = 1200
+fct_scale = 64
