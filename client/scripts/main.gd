@@ -135,7 +135,7 @@ func _ready() -> void:
 		await _run_dummy_cast_demo()
 		return
 	if DUMMY_ATTACK_FLAG in args:
-		await _run_dummy_attack_demo()
+		await _run_dummy_attack_demo(args)
 		return
 	if HEAL_WOUNDED_SHOTS_FLAG in args:
 		await _run_heal_wounded_demo(args)
@@ -384,14 +384,17 @@ func _run_dummy_cast_demo() -> void:
 	get_tree().quit(code)
 
 
-func _run_dummy_attack_demo() -> void:
+func _run_dummy_attack_demo(args: Array) -> void:
 	var session := get_node_or_null("Session") as SessionScript
 	if session == null:
 		push_error("main.tscn is missing Session")
 		get_tree().quit(1)
 		return
 	var demo := DummyAttackDemoScript.new()
-	var code: int = await demo.run(self, session)
+	var code: int = await demo.run(
+		self, session, "--expect-white-miss" in args,
+		_argument_after(args, "--miss-shot"), "--miss-review" in args
+	)
 	get_tree().quit(code)
 
 

@@ -248,13 +248,13 @@ func TestZeroWishHaltsWithPose(t *testing.T) {
 	bob.welcome()
 	alice.spawn()
 
-	halt := haltMidSteer(t, alice)
+	halt := haltMidSteer(t, h, alice)
 
 	if halt.ID != aliceWelcome.You {
 		t.Fatalf("halt pose is for player %d, want alice (%d)", halt.ID, aliceWelcome.You)
 	}
 
-	seen := bob.awaitPlayerPose(aliceWelcome.You)
+	seen := bob.awaitPlayerPoseAtOrAfterTick(aliceWelcome.You, halt.Tick)
 	if math.Abs(seen.X-halt.X) > 1e-6 || math.Abs(seen.Z-halt.Z) > 1e-6 {
 		t.Fatalf("bob was told alice halts at (%v,%v), alice was told (%v,%v)", seen.X, seen.Z, halt.X, halt.Z)
 	}
@@ -269,7 +269,7 @@ func TestHaltedPlayerStaysHalted(t *testing.T) {
 	bob.welcome()
 	alice.spawn()
 
-	halt := haltMidSteer(t, alice)
+	halt := haltMidSteer(t, h, alice)
 	bob.drain()
 
 	time.Sleep(4 * game.TickDuration)
@@ -302,16 +302,16 @@ func TestHaltedPlayerStaysHalted(t *testing.T) {
 	carol.expectSilence()
 }
 
-func haltMidSteer(t *testing.T, c *client) mnet.Pose {
+func haltMidSteer(t *testing.T, h *harness, c *client) mnet.Pose {
 	t.Helper()
+	priorMoves := len(h.eventsNamed(game.EvMove))
 	c.move(1, 0)
-	walking := c.awaitPose()
+	h.awaitEvents(game.EvMove, priorMoves+1)
+	c.awaitPose()
 	c.move(0, 0)
-	halt := c.awaitPose()
-	if halt.Tick < walking.Tick {
-		t.Fatalf("halt tick %d before walk tick %d", halt.Tick, walking.Tick)
-	}
-	return halt
+	allMoves := h.awaitEvents(game.EvMove, priorMoves+2)
+	haltTick := int64(allMoves[priorMoves+1]["t"].(float64))
+	return c.awaitPlayerPoseAtOrAfterTick(c.id, haltTick)
 }
 
 func TestUnknownMessageIsIgnored(t *testing.T) {
@@ -361,9 +361,9 @@ func TestMalformedFramesAreRejectedWithAReason(t *testing.T) {
 	aliceWelcome := alice.welcome()
 
 	cases := []struct {
-		frame   string
-		want    mnet.RejectReason
-		wantEv  string
+		frame  string
+		want   mnet.RejectReason
+		wantEv string
 	}{
 		{`this is not json`, mnet.ReasonMalformedJSON, game.EvMoveToRejected},
 		{`{"move":{"dx":5}}`, mnet.ReasonMissingField, game.EvMoveRejected},
