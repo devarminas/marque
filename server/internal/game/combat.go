@@ -185,7 +185,13 @@ func (w *World) rollWhiteDamage(weaponID string, ap, crit, armor int) whiteRoll 
 		dmg += w.intN(span + 1)
 	}
 	dmg += ap
-	critHit := crit > 0 && w.intN(100) < crit
+	effectiveCrit := crit
+	if w.forceCritPct > 0 && w.forceCritAfterWhites == 0 {
+		effectiveCrit = w.forceCritPct
+	} else if w.forceCritAfterWhites > 0 {
+		w.forceCritAfterWhites--
+	}
+	critHit := effectiveCrit > 0 && w.intN(100) < effectiveCrit
 	if critHit {
 		dmg *= 2
 	}
