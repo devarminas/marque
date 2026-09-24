@@ -4,7 +4,8 @@ param(
     [string] $OutDir = (Join-Path ([System.IO.Path]::GetTempPath()) "marque-cast-bar"),
     [int] $ReadyTimeoutSeconds = 20,
     [int] $ClientTimeoutSeconds = 90,
-    [switch] $CooldownProof
+    [switch] $CooldownProof,
+    [switch] $Sweep
 )
 
 Set-StrictMode -Version Latest
@@ -43,6 +44,8 @@ function Read-ClientReport([string] $path) {
         CooldownCancelled = $false
         CooldownAfterReady = $false
         CooldownResolves = New-Object System.Collections.Generic.List[string]
+        SweepStates = New-Object System.Collections.Generic.List[string]
+        HotbarPresses = New-Object System.Collections.Generic.List[string]
     }
     if (-not (Test-Path $path)) { return $report }
     foreach ($line in Get-Content -Path $path) {
@@ -61,6 +64,8 @@ function Read-ClientReport([string] $path) {
             '^DEMO cooldown_cancel fireball remaining=0\s*$' { $report.CooldownCancelled = $true }
             '^DEMO cooldown_after_ready fireball cooldown=75\s*$' { $report.CooldownAfterReady = $true }
             '^DEMO cooldown_resolve (fireball|heal) cooldown=(75|38)\s*$' { $report.CooldownResolves.Add("$($Matches[1])=$($Matches[2])") }
+            '^DEMO sweep (appearing|draining|idle|resync|re-anchor|clear)\b' { $report.SweepStates.Add($Matches[1]) }
+            '^DEMO hotbar_press slot=\d+ ability=(\S+)\s*$' { $report.HotbarPresses.Add($Matches[1]) }
         }
     }
     return $report
@@ -119,6 +124,7 @@ try {
         "--cast-bar-shots", ('"' + $prefix + '"')
     )
     if ($CooldownProof) { $clientArgs += "--cast-bar-cooldown-proof" }
+    if ($Sweep) { $clientArgs += "--cast-bar-sweep-demo" }
     $client = Start-Process -FilePath $Godot -NoNewWindow -PassThru `
         -ArgumentList $clientArgs `
         -RedirectStandardOutput $clientOut -RedirectStandardError $clientErr
@@ -146,9 +152,15 @@ try {
     foreach ($reason in $report.Failures) { Add-Failure "client reported DEMO FAIL: $reason" }
     if (-not $report.Done) { Add-Failure "client never reported DEMO done" }
     if (-not $report.CastOk) { Add-Failure "missing DEMO castok" }
-    if (-not $report.CastCancel) { Add-Failure "missing DEMO castcancel" }
+    if (-not $Sweep -and -not $report.CastCancel) { Add-Failure "missing DEMO castcancel" }
     if (-not $report.CastBarVisible) { Add-Failure "missing DEMO castbar visible=1" }
-    if (-not $report.CastBarHidden) { Add-Failure "missing DEMO castbar visible=0" }
+    if (-not $Sweep -and -not $report.CastBarHidden) { Add-Failure "missing DEMO castbar visible=0" }
+    if ($report.HotbarPresses.Count -lt 2 -or $report.HotbarPresses -contains "") { Add-Failure "demo cast did not press abilities through the hotbar" }
+    if ($Sweep) {
+        foreach ($state in @("appearing", "draining", "idle", "resync", "re-anchor", "clear")) {
+            if (-not $report.SweepStates.Contains($state)) { Add-Failure "missing DEMO sweep $state observation" }
+        }
+    }
     if ($CooldownProof) {
         if (-not $report.CooldownFirstReady) { Add-Failure "missing DEMO cooldown first_ready" }
         if (-not $report.CooldownFireballRefused) { Add-Failure "missing DEMO fireball cooldown refusal" }
@@ -162,7 +174,7 @@ try {
     }
 
     # PNG artifacts only (ARM-289); DEMO cast lines + GAMELOG are the proof.
-    $shotCount = 3
+    $shotCount = if ($Sweep) { 6 } else { 3 }
     foreach ($index in 1..$shotCount) {
         $shot = "${prefix}_$index.png"
         if (Test-Path $shot) {
@@ -182,7 +194,13 @@ try {
         $effect = Select-Events $events "cast_effect" $player
         $cancelled = Select-Events $events "cast_cancelled" $player
         $moveCancel = @($cancelled | Where-Object { [string]$_.cause -eq "move" })
-        if ($CooldownProof) {
+        if ($Sweep) {
+            $fireballBegin = @($begin | Where-Object { [string]$_.ability -eq "fireball" })
+            $fireballCast = @($cast | Where-Object { [string]$_.ability -eq "fireball" })
+            if ($fireballBegin.Count -ne 2 -or $fireballCast.Count -ne 2) { Add-Failure "sweep server fireball begin=$($fireballBegin.Count) resolve=$($fireballCast.Count), want 2 each" }
+            $cancelled = Select-Events $events "cast_cancelled" $player
+            if ($cancelled.Count -ne 0) { Add-Failure "sweep unexpectedly cancelled a cast" }
+        } elseif ($CooldownProof) {
             $fireballBegin = @($begin | Where-Object { [string]$_.ability -eq "fireball" })
             $healBegin = @($begin | Where-Object { [string]$_.ability -eq "heal" })
             $fireballCast = @($cast | Where-Object { [string]$_.ability -eq "fireball" })
