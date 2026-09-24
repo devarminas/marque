@@ -39,6 +39,7 @@ script = ExtResource("1_avatar")
 ground_y = 0.0
 face_travel_direction = true
 turn_degrees_per_second = 540.0
+face_target_degrees_per_second = 360.0
 
 [node name="Body" parent="." instance=ExtResource("4_body")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)

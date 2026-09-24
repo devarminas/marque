@@ -7,7 +7,8 @@ param(
     [switch] $CooldownProof,
     [switch] $Sweep,
     [switch] $RefusalDemo,
-    [switch] $OutOfMana
+    [switch] $OutOfMana,
+    [switch] $YawSamples
 )
 
 Set-StrictMode -Version Latest
@@ -35,6 +36,8 @@ function Read-ClientReport([string] $path) {
         Joined = -1
         Failures = New-Object System.Collections.Generic.List[string]
         Done = $false
+        YawBeforeMid = $false
+        YawAfter = $false
         CastOk = $false
         CastCancel = $false
         CastBarVisible = $false
@@ -65,6 +68,8 @@ function Read-ClientReport([string] $path) {
             '^DEMO joined (\d+)\s*$' { $report.Joined = [int]$Matches[1] }
             '^DEMO FAIL (.+)$' { $report.Failures.Add($Matches[1].Trim()) }
             '^DEMO done\s*$' { $report.Done = $true }
+            '^DEMO yaw cast before=.* mid=' { $report.YawBeforeMid = $true }
+            '^DEMO yaw cast after=' { $report.YawAfter = $true }
             '^DEMO castok ' { $report.CastOk = $true }
             '^DEMO castcancel ' { $report.CastCancel = $true }
             '^DEMO castbar .+ visible=1\s*$' { $report.CastBarVisible = $true }
@@ -149,6 +154,7 @@ try {
         "--server", $url,
         "--cast-bar-shots", ('"' + $prefix + '"')
     )
+    if ($YawSamples) { $clientArgs += "--yaw-samples" }
     if ($CooldownProof) { $clientArgs += "--cast-bar-cooldown-proof" }
     if ($RefusalDemo) { $clientArgs += "--cast-bar-refusal-demo" }
     if ($OutOfMana) { $clientArgs += "--cast-bar-oom-demo" }
@@ -179,6 +185,7 @@ try {
     if ($report.Joined -lt 1) { Add-Failure "client never reported DEMO joined" }
     foreach ($reason in $report.Failures) { Add-Failure "client reported DEMO FAIL: $reason" }
     if (-not $report.Done) { Add-Failure "client never reported DEMO done" }
+    if ($YawSamples -and (-not $report.YawBeforeMid -or -not $report.YawAfter)) { Add-Failure "missing cast yaw before/mid/after samples" }
     if (-not $OutOfMana -and -not $report.CastOk) { Add-Failure "missing DEMO castok" }
     if (-not $Sweep -and -not $RefusalDemo -and -not $OutOfMana -and -not $report.CastCancel) { Add-Failure "missing DEMO castcancel" }
     if (-not $Sweep -and -not $OutOfMana -and -not $report.CastBarVisible) { Add-Failure "missing DEMO castbar visible=1" }

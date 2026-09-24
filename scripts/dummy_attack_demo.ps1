@@ -9,7 +9,8 @@ param(
     [ValidateRange(0, 100)] [int] $ForceCritAfterWhites = 0,
     [switch] $ObserveFctLifetime,
     [switch] $ReviewMovie,
-    [switch] $FctOff
+    [switch] $FctOff,
+    [switch] $YawSamples
 )
 
 Set-StrictMode -Version Latest
@@ -104,6 +105,7 @@ try {
         $clientArgs += @("--fct-review-prefix", $reviewPrefix)
     }
     if ($FctOff) { $clientArgs += "--fct-off" }
+    if ($YawSamples) { $clientArgs += "--yaw-samples" }
     $client = Start-Process -FilePath $Godot -ArgumentList $clientArgs `
         -RedirectStandardOutput $clientOut -RedirectStandardError $clientErr -PassThru
 
@@ -121,6 +123,9 @@ try {
     }
 
     $done = $false
+    $yawBefore = $false
+    $yawMid = $false
+    $yawAfter = $false
     $refuseOk = $false
     $attackOk = $false
     $missOk = $false
@@ -137,6 +142,8 @@ try {
             if ($line -match '^DEMO npc ') { $npcCount++ }
             if ($line -match '^DEMO refuse ') { $refuseOk = $true }
             if ($line -match '^DEMO attackok ') { $attackOk = $true }
+            if ($line -match '^DEMO yaw attack before=.* mid=') { $yawBefore = $true; $yawMid = $true }
+            if ($line -match '^DEMO yaw attack after=') { $yawAfter = $true }
             if ($line -match '^DEMO miss \d+ amount=0 crit=false hp=') { $missOk = $true }
             if ($line -match '^DEMO misshp \d+ unchanged=') { $missHPOk = $true }
             if ($line -match '^DEMO fctframes (\d+)$') { $reviewFrameCount += [int]$Matches[1] }
@@ -165,6 +172,7 @@ try {
         if ($ReviewMovie -and $reviewFrameCount -ne 150) { Add-Failure "review frames=$reviewFrameCount, want 150" }
     } elseif (-not $attackOk) { Add-Failure "missing DEMO attackok" }
     if (-not $done) { Add-Failure "missing DEMO done" }
+    if ($YawSamples -and (-not $yawBefore -or -not $yawMid -or -not $yawAfter)) { Add-Failure "missing before/mid/after yaw samples" }
     if ($ReviewMovie -and (Get-ChildItem -Path "$reviewPrefix-*.png" -ErrorAction SilentlyContinue).Count -ne 150) {
         Add-Failure "game-authored review frame files missing"
     }

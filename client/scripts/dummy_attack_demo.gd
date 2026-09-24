@@ -29,7 +29,8 @@ var _hp_frame_ids: Array = []
 
 func run(
 	root: Node, session: SessionScript, expect_white_miss: bool = false, shot_path: String = "",
-	white_shot_path: String = "", crit_shot_path: String = "", review_prefix: String = ""
+	white_shot_path: String = "", crit_shot_path: String = "", review_prefix: String = "",
+	yaw_samples: bool = false
 ) -> int:
 	_root = root
 	_tree = root.get_tree()
@@ -98,9 +99,22 @@ func run(
 	print("DEMO refuse %d wrong_target" % friendly_id)
 
 	var hostile_hp_before := _session.hit_points_for(hostile_id).x
+	var local_avatar: Node3D = _session.get("_local")
+	var yaw_before := local_avatar.rotation.y if yaw_samples and local_avatar != null else 0.0
 	if not await _right_click_npc(hostile_id):
 		return _fail("could not right-click hostile dummy %d" % hostile_id)
 	print("DEMO rightclick %d hostile" % hostile_id)
+	if yaw_samples and local_avatar != null:
+		await _tree.process_frame
+		var yaw_mid := local_avatar.rotation.y
+		var target_body: Node3D = npcs.get(hostile_id)
+		var wanted_yaw := atan2(
+			-(target_body.global_position.x - local_avatar.global_position.x),
+			-(target_body.global_position.z - local_avatar.global_position.z),
+		)
+		if not _yaw_advanced(yaw_before, yaw_mid, wanted_yaw):
+			return _fail("attack yaw did not turn gradually toward the hostile target")
+		print("DEMO yaw attack before=%.5f mid=%.5f" % [yaw_before, yaw_mid])
 	if _session.selected_player_id() != hostile_id:
 		return _fail(
 			"hostile right-click did not select %d, got %d"
@@ -110,6 +124,8 @@ func run(
 		if not await _wait_swing_miss():
 			return _fail("no server swing miss after right-click attack")
 		print("DEMO miss %d amount=0 crit=false hp=%d" % [hostile_id, _session.hit_points_for(hostile_id).x])
+		if yaw_samples and local_avatar != null:
+			print("DEMO yaw attack after=%.5f" % local_avatar.rotation.y)
 		if not shot_path.is_empty():
 			await RenderingServer.frame_post_draw
 			var shot_error := _root.get_viewport().get_texture().get_image().save_png(shot_path)
@@ -138,6 +154,15 @@ func run(
 		if white_hp_frames < 1:
 			return _fail("white hit received no target HP frame")
 		print("DEMO attackok %d %d" % [hostile_id, _session.hit_points_for(hostile_id).x])
+		if yaw_samples and local_avatar != null:
+			var target_body: Node3D = npcs.get(hostile_id)
+			var wanted_yaw := atan2(
+				-(target_body.global_position.x - local_avatar.global_position.x),
+				-(target_body.global_position.z - local_avatar.global_position.z),
+			)
+			if absf(angle_difference(local_avatar.rotation.y, wanted_yaw)) >= absf(angle_difference(yaw_before, wanted_yaw)):
+				return _fail("attack yaw after hit was not closer to the target")
+			print("DEMO yaw attack after=%.5f" % local_avatar.rotation.y)
 		print("DEMO hpframe %d count=%d" % [hostile_id, white_hp_frames])
 		if not white_shot_path.is_empty():
 			if not await _capture(white_shot_path):
@@ -240,6 +265,12 @@ func _has_practice_dummy_pair() -> bool:
 		elif body.faction == NpcDummyScript.FactionHostile:
 			hostile = true
 	return friendly and hostile
+
+
+func _yaw_advanced(before: float, mid: float, wanted: float) -> bool:
+	var start_distance := absf(angle_difference(before, wanted))
+	var mid_distance := absf(angle_difference(mid, wanted))
+	return absf(angle_difference(before, mid)) > 0.01 and mid_distance < start_distance and mid_distance > 0.01
 
 
 func _target_hp_frame_count(id: int) -> int:

@@ -40,6 +40,7 @@ func _ready() -> void:
 	_test_two_avatars_do_not_share_state()
 	_test_an_unmoved_avatar_idles()
 	await _test_the_body_turns_to_face_its_direction_of_travel()
+	await _test_target_facing_is_rate_limited_and_yields_to_travel()
 	await _test_facing_can_be_turned_off_without_moving_the_body()
 
 	_finished = true
@@ -280,14 +281,52 @@ func _test_the_body_turns_to_face_its_direction_of_travel() -> void:
 	avatar.queue_free()
 
 
+func _test_target_facing_is_rate_limited_and_yields_to_travel() -> void:
+	var avatar := _spawn(32)
+	avatar.teleport_to(0.0, 0.0)
+	avatar.face_target(Vector3(4.0, 0.0, 0.0))
+	await get_tree().process_frame
+	var halfway := avatar.rotation.y
+	_assertions.check(
+		absf(halfway) > 0.0 and absf(halfway) < PI * 0.5,
+		"target turn is gradual mid-turn (yaw %.4f)" % halfway,
+	)
+	for _frame in TURN_FRAMES:
+		await get_tree().process_frame
+	_assertions.check_near(
+		absf(angle_difference(avatar.rotation.y, -PI * 0.5)), 0.0, YAW_EPSILON,
+		"target facing settles at literal east yaw -90 degrees",
+	)
+
+	avatar.rotation.y = 0.0
+	avatar.face_target(Vector3(4.0, 0.0, 0.0))
+	for _frame in TURN_FRAMES:
+		avatar.present_at(0.0, -2.0, true)
+		await get_tree().process_frame
+	_assertions.check_near(
+		absf(angle_difference(avatar.rotation.y, 0.0)), 0.0, YAW_EPSILON,
+		"while walking the travel heading wins over the target",
+	)
+	var halted_yaw := avatar.rotation.y
+	for _frame in TURN_FRAMES:
+		avatar.present_at(0.0, -2.0, false)
+		await get_tree().process_frame
+	_assertions.check_near(
+		absf(angle_difference(avatar.rotation.y, halted_yaw)), 0.0, YAW_EPSILON,
+		"halt holds the last travel heading rather than switching to target",
+	)
+	avatar.queue_free()
+
+
 func _test_facing_can_be_turned_off_without_moving_the_body() -> void:
 	var avatar := _spawn(41)
 	avatar.face_travel_direction = false
 	avatar.teleport_to(0.0, 0.0)
 	for _frame in TURN_FRAMES:
 		avatar.present_at(2.0, 0.0, true)
+		avatar.face_target(Vector3(0.0, 0.0, -4.0))
 		await get_tree().process_frame
-	_assertions.check_near(avatar.rotation.y, 0.0, POSITION_EPSILON, "with facing off the body never turns")
+	_assertions.check_near(avatar.rotation.y, 0.0, POSITION_EPSILON, "with facing off neither travel nor target turns the body")
 	_assertions.check_position_near(
 		_ground(avatar),
 		Vector2(2.0, 0.0),
