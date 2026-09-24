@@ -53,6 +53,12 @@ const RECONNECT_BACKOFF_CAP_MSEC := 5000
 
 const MOVE_INTENT_PERIOD_MSEC := 40
 
+const CAST_REFUSAL_TEXT := {
+	"insufficient_mana": "Not enough mana",
+	"out_of_range": "Out of range",
+	"cooldown": "Not ready yet",
+}
+
 const REFUSAL_TEXT := {
 	"gather": {
 		"gather requires an active class whose skill matches this node": "usable tool not equipped",
@@ -1535,13 +1541,16 @@ func _on_pose_received(id: int, tick: int, x: float, y: float, z: float) -> void
 	_present_remote(avatar, buf, _render_tick_fraction())
 
 
-func _on_server_error(re: String, message: String) -> void:
-	push_warning('session: server refused "%s": %s' % [re, message])
+func _on_server_error(reason: String, re: String, message: String) -> void:
+	push_warning('session: server refused "%s" (%s): %s' % [re, reason, message])
 	if _error_hud != null:
-		_error_hud.show_refusal(player_refusal_text(re, message))
+		var visual_reason := reason if re == "cast" else ""
+		_error_hud.show_refusal(player_refusal_text(reason, re, message), visual_reason)
 
 
-static func player_refusal_text(re: String, message: String) -> String:
+static func player_refusal_text(reason: String, re: String, message: String) -> String:
+	if re == "cast" and CAST_REFUSAL_TEXT.has(reason):
+		return CAST_REFUSAL_TEXT[reason]
 	var table: Variant = REFUSAL_TEXT.get(re, {})
 	if typeof(table) == TYPE_DICTIONARY and (table as Dictionary).has(message):
 		return String((table as Dictionary)[message])

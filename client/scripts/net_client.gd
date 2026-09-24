@@ -120,7 +120,7 @@ signal party_invite_notice_changed(from_player: int)
 
 signal admin_reply_received(text: String)
 
-signal server_error(re: String, message: String)
+signal server_error(reason: String, re: String, message: String)
 
 signal unknown_message(key: String)
 
@@ -1397,7 +1397,11 @@ func _on_error(body: Dictionary, text: String) -> void:
 	if typeof(re) != TYPE_STRING:
 		push_error("net_client: error.re is not a string: %s" % text)
 		return
-	server_error.emit(re, body["msg"])
+	var reason: Variant = body.get("reason", "")
+	if typeof(reason) != TYPE_STRING:
+		push_error("net_client: error.reason is not a string: %s" % text)
+		return
+	server_error.emit(reason, re, body["msg"])
 
 
 func _send(message: Dictionary) -> Error:

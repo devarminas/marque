@@ -185,6 +185,21 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			want: `{"error":{"re":"move_to","msg":"out of bounds"}}`,
 		},
 		{
+			name: "cast error carries out-of-range reason",
+			msg:  mnet.Error{Re: mnet.MsgCast, Msg: "target out of range", Reason: mnet.ReasonOutOfRange},
+			want: `{"error":{"re":"cast","msg":"target out of range","reason":"out_of_range"}}`,
+		},
+		{
+			name: "cast error carries insufficient-mana reason",
+			msg:  mnet.Error{Re: mnet.MsgCast, Msg: "not enough mana", Reason: mnet.ReasonInsufficientMana},
+			want: `{"error":{"re":"cast","msg":"not enough mana","reason":"insufficient_mana"}}`,
+		},
+		{
+			name: "cast error carries cooldown reason",
+			msg:  mnet.Error{Re: mnet.MsgCast, Msg: "ability is on cooldown", Reason: mnet.ReasonCooldown},
+			want: `{"error":{"re":"cast","msg":"ability is on cooldown","reason":"cooldown"}}`,
+		},
+		{
 			name: "dialog",
 			msg: mnet.Dialog{
 				NPC:   1000003,

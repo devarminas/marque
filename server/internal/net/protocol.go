@@ -153,8 +153,9 @@ type Pose struct {
 }
 
 type Error struct {
-	Re  string `json:"re,omitempty"`
-	Msg string `json:"msg"`
+	Re     string       `json:"re,omitempty"`
+	Msg    string       `json:"msg"`
+	Reason RejectReason `json:"reason,omitempty"`
 }
 
 type ItemSpawn ItemState

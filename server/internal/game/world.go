@@ -255,6 +255,7 @@ type World struct {
 	camps                []*camp
 	rng                  *mrand.Rand
 	whiteMissPct         int
+	startMana            int
 	forceCritPct         int
 	forceCritAfterWhites int
 
@@ -289,6 +290,7 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		nodes:       make(map[mnet.NodeID]*resourceNode),
 		npcs:        make(map[mnet.PlayerID]*npc),
 		resumeGrace: resumeGrace,
+		startMana:   -1,
 		joinKit:     joinKit,
 		players:     make(map[mnet.PlayerID]*player),
 		parties:     make(map[mnet.PartyID]*party),
@@ -315,6 +317,13 @@ func (w *World) SetMap(cfg MapConfig) {
 		panic(fmt.Sprintf("game: SetMap %q half extent %v; must be > 0", cfg.ID, cfg.HalfExtent))
 	}
 	w.mapCfg = cfg
+}
+
+func (w *World) SetStartMana(mana int) {
+	if mana < 0 || mana > defaultPlayerAttrs().maxMana() {
+		panic(fmt.Sprintf("game: start mana %d outside [0,%d]", mana, defaultPlayerAttrs().maxMana()))
+	}
+	w.startMana = mana
 }
 
 func (w *World) SetAbilities(c *abilitydef.Catalog) {
@@ -552,6 +561,9 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		lastPoseTick:      w.tick,
 		quests:            make(map[string]questStatus),
 		questKillProgress: make(map[string]int),
+	}
+	if w.startMana >= 0 {
+		p.mana = w.startMana
 	}
 	w.players[p.id] = p
 	w.byConn[conn] = p
@@ -799,7 +811,7 @@ func (w *World) refuse(p *player, rejection *mnet.RejectError) {
 	}
 
 	w.log.Event(w.tick, rejectionEvent(rejection.Re), fields)
-	w.send(p, mnet.Error{Re: rejection.Re, Msg: rejection.Detail})
+	w.send(p, mnet.Error{Re: rejection.Re, Msg: rejection.Detail, Reason: rejection.Reason})
 	if rejection.Disposition == mnet.ReplyErrorAndClose {
 		p.conn.CloseAfterFlush(mnet.DisconnectProtocol)
 	}
