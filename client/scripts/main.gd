@@ -449,7 +449,9 @@ func _run_enemy_party_demo(args: Array) -> void:
 		return
 
 	var demo := EnemyPartyDemoScript.new()
-	var code: int = await demo.run(self, session, inventory, dialog, party, prefix, role)
+	var code: int = await demo.run(
+		self, session, inventory, dialog, party, prefix, role, "--outgoing-only" in args
+	)
 	get_tree().quit(code)
 
 
