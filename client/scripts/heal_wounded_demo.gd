@@ -65,8 +65,6 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 	if friendly_id == 0:
 		return _fail("missing friendly practice dummy after join")
 
-	await _capture(1)
-
 	if not _session.select_player(friendly_id):
 		return _fail("could not select friendly dummy %d" % friendly_id)
 	print("DEMO select %d friendly" % friendly_id)
@@ -104,6 +102,7 @@ func run(root: Node, session: SessionScript, prefix: String) -> int:
 		_session.hit_points_for(friendly_id).x,
 		_session.mana_for(_session.own_id()).x,
 	])
+	await _capture(1)
 	await _capture(2)
 
 	await _wait_msec(HOLD_MSEC)
