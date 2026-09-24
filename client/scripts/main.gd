@@ -332,7 +332,7 @@ func _run_cast_bar_demo(args: Array) -> void:
 		return
 
 	var demo := CastBarDemoScript.new()
-	var code: int = await demo.run(self, session, cast_bar, prefix)
+	var code: int = await demo.run(self, session, cast_bar, prefix, "--yaw-samples" in args)
 	get_tree().quit(code)
 
 
@@ -396,7 +396,8 @@ func _run_dummy_attack_demo(args: Array) -> void:
 	var code: int = await demo.run(
 		self, session, "--expect-white-miss" in args,
 		_argument_after(args, "--miss-shot"), _argument_after(args, "--fct-white-shot"),
-		_argument_after(args, "--fct-crit-shot"), _argument_after(args, "--fct-review-prefix")
+		_argument_after(args, "--fct-crit-shot"), _argument_after(args, "--fct-review-prefix"),
+		"--yaw-samples" in args
 	)
 	get_tree().quit(code)
 

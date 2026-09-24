@@ -4,6 +4,7 @@ const MainScene := preload("res://scenes/main.tscn")
 const SessionScript := preload("res://scripts/session.gd")
 const NetClientScript := preload("res://scripts/net_client.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
+const Facing := preload("res://scripts/facing.gd")
 const NpcDummyScene := preload("res://scenes/npc_dummy.tscn")
 const NpcQuestGiverScene := preload("res://scenes/npc_quest_giver.tscn")
 const NpcImpScene := preload("res://scenes/npc_imp.tscn")
@@ -75,6 +76,7 @@ func _ready() -> void:
 	_test_quest_giver_spawns_from_welcome()
 	_test_imp_spawns_from_welcome()
 	_test_imp_follows_path_frames()
+	_test_npc_uses_shared_facing_helper()
 	_test_demo_npc_capture_dump()
 	_test_cast_targets()
 	_test_attack_targets()
@@ -400,6 +402,21 @@ func _test_imp_follows_path_frames() -> void:
 		< Vector2(12.0, 8.0).distance_to(Vector2.ZERO),
 		"imp closer to player origin than camp after chase path",
 	)
+
+
+func _test_npc_uses_shared_facing_helper() -> void:
+	var dummy := NpcDummyScene.instantiate() as NpcDummyScript
+	_world.add_child(dummy)
+	dummy.configure_motion(40)
+	dummy.place_at(0.0, 0.0)
+	dummy.follow_path(PackedVector2Array([Vector2.ZERO, Vector2(4.0, 0.0)]), 1, 3.0)
+	dummy.update_to_tick(2)
+	_check(
+		is_equal_approx(Facing.yaw_facing(Vector2(1.0, 0.0)), -PI * 0.5)
+		and is_equal_approx(dummy.get("_desired_yaw"), Facing.yaw_facing(Vector2(1.0, 0.0))),
+		"NPC travel and avatar target facing share the same yaw helper contract",
+	)
+	dummy.queue_free()
 
 
 func _test_demo_npc_capture_dump() -> void:
