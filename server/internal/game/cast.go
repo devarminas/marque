@@ -112,6 +112,16 @@ func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
 		}
 	}
 
+	if !p.cooldowns.ready(ability.ID, w.tick) {
+		w.refuse(p, &mnet.RejectError{
+			Reason:      mnet.ReasonCooldown,
+			Detail:      "ability is on cooldown",
+			Re:          mnet.MsgCast,
+			Disposition: mnet.ReplyError,
+		})
+		return
+	}
+
 	cost := int(math.Round(ability.ManaCost))
 	if p.mana < cost {
 		w.refuse(p, &mnet.RejectError{
@@ -311,13 +321,19 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 	// Logged after the apply, because `applied` is the post-clamp delta.
 	fields["applied"] = applied
 	w.log.Event(w.tick, EvCast, fields)
+	cooldown := 0
+	if p := playerCombatant(c); p != nil {
+		p.cooldowns.start(ability.ID, ability.CooldownTicks, w.tick)
+		cooldown = ability.CooldownTicks
+	}
 	w.broadcast(mnet.CastPhase{
-		ID:      c.combatID(),
-		Ability: ability.ID,
-		Target:  target.id,
-		Phase:   mnet.CastPhaseResolve,
-		Amount:  applied,
-		Effect:  string(ability.Effect.Kind),
+		ID:       c.combatID(),
+		Ability:  ability.ID,
+		Target:   target.id,
+		Phase:    mnet.CastPhaseResolve,
+		Amount:   applied,
+		Effect:   string(ability.Effect.Kind),
+		Cooldown: cooldown,
 	}, nil)
 
 	effectFields := gamelog.Fields{
