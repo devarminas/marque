@@ -5,7 +5,9 @@ param(
     [int] $ReadyTimeoutSeconds = 20,
     [int] $ClientTimeoutSeconds = 90,
     [switch] $CooldownProof,
-    [switch] $Sweep
+    [switch] $Sweep,
+    [switch] $RefusalDemo,
+    [switch] $OutOfMana
 )
 
 Set-StrictMode -Version Latest
@@ -44,6 +46,16 @@ function Read-ClientReport([string] $path) {
         CooldownCancelled = $false
         CooldownAfterReady = $false
         CooldownResolves = New-Object System.Collections.Generic.List[string]
+        CooldownReason = $false
+        OutOfRangeReason = $false
+        InsufficientManaReason = $false
+        ErrorTintRange = $false
+        ErrorTintMana = $false
+        ErrorText = $false
+        ErrorCleared = $false
+        NoDebit = $false
+        ManaBefore = -1
+        ManaAfter = -1
         SweepStates = New-Object System.Collections.Generic.List[string]
         HotbarPresses = New-Object System.Collections.Generic.List[string]
     }
@@ -59,6 +71,18 @@ function Read-ClientReport([string] $path) {
             '^DEMO castbar .+ visible=0\s*$' { $report.CastBarHidden = $true }
             '^DEMO cooldown first_ready fireball\s*$' { $report.CooldownFirstReady = $true }
             '^DEMO cooldown_refuse fireball ' { $report.CooldownFireballRefused = $true }
+            '^DEMO castrefusal reason=cooldown ' { $report.CooldownReason = $true }
+            '^DEMO castrefusal reason=out_of_range ' { $report.OutOfRangeReason = $true }
+            '^DEMO castrefusal reason=insufficient_mana ' { $report.InsufficientManaReason = $true }
+            '^DEMO errortint out_of_range ' { $report.ErrorTintRange = $true }
+            '^DEMO errortint insufficient_mana ' { $report.ErrorTintMana = $true }
+            '^DEMO errortext (Not ready yet|Out of range|Not enough mana)\s*$' { $report.ErrorText = $true }
+            '^DEMO errorcleared\s*$' { $report.ErrorCleared = $true }
+            '^DEMO refusal mana_before=(\d+) mana_after=(\d+) begins=(\d+)\s*$' {
+                $report.ManaBefore = [int]$Matches[1]
+                $report.ManaAfter = [int]$Matches[2]
+                $report.NoDebit = ([int]$Matches[1] -eq [int]$Matches[2] -and [int]$Matches[3] -eq 0)
+            }
             '^DEMO cooldown_refuse heal ' { $report.CooldownHealRefused = $true }
             '^DEMO cooldown_welcome fireball=\d+ heal=\d+\s*$' { $report.CooldownWelcome = $true }
             '^DEMO cooldown_cancel fireball remaining=0\s*$' { $report.CooldownCancelled = $true }
@@ -92,8 +116,10 @@ try {
     if ($warm.ExitCode -ne 0) { throw "the Godot warm-up run exited $($warm.ExitCode)" }
 
     Write-Host "==> starting marqued on a free port (-admin; kit via client /give)"
+    $serverArgs = @("-addr", "127.0.0.1:0", "-admin")
+    if ($OutOfMana) { $serverArgs += @("-start-mana", "0") }
     $server = Start-Process -FilePath $binary `
-        -ArgumentList @("-addr", "127.0.0.1:0", "-admin") `
+        -ArgumentList $serverArgs `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
     $null = $server.Handle
@@ -124,6 +150,8 @@ try {
         "--cast-bar-shots", ('"' + $prefix + '"')
     )
     if ($CooldownProof) { $clientArgs += "--cast-bar-cooldown-proof" }
+    if ($RefusalDemo) { $clientArgs += "--cast-bar-refusal-demo" }
+    if ($OutOfMana) { $clientArgs += "--cast-bar-oom-demo" }
     if ($Sweep) { $clientArgs += "--cast-bar-sweep-demo" }
     $client = Start-Process -FilePath $Godot -NoNewWindow -PassThru `
         -ArgumentList $clientArgs `
@@ -151,15 +179,21 @@ try {
     if ($report.Joined -lt 1) { Add-Failure "client never reported DEMO joined" }
     foreach ($reason in $report.Failures) { Add-Failure "client reported DEMO FAIL: $reason" }
     if (-not $report.Done) { Add-Failure "client never reported DEMO done" }
-    if (-not $report.CastOk) { Add-Failure "missing DEMO castok" }
-    if (-not $Sweep -and -not $report.CastCancel) { Add-Failure "missing DEMO castcancel" }
-    if (-not $report.CastBarVisible) { Add-Failure "missing DEMO castbar visible=1" }
-    if (-not $Sweep -and -not $report.CastBarHidden) { Add-Failure "missing DEMO castbar visible=0" }
-    if ($report.HotbarPresses.Count -lt 2 -or $report.HotbarPresses -contains "") { Add-Failure "demo cast did not press abilities through the hotbar" }
+    if (-not $OutOfMana -and -not $report.CastOk) { Add-Failure "missing DEMO castok" }
+    if (-not $Sweep -and -not $RefusalDemo -and -not $OutOfMana -and -not $report.CastCancel) { Add-Failure "missing DEMO castcancel" }
+    if (-not $Sweep -and -not $OutOfMana -and -not $report.CastBarVisible) { Add-Failure "missing DEMO castbar visible=1" }
+    if (-not $Sweep -and -not $OutOfMana -and -not $report.CastBarHidden) { Add-Failure "missing DEMO castbar visible=0" }
+    if (-not $OutOfMana -and ($report.HotbarPresses.Count -lt 2 -or $report.HotbarPresses -contains "")) { Add-Failure "demo cast did not press abilities through the hotbar" }
     if ($Sweep) {
         foreach ($state in @("appearing", "draining", "idle", "resync", "re-anchor", "clear")) {
             if (-not $report.SweepStates.Contains($state)) { Add-Failure "missing DEMO sweep $state observation" }
         }
+    }
+    if ($OutOfMana) {
+        if (-not $report.OutOfRangeReason -or -not $report.InsufficientManaReason) { Add-Failure "missing decoded out_of_range/insufficient_mana DEMO refusal" }
+        if (-not $report.ErrorText -or -not $report.ErrorCleared) { Add-Failure "missing refusal HUD text/clear markers" }
+        if (-not $report.ErrorTintRange -or -not $report.ErrorTintMana) { Add-Failure "missing reason-specific HUD tint markers" }
+        if (-not $report.NoDebit -or $report.ManaBefore -ge 25) { Add-Failure "mana changed, was insufficiently low, or cast_begin followed a refused press" }
     }
     if ($CooldownProof) {
         if (-not $report.CooldownFirstReady) { Add-Failure "missing DEMO cooldown first_ready" }
@@ -174,7 +208,7 @@ try {
     }
 
     # PNG artifacts only (ARM-289); DEMO cast lines + GAMELOG are the proof.
-    $shotCount = if ($Sweep) { 6 } else { 3 }
+    $shotCount = if ($Sweep) { 6 } elseif ($OutOfMana) { 2 } elseif ($RefusalDemo) { 1 } else { 3 }
     foreach ($index in 1..$shotCount) {
         $shot = "${prefix}_$index.png"
         if (Test-Path $shot) {
@@ -194,12 +228,27 @@ try {
         $effect = Select-Events $events "cast_effect" $player
         $cancelled = Select-Events $events "cast_cancelled" $player
         $moveCancel = @($cancelled | Where-Object { [string]$_.cause -eq "move" })
-        if ($Sweep) {
+        if ($OutOfMana) {
+            $rejected = Select-Events $events "cast_rejected" $player
+            $oor = @($rejected | Where-Object { [string]$_.reason -eq "out_of_range" })
+            $oom = @($rejected | Where-Object { [string]$_.reason -eq "insufficient_mana" })
+            $spends = Select-Events $events "mana_spend" $player
+            if ($begin.Count -ne 0 -or $cast.Count -ne 0) { Add-Failure "OOM/OOR generated cast_begin=$($begin.Count) cast=$($cast.Count)" }
+            if ($oor.Count -ne 1 -or $oom.Count -ne 1 -or $rejected.Count -ne 2) { Add-Failure "cast_rejected OOR=$($oor.Count) OOM=$($oom.Count) total=$($rejected.Count), want 1 each" }
+            if ($spends.Count -ne 0) { Add-Failure "refused OOM/OOR spent mana $($spends.Count) time(s)" }
+        } elseif ($Sweep) {
             $fireballBegin = @($begin | Where-Object { [string]$_.ability -eq "fireball" })
             $fireballCast = @($cast | Where-Object { [string]$_.ability -eq "fireball" })
             if ($fireballBegin.Count -ne 2 -or $fireballCast.Count -ne 2) { Add-Failure "sweep server fireball begin=$($fireballBegin.Count) resolve=$($fireballCast.Count), want 2 each" }
             $cancelled = Select-Events $events "cast_cancelled" $player
             if ($cancelled.Count -ne 0) { Add-Failure "sweep unexpectedly cancelled a cast" }
+        } elseif ($RefusalDemo) {
+            if ($begin.Count -ne 1 -or $cast.Count -ne 1) { Add-Failure "refusal phase successful begin=$($begin.Count) cast=$($cast.Count), want 1 each" }
+            $rejected = Select-Events $events "cast_rejected" $player
+            $cooldownRejected = @($rejected | Where-Object { [string]$_.reason -eq "cooldown" })
+            if ($rejected.Count -ne 1 -or $cooldownRejected.Count -ne 1) { Add-Failure "refusal phase cast_rejected cooldown=$($cooldownRejected.Count)/total=$($rejected.Count), want 1" }
+            if (-not $report.CooldownReason) { Add-Failure "client did not decode cooldown reason" }
+            if (-not $report.ErrorText -or -not $report.ErrorCleared) { Add-Failure "error HUD text/linger markers missing" }
         } elseif ($CooldownProof) {
             $fireballBegin = @($begin | Where-Object { [string]$_.ability -eq "fireball" })
             $healBegin = @($begin | Where-Object { [string]$_.ability -eq "heal" })

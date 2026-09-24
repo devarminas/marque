@@ -126,6 +126,7 @@ func run() error {
 	npcArchetypesPath := flag.String("npc-archetypes", "", "path to shared/npc_archetypes.json (default: search from cwd, or MARQUE_NPC_ARCHETYPES)")
 	questsPath := flag.String("quests", "", "path to shared/quests.json (default: search from cwd, or MARQUE_QUESTS)")
 	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
+	startMana := flag.Int("start-mana", -1, "set joining players' starting mana (0..max, demo harness)")
 	whiteMissPct := flag.Int("white-miss-pct", game.DefaultWhiteMissPct, "white swing miss chance in percent (0-100)")
 	forceCritPct := flag.Int("force-crit-pct", 0, "force white-swing crit probability in percent (0=off, demo only)")
 	forceCritAfterWhites := flag.Int("force-crit-after-whites", 0, "leave this many white swings unforced before -force-crit-pct applies (demo only)")
@@ -139,6 +140,9 @@ func run() error {
 	flag.Var(&adminPlayers, "admin-player", "allow this player id to run admin commands.\nRepeat the flag for more ids. Ignored when -admin is set.")
 	flag.Parse()
 
+	if *startMana < -1 || *startMana > game.MaxMana {
+		return fmt.Errorf("-start-mana must be between 0 and %d when supplied, got %d", game.MaxMana, *startMana)
+	}
 	if *whiteMissPct < 0 || *whiteMissPct > 100 {
 		return fmt.Errorf("-white-miss-pct must be between 0 and 100, got %d", *whiteMissPct)
 	}
@@ -239,6 +243,9 @@ func run() error {
 	world.SetAbilities(abilities)
 	world.SetWeapons(weapons)
 	world.SetWhiteMissPct(*whiteMissPct)
+	if *startMana >= 0 {
+		world.SetStartMana(*startMana)
+	}
 	if *forceCritPct > 0 {
 		world.SetForceCritPct(*forceCritPct)
 		world.SetForceCritAfterWhites(*forceCritAfterWhites)
