@@ -122,6 +122,7 @@ signal admin_requested(line: String)
 signal respawn_requested()
 
 signal own_mana_changed(mana: int, max_mana: int)
+signal cooldowns_changed
 
 @export var net: Node
 @export var local_player: Node3D
@@ -379,6 +380,7 @@ func _ready() -> void:
 		push_error("Session.hotbar must point at a node running hotbar.gd")
 	else:
 		_hotbar.ability_activated.connect(_on_hotbar_ability)
+		_hotbar.set_cooldown_source(self)
 	_cast_bar = cast_bar as CastBarScript
 	if _cast_bar == null:
 		push_error("Session.cast_bar must point at a node running cast_bar.gd")
@@ -434,6 +436,10 @@ func has_joined() -> bool:
 
 func tick_clock() -> TickClock:
 	return _clock
+
+
+func estimated_tick() -> int:
+	return _clock.estimated_tick()
 
 
 func avatar_for(id: int) -> PlayerAvatarScript:
@@ -1070,6 +1076,7 @@ func _on_welcomed(
 			_local_mover.reset_at(tick, _local.position.x, _local.position.z)
 
 	_cooldown_cache.clear()
+	cooldowns_changed.emit()
 
 	if previous_you != 0 and previous_you == _you:
 		print("session: resumed as %d at tick %d, %d player(s)" % [_you, tick, _avatars.size()])
@@ -1173,12 +1180,14 @@ func _on_cooldowns_received(cooldowns: Array) -> void:
 			continue
 		var value: Dictionary = entry
 		_cooldown_cache[value["ability"]] = {"remaining": int(value["remaining"]), "tick": tick}
+	cooldowns_changed.emit()
 
 
 func _on_cast_cooldown_observed(id: int, ability: String, cooldown: int) -> void:
 	if id != _you or cooldown <= 0:
 		return
 	_cooldown_cache[ability] = {"remaining": cooldown, "tick": _clock.estimated_tick()}
+	cooldowns_changed.emit()
 
 
 func cooldown_remaining(ability: String) -> int:
@@ -1552,6 +1561,8 @@ static func _use_refusal_text(message: String) -> String:
 
 func _on_disconnected(code: int, reason: String) -> void:
 	_connection_over = true
+	_cooldown_cache.clear()
+	cooldowns_changed.emit()
 	_liveness_deadline_msec = 0
 	if _admin_console != null and _admin_console.is_open():
 		_close_admin_console()
