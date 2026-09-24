@@ -154,14 +154,15 @@ func run(
 				if not await _capture_review_frames(review_prefix, 10, 140):
 					return _fail("crit review frame capture failed")
 
-		var hp_after_first := _session.hit_points_for(hostile_id).x
-		await _wait_msec(6000)
-		var hp_after_sustain := _session.hit_points_for(hostile_id).x
-		if hp_after_sustain <= 0:
-			return _fail("hostile dummy died during sustained attack: hp=%d" % hp_after_sustain)
-		if hp_after_sustain >= hp_after_first:
-			return _fail("hostile dummy hp did not keep falling: %d -> %d" % [hp_after_first, hp_after_sustain])
-		print("DEMO immortal %d hp=%d" % [hostile_id, hp_after_sustain])
+		if review_prefix.is_empty():
+			var hp_after_first := _session.hit_points_for(hostile_id).x
+			await _wait_msec(6000)
+			var hp_after_sustain := _session.hit_points_for(hostile_id).x
+			if hp_after_sustain <= 0:
+				return _fail("hostile dummy died during sustained attack: hp=%d" % hp_after_sustain)
+			if hp_after_sustain >= hp_after_first:
+				return _fail("hostile dummy hp did not keep falling: %d -> %d" % [hp_after_first, hp_after_sustain])
+			print("DEMO immortal %d hp=%d" % [hostile_id, hp_after_sustain])
 
 	await _wait_msec(HOLD_MSEC)
 	print("DEMO done")
