@@ -127,6 +127,8 @@ func run() error {
 	questsPath := flag.String("quests", "", "path to shared/quests.json (default: search from cwd, or MARQUE_QUESTS)")
 	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
 	whiteMissPct := flag.Int("white-miss-pct", game.DefaultWhiteMissPct, "white swing miss chance in percent (0-100)")
+	forceCritPct := flag.Int("force-crit-pct", 0, "force white-swing crit probability in percent (0=off, demo only)")
+	forceCritAfterWhites := flag.Int("force-crit-after-whites", 0, "leave this many white swings unforced before -force-crit-pct applies (demo only)")
 	seedClassKits := flag.Bool("seed-class-kits", false, "retired: hard-errors; use -admin and /give instead")
 	var seeds itemSeeds
 	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world.")
@@ -139,6 +141,15 @@ func run() error {
 
 	if *whiteMissPct < 0 || *whiteMissPct > 100 {
 		return fmt.Errorf("-white-miss-pct must be between 0 and 100, got %d", *whiteMissPct)
+	}
+	if *forceCritPct < 0 || *forceCritPct > 100 {
+		return fmt.Errorf("-force-crit-pct must be between 0 and 100, got %d", *forceCritPct)
+	}
+	if *forceCritAfterWhites < 0 {
+		return fmt.Errorf("-force-crit-after-whites must be non-negative, got %d", *forceCritAfterWhites)
+	}
+	if *forceCritAfterWhites > 0 && *forceCritPct == 0 {
+		return fmt.Errorf("-force-crit-after-whites requires -force-crit-pct")
 	}
 	if *seedClassKits {
 		return fmt.Errorf("-seed-class-kits retired; start with -admin (or -admin-player) and /give <kind> via the admin bus")
@@ -228,6 +239,10 @@ func run() error {
 	world.SetAbilities(abilities)
 	world.SetWeapons(weapons)
 	world.SetWhiteMissPct(*whiteMissPct)
+	if *forceCritPct > 0 {
+		world.SetForceCritPct(*forceCritPct)
+		world.SetForceCritAfterWhites(*forceCritAfterWhites)
+	}
 	world.SetNPCArchetypes(npcArchetypes)
 	world.SetClasses(classes)
 	world.SetQuests(quests)
@@ -251,28 +266,30 @@ func run() error {
 	srv := &http.Server{Handler: mux}
 
 	started := gamelog.Fields{
-		"addr":                listener.Addr().String(),
-		"path":                wsPath,
-		"tick_ms":             int(game.TickDuration.Milliseconds()),
-		"walk_speed":          game.WalkSpeed,
-		"white_miss_pct":      *whiteMissPct,
-		"map":                 world.MapID(),
-		"world_half_extent":   world.HalfExtent(),
-		"inventory_size":      game.InventorySize,
-		"resume_grace":        game.ResumeGraceTicks,
-		"seeded_items":        len(seeds),
-		"join_kit":            joinKit,
-		"worn_slots":          game.WornSlots,
-		"abilities":           abilities.Len(),
-		"abilities_path":      path,
-		"npc_archetypes":      npcArchetypes.Len(),
-		"npc_archetypes_path": npath,
-		"quests":              quests.Len(),
-		"quests_path":         qpath,
-		"classes":             classes.ClassLen(),
-		"skills":              classes.SkillLen(),
-		"admin":               *devAdmin,
-		"admin_players":       adminPlayers,
+		"addr":                    listener.Addr().String(),
+		"path":                    wsPath,
+		"tick_ms":                 int(game.TickDuration.Milliseconds()),
+		"walk_speed":              game.WalkSpeed,
+		"white_miss_pct":          *whiteMissPct,
+		"force_crit_pct":          *forceCritPct,
+		"force_crit_after_whites": *forceCritAfterWhites,
+		"map":                     world.MapID(),
+		"world_half_extent":       world.HalfExtent(),
+		"inventory_size":          game.InventorySize,
+		"resume_grace":            game.ResumeGraceTicks,
+		"seeded_items":            len(seeds),
+		"join_kit":                joinKit,
+		"worn_slots":              game.WornSlots,
+		"abilities":               abilities.Len(),
+		"abilities_path":          path,
+		"npc_archetypes":          npcArchetypes.Len(),
+		"npc_archetypes_path":     npath,
+		"quests":                  quests.Len(),
+		"quests_path":             qpath,
+		"classes":                 classes.ClassLen(),
+		"skills":                  classes.SkillLen(),
+		"admin":                   *devAdmin,
+		"admin_players":           adminPlayers,
 	}
 	log.Event(0, game.EvServerStarted, started)
 
