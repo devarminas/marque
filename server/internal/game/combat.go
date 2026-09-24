@@ -175,6 +175,21 @@ type whiteRoll struct {
 }
 
 func (w *World) rollWhiteDamage(weaponID string, ap, crit, armor int) whiteRoll {
+	return w.rollWhiteDamageWithCrit(weaponID, ap, crit, armor)
+}
+
+func (w *World) rollDemoPlayerWhiteDamage(weaponID string, ap, crit, armor int) whiteRoll {
+	if w.forceCritPct > 0 {
+		if w.forceCritAfterWhites > 0 {
+			w.forceCritAfterWhites--
+		} else {
+			crit = w.forceCritPct
+		}
+	}
+	return w.rollWhiteDamageWithCrit(weaponID, ap, crit, armor)
+}
+
+func (w *World) rollWhiteDamageWithCrit(weaponID string, ap, crit, armor int) whiteRoll {
 	if w.whiteMissPct > 0 && w.intN(100) < w.whiteMissPct {
 		return whiteRoll{miss: true}
 	}
@@ -185,13 +200,7 @@ func (w *World) rollWhiteDamage(weaponID string, ap, crit, armor int) whiteRoll 
 		dmg += w.intN(span + 1)
 	}
 	dmg += ap
-	effectiveCrit := crit
-	if w.forceCritPct > 0 && w.forceCritAfterWhites == 0 {
-		effectiveCrit = w.forceCritPct
-	} else if w.forceCritAfterWhites > 0 {
-		w.forceCritAfterWhites--
-	}
-	critHit := effectiveCrit > 0 && w.intN(100) < effectiveCrit
+	critHit := crit > 0 && w.intN(100) < crit
 	if critHit {
 		dmg *= 2
 	}
@@ -292,7 +301,7 @@ func (w *World) resolveAttack(p *player) {
 
 	p.attackProgress = 0
 	weaponID := w.playerWeaponID(p)
-	hit := w.rollWhiteDamage(weaponID, p.attrs.AP(), p.attrs.CritChance(), target.attrs.Armor())
+	hit := w.rollDemoPlayerWhiteDamage(weaponID, p.attrs.AP(), p.attrs.CritChance(), target.attrs.Armor())
 	hpBefore := target.hp
 	target.hp -= hit.damage
 	if target.hp < 0 {
@@ -344,7 +353,7 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 
 	p.attackProgress = 0
 	weaponID := w.playerWeaponID(p)
-	hit := w.rollWhiteDamage(weaponID, p.attrs.AP(), p.attrs.CritChance(), target.attrs.Armor())
+	hit := w.rollDemoPlayerWhiteDamage(weaponID, p.attrs.AP(), p.attrs.CritChance(), target.attrs.Armor())
 	hpBefore := target.hp
 	target.hp -= hit.damage
 	if target.kind == KindDummy {

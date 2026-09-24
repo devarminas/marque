@@ -910,13 +910,55 @@ func TestForceCritAfterWhiteProducesWhiteThenCrit(t *testing.T) {
 	]}`))
 	pw.w.SetForceCritPct(100)
 	pw.w.SetForceCritAfterWhites(1)
-	first := pw.w.rollWhiteDamage(weapondef.Sword, 0, 0, 0)
-	second := pw.w.rollWhiteDamage(weapondef.Sword, 0, 0, 0)
+	first := pw.w.rollDemoPlayerWhiteDamage(weapondef.Sword, 0, 0, 0)
+	second := pw.w.rollDemoPlayerWhiteDamage(weapondef.Sword, 0, 0, 0)
 	if first.crit || first.miss {
 		t.Fatalf("first delayed force-crit roll=%+v, want a landed white", first)
 	}
 	if !second.crit || second.miss {
 		t.Fatalf("second delayed force-crit roll=%+v, want a landed crit", second)
+	}
+}
+
+func TestForceCritDelayIgnoresInterleavedNPCSwing(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetWeapons(parseWeapons(t, `{"weapons":[
+		{"id":"unarmed","attack_period_ticks":1,"damage_min":3,"damage_max":3},
+		{"id":"sword","attack_period_ticks":1,"damage_min":8,"damage_max":8},
+		{"id":"imp_claw","attack_period_ticks":1,"damage_min":2,"damage_max":2}
+	]}`))
+	pw.w.SetForceCritPct(100)
+	pw.w.SetForceCritAfterWhites(1)
+	alice := pw.joinWithClass("knight")
+	bob := pw.joinBare()
+	target := pw.seedHostile()
+	alice.pos = target.pos
+	bob.pos = Point{X: 0, Z: 0}
+
+	pw.w.resolveAttackOnNPC(alice, target)
+	seedDeterministicCamp(t, pw.w)
+	imp := pw.w.npcByKind(KindImp)
+	despawnOtherImps(pw.w, imp)
+	imp.pos = bob.pos
+	imp.home = imp.pos
+	imp.remaining = nil
+	imp.attackTarget = bob.id
+	imp.attackProgress = pw.w.npcAttackPeriod(imp) - 1
+	pw.w.stepImpAttack(imp)
+	pw.w.resolveAttackOnNPC(alice, target)
+
+	hits := pw.events(EvAttackHit)
+	if len(hits) != 3 {
+		t.Fatalf("attack_hit count=%d, want player, NPC, player", len(hits))
+	}
+	if hits[0]["player"] != float64(alice.id) || hits[0]["crit"] != false {
+		t.Fatalf("first player hit=%v, want an unforced white", hits[0])
+	}
+	if hits[1]["npc"] != float64(imp.id) || hits[1]["crit"] != false {
+		t.Fatalf("interleaved NPC hit=%v, want its normal non-crit roll", hits[1])
+	}
+	if hits[2]["player"] != float64(alice.id) || hits[2]["crit"] != true {
+		t.Fatalf("second player hit=%v, want the forced crit", hits[2])
 	}
 }
 

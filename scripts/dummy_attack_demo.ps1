@@ -29,6 +29,7 @@ $clientOut = Join-Path $OutDir "client.stdout.log"
 $clientErr = Join-Path $OutDir "client.stderr.log"
 $whiteFctShot = Join-Path $OutDir "fct-white.png"
 $critFctShot = Join-Path $OutDir "fct-crit.png"
+$reviewPrefix = Join-Path $OutDir "fct-review"
 $evidenceMarker = Join-Path $OutDir ".marque-evidence"
 
 $server = $null
@@ -92,11 +93,15 @@ try {
     $clientArgs = @("--path", $clientDir, "--", "--server", $wsUrl, "--dummy-attack")
     if ($WhiteMissPct -eq 100) {
         $clientArgs += @("--expect-white-miss", "--miss-shot", (Join-Path $OutDir "miss.png"))
-        if ($ReviewMovie) { $clientArgs += "--miss-review" }
     }
-    if ($ReviewMovie -and $WhiteMissPct -ne 100) { throw "-ReviewMovie needs -WhiteMissPct 100" }
     if ($ForceCritPct -eq 100) {
         $clientArgs += @("--fct-white-shot", $whiteFctShot, "--fct-crit-shot", $critFctShot)
+    }
+    if ($ReviewMovie) {
+        if ($WhiteMissPct -ne 100 -and $ForceCritPct -ne 100) {
+            throw "-ReviewMovie needs -WhiteMissPct 100 or -ForceCritPct 100"
+        }
+        $clientArgs += @("--fct-review-prefix", $reviewPrefix)
     }
     if ($FctOff) { $clientArgs += "--fct-off" }
     $client = Start-Process -FilePath $Godot -ArgumentList $clientArgs `
@@ -120,7 +125,7 @@ try {
     $attackOk = $false
     $missOk = $false
     $missHPOk = $false
-    $missFramesOk = $false
+    $reviewFrameCount = 0
     $missFctOk = $false
     $npcCount = 0
     $critScales = @()
@@ -134,7 +139,7 @@ try {
             if ($line -match '^DEMO attackok ') { $attackOk = $true }
             if ($line -match '^DEMO miss \d+ amount=0 crit=false hp=') { $missOk = $true }
             if ($line -match '^DEMO misshp \d+ unchanged=') { $missHPOk = $true }
-            if ($line -match '^DEMO missframes 30$') { $missFramesOk = $true }
+            if ($line -match '^DEMO fctframes (\d+)$') { $reviewFrameCount += [int]$Matches[1] }
             if ($line -match '^DEMO fct miss text=Miss scale=\d+ color=999999ff$') { $missFctOk = $true }
             if ($line -match '^DEMO fct crit=\d+ scale=(\d+) text=\d+!$') { $critScales += [int]$Matches[1] }
             if ($line -match '^DEMO fct white=\d+ scale=(\d+) text=\d+$') { $whiteScales += [int]$Matches[1] }
@@ -148,7 +153,7 @@ try {
     if (-not $refuseOk) { Add-Failure "missing DEMO refuse" }
     if ($WhiteMissPct -eq 100) {
         if (-not $missOk -or -not $missHPOk -or -not $missFctOk) { Add-Failure "missing DEMO miss, misshp, or grey Miss float" }
-        if ($ReviewMovie -and -not $missFramesOk) { Add-Failure "missing DEMO missframes 30" }
+        if ($ReviewMovie -and $reviewFrameCount -ne 150) { Add-Failure "review frames=$reviewFrameCount, want 150" }
     } elseif ($ForceCritPct -eq 100) {
         if ($whiteScales.Count -lt 1) { Add-Failure "no DEMO fct white scale with ForceCritPct=100" }
         if ($critScales.Count -lt 1) { Add-Failure "no DEMO fct crit scale with ForceCritPct=100" }
@@ -157,8 +162,12 @@ try {
         }
         if (-not (Test-Path $whiteFctShot)) { Add-Failure "missing game-authored white float screenshot" }
         if (-not (Test-Path $critFctShot)) { Add-Failure "missing game-authored crit float screenshot" }
+        if ($ReviewMovie -and $reviewFrameCount -ne 150) { Add-Failure "review frames=$reviewFrameCount, want 150" }
     } elseif (-not $attackOk) { Add-Failure "missing DEMO attackok" }
     if (-not $done) { Add-Failure "missing DEMO done" }
+    if ($ReviewMovie -and (Get-ChildItem -Path "$reviewPrefix-*.png" -ErrorAction SilentlyContinue).Count -ne 150) {
+        Add-Failure "game-authored review frame files missing"
+    }
     if ($ObserveFctLifetime -and ($fctLifetimePresent -lt 1 -or $fctLifetimeGone -lt 1)) {
         Add-Failure "FCT lifetime present=$fctLifetimePresent gone=$fctLifetimeGone, want both"
     }
