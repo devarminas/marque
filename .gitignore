@@ -28,6 +28,11 @@ export_presets.cfg
 # Agent worktrees
 .claude/worktrees/
 
+# Agent harness state in the checkout. The audit-tick schedule and the
+# subagent run records land here, and a broad `git add` in a stack PR must
+# not ship them.
+.pi/
+
 # Recipe output. Recipes G, H and W all redirect into the repo root, never pipe,
 # so every worker's `git status` grew two or three untracked files it must not
 # commit and must not delete either, because the ledger quotes their tail lines.

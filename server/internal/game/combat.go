@@ -168,7 +168,14 @@ func (w *World) attackPeriodTicks(weaponID string) int {
 	return w.weaponDef(weaponID).AttackPeriodTicks
 }
 
-func (w *World) rollWhiteDamage(weaponID string, ap, crit, armor int) int {
+// whiteRoll is one resolved white swing: the damage left after armor, and whether
+// the roll doubled the pre-armor amount.
+type whiteRoll struct {
+	damage int
+	crit   bool
+}
+
+func (w *World) rollWhiteDamage(weaponID string, ap, crit, armor int) whiteRoll {
 	weapon := w.weaponDef(weaponID)
 	span := weapon.DamageMax - weapon.DamageMin
 	dmg := weapon.DamageMin
@@ -176,18 +183,15 @@ func (w *World) rollWhiteDamage(weaponID string, ap, crit, armor int) int {
 		dmg += w.intN(span + 1)
 	}
 	dmg += ap
-	if crit > 0 && w.intN(100) < crit {
+	critHit := crit > 0 && w.intN(100) < crit
+	if critHit {
 		dmg *= 2
 	}
 	dmg -= armor
 	if dmg < 1 {
 		dmg = 1
 	}
-	return dmg
-}
-
-func (w *World) rollWhite(weaponID string, atk, def attributes) int {
-	return w.rollWhiteDamage(weaponID, atk.AP(), atk.CritChance(), def.Armor())
+	return whiteRoll{damage: dmg, crit: critHit}
 }
 
 func (w *World) playerAttackPeriod(p *player) int {
@@ -280,17 +284,28 @@ func (w *World) resolveAttack(p *player) {
 
 	p.attackProgress = 0
 	weaponID := w.playerWeaponID(p)
-	damage := w.rollWhite(weaponID, p.attrs, target.attrs)
-	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: weaponID}, nil)
-	target.hp -= damage
+	hit := w.rollWhiteDamage(weaponID, p.attrs.AP(), p.attrs.CritChance(), target.attrs.Armor())
+	hpBefore := target.hp
+	target.hp -= hit.damage
 	if target.hp < 0 {
 		target.hp = 0
 	}
+	applied := hpBefore - target.hp
+	w.broadcast(mnet.Swing{
+		ID:     p.id,
+		Target: target.id,
+		Weapon: weaponID,
+		Amount: applied,
+		Crit:   hit.crit,
+	}, nil)
 	w.markCombat(p)
 	w.markCombat(target)
 	fields := playerTargetFields(p.id, target.id)
-	fields["damage"] = damage
+	fields["damage"] = hit.damage
+	fields["applied"] = applied
 	fields["target_hp"] = target.hp
+	fields["crit"] = hit.crit
+	fields["miss"] = false
 	w.log.Event(w.tick, EvAttackHit, fields)
 	w.broadcastHP(target)
 	if target.hp == 0 {
@@ -318,18 +333,29 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 
 	p.attackProgress = 0
 	weaponID := w.playerWeaponID(p)
-	damage := w.rollWhite(weaponID, p.attrs, target.attrs)
-	w.broadcast(mnet.Swing{ID: p.id, Target: target.id, Weapon: weaponID}, nil)
-	target.hp -= damage
+	hit := w.rollWhiteDamage(weaponID, p.attrs.AP(), p.attrs.CritChance(), target.attrs.Armor())
+	hpBefore := target.hp
+	target.hp -= hit.damage
 	if target.kind == KindDummy {
 		target.floorPracticeHP()
 	} else if target.hp < 0 {
 		target.hp = 0
 	}
+	applied := hpBefore - target.hp
+	w.broadcast(mnet.Swing{
+		ID:     p.id,
+		Target: target.id,
+		Weapon: weaponID,
+		Amount: applied,
+		Crit:   hit.crit,
+	}, nil)
 	w.markCombat(p)
 	fields := playerTargetFields(p.id, target.id)
-	fields["damage"] = damage
+	fields["damage"] = hit.damage
+	fields["applied"] = applied
 	fields["target_hp"] = target.hp
+	fields["crit"] = hit.crit
+	fields["miss"] = false
 	w.log.Event(w.tick, EvAttackHit, fields)
 	w.broadcastNPCHP(target)
 	if target.dead() {

@@ -86,10 +86,25 @@ func decodeFrames[T any](t *testing.T, frames []wireFrame, kind string) []T {
 	return out
 }
 
+// logWireFrame prints the exact bytes the server wrote, with the frame's index in
+// the run, so a verify lane can lift the frame out of the test log.
+func logWireFrame(t *testing.T, index int, body json.RawMessage) {
+	t.Helper()
+	t.Logf("WIRE %d %s", index, body)
+}
+
 func castPhasesOf(t *testing.T, frames []wireFrame, caster mnet.PlayerID) []mnet.CastPhase {
 	t.Helper()
 	var out []mnet.CastPhase
-	for _, phase := range decodeFrames[mnet.CastPhase](t, frames, "cast_phase") {
+	for i, f := range frames {
+		if f.kind != "cast_phase" {
+			continue
+		}
+		logWireFrame(t, i, f.body)
+		var phase mnet.CastPhase
+		if err := json.Unmarshal(f.body, &phase); err != nil {
+			t.Fatalf("cast_phase: %v: %s", err, f.body)
+		}
 		if phase.ID == caster {
 			out = append(out, phase)
 		}
@@ -106,6 +121,7 @@ func assertSwingBeforeHP(t *testing.T, frames []wireFrame, want mnet.Swing) {
 	for i, f := range frames {
 		switch f.kind {
 		case "swing":
+			logWireFrame(t, i, f.body)
 			swingAt = i
 		case "hp":
 			var hp mnet.HP
@@ -113,6 +129,7 @@ func assertSwingBeforeHP(t *testing.T, frames []wireFrame, want mnet.Swing) {
 				t.Fatalf("hp: %v: %s", err, f.body)
 			}
 			if hp.ID == want.Target && hpAt < 0 {
+				logWireFrame(t, i, f.body)
 				hpAt = i
 			}
 		}
@@ -144,10 +161,13 @@ func TestSwingPlayerOnPlayerBroadcastsBeforeHP(t *testing.T) {
 	obs.flush()
 
 	alice.attackTarget = bob.id
+	hpBefore := bob.hp
 	for i := 0; i < 50 && bob.hp == MaxHP; i++ {
 		pw.w.step()
 	}
-	assertSwingBeforeHP(t, obs.flush(), mnet.Swing{ID: alice.id, Target: bob.id, Weapon: KindSword})
+	assertSwingBeforeHP(t, obs.flush(), mnet.Swing{
+		ID: alice.id, Target: bob.id, Weapon: KindSword, Amount: hpBefore - bob.hp,
+	})
 }
 
 func TestSwingPlayerOnNPCBroadcastsBeforeHP(t *testing.T) {
@@ -159,10 +179,13 @@ func TestSwingPlayerOnNPCBroadcastsBeforeHP(t *testing.T) {
 	obs.flush()
 
 	pw.w.attack(alice, mnet.Attack{Player: dummy.id}, 0)
+	hpBefore := dummy.hp
 	for i := 0; i < 50 && dummy.hp == DummyMaxHP; i++ {
 		pw.w.step()
 	}
-	assertSwingBeforeHP(t, obs.flush(), mnet.Swing{ID: alice.id, Target: dummy.id, Weapon: KindSword})
+	assertSwingBeforeHP(t, obs.flush(), mnet.Swing{
+		ID: alice.id, Target: dummy.id, Weapon: KindSword, Amount: hpBefore - dummy.hp,
+	})
 }
 
 func TestSwingImpOnPlayerBroadcastsBeforeHP(t *testing.T) {
@@ -179,8 +202,102 @@ func TestSwingImpOnPlayerBroadcastsBeforeHP(t *testing.T) {
 	imp.remaining = nil
 	obs.flush()
 
+	hpBefore := alice.hp
 	pw.stepN(pw.npcPeriod(imp))
-	assertSwingBeforeHP(t, obs.flush(), mnet.Swing{ID: imp.id, Target: alice.id, Weapon: weapondef.ImpClaw})
+	assertSwingBeforeHP(t, obs.flush(), mnet.Swing{
+		ID: imp.id, Target: alice.id, Weapon: weapondef.ImpClaw, Amount: hpBefore - alice.hp,
+	})
+}
+
+func TestSwingCritFlagReportsTheDoubledRoll(t *testing.T) {
+	pw := newClassProbe(t)
+	alice := pw.joinWithClass("knight")
+	bob := pw.joinBare()
+	obs := pw.observe()
+	bob.pos = Point{X: alice.pos.X + 1, Z: alice.pos.Z}
+	alice.attrs.DEX = AttrBaseline + 100
+	obs.flush()
+
+	alice.attackTarget = bob.id
+	hpBefore := bob.hp
+	for i := 0; i < 50 && bob.hp == MaxHP; i++ {
+		pw.w.step()
+	}
+	weapon := pw.weapon(KindSword)
+	assertSwingBeforeHP(t, obs.flush(), mnet.Swing{
+		ID: alice.id, Target: bob.id, Weapon: KindSword, Amount: hpBefore - bob.hp, Crit: true,
+	})
+	worstNormalHit := weapon.DamageMax + alice.attrs.AP() - bob.attrs.Armor()
+	if hpBefore-bob.hp <= worstNormalHit {
+		t.Fatalf("crit hit took %d, want more than the %d a normal roll can reach", hpBefore-bob.hp, worstNormalHit)
+	}
+}
+
+func TestSwingAmountClampsBelowTheRolledDamage(t *testing.T) {
+	cases := []struct {
+		name string
+		run  func(t *testing.T, pw *classProbe, alice *player, obs *observer)
+	}{
+		{
+			name: "player on player at lethal hp",
+			run: func(t *testing.T, pw *classProbe, alice *player, obs *observer) {
+				bob := pw.joinBare()
+				bob.hp = 1
+				bob.pos = Point{X: alice.pos.X + 1, Z: alice.pos.Z}
+				obs.flush()
+				alice.attackTarget = bob.id
+				pw.stepN(pw.playerPeriod(alice))
+				if !bob.dead() {
+					t.Fatalf("the lethal target survived with hp=%d", bob.hp)
+				}
+			},
+		},
+		{
+			name: "imp on player at lethal hp",
+			run: func(t *testing.T, pw *classProbe, alice *player, obs *observer) {
+				seedDeterministicCamp(t, pw.w)
+				imp := pw.w.npcByKind(KindImp)
+				despawnOtherImps(pw.w, imp)
+				alice.hp = 1
+				alice.pos = imp.pos
+				imp.phase = phaseCombat
+				imp.combatBeat = combatSwing
+				imp.attackTarget = alice.id
+				imp.remaining = nil
+				obs.flush()
+				pw.stepN(pw.npcPeriod(imp))
+				if !alice.dead() {
+					t.Fatalf("the lethal target survived with hp=%d", alice.hp)
+				}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pw := newClassProbe(t)
+			alice := pw.joinWithClass("knight")
+			obs := pw.observe()
+			tc.run(t, pw, alice, obs)
+
+			// The target sat at 1 hp, so the clamp bites: the frame carries the 1
+			// the target moved while the roll behind it is larger.
+			swings := decodeFrames[mnet.Swing](t, obs.flush(), "swing")
+			if len(swings) != 1 || swings[0].Amount != 1 {
+				t.Fatalf("swing frames=%+v, want one with amount=1", swings)
+			}
+			hits := pw.events(EvAttackHit)
+			if len(hits) != 1 {
+				t.Fatalf("logged %d attack_hit, want 1", len(hits))
+			}
+			damage, ok := hits[0]["damage"].(float64)
+			if !ok {
+				t.Fatalf("damage=%v", hits[0]["damage"])
+			}
+			if damage <= 1 {
+				t.Fatalf("attack_hit damage=%v, want more than the 1 the clamped target moved", damage)
+			}
+		})
+	}
 }
 
 func TestPlayerFireballBeginsThenResolves(t *testing.T) {
@@ -193,11 +310,14 @@ func TestPlayerFireballBeginsThenResolves(t *testing.T) {
 	obs.flush()
 
 	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
+	hpBefore := bob.hp
 	pw.w.stepNForTest(alice.castTotal)
 
 	begin := mnet.CastPhase{ID: alice.id, Ability: "fireball", Target: bob.id, Phase: mnet.CastPhaseBegin}
-	resolve := begin
-	resolve.Phase = mnet.CastPhaseResolve
+	resolve := mnet.CastPhase{
+		ID: alice.id, Ability: "fireball", Target: bob.id, Phase: mnet.CastPhaseResolve,
+		Amount: hpBefore - bob.hp, Effect: "damage",
+	}
 	if got := castPhasesOf(t, obs.flush(), alice.id); !slices.Equal(got, []mnet.CastPhase{begin, resolve}) {
 		t.Fatalf("cast_phase frames=%+v, want begin then resolve", got)
 	}
@@ -208,13 +328,21 @@ func TestInstantHealResolvesWithoutBegin(t *testing.T) {
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
 	alice := pw.joinWithClass("mage")
 	obs := pw.observe()
+	alice.hp = MaxHP - 10
 	obs.flush()
 
+	hpBefore := alice.hp
 	pw.w.cast(alice, mnet.Cast{Ability: "heal", Player: alice.id}, 1)
 
-	want := mnet.CastPhase{ID: alice.id, Ability: "heal", Target: alice.id, Phase: mnet.CastPhaseResolve}
+	want := mnet.CastPhase{
+		ID: alice.id, Ability: "heal", Target: alice.id, Phase: mnet.CastPhaseResolve,
+		Amount: alice.hp - hpBefore, Effect: "heal",
+	}
 	if got := castPhasesOf(t, obs.flush(), alice.id); !slices.Equal(got, []mnet.CastPhase{want}) {
 		t.Fatalf("cast_phase frames=%+v, want only %+v", got, want)
+	}
+	if alice.hp != MaxHP {
+		t.Fatalf("heal left hp at %d, want the clamped delta to top up to %d", alice.hp, MaxHP)
 	}
 }
 
@@ -238,11 +366,14 @@ func TestImpFireballBeginsThenResolves(t *testing.T) {
 	if rej := pw.w.castAbility(imp, pw.impArch().SkillID(), alice.id); rej != nil {
 		t.Fatalf("castAbility: %+v", rej)
 	}
+	hpBefore := alice.hp
 	pw.w.stepNForTest(imp.castTotal)
 
 	begin := mnet.CastPhase{ID: imp.id, Ability: pw.impArch().SkillID(), Target: alice.id, Phase: mnet.CastPhaseBegin}
-	resolve := begin
-	resolve.Phase = mnet.CastPhaseResolve
+	resolve := mnet.CastPhase{
+		ID: imp.id, Ability: pw.impArch().SkillID(), Target: alice.id, Phase: mnet.CastPhaseResolve,
+		Amount: hpBefore - alice.hp, Effect: "damage",
+	}
 	if got := castPhasesOf(t, obs.flush(), imp.id); !slices.Equal(got, []mnet.CastPhase{begin, resolve}) {
 		t.Fatalf("cast_phase frames=%+v, want begin then resolve", got)
 	}
