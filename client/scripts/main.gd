@@ -67,6 +67,8 @@ const DUMMY_CAST_FLAG := "--dummy-cast"
 const DUMMY_ATTACK_FLAG := "--dummy-attack"
 const HEAL_WOUNDED_SHOTS_FLAG := "--heal-wounded-shots"
 const WASD_SHOTS_FLAG := "--wasd-shots"
+const WASD_OBSERVE_YAW_FLAG := "--wasd-observe-yaw"
+const WASD_FACING_OFF_FLAG := "--wasd-facing-off"
 const ARENA_COLLISION_SHOTS_FLAG := "--arena-collision-shots"
 const TAB_COMBAT_SHOTS_FLAG := "--tab-combat-shots"
 const QUEST_SHOTS_FLAG := "--quest-shots"
@@ -353,7 +355,9 @@ func _run_wasd_demo(args: Array) -> void:
 		get_tree().quit(1)
 		return
 	var demo := WasdDemoScript.new()
-	var code: int = await demo.run(self, session, prefix)
+	var observe_yaw := WASD_OBSERVE_YAW_FLAG in args or WASD_FACING_OFF_FLAG in args
+	var facing_off := WASD_FACING_OFF_FLAG in args
+	var code: int = await demo.run(self, session, prefix, observe_yaw, facing_off)
 	get_tree().quit(code)
 
 

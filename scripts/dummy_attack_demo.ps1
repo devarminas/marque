@@ -35,6 +35,10 @@ $evidenceMarker = Join-Path $OutDir ".marque-evidence"
 
 $server = $null
 $failures = New-Object System.Collections.Generic.List[string]
+$staffWeapon = @((Get-Content -Raw (Join-Path $repo "shared/weapons.json") | ConvertFrom-Json).weapons | Where-Object { $_.id -eq "staff" })[0]
+if ($null -eq $staffWeapon) { throw "staff weapon definition missing" }
+$normalDamageMin = [int]$staffWeapon.damage_min
+$normalDamageMax = [int]$staffWeapon.damage_max
 
 function Add-Failure([string] $message) { $failures.Add($message) }
 
@@ -126,6 +130,7 @@ try {
     $yawBefore = $false
     $yawMid = $false
     $yawAfter = $false
+    $yawFacingAway = $false
     $refuseOk = $false
     $attackOk = $false
     $missOk = $false
@@ -142,6 +147,7 @@ try {
             if ($line -match '^DEMO npc ') { $npcCount++ }
             if ($line -match '^DEMO refuse ') { $refuseOk = $true }
             if ($line -match '^DEMO attackok ') { $attackOk = $true }
+            if ($line -match '^DEMO yaw attack facing_away before=[-0-9.]+ target=[-0-9.]+ delta=[0-9.]+$') { $yawFacingAway = $true }
             if ($line -match '^DEMO yaw attack before=.* mid=') { $yawBefore = $true; $yawMid = $true }
             if ($line -match '^DEMO yaw attack after=') { $yawAfter = $true }
             if ($line -match '^DEMO miss \d+ amount=0 crit=false hp=') { $missOk = $true }
@@ -172,7 +178,9 @@ try {
         if ($ReviewMovie -and $reviewFrameCount -ne 150) { Add-Failure "review frames=$reviewFrameCount, want 150" }
     } elseif (-not $attackOk) { Add-Failure "missing DEMO attackok" }
     if (-not $done) { Add-Failure "missing DEMO done" }
-    if ($YawSamples -and (-not $yawBefore -or -not $yawMid -or -not $yawAfter)) { Add-Failure "missing before/mid/after yaw samples" }
+    if ($YawSamples -and (-not $yawFacingAway -or -not $yawBefore -or -not $yawMid -or -not $yawAfter)) {
+        Add-Failure "missing facing-away or before/mid/after yaw samples"
+    }
     if ($ReviewMovie -and (Get-ChildItem -Path "$reviewPrefix-*.png" -ErrorAction SilentlyContinue).Count -ne 150) {
         Add-Failure "game-authored review frame files missing"
     }
@@ -187,6 +195,7 @@ try {
     $landedHits = 0
     $critHits = 0
     $whiteHits = 0
+    $normalDamages = [System.Collections.Generic.List[int]]::new()
     if (Test-Path $serverOut) {
         foreach ($line in Get-Content $serverOut) {
             if (-not $line.StartsWith("GAMELOG ")) { continue }
@@ -199,7 +208,10 @@ try {
                 if ($ev.miss -eq $false -and $ev.applied -gt 0) { $landedHits++ }
                 $isPlayerHit = $null -ne $ev.PSObject.Properties["player"]
                 if ($isPlayerHit -and $ev.crit -eq $true -and $ev.miss -eq $false) { $critHits++ }
-                if ($isPlayerHit -and $ev.crit -eq $false -and $ev.miss -eq $false -and $ev.applied -gt 0) { $whiteHits++ }
+                if ($isPlayerHit -and $ev.crit -eq $false -and $ev.miss -eq $false -and $ev.applied -gt 0) {
+                    $whiteHits++
+                    $normalDamages.Add([int]$ev.damage)
+                }
             }
             if ($ev.ev -eq "attack_rejected") {
                 Add-Failure "unexpected attack_rejected on the happy path: $line"
@@ -213,6 +225,17 @@ try {
     if ($ForceCritPct -eq 100 -and $critHits -lt 1) { Add-Failure "crit hits=$critHits, want >= 1 with force-crit-pct=100" }
     if ($ForceCritPct -eq 100 -and $whiteHits -lt 1) { Add-Failure "white hits=$whiteHits, want >= 1 before the forced crit" }
     if ($WhiteMissPct -ne 100 -and $ForceCritPct -ne 100 -and $landedHits -lt 1) { Add-Failure "landed hits=$landedHits, want >= 1" }
+    if ($WhiteMissPct -eq 0 -and $ForceCritPct -eq 0) {
+        if ($normalDamages.Count -lt 1) {
+            Add-Failure "normal player attack_hit damage samples=$($normalDamages.Count), want >= 1"
+        } elseif (($normalDamages | Where-Object { $_ -lt $normalDamageMin -or $_ -gt $normalDamageMax } | Measure-Object).Count -gt 0) {
+            Add-Failure "normal attack_hit damage outside configured staff range ${normalDamageMin}..${normalDamageMax}: $($normalDamages -join ',')"
+        } else {
+            $observedMin = ($normalDamages | Measure-Object -Minimum).Minimum
+            $observedMax = ($normalDamages | Measure-Object -Maximum).Maximum
+            Write-Host "DEMO attack_hit normal count=$($normalDamages.Count) observed=$observedMin..$observedMax configured_staff=$normalDamageMin..$normalDamageMax"
+        }
+    }
 
     Show-File "client stdout" $clientOut
     Show-File "client stderr" $clientErr

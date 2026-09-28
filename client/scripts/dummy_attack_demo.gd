@@ -101,6 +101,19 @@ func run(
 	var hostile_hp_before := _session.hit_points_for(hostile_id).x
 	var local_avatar: Node3D = _session.get("_local")
 	var yaw_before := local_avatar.rotation.y if yaw_samples and local_avatar != null else 0.0
+	if yaw_samples and local_avatar != null:
+		var target_body: Node3D = npcs.get(hostile_id)
+		var wanted_yaw := atan2(
+			-(target_body.global_position.x - local_avatar.global_position.x),
+			-(target_body.global_position.z - local_avatar.global_position.z),
+		)
+		var facing_delta := absf(angle_difference(yaw_before, wanted_yaw))
+		if facing_delta <= 0.5:
+			return _fail("attack yaw did not start facing away from the hostile target")
+		print(
+			"DEMO yaw attack facing_away before=%.5f target=%.5f delta=%.5f"
+			% [yaw_before, wanted_yaw, facing_delta]
+		)
 	if not await _right_click_npc(hostile_id):
 		return _fail("could not right-click hostile dummy %d" % hostile_id)
 	print("DEMO rightclick %d hostile" % hostile_id)
