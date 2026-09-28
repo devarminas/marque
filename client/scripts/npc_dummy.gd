@@ -5,6 +5,7 @@ const PolylineWalker := preload("res://scripts/polyline_walker.gd")
 const TickClock := preload("res://scripts/tick_clock.gd")
 const DummyMeterScript := preload("res://scripts/dummy_meter.gd")
 const CharacterVisual := preload("res://scripts/character_visual.gd")
+const Facing := preload("res://scripts/facing.gd")
 
 const FactionFriendly := "friendly"
 const FactionHostile := "hostile"
@@ -181,14 +182,14 @@ func update_to_tick(tick: int) -> void:
 	var heading := _walker.direction_at_tick(tick)
 	if heading == Vector2.ZERO:
 		return
-	_desired_yaw = _yaw_facing(heading)
+	_desired_yaw = Facing.yaw_facing(heading)
 
 
 func _process(delta: float) -> void:
 	if clock != null and clock.is_anchored():
 		update_to_tick(clock.estimated_tick())
 	if face_travel_direction:
-		_turn_toward_desired_yaw(delta)
+		rotation.y = Facing.turn_toward(rotation.y, _desired_yaw, turn_degrees_per_second, delta)
 
 
 func set_selected(on: bool) -> void:
@@ -307,13 +308,3 @@ func _locomote(ground_speed: float) -> void:
 			)
 		return
 	character.locomote(ground_speed)
-
-
-func _turn_toward_desired_yaw(delta: float) -> void:
-	rotation.y = rotate_toward(
-		rotation.y, _desired_yaw, deg_to_rad(turn_degrees_per_second) * delta
-	)
-
-
-static func _yaw_facing(heading: Vector2) -> float:
-	return atan2(-heading.x, -heading.y)

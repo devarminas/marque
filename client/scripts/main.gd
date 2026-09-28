@@ -67,6 +67,8 @@ const DUMMY_CAST_FLAG := "--dummy-cast"
 const DUMMY_ATTACK_FLAG := "--dummy-attack"
 const HEAL_WOUNDED_SHOTS_FLAG := "--heal-wounded-shots"
 const WASD_SHOTS_FLAG := "--wasd-shots"
+const WASD_OBSERVE_YAW_FLAG := "--wasd-observe-yaw"
+const WASD_FACING_OFF_FLAG := "--wasd-facing-off"
 const ARENA_COLLISION_SHOTS_FLAG := "--arena-collision-shots"
 const TAB_COMBAT_SHOTS_FLAG := "--tab-combat-shots"
 const QUEST_SHOTS_FLAG := "--quest-shots"
@@ -332,7 +334,7 @@ func _run_cast_bar_demo(args: Array) -> void:
 		return
 
 	var demo := CastBarDemoScript.new()
-	var code: int = await demo.run(self, session, cast_bar, prefix)
+	var code: int = await demo.run(self, session, cast_bar, prefix, "--yaw-samples" in args)
 	get_tree().quit(code)
 
 
@@ -353,7 +355,9 @@ func _run_wasd_demo(args: Array) -> void:
 		get_tree().quit(1)
 		return
 	var demo := WasdDemoScript.new()
-	var code: int = await demo.run(self, session, prefix)
+	var observe_yaw := WASD_OBSERVE_YAW_FLAG in args or WASD_FACING_OFF_FLAG in args
+	var facing_off := WASD_FACING_OFF_FLAG in args
+	var code: int = await demo.run(self, session, prefix, observe_yaw, facing_off)
 	get_tree().quit(code)
 
 
@@ -396,7 +400,8 @@ func _run_dummy_attack_demo(args: Array) -> void:
 	var code: int = await demo.run(
 		self, session, "--expect-white-miss" in args,
 		_argument_after(args, "--miss-shot"), _argument_after(args, "--fct-white-shot"),
-		_argument_after(args, "--fct-crit-shot"), _argument_after(args, "--fct-review-prefix")
+		_argument_after(args, "--fct-crit-shot"), _argument_after(args, "--fct-review-prefix"),
+		"--yaw-samples" in args
 	)
 	get_tree().quit(code)
 

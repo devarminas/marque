@@ -201,6 +201,7 @@ var _npcs := {}
 var _fct_disabled := false
 var _last_swing_target := 0
 var _last_cast_resolve_target := 0
+var _facing_target_id := 0
 var _use_from := -1
 var _hover_slot := -1
 var _hover_node := 0
@@ -489,6 +490,8 @@ func request_move_to(x: float, z: float) -> void:
 
 
 func request_move(dx: float, dz: float, jump: bool = false) -> void:
+	if dx != 0.0 or dz != 0.0:
+		_clear_local_face_target()
 	move_requested.emit(dx, dz)
 	if _net == null or not _net.is_open():
 		push_warning("session: move (%f, %f) dropped, the socket is not open" % [dx, dz])
@@ -539,6 +542,7 @@ func request_attack(player_id: int) -> void:
 		push_warning("session: attack refused for non-hostile npc %d" % player_id)
 		return
 	attack_requested.emit(player_id)
+	_face_local_toward(player_id)
 	if _net == null or not _net.is_open():
 		push_warning("session: attack of actor %d dropped, the socket is not open" % player_id)
 		return
@@ -656,6 +660,7 @@ func request_cast(ability_id: String) -> void:
 		return
 	var target_id := _cast_target_for(ability_id)
 	cast_requested.emit(ability_id, target_id)
+	_face_local_toward(target_id)
 	if _net == null or not _net.is_open():
 		push_warning("session: cast %s dropped, the socket is not open" % ability_id)
 		return
@@ -1274,6 +1279,8 @@ func _advance_locomotion(delta: float) -> void:
 		_local_mover.advance_to_tick(est)
 		_local_mover.soft_pull_display(delta)
 		_present_local()
+		if not _local_mover.moving() and _facing_target_id > 0:
+			_face_local_toward(_facing_target_id)
 	_sync_npc_overhead_proximity()
 	var render_tick := _render_tick_fraction()
 	for id in _remote_poses.keys():
@@ -1286,6 +1293,26 @@ func _advance_locomotion(delta: float) -> void:
 		if buf == null:
 			continue
 		_present_remote(avatar, buf, render_tick)
+
+
+func _face_local_toward(target_id: int) -> void:
+	if target_id <= 0 or _local == null:
+		_clear_local_face_target()
+		return
+	var target: Node3D = _avatars.get(target_id)
+	if target == null:
+		target = _npcs.get(target_id)
+	if target == null:
+		_clear_local_face_target()
+		return
+	_facing_target_id = target_id
+	_local.face_target(target.global_position)
+
+
+func _clear_local_face_target() -> void:
+	_facing_target_id = 0
+	if _local != null:
+		_local.clear_face_target()
 
 
 func _present_local() -> void:
@@ -1493,6 +1520,8 @@ func _on_spawned(id: int, spawn_position: Vector2) -> void:
 
 
 func _on_despawned(id: int) -> void:
+	if id == _facing_target_id:
+		_clear_local_face_target()
 	if id == _you:
 		push_error("session: despawn carried our own id %d; ignoring" % id)
 		return
@@ -1940,6 +1969,7 @@ func _on_swing_observed(id: int, target: int, weapon: String) -> void:
 func _on_swing_hit_observed(id: int, amount: int, crit: bool, miss: bool) -> void:
 	if id != _you:
 		return
+	_clear_local_face_target()
 	var target_id := _last_swing_target
 	if target_id == 0:
 		return
@@ -1963,6 +1993,8 @@ func _on_cast_effect_observed(id: int, amount: int, effect: String) -> void:
 
 func _on_cast_phase_observed(id: int, ability: String, target: int, phase: String) -> void:
 	_record_hostile_cast(id, ability, phase)
+	if id == _you and phase == "resolve":
+		_clear_local_face_target()
 	if phase == "resolve" and id == _you:
 		_last_cast_resolve_target = target
 		_play_cast_effect_on_target(target, ability)
@@ -2098,6 +2130,8 @@ func _ensure_avatar(id: int) -> PlayerAvatarScript:
 
 
 func _forget(id: int) -> void:
+	if id == _facing_target_id:
+		_clear_local_face_target()
 	if id == _selected_player_id:
 		clear_selection()
 	var avatar: PlayerAvatarScript = _avatars.get(id)
@@ -2232,6 +2266,8 @@ func _forget_node(id: int) -> void:
 
 
 func _forget_npc(id: int) -> void:
+	if id == _facing_target_id:
+		_clear_local_face_target()
 	_npc_casts.erase(id)
 	if id == _selected_player_id:
 		clear_selection()
@@ -2272,6 +2308,8 @@ func _forget_everyone() -> void:
 
 func _apply_hit_points(id: int, hp: int, max_hp: int) -> void:
 	_hp[id] = Vector2i(hp, max_hp)
+	if hp <= 0 and (id == _you or id == _facing_target_id):
+		_clear_local_face_target()
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar != null:
 		avatar.set_hit_points(hp, max_hp)

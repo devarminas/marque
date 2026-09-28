@@ -4,6 +4,7 @@ extends Node3D
 const TickClock := preload("res://scripts/tick_clock.gd")
 const CharacterVisual := preload("res://scripts/character_visual.gd")
 const SteerIntegrate := preload("res://scripts/steer_integrate.gd")
+const Facing := preload("res://scripts/facing.gd")
 
 var player_id := 0
 
@@ -15,8 +16,12 @@ var clock: TickClock = null
 
 # Linear ARM-51.
 @export var turn_degrees_per_second := 540.0
+@export var face_target_degrees_per_second := 360.0
 
 var _desired_yaw := 0.0
+var _target_yaw := 0.0
+var _has_face_target := false
+var _walking := false
 var _tick_ms := 0
 
 @onready var _hp_label: Label3D = $HpLabel
@@ -68,12 +73,29 @@ func present_at(
 	position = Vector3(x, ground_y + height, z)
 	visual().locomote(SteerIntegrate.WALK_SPEED if walking else 0.0)
 	visual().elevate(height - ground_height)
+	_walking = walking
+	if walking:
+		clear_face_target()
 	if not face_travel_direction or not walking:
 		return
 	var delta := Vector2(x - prior.x, z - prior.y)
 	if delta.length_squared() < 1e-8:
 		return
-	_desired_yaw = _yaw_facing(delta)
+	_desired_yaw = Facing.yaw_facing(delta)
+
+
+func face_target(position_world: Vector3) -> void:
+	if not face_travel_direction:
+		return
+	var direction := Vector2(position_world.x - global_position.x, position_world.z - global_position.z)
+	if direction.length_squared() < 1.0e-8:
+		return
+	_target_yaw = Facing.yaw_facing(direction)
+	_has_face_target = true
+
+
+func clear_face_target() -> void:
+	_has_face_target = false
 
 
 func set_hit_points(hp: int, max_hp: int) -> void:
@@ -101,15 +123,9 @@ func is_selected() -> bool:
 
 
 func _process(delta: float) -> void:
-	if face_travel_direction:
-		_turn_toward_desired_yaw(delta)
-
-
-func _turn_toward_desired_yaw(delta: float) -> void:
-	rotation.y = rotate_toward(
-		rotation.y, _desired_yaw, deg_to_rad(turn_degrees_per_second) * delta
-	)
-
-
-static func _yaw_facing(heading: Vector2) -> float:
-	return atan2(-heading.x, -heading.y)
+	if not face_travel_direction:
+		return
+	if _walking:
+		rotation.y = Facing.turn_toward(rotation.y, _desired_yaw, turn_degrees_per_second, delta)
+	elif _has_face_target:
+		rotation.y = Facing.turn_toward(rotation.y, _target_yaw, face_target_degrees_per_second, delta)

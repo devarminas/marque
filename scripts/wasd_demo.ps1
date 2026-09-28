@@ -3,7 +3,9 @@ param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
     [string] $OutDir = (Join-Path ([System.IO.Path]::GetTempPath()) "marque-wasd"),
     [int] $ReadyTimeoutSeconds = 20,
-    [int] $ClientTimeoutSeconds = 90
+    [int] $ClientTimeoutSeconds = 90,
+    [switch] $ObserveYaw,
+    [switch] $FacingOff
 )
 
 Set-StrictMode -Version Latest
@@ -78,12 +80,16 @@ try {
     if (-not $wsUrl) { throw "server_started not seen within ${ReadyTimeoutSeconds}s" }
     Write-Host "SERVER $wsUrl"
 
-    $client = Start-Process -FilePath $Godot -ArgumentList @(
+    $clientArgs = @(
         "--path", $clientDir,
         "--",
         "--server", $wsUrl,
         "--wasd-shots", $shotsPrefix
-    ) -RedirectStandardOutput $clientOut -RedirectStandardError $clientErr -PassThru
+    )
+    if ($ObserveYaw -or $FacingOff) { $clientArgs += "--wasd-observe-yaw" }
+    if ($FacingOff) { $clientArgs += "--wasd-facing-off" }
+    $client = Start-Process -FilePath $Godot -ArgumentList $clientArgs `
+        -RedirectStandardOutput $clientOut -RedirectStandardError $clientErr -PassThru
 
     $client.WaitForExit($ClientTimeoutSeconds * 1000) | Out-Null
     if (-not $client.HasExited) {
@@ -101,9 +107,19 @@ try {
     $displacement = $null
     $posLines = 0
     $wishOk = $false
+    $yawTargetRequest = $false
+    $yawWalking = $false
+    $yawHalt = $false
+    $yawFacingOff = $false
     if (Test-Path $clientOut) {
         foreach ($line in Get-Content $clientOut) {
             if ($line -match '^DEMO pos ') { $posLines++ }
+            if ($line -match '^DEMO yaw target_request target=\d+ before=[-0-9.]+ after=[-0-9.]+ target_yaw=[-0-9.]+ facing_off=(true|false)$') {
+                $yawTargetRequest = $true
+                $yawFacingOff = $Matches[1] -eq "true"
+            }
+            if ($line -match '^DEMO yaw walking yaw=[-0-9.]+ pose=[-0-9.]+,[-0-9.]+ displacement=[0-9.]+ wish=[-0-9.]+,[-0-9.]+$') { $yawWalking = $true }
+            if ($line -match '^DEMO yaw halt yaw=[-0-9.]+ held_from=[-0-9.]+$') { $yawHalt = $true }
             if ($line -match '^DEMO move_displacement ([0-9.]+)') {
                 $displacement = [double]$Matches[1]
             }
@@ -118,6 +134,10 @@ try {
         Add-Failure "DEMO move_displacement=$displacement, want >= 1.5"
     }
     if (-not $wishOk) { Add-Failure "missing DEMO wish_ok" }
+    if (($ObserveYaw -or $FacingOff) -and (-not $yawTargetRequest -or -not $yawWalking -or -not $yawHalt)) {
+        Add-Failure "missing DEMO target-request, walking, or halt yaw observations"
+    }
+    if ($FacingOff -and -not $yawFacingOff) { Add-Failure "missing facing_off=true yaw observation" }
 
     $moveEvents = 0
     $nonzeroMoves = 0

@@ -45,6 +45,7 @@ var _cooldown_updates: Array = []
 var _welcome_cooldowns: Array = []
 var _ticks_received := 0
 var _sweep_previous_remaining := -1
+var _yaw_samples := false
 
 
 func run(
@@ -52,6 +53,7 @@ func run(
 	session: SessionScript,
 	cast_bar: CastBarScript,
 	prefix: String,
+	yaw_samples: bool = false,
 ) -> int:
 	_root = root
 	_tree = root.get_tree()
@@ -59,6 +61,7 @@ func run(
 	_cast_bar = cast_bar
 	_hotbar = _session.get("hotbar") as HotbarScript
 	_prefix = prefix
+	_yaw_samples = yaw_samples
 
 	_session.cast_effect_played.connect(_on_cast_effect)
 	var net: Node = _session.get("net")
@@ -118,6 +121,12 @@ func run(
 	return 0
 
 
+func _yaw_advanced(before: float, mid: float, wanted: float) -> bool:
+	var start_distance := absf(angle_difference(before, wanted))
+	var mid_distance := absf(angle_difference(mid, wanted))
+	return absf(angle_difference(before, mid)) > 0.01 and mid_distance < start_distance and mid_distance > 0.01
+
+
 func _press_ability(ability_id: String) -> void:
 	if _hotbar == null:
 		_fail("hotbar is unavailable for the demo press")
@@ -160,6 +169,8 @@ func _cast_resolve(hostile_id: int) -> bool:
 	var mana_before := _session.mana_for(_session.own_id()).x
 	if mana_before < 0:
 		mana_before = 100
+	var local_avatar: Node3D = _session.get("_local")
+	var yaw_before := local_avatar.rotation.y if _yaw_samples and local_avatar != null else 0.0
 	_press_ability(FIREBALL)
 	print("DEMO cast %s %d" % [FIREBALL, hostile_id])
 	if not await _wait_until(
@@ -170,6 +181,17 @@ func _cast_resolve(hostile_id: int) -> bool:
 		_fail("cast bar never became visible for resolve cast")
 		return false
 	print("DEMO castbar %s visible=1" % FIREBALL)
+	if _yaw_samples and local_avatar != null:
+		for _frame in 4:
+			await _tree.process_frame
+		var target_body: Node3D = (_session.get("_npcs") as Dictionary).get(hostile_id)
+		var wanted_yaw := atan2(
+			-(target_body.global_position.x - local_avatar.global_position.x),
+			-(target_body.global_position.z - local_avatar.global_position.z),
+		)
+		if not _yaw_advanced(yaw_before, local_avatar.rotation.y, wanted_yaw):
+			return _fail("cast yaw did not turn gradually toward the hostile target")
+		print("DEMO yaw cast before=%.5f mid=%.5f" % [yaw_before, local_avatar.rotation.y])
 	if not await _wait_cast_fx(hostile_id, FIREBALL):
 		_fail("resolve fireball never played cast effect")
 		return false
@@ -186,6 +208,15 @@ func _cast_resolve(hostile_id: int) -> bool:
 		_fail("resolve cast did not spend mana (%d -> %d)" % [mana_before, mana_after])
 		return false
 	print("DEMO castok %s %d mana=%d" % [FIREBALL, hostile_id, mana_after])
+	if _yaw_samples and local_avatar != null:
+		var target_body: Node3D = (_session.get("_npcs") as Dictionary).get(hostile_id)
+		var wanted_yaw := atan2(
+			-(target_body.global_position.x - local_avatar.global_position.x),
+			-(target_body.global_position.z - local_avatar.global_position.z),
+		)
+		if absf(angle_difference(local_avatar.rotation.y, wanted_yaw)) >= absf(angle_difference(yaw_before, wanted_yaw)):
+			return _fail("cast yaw after resolve was not closer to the target")
+		print("DEMO yaw cast after=%.5f" % local_avatar.rotation.y)
 	return true
 
 
