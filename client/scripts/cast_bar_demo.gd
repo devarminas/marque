@@ -7,6 +7,7 @@ const HotbarScript := preload("res://scripts/hotbar.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const DemoAdminGive := preload("res://scripts/demo_admin_give.gd")
 const AbilityDefs := preload("res://scripts/ability_defs.gd")
+const ErrorHudScript := preload("res://scripts/error_hud.gd")
 
 const FIREBALL := "fireball"
 const MAGE_CLASS := "mage"
@@ -92,6 +93,10 @@ func run(
 
 	if _sweep_demo_requested():
 		return await _run_sweep_demo(hostile_id)
+	if _oom_demo_requested():
+		return await _run_oom_demo(hostile_id)
+	if _refusal_demo_requested():
+		return await _run_refusal_demo(hostile_id)
 	if _cooldown_proof_requested():
 		return await _run_cooldown_proof(hostile_id)
 
@@ -323,6 +328,96 @@ func _cooldown_proof_requested() -> bool:
 	return OS.get_cmdline_user_args().has("--cast-bar-cooldown-proof")
 
 
+func _refusal_demo_requested() -> bool:
+	return OS.get_cmdline_user_args().has("--cast-bar-refusal-demo")
+
+
+func _oom_demo_requested() -> bool:
+	return OS.get_cmdline_user_args().has("--cast-bar-oom-demo")
+
+
+func _run_oom_demo(hostile_id: int) -> int:
+	var net: Node = _session.get("net")
+	var error_hud: ErrorHudScript = _session.get("_error_hud") as ErrorHudScript
+	var begins_before := _phase_count(FIREBALL, "begin")
+	var refusals_before := _refusals.size()
+	var out_of_range_id := _out_of_range_hostile_id()
+	if out_of_range_id == 0:
+		return _fail("no hostile NPC is reliably outside fireball range")
+	print("DEMO select %d hostile out_of_range" % out_of_range_id)
+	if net == null or net.send_cast(FIREBALL, out_of_range_id) != OK:
+		return _fail("could not send the out-of-range cast intent")
+	if not await _wait_until(func() -> bool: return _refusals.size() > refusals_before, CASTBAR_TIMEOUT_MSEC):
+		return _fail("out-of-range cast refusal did not arrive")
+	if String(_refusals.back().get("reason", "")) != "out_of_range":
+		return _fail("expected out_of_range decoded reason, got %s" % [_refusals.back()])
+	if error_hud == null or error_hud.text != "Out of range":
+		return _fail("out-of-range HUD did not display its reason-keyed copy")
+	print("DEMO errortext %s" % error_hud.text)
+	var range_tint: Color = error_hud.message_label.get_theme_color("font_color")
+	print("DEMO errortint out_of_range %s" % range_tint.to_html())
+	if not await _capture(1):
+		return 1
+	refusals_before = _refusals.size()
+	var mana_before := _session.mana_for(_session.own_id()).x
+	if net.send_cast(FIREBALL, hostile_id) != OK:
+		return _fail("could not send the insufficient-mana cast intent")
+	if not await _wait_until(func() -> bool: return _refusals.size() > refusals_before, CASTBAR_TIMEOUT_MSEC):
+		return _fail("insufficient-mana cast refusal did not arrive")
+	if String(_refusals.back().get("reason", "")) != "insufficient_mana":
+		return _fail("expected insufficient_mana decoded reason, got %s" % [_refusals.back()])
+	if error_hud == null or error_hud.text != "Not enough mana":
+		return _fail("insufficient-mana HUD did not display its reason-keyed copy")
+	var mana_tint: Color = error_hud.message_label.get_theme_color("font_color")
+	if mana_tint == range_tint:
+		return _fail("out-of-mana and out-of-range tints are not distinct")
+	print("DEMO errortint insufficient_mana %s" % mana_tint.to_html())
+	if mana_before >= 25 or _session.mana_for(_session.own_id()).x != mana_before:
+		return _fail("insufficient-mana refusal changed mana (before=%d after=%d)" % [mana_before, _session.mana_for(_session.own_id()).x])
+	if _phase_count(FIREBALL, "begin") != begins_before:
+		return _fail("a refused OOR/OOM press emitted cast_begin")
+	print("DEMO refusal mana_before=%d mana_after=%d begins=%d" % [mana_before, _session.mana_for(_session.own_id()).x, _phase_count(FIREBALL, "begin")])
+	print("DEMO errortext %s" % error_hud.text)
+	if not await _capture(2):
+		return 1
+	await _wait_msec(int(error_hud.linger.wait_time * 1000.0) + 100)
+	if error_hud.visible or not error_hud.text.is_empty():
+		return _fail("insufficient-mana HUD did not clear after authored linger")
+	print("DEMO errorcleared")
+	print("DEMO done")
+	return 0
+
+
+func _out_of_range_hostile_id() -> int:
+	var local: Node3D = _session.avatar_for(_session.own_id())
+	if local == null:
+		return 0
+	var candidates: Dictionary = _session.get("_npcs")
+	var furthest_id := 0
+	var furthest_distance := 8.0
+	for value: Variant in candidates.keys():
+		var npc: NpcDummyScript = candidates[value] as NpcDummyScript
+		if npc == null or npc.faction != NpcDummyScript.FactionHostile:
+			continue
+		var distance := local.global_position.distance_to(npc.global_position)
+		if distance > furthest_distance:
+			furthest_distance = distance
+			furthest_id = int(value)
+	return furthest_id
+
+
+func _run_refusal_demo(hostile_id: int) -> int:
+	if not await _cast_resolve(hostile_id):
+		return 1
+	if not await _refuse_inside_cooldown(FIREBALL):
+		return 1
+	if not await _capture(1):
+		return 1
+	await _wait_msec(HOLD_MSEC)
+	print("DEMO done")
+	return 0
+
+
 func _run_cooldown_proof(hostile_id: int) -> int:
 	print("DEMO cooldown first_ready %s" % FIREBALL)
 	if not await _cast_resolve(hostile_id):
@@ -407,9 +502,19 @@ func _refuse_inside_cooldown(ability_id: String) -> bool:
 		_fail("%s cooldown press produced no refusal frame" % ability_id)
 		return false
 	var refusal: Dictionary = _refusals.back()
-	if String(refusal.get("re", "")) != "cast" or String(refusal.get("message", "")) != "ability is on cooldown":
-		_fail("%s refusal was not the cooldown wire error: %s" % [ability_id, refusal])
+	if String(refusal.get("re", "")) != "cast" or String(refusal.get("reason", "")) != "cooldown":
+		_fail("%s refusal was not decoded with cooldown reason: %s" % [ability_id, refusal])
 		return false
+	var error_hud: ErrorHudScript = _session.get("_error_hud") as ErrorHudScript
+	if error_hud == null or not error_hud.visible or error_hud.text != "Not ready yet":
+		_fail("cooldown error HUD did not show its reason-keyed text")
+		return false
+	print("DEMO errortext %s" % error_hud.text)
+	await _wait_msec(int(error_hud.linger.wait_time * 1000.0) + 100)
+	if error_hud.visible or not error_hud.text.is_empty():
+		_fail("error HUD did not clear after authored linger")
+		return false
+	print("DEMO errorcleared")
 	await _wait_msec(100)
 	if _phase_count(ability_id, "begin") != begins_before:
 		_fail("%s cooldown refusal began a cast" % ability_id)
@@ -544,9 +649,9 @@ func _on_cast_phase(id: int, ability_id: String, target_id: int, phase: String) 
 	print("DEMO castphase %s %s" % [ability_id, phase])
 
 
-func _on_server_error(re: String, message: String) -> void:
-	_refusals.append({"re": re, "message": message})
-	print("DEMO castrefusal %s %s" % [re, message])
+func _on_server_error(reason: String, re: String, message: String) -> void:
+	_refusals.append({"reason": reason, "re": re, "message": message})
+	print("DEMO castrefusal reason=%s re=%s msg=%s" % [reason, re, message])
 
 
 func _on_cast_cooldown(id: int, ability_id: String, cooldown: int) -> void:

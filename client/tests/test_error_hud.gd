@@ -52,9 +52,11 @@ func _ready() -> void:
 
 	_test_the_hud_is_authored_in_the_scene()
 	_test_the_class_gate_detail_maps_to_the_player_text()
+	_test_cast_refusals_map_by_reason()
 	_test_use_refusals_map_by_reason()
 	_test_any_other_refusal_passes_through()
 	await _test_a_class_gate_error_frame_paints_the_hud()
+	await _test_a_cast_error_frame_uses_its_reason()
 	await _test_an_unmapped_gather_error_frame_shows_the_server_text()
 	await _test_a_use_error_frame_paints_the_hud()
 	_test_clearing_empties_and_hides()
@@ -98,68 +100,83 @@ func _test_the_hud_is_authored_in_the_scene() -> void:
 
 func _test_the_class_gate_detail_maps_to_the_player_text() -> void:
 	_check(
-		SessionScript.player_refusal_text("gather", CLASS_GATE_DETAIL) == NO_TOOL_TEXT,
+		SessionScript.player_refusal_text("", "gather", CLASS_GATE_DETAIL) == NO_TOOL_TEXT,
 		'the class gate detail reads "%s", got "%s"'
-		% [NO_TOOL_TEXT, SessionScript.player_refusal_text("gather", CLASS_GATE_DETAIL)],
+		% [NO_TOOL_TEXT, SessionScript.player_refusal_text("", "gather", CLASS_GATE_DETAIL)],
 	)
+
+
+func _test_cast_refusals_map_by_reason() -> void:
+	var oor := SessionScript.player_refusal_text("out_of_range", "cast", "out of range")
+	var oom := SessionScript.player_refusal_text("insufficient_mana", "cast", "not enough mana")
+	var cooldown := SessionScript.player_refusal_text("cooldown", "cast", "cooldown")
+	_check(oor == "Out of range", "out_of_range copy is keyed by reason")
+	_check(oom == "Not enough mana", "insufficient_mana copy is keyed by reason")
+	_check(cooldown == "Not ready yet", "cooldown copy is keyed by reason")
+	_check(oor != oom, "out of range and mana copy are distinct")
+	_error_hud.show_refusal(oor, "out_of_range")
+	var range_color := _error_hud.message_label.get_theme_color("font_color")
+	_error_hud.show_refusal(oom, "insufficient_mana")
+	var mana_color := _error_hud.message_label.get_theme_color("font_color")
+	_check(range_color != mana_color, "out of range and mana tints are distinct")
 
 
 func _test_use_refusals_map_by_reason() -> void:
 	_check(
-		SessionScript.player_refusal_text("use", "that cannot be crafted") == "no recipe for that",
+		SessionScript.player_refusal_text("", "use", "that cannot be crafted") == "no recipe for that",
 		'no_recipe use reads "no recipe for that", got "%s"'
-		% SessionScript.player_refusal_text("use", "that cannot be crafted"),
+		% SessionScript.player_refusal_text("", "use", "that cannot be crafted"),
 	)
 	_check(
-		SessionScript.player_refusal_text("use", "too far from that station")
+		SessionScript.player_refusal_text("", "use", "too far from that station")
 		== "too far from that station",
 		"out_of_range use stays distinct, got \"%s\""
-		% SessionScript.player_refusal_text("use", "too far from that station"),
+		% SessionScript.player_refusal_text("", "use", "too far from that station"),
 	)
 	_check(
-		SessionScript.player_refusal_text("use", "inventory is full") == "inventory is full",
+		SessionScript.player_refusal_text("", "use", "inventory is full") == "inventory is full",
 		'inventory_full use stays honest, got "%s"'
-		% SessionScript.player_refusal_text("use", "inventory is full"),
+		% SessionScript.player_refusal_text("", "use", "inventory is full"),
 	)
 	_check(
-		SessionScript.player_refusal_text("use", "that slot is empty") == "that slot is empty",
+		SessionScript.player_refusal_text("", "use", "that slot is empty") == "that slot is empty",
 		'empty_slot use stays honest, got "%s"'
-		% SessionScript.player_refusal_text("use", "that slot is empty"),
+		% SessionScript.player_refusal_text("", "use", "that slot is empty"),
 	)
 	_check(
-		SessionScript.player_refusal_text("use", "no such slot: 99 is outside 0 to 27")
+		SessionScript.player_refusal_text("", "use", "no such slot: 99 is outside 0 to 27")
 		== "that slot is not in the bag",
 		'no_such_slot use reads "that slot is not in the bag", got "%s"'
-		% SessionScript.player_refusal_text("use", "no such slot: 99 is outside 0 to 27"),
+		% SessionScript.player_refusal_text("", "use", "no such slot: 99 is outside 0 to 27"),
 	)
 	_check(
-		SessionScript.player_refusal_text("use", "missing sticks") == "missing Sticks",
+		SessionScript.player_refusal_text("", "use", "missing sticks") == "missing Sticks",
 		'missing_mat use names Sticks, got "%s"'
-		% SessionScript.player_refusal_text("use", "missing sticks"),
+		% SessionScript.player_refusal_text("", "use", "missing sticks"),
 	)
 	_check(
-		SessionScript.player_refusal_text("gather", "that cannot be crafted")
+		SessionScript.player_refusal_text("", "gather", "that cannot be crafted")
 		== "that cannot be crafted",
 		"use mapping does not rewrite gather copy, got \"%s\""
-		% SessionScript.player_refusal_text("gather", "that cannot be crafted"),
+		% SessionScript.player_refusal_text("", "gather", "that cannot be crafted"),
 	)
 
 
 func _test_any_other_refusal_passes_through() -> void:
 	_check(
-		SessionScript.player_refusal_text("gather", DEPLETED_DETAIL) == DEPLETED_DETAIL,
+		SessionScript.player_refusal_text("", "gather", DEPLETED_DETAIL) == DEPLETED_DETAIL,
 		'another gather refusal keeps the server text, got "%s"'
-		% SessionScript.player_refusal_text("gather", DEPLETED_DETAIL),
+		% SessionScript.player_refusal_text("", "gather", DEPLETED_DETAIL),
 	)
 	_check(
-		SessionScript.player_refusal_text("move_to", NON_GATHER_DETAIL) == NON_GATHER_DETAIL,
+		SessionScript.player_refusal_text("", "move_to", NON_GATHER_DETAIL) == NON_GATHER_DETAIL,
 		'a non-gather refusal keeps the server text, got "%s"'
-		% SessionScript.player_refusal_text("move_to", NON_GATHER_DETAIL),
+		% SessionScript.player_refusal_text("", "move_to", NON_GATHER_DETAIL),
 	)
 	_check(
-		SessionScript.player_refusal_text("pickup", CLASS_GATE_DETAIL) == CLASS_GATE_DETAIL,
+		SessionScript.player_refusal_text("", "pickup", CLASS_GATE_DETAIL) == CLASS_GATE_DETAIL,
 		"the class gate detail is only special under gather, got \"%s\""
-		% SessionScript.player_refusal_text("pickup", CLASS_GATE_DETAIL),
+		% SessionScript.player_refusal_text("", "pickup", CLASS_GATE_DETAIL),
 	)
 
 
@@ -171,6 +188,17 @@ func _test_a_class_gate_error_frame_paints_the_hud() -> void:
 	)
 	_check(_error_hud.visible, "and shows the hud")
 	_check(_linger != null and not _linger.is_stopped(), "and starts the linger timer")
+
+
+func _test_a_cast_error_frame_uses_its_reason() -> void:
+	await _feed('{"error":{"re":"cast","msg":"not enough mana","reason":"insufficient_mana"}}')
+	_check(_error_hud.text == "Not enough mana", "cast error copy uses the decoded reason")
+	_check(_error_hud.visible, "cast refusal makes error HUD visible")
+	_check(_linger != null and not _linger.is_stopped(), "cast refusal starts scene-authored linger")
+	_check(
+		_error_hud.message_label.get_theme_color("font_color") == _error_hud.mana_tint,
+		"mana refusal applies mana tint",
+	)
 
 
 func _test_an_unmapped_gather_error_frame_shows_the_server_text() -> void:

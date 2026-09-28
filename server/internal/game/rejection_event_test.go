@@ -10,7 +10,7 @@ func TestEveryClientMessageHasItsOwnRejectionEvent(t *testing.T) {
 	seen := map[string]string{}
 	for _, m := range []mnet.ClientMessage{
 		mnet.MoveTo{}, mnet.Pickup{}, mnet.Drop{}, mnet.Equip{}, mnet.Unequip{}, mnet.Gather{}, mnet.Use{},
-		mnet.Attack{}, mnet.Respawn{}, mnet.Talk{}, mnet.DialogOptionPick{}, mnet.Give{},
+		mnet.Attack{}, mnet.Respawn{}, mnet.Cast{}, mnet.Talk{}, mnet.DialogOptionPick{}, mnet.Give{},
 		mnet.PartyInvite{}, mnet.PartyAccept{}, mnet.PartyDecline{}, mnet.PartyLeave{}, mnet.PartyKick{},
 		mnet.Admin{},
 	} {

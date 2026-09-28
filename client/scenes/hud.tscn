@@ -874,6 +874,10 @@ mouse_filter = 2
 script = ExtResource("17_error_hud")
 message_label = NodePath("MessageLabel")
 linger = NodePath("Linger")
+range_tint = Color(1, 0.52, 0.28, 1)
+mana_tint = Color(0.75, 0.48, 1, 1)
+cooldown_tint = Color(1, 0.82, 0.32, 1)
+default_tint = Color(0.98, 0.74, 0.36, 1)
 
 [node name="MessageLabel" type="Label" parent="ErrorHud" unique_id=946272044]
 layout_mode = 1

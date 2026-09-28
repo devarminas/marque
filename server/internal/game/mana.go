@@ -45,6 +45,9 @@ func (w *World) refundMana(p *player, amount int) {
 }
 
 func (w *World) regenMana() {
+	if w.startMana >= 0 {
+		return
+	}
 	for _, p := range w.order {
 		if p.dead() || p.mana >= p.attrs.maxMana() {
 			continue

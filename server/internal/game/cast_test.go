@@ -50,6 +50,19 @@ func TestCastFireballDamagesHostileInRange(t *testing.T) {
 	}
 }
 
+func TestStartManaAllowsExplicitZeroForJoiningPlayers(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetStartMana(0)
+	alice := pw.joinBare()
+	if alice.mana != 0 {
+		t.Fatalf("starting mana=%d, want explicit zero", alice.mana)
+	}
+	pw.w.regenMana()
+	if alice.mana != 0 {
+		t.Fatalf("demo start-mana zero regenerated to %d", alice.mana)
+	}
+}
+
 func TestCooldownsTrackAbilityReadyTicks(t *testing.T) {
 	var got cooldowns
 	if !got.ready("fireball", 0) {
@@ -260,6 +273,9 @@ func TestCastRefusesInsufficientMana(t *testing.T) {
 	if len(got) != 1 || got[0]["reason"] != string(mnet.ReasonInsufficientMana) {
 		t.Fatalf("cast_rejected=%v, want insufficient_mana", got)
 	}
+	if len(pw.events(EvCastBegin)) != 0 {
+		t.Fatalf("insufficient-mana refusal began a cast: %v", pw.events(EvCastBegin))
+	}
 }
 
 func TestCastRefusesOutOfRange(t *testing.T) {
@@ -279,6 +295,9 @@ func TestCastRefusesOutOfRange(t *testing.T) {
 	got := pw.events(EvCastRejected)
 	if len(got) != 1 || got[0]["reason"] != string(mnet.ReasonOutOfRange) {
 		t.Fatalf("cast_rejected=%v, want out_of_range", got)
+	}
+	if len(pw.events(EvCastBegin)) != 0 {
+		t.Fatalf("out-of-range refusal began a cast: %v", pw.events(EvCastBegin))
 	}
 }
 

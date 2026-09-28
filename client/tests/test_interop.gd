@@ -131,8 +131,8 @@ class Peer:
 	) -> void:
 		paths.append({"id": id, "start_tick": start_tick, "points": points, "speed": speed})
 
-	func _on_server_error(re: String, message: String) -> void:
-		errors.append({"re": re, "msg": message})
+	func _on_server_error(reason: String, re: String, message: String) -> void:
+		errors.append({"reason": reason, "re": re, "msg": message})
 
 	func _on_unknown_message(key: String) -> void:
 		unknown_keys.append(key)
@@ -638,7 +638,7 @@ func _test_a_no_tool_gather_reads_as_no_usable_tool(a: Peer) -> bool:
 		'the refusal names gather, got "%s"' % String(failure["re"]),
 	)
 	var rendered := SessionScript.player_refusal_text(
-		String(failure["re"]), String(failure["msg"])
+		String(failure.get("reason", "")), String(failure["re"]), String(failure["msg"])
 	)
 	_check(
 		rendered == NO_TOOL_TEXT,
