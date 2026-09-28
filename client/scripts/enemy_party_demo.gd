@@ -18,6 +18,7 @@ const SCREENSHOT_WARMUP_FRAMES := 15
 const JOIN_TIMEOUT_MSEC := 25000
 const STEP_TIMEOUT_MSEC := 45000
 const HOLD_MSEC := 800
+const OUTGOING_READY_MSEC := 1200
 const CLASS_ID := "knight"
 
 const KNIGHT_KIT := [
@@ -37,6 +38,10 @@ var _dialog: DialogPanelScript
 var _party: PartyPanelScript
 var _prefix: String
 var _role: String
+var _outgoing_only := false
+var _remote_targets := {}
+var _remote_swings: Array[Dictionary] = []
+var _local_swings: Array[Dictionary] = []
 
 
 func run(
@@ -47,6 +52,7 @@ func run(
 	party: Node,
 	prefix: String,
 	role: String,
+	outgoing_only: bool = false,
 ) -> int:
 	_root = root
 	_tree = root.get_tree()
@@ -58,6 +64,10 @@ func run(
 		return _fail("PartyPanel missing party_panel.gd")
 	_prefix = prefix
 	_role = role
+	_outgoing_only = outgoing_only
+	var net: Node = _session.get("_net")
+	net.swing_observed.connect(_on_swing_observed)
+	net.swing_hit_observed.connect(_on_swing_hit_observed)
 
 	if _role != ROLE_LEADER and _role != ROLE_MEMBER:
 		return _fail("role must be leader or member, got %s" % _role)
@@ -92,6 +102,9 @@ func run(
 		if not await _party_as_member():
 			return 1
 	print("DEMO party %d members=%d" % [_party.party_id(), _party.members().size()])
+
+	if _outgoing_only:
+		return await _prove_outgoing_only()
 
 	_session.request_talk(giver_id)
 	print("DEMO talk %d" % giver_id)
@@ -177,6 +190,76 @@ func _party_as_member() -> bool:
 			return true
 		await _tree.process_frame
 	return _fail_bool("member never joined the party")
+
+
+func _on_swing_observed(id: int, target: int, _weapon: String) -> void:
+	if id != _session.own_id():
+		_remote_targets[id] = target
+
+
+func _on_swing_hit_observed(id: int, amount: int, crit: bool, miss: bool) -> void:
+	if id == _session.own_id():
+		_local_swings.append({"actor": id, "amount": amount, "crit": crit, "miss": miss})
+		return
+	if not _remote_targets.has(id):
+		return
+	var target := int(_remote_targets[id])
+	var npcs: Dictionary = _session.get("_npcs")
+	if not npcs.has(target):
+		return
+	_remote_swings.append({
+		"actor": id, "target": target, "amount": amount, "crit": crit, "miss": miss,
+	})
+	print(
+		"DEMO remote_swing actor=%d target=%d amount=%d crit=%s miss=%s"
+		% [id, target, amount, str(crit).to_lower(), str(miss).to_lower()]
+	)
+
+
+func _prove_outgoing_only() -> int:
+	await _wait_msec(OUTGOING_READY_MSEC)
+	if _role == ROLE_LEADER:
+		var target := _first_hostile_imp()
+		if target <= 0:
+			return _fail("no hostile imp available for outgoing-only proof")
+		_session.request_attack(target)
+		print("DEMO outgoing_attack actor=%d target=%d" % [_session.own_id(), target])
+		if not await _wait_local_swing():
+			return _fail("no local server swing in outgoing-only proof")
+	else:
+		if not await _wait_remote_swing():
+			return _fail("no remote server swing in outgoing-only proof")
+	print("DEMO outgoing_only role=%s" % _role)
+	await _wait_msec(HOLD_MSEC)
+	print("DEMO done")
+	return 0
+
+
+func _first_hostile_imp() -> int:
+	var npcs: Dictionary = _session.get("_npcs")
+	for id: int in npcs.keys():
+		var body: NpcDummyScript = npcs[id]
+		if body != null and body.kind == NpcDummyScript.KindImp and body.faction == NpcDummyScript.FactionHostile:
+			return id
+	return 0
+
+
+func _wait_local_swing() -> bool:
+	var deadline := Time.get_ticks_msec() + STEP_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		if not _local_swings.is_empty():
+			return true
+		await _tree.process_frame
+	return false
+
+
+func _wait_remote_swing() -> bool:
+	var deadline := Time.get_ticks_msec() + STEP_TIMEOUT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		if not _remote_swings.is_empty():
+			return true
+		await _tree.process_frame
+	return false
 
 
 func _find_imp_quest_giver() -> int:

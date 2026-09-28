@@ -390,10 +390,13 @@ func _run_dummy_attack_demo(args: Array) -> void:
 		push_error("main.tscn is missing Session")
 		get_tree().quit(1)
 		return
+	if "--fct-off" in args:
+		session.set_fct_disabled(true)
 	var demo := DummyAttackDemoScript.new()
 	var code: int = await demo.run(
 		self, session, "--expect-white-miss" in args,
-		_argument_after(args, "--miss-shot"), "--miss-review" in args
+		_argument_after(args, "--miss-shot"), _argument_after(args, "--fct-white-shot"),
+		_argument_after(args, "--fct-crit-shot"), _argument_after(args, "--fct-review-prefix")
 	)
 	get_tree().quit(code)
 
@@ -446,7 +449,9 @@ func _run_enemy_party_demo(args: Array) -> void:
 		return
 
 	var demo := EnemyPartyDemoScript.new()
-	var code: int = await demo.run(self, session, inventory, dialog, party, prefix, role)
+	var code: int = await demo.run(
+		self, session, inventory, dialog, party, prefix, role, "--outgoing-only" in args
+	)
 	get_tree().quit(code)
 
 

@@ -33,6 +33,7 @@ const TREE_FREE_SUITES: Array = [
 	{"name": "gear look", "script": preload("res://tests/test_gear_look.gd")},
 	{"name": "clip director", "script": preload("res://tests/test_clip_director.gd")},
 	{"name": "presentation protocol", "script": preload("res://tests/test_presentation_protocol.gd")},
+	{"name": "floating combat text", "script": preload("res://tests/test_floating_combat_text.gd")},
 ]
 
 const SCENE_SUITES: Array = [
@@ -69,6 +70,7 @@ const SCENE_SUITES: Array = [
 	{"name": "world map", "scene": "res://tests/test_world_map.tscn"},
 	{"name": "player character prop", "scene": "res://tests/test_player_character_prop.tscn"},
 	{"name": "art assets", "scene": "res://tests/test_art_assets.tscn"},
+	{"name": "fct scene", "scene": "res://tests/test_fct_scene.tscn"},
 ]
 
 const Assertions := preload("res://tests/assertions.gd")

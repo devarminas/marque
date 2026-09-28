@@ -24,9 +24,13 @@ var _root: Node
 var _session: SessionScript
 var _refuses: Array = []
 var _swings: Array = []
+var _hp_frame_ids: Array = []
 
 
-func run(root: Node, session: SessionScript, expect_white_miss: bool = false, shot_path: String = "", review: bool = false) -> int:
+func run(
+	root: Node, session: SessionScript, expect_white_miss: bool = false, shot_path: String = "",
+	white_shot_path: String = "", crit_shot_path: String = "", review_prefix: String = ""
+) -> int:
 	_root = root
 	_tree = root.get_tree()
 	_session = session
@@ -34,6 +38,10 @@ func run(root: Node, session: SessionScript, expect_white_miss: bool = false, sh
 	net.swing_hit_observed.connect(
 		func(id: int, amount: int, crit: bool, miss: bool) -> void:
 			_swings.append({"id": id, "amount": amount, "crit": crit, "miss": miss})
+	)
+	net.hp_changed.connect(
+		func(id: int, _hp: int, _max_hp: int) -> void:
+			_hp_frame_ids.append(id)
 	)
 	_session.attack_refused.connect(
 		func(id: int, reason: String) -> void:
@@ -68,6 +76,7 @@ func run(root: Node, session: SessionScript, expect_white_miss: bool = false, sh
 	if friendly_id == 0 or hostile_id == 0:
 		return _fail("missing friendly or hostile practice dummy after join")
 
+	_hp_frame_ids.clear()
 	_refuses.clear()
 	if not await _right_click_npc(friendly_id):
 		return _fail("could not right-click friendly dummy %d" % friendly_id)
@@ -107,36 +116,53 @@ func run(root: Node, session: SessionScript, expect_white_miss: bool = false, sh
 			if shot_error != OK:
 				return _fail("miss screenshot failed: %d" % shot_error)
 			print("DEMO missshot %s" % shot_path)
-		if review:
-			for frame in range(30):
-				await RenderingServer.frame_post_draw
-				var review_path := "%s-%02d.png" % [shot_path.get_basename(), frame]
-				var review_error := _root.get_viewport().get_texture().get_image().save_png(review_path)
-				if review_error != OK:
-					return _fail("miss review frame failed: %d" % review_error)
-				await _wait_msec(1000)
-			print("DEMO missframes 30")
+		if not review_prefix.is_empty():
+			if not await _capture_review_frames(review_prefix, 0, 150):
+				return _fail("miss review frame capture failed")
 		else:
 			await _wait_msec(6000)
 		if _session.hit_points_for(hostile_id).x != hostile_hp_before:
 			return _fail("miss changed dummy hp from %d to %d" % [hostile_hp_before, _session.hit_points_for(hostile_id).x])
+		var miss_hp_frames := _target_hp_frame_count(hostile_id)
+		if miss_hp_frames != 0:
+			return _fail("miss received %d target HP frame(s)" % miss_hp_frames)
 		for swing: Dictionary in _swings:
 			if swing["id"] == _session.own_id() and (not swing["miss"] or swing["crit"] or swing["amount"] != 0):
 				return _fail("white swing was not a miss: %s" % [swing])
 		print("DEMO misshp %d unchanged=%d" % [hostile_id, hostile_hp_before])
+		print("DEMO hpframe %d count=%d" % [hostile_id, miss_hp_frames])
 	else:
 		if not await _wait_hp_drop(hostile_id, hostile_hp_before):
 			return _fail("hostile dummy hp never dropped after right-click attack")
+		var white_hp_frames := _target_hp_frame_count(hostile_id)
+		if white_hp_frames < 1:
+			return _fail("white hit received no target HP frame")
 		print("DEMO attackok %d %d" % [hostile_id, _session.hit_points_for(hostile_id).x])
+		print("DEMO hpframe %d count=%d" % [hostile_id, white_hp_frames])
+		if not white_shot_path.is_empty():
+			if not await _capture(white_shot_path):
+				return _fail("white float screenshot failed")
+		if not review_prefix.is_empty():
+			if not await _capture_review_frames(review_prefix, 0, 10):
+				return _fail("white review frame capture failed")
+		if not crit_shot_path.is_empty():
+			if not await _wait_swing_crit():
+				return _fail("no server crit after forced crit setup")
+			if not await _capture(crit_shot_path):
+				return _fail("crit float screenshot failed")
+			if not review_prefix.is_empty():
+				if not await _capture_review_frames(review_prefix, 10, 140):
+					return _fail("crit review frame capture failed")
 
-		var hp_after_first := _session.hit_points_for(hostile_id).x
-		await _wait_msec(6000)
-		var hp_after_sustain := _session.hit_points_for(hostile_id).x
-		if hp_after_sustain <= 0:
-			return _fail("hostile dummy died during sustained attack: hp=%d" % hp_after_sustain)
-		if hp_after_sustain >= hp_after_first:
-			return _fail("hostile dummy hp did not keep falling: %d -> %d" % [hp_after_first, hp_after_sustain])
-		print("DEMO immortal %d hp=%d" % [hostile_id, hp_after_sustain])
+		if review_prefix.is_empty():
+			var hp_after_first := _session.hit_points_for(hostile_id).x
+			await _wait_msec(6000)
+			var hp_after_sustain := _session.hit_points_for(hostile_id).x
+			if hp_after_sustain <= 0:
+				return _fail("hostile dummy died during sustained attack: hp=%d" % hp_after_sustain)
+			if hp_after_sustain >= hp_after_first:
+				return _fail("hostile dummy hp did not keep falling: %d -> %d" % [hp_after_first, hp_after_sustain])
+			print("DEMO immortal %d hp=%d" % [hostile_id, hp_after_sustain])
 
 	await _wait_msec(HOLD_MSEC)
 	print("DEMO done")
@@ -216,12 +242,30 @@ func _has_practice_dummy_pair() -> bool:
 	return friendly and hostile
 
 
+func _target_hp_frame_count(id: int) -> int:
+	var count := 0
+	for frame_id: int in _hp_frame_ids:
+		if frame_id == id:
+			count += 1
+	return count
+
+
 func _wait_swing_miss() -> bool:
 	var deadline := Time.get_ticks_msec() + HIT_WAIT_MSEC
 	while Time.get_ticks_msec() < deadline:
 		for swing: Dictionary in _swings:
 			if swing["id"] == _session.own_id():
 				return swing["miss"] and not swing["crit"] and swing["amount"] == 0
+		await _tree.create_timer(SPIN_USEC / 1_000_000.0).timeout
+	return false
+
+
+func _wait_swing_crit() -> bool:
+	var deadline := Time.get_ticks_msec() + HIT_WAIT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		for swing: Dictionary in _swings:
+			if swing["id"] == _session.own_id() and swing["crit"] and not swing["miss"]:
+				return true
 		await _tree.create_timer(SPIN_USEC / 1_000_000.0).timeout
 	return false
 
@@ -234,6 +278,27 @@ func _wait_hp_drop(id: int, baseline: int) -> bool:
 			return true
 		await _tree.create_timer(SPIN_USEC / 1_000_000.0).timeout
 	return false
+
+
+func _capture(path: String) -> bool:
+	await RenderingServer.frame_post_draw
+	var error := _root.get_viewport().get_texture().get_image().save_png(path)
+	if error != OK:
+		return false
+	print("DEMO fctshot %s" % path)
+	return true
+
+
+func _capture_review_frames(prefix: String, start: int, count: int) -> bool:
+	for offset in range(count):
+		await RenderingServer.frame_post_draw
+		var path := "%s-%03d.png" % [prefix, start + offset]
+		var error := _root.get_viewport().get_texture().get_image().save_png(path)
+		if error != OK:
+			return false
+		await _wait_msec(100)
+	print("DEMO fctframes %d" % count)
+	return true
 
 
 func _wait_msec(msec: int) -> void:

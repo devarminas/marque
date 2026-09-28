@@ -250,9 +250,11 @@ type World struct {
 	npcOrder  []mnet.PlayerID
 	nextNpcID mnet.PlayerID
 
-	camps        []*camp
-	rng          *mrand.Rand
-	whiteMissPct int
+	camps                []*camp
+	rng                  *mrand.Rand
+	whiteMissPct         int
+	forceCritPct         int
+	forceCritAfterWhites int
 
 	byConn map[*mnet.Conn]*player
 
@@ -334,6 +336,20 @@ func (w *World) SetWhiteMissPct(pct int) {
 		panic(fmt.Sprintf("game: white miss percentage %d outside [0,100]", pct))
 	}
 	w.whiteMissPct = pct
+}
+
+func (w *World) SetForceCritPct(pct int) {
+	if pct < 0 || pct > 100 {
+		panic(fmt.Sprintf("game: force-crit percentage %d outside [0,100]", pct))
+	}
+	w.forceCritPct = pct
+}
+
+func (w *World) SetForceCritAfterWhites(count int) {
+	if count < 0 {
+		panic(fmt.Sprintf("game: force-crit white count %d must be non-negative", count))
+	}
+	w.forceCritAfterWhites = count
 }
 
 func (w *World) SetNPCArchetypes(c *npcdef.Catalog) {

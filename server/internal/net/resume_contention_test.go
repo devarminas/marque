@@ -1,9 +1,7 @@
 package net_test
 
-
 import (
 	"math"
-	"sync"
 	"testing"
 	"time"
 
@@ -82,16 +80,24 @@ func TestProbeTwoConnectionsRaceForOneSuspendedToken(t *testing.T) {
 	alice.destroy()
 	h.awaitEvents(game.EvPlayerSuspended, 1)
 
+	type claimant struct {
+		index  int
+		client *client
+	}
 	claimants := make([]*client, 2)
-	var wg sync.WaitGroup
+	results := make(chan claimant, len(claimants))
 	for i := range claimants {
-		wg.Add(1)
 		go func(i int) {
-			defer wg.Done()
-			claimants[i] = h.dialResume([]string{"left", "right"}[i], first.Session)
+			results <- claimant{
+				index:  i,
+				client: h.dialResume([]string{"left", "right"}[i], first.Session),
+			}
 		}(i)
 	}
-	wg.Wait()
+	for range claimants {
+		result := <-results
+		claimants[result.index] = result.client
+	}
 
 	welcomed, refused := 0, 0
 	for _, c := range claimants {
@@ -170,7 +176,9 @@ func TestProbeSuspendedLoserOfAContestedPickupResumesEmptyHanded(t *testing.T) {
 
 	alice := h.dial("alice")
 	aw := alice.welcome()
-	bob.spawn()
+	if got := bob.awaitSpawn(aw.You).ID; got != aw.You {
+		t.Fatalf("bob saw spawn %d, want alice (%d)", got, aw.You)
+	}
 
 	// Alice starts approach from spawn; Bob claims underfoot immediately so the
 	// contest resolves before sticky steer can walk Alice into range.

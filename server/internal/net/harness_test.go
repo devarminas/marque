@@ -815,6 +815,28 @@ func (c *client) spawn() mnet.Spawn {
 	return *f.Spawn
 }
 
+func (c *client) awaitSpawn(id mnet.PlayerID) mnet.Spawn {
+	c.t.Helper()
+
+	deadline := time.Now().Add(readTimeout)
+	for time.Now().Before(deadline) {
+		f, ok := c.tryNext(time.Until(deadline))
+		if !ok {
+			break
+		}
+		if f.Pose != nil {
+			c.noteSelfPose(*f.Pose)
+			continue
+		}
+		if f.Spawn != nil && f.Spawn.ID == id {
+			return *f.Spawn
+		}
+		c.t.Fatalf("client %s: got a %s frame, want spawn for player %d: %s", c.name, f.kind(), id, f.raw)
+	}
+	c.t.Fatalf("client %s: no spawn for player %d within %v", c.name, id, readTimeout)
+	return mnet.Spawn{}
+}
+
 func (c *client) errorFrame() mnet.Error {
 	c.t.Helper()
 	f := c.next()

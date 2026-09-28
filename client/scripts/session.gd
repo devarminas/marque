@@ -40,6 +40,8 @@ const LocalMover := preload("res://scripts/local_mover.gd")
 const PoseInterp := preload("res://scripts/pose_interp.gd")
 const MapCfg := preload("res://scripts/map_cfg.gd")
 const CraftRecipes := preload("res://scripts/craft_recipes.gd")
+const FloatingCombatTextScript := preload("res://scripts/floating_combat_text.gd")
+const FloatingCombatTextScene := preload("res://scenes/floating_combat_text.tscn")
 const NodeKinds := preload("res://scripts/node_kinds.gd")
 
 const SERVER_ARG := "--server"
@@ -119,6 +121,8 @@ signal admin_requested(line: String)
 
 signal respawn_requested()
 
+signal own_mana_changed(mana: int, max_mana: int)
+
 @export var net: Node
 @export var local_player: Node3D
 @export var remote_players: Node3D
@@ -186,6 +190,9 @@ var _avatars := {}
 var _items := {}
 var _nodes := {}
 var _npcs := {}
+var _fct_disabled := false
+var _last_swing_target := 0
+var _last_cast_resolve_target := 0
 var _use_from := -1
 var _hover_slot := -1
 var _hover_node := 0
@@ -258,7 +265,9 @@ func _ready() -> void:
 	_net.equipment_changed.connect(_on_equipment_changed)
 	_net.worn_changed.connect(_on_worn_changed)
 	_net.swing_observed.connect(_on_swing_observed)
+	_net.swing_hit_observed.connect(_on_swing_hit_observed)
 	_net.cast_phase_observed.connect(_on_cast_phase_observed)
+	_net.cast_effect_observed.connect(_on_cast_effect_observed)
 	_net.class_changed.connect(_on_class_changed)
 	_net.skills_changed.connect(_on_skills_changed)
 	_net.hp_changed.connect(_on_hp_changed)
@@ -1864,7 +1873,9 @@ func _on_worn_changed(id: int, slot_names: PackedStringArray, slot_kinds: Packed
 	avatar.apply_equipment(slot_names, slot_kinds)
 
 
-func _on_swing_observed(id: int, _target: int, weapon: String) -> void:
+func _on_swing_observed(id: int, target: int, weapon: String) -> void:
+	if id == _you:
+		_last_swing_target = target
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar != null:
 		avatar.swing(weapon)
@@ -1876,11 +1887,34 @@ func _on_swing_observed(id: int, _target: int, weapon: String) -> void:
 	push_warning("session: swing for unknown actor %d; ignoring" % id)
 
 
+func _on_swing_hit_observed(id: int, amount: int, crit: bool, miss: bool) -> void:
+	if id != _you:
+		return
+	var target_id := _last_swing_target
+	if target_id == 0:
+		return
+	var kind := FloatingCombatTextScript.KIND_WHITE
+	if miss:
+		kind = FloatingCombatTextScript.KIND_MISS
+	_spawn_fct(target_id, amount, kind, crit)
+
+
+func _on_cast_effect_observed(id: int, amount: int, effect: String) -> void:
+	if id != _you:
+		return
+	if amount <= 0:
+		return
+	var kind := FloatingCombatTextScript.KIND_SPELL
+	if effect == "heal":
+		kind = FloatingCombatTextScript.KIND_HEAL
+	var target_id := _last_cast_resolve_target
+	_spawn_fct(target_id, amount, kind, false)
+
+
 func _on_cast_phase_observed(id: int, ability: String, target: int, phase: String) -> void:
 	_record_hostile_cast(id, ability, phase)
-	# A resolve frame settles it. A cancelled cast sends no resolve, and the frame
-	# order against the mana spend and the cast bar clear stops mattering.
 	if phase == "resolve" and id == _you:
+		_last_cast_resolve_target = target
 		_play_cast_effect_on_target(target, ability)
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar != null:
@@ -1945,6 +1979,31 @@ func _play_cast_effect_on_target(target_id: int, ability_id: String) -> void:
 	if dummy != null and dummy.kind == NpcDummyScript.KindDummy:
 		dummy.observe_cast(ability_id)
 	cast_effect_played.emit(target_id, ability_id)
+
+
+func set_fct_disabled(off: bool) -> void:
+	_fct_disabled = off
+
+
+func _spawn_fct(target_id: int, amount: int, kind: String, crit: bool) -> void:
+	if _fct_disabled:
+		return
+	var host: Node3D = _npcs.get(target_id)
+	if host == null:
+		host = _avatars.get(target_id)
+	if host == null:
+		return
+	var packed := FloatingCombatTextScene as PackedScene
+	if packed == null:
+		return
+	var fct := packed.instantiate() as FloatingCombatTextScript
+	if fct == null:
+		return
+	if not fct.fct_enabled:
+		fct.queue_free()
+		return
+	host.add_child(fct)
+	fct.show_hit(amount, kind, crit)
 
 
 func _ability_ui_color(ability_id: String) -> String:
@@ -2210,6 +2269,7 @@ func _apply_mana(id: int, mana: int, max_mana: int) -> void:
 	_mana[id] = Vector2i(mana, max_mana)
 	if id != _you:
 		return
+	own_mana_changed.emit(mana, max_mana)
 	if _hp_hud != null:
 		_hp_hud.apply_mana(mana, max_mana)
 

@@ -3,7 +3,8 @@ param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
     [string] $OutDir = (Join-Path ([System.IO.Path]::GetTempPath()) "marque-enemy-party"),
     [int] $ReadyTimeoutSeconds = 20,
-    [int] $ClientTimeoutSeconds = 90
+    [int] $ClientTimeoutSeconds = 90,
+    [switch] $OutgoingOnly
 )
 
 Set-StrictMode -Version Latest
@@ -37,6 +38,8 @@ function Read-ClientReport([string] $path) {
         Accepted = $false
         PartyId = -1
         PartyMembers = 0
+        OutgoingOnly = $false
+        RemoteSwings = New-Object System.Collections.Generic.List[object]
     }
     if (-not (Test-Path $path)) { return $report }
     foreach ($line in Get-Content -Path $path) {
@@ -51,6 +54,16 @@ function Read-ClientReport([string] $path) {
             '^DEMO party (\d+) members=(\d+)\s*$' {
                 $report.PartyId = [int]$Matches[1]
                 $report.PartyMembers = [int]$Matches[2]
+            }
+            '^DEMO outgoing_only role=(\S+)\s*$' { $report.OutgoingOnly = $true }
+            '^DEMO remote_swing actor=(\d+) target=(\d+) amount=(\d+) crit=(true|false) miss=(true|false)\s*$' {
+                $report.RemoteSwings.Add([pscustomobject]@{
+                    Actor = [int]$Matches[1]
+                    Target = [int]$Matches[2]
+                    Amount = [int]$Matches[3]
+                    Crit = [bool]::Parse($Matches[4])
+                    Miss = [bool]::Parse($Matches[5])
+                })
             }
         }
     }
@@ -132,6 +145,7 @@ try {
             "--enemy-party-shots", ('"' + $spec.Prefix + '"'),
             "--enemy-party-role", $spec.Role
         )
+        if ($OutgoingOnly) { $godotArgs += "--outgoing-only" }
         Write-Host "==> launching client-$($spec.Name) as $($spec.Role)"
         $proc = Start-Process -FilePath $Godot -ArgumentList $godotArgs -NoNewWindow -PassThru `
             -RedirectStandardOutput $stdout -RedirectStandardError $stderr
@@ -177,8 +191,11 @@ try {
         if (-not $report.Done) {
             Add-Failure "client-$($client.Name) never reported 'DEMO done'"
         }
-        if (-not $report.Accepted) {
+        if (-not $OutgoingOnly -and -not $report.Accepted) {
             Add-Failure "client-$($client.Name) never reported DEMO accepted $QuestId active"
+        }
+        if ($OutgoingOnly -and -not $report.OutgoingOnly) {
+            Add-Failure "client-$($client.Name) never completed the outgoing-only proof"
         }
         if ($report.PartyId -lt 1 -or $report.PartyMembers -lt 2) {
             Add-Failure "client-$($client.Name) party id=$($report.PartyId) members=$($report.PartyMembers), want party with 2"
@@ -212,12 +229,45 @@ try {
     }
     $ids = @($ids | Select-Object -Unique)
 
-    foreach ($player in $ids) {
-        $accepted = Select-Events $events "quest_accepted" $player
-        if ($accepted.Count -lt 1) {
-            Add-Failure "player $player has no quest_accepted"
-        } elseif ([string]$accepted[0].quest -ne $QuestId) {
-            Add-Failure "player $player quest_accepted '$($accepted[0].quest)', want $QuestId"
+    if ($OutgoingOnly) {
+        $leader = $reports["a"]
+        $member = $reports["b"]
+        $remote = @($member.RemoteSwings | Where-Object {
+            $_.Actor -eq $leader.Joined -and $_.Actor -ne $member.Joined
+        })
+        if ($remote.Count -lt 1) {
+            Add-Failure "observer client-b ingested no nonlocal swing from client-a"
+        } else {
+            $knownTargets = @($remote | Where-Object { $_.Target -gt 0 })
+            if ($knownTargets.Count -lt 1) {
+                Add-Failure "observer client-b remote swing named no target"
+            }
+        }
+        $observerFct = @(Select-String -Path $clients[1].Stdout -Pattern '^DEMO fct ' -ErrorAction SilentlyContinue)
+        if ($observerFct.Count -ne 0) {
+            Add-Failure "observer client-b rendered $($observerFct.Count) floating combat text line(s) for nonlocal traffic"
+        }
+        $qualifyingHits = @($events | Where-Object {
+            $_.ev -eq "attack_hit" -and $_.PSObject.Properties.Name -contains "player" -and
+            [int]$_.player -eq $leader.Joined -and $_.PSObject.Properties.Name -contains "target"
+        })
+        if ($qualifyingHits.Count -lt 1) {
+            Add-Failure "server logged no player attack_hit from client-a"
+        } elseif ($remote.Count -gt 0) {
+            $target = $remote[0].Target
+            $matchingHits = @($qualifyingHits | Where-Object { [int]$_.target -eq $target })
+            if ($matchingHits.Count -lt 1) {
+                Add-Failure "observer remote target $target has no matching server attack_hit"
+            }
+        }
+    } else {
+        foreach ($player in $ids) {
+            $accepted = Select-Events $events "quest_accepted" $player
+            if ($accepted.Count -lt 1) {
+                Add-Failure "player $player has no quest_accepted"
+            } elseif ([string]$accepted[0].quest -ne $QuestId) {
+                Add-Failure "player $player quest_accepted '$($accepted[0].quest)', want $QuestId"
+            }
         }
     }
 
@@ -256,6 +306,6 @@ try {
 }
 
 Write-MarqueDemoResult `
-    -OkMarker "ENEMY PARTY DEMO OK" `
+    -OkMarker $(if ($OutgoingOnly) { "OUTGOING ONLY DEMO OK" } else { "ENEMY PARTY DEMO OK" }) `
     -FailMarker "ENEMY PARTY DEMO FAILED" `
     -EvidenceLine "evidence (screenshots, client logs, server event log): $OutDir"
