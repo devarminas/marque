@@ -3,8 +3,10 @@ extends RefCounted
 
 const SessionScript := preload("res://scripts/session.gd")
 const CastBarScript := preload("res://scripts/cast_bar.gd")
+const HotbarScript := preload("res://scripts/hotbar.gd")
 const NpcDummyScript := preload("res://scripts/npc_dummy.gd")
 const DemoAdminGive := preload("res://scripts/demo_admin_give.gd")
+const AbilityDefs := preload("res://scripts/ability_defs.gd")
 
 const FIREBALL := "fireball"
 const MAGE_CLASS := "mage"
@@ -23,6 +25,7 @@ const CLASS_TIMEOUT_MSEC := 15000
 const CAST_TIMEOUT_MSEC := 12000
 const CASTBAR_TIMEOUT_MSEC := 4000
 const COOLDOWN_WAIT_MSEC := 6000
+const COOLDOWN_READY_GUARD_TICKS := 8
 const HOLD_MSEC := 800
 const SPIN_USEC := 20000
 
@@ -31,6 +34,7 @@ var _tree: SceneTree
 var _root: Node
 var _session: SessionScript
 var _cast_bar: CastBarScript
+var _hotbar: HotbarScript
 var _prefix: String
 var _effects: Array = []
 var _cast_seen: Array = []
@@ -39,6 +43,7 @@ var _refusals: Array = []
 var _cooldown_updates: Array = []
 var _welcome_cooldowns: Array = []
 var _ticks_received := 0
+var _sweep_previous_remaining := -1
 
 
 func run(
@@ -51,6 +56,7 @@ func run(
 	_tree = root.get_tree()
 	_session = session
 	_cast_bar = cast_bar
+	_hotbar = _session.get("hotbar") as HotbarScript
 	_prefix = prefix
 
 	_session.cast_effect_played.connect(_on_cast_effect)
@@ -84,6 +90,8 @@ func run(
 		return _fail("could not select hostile dummy %d" % hostile_id)
 	print("DEMO select %d hostile" % hostile_id)
 
+	if _sweep_demo_requested():
+		return await _run_sweep_demo(hostile_id)
 	if _cooldown_proof_requested():
 		return await _run_cooldown_proof(hostile_id)
 
@@ -103,6 +111,20 @@ func run(
 	await _wait_msec(HOLD_MSEC)
 	print("DEMO done")
 	return 0
+
+
+func _press_ability(ability_id: String) -> void:
+	if _hotbar == null:
+		_fail("hotbar is unavailable for the demo press")
+		return
+	for index in HotbarScript.SLOT_COUNT:
+		if _hotbar.ability_id_in_slot(index + 1) == ability_id:
+			var widgets: Array = _hotbar.call("_slot_widgets")
+			var slot: Button = widgets[index]
+			slot.pressed.emit()
+			print("DEMO hotbar_press slot=%d ability=%s" % [index + 1, ability_id])
+			return
+	_fail("ability %s has no hotbar slot" % ability_id)
 
 
 func _world_ready() -> bool:
@@ -133,7 +155,7 @@ func _cast_resolve(hostile_id: int) -> bool:
 	var mana_before := _session.mana_for(_session.own_id()).x
 	if mana_before < 0:
 		mana_before = 100
-	_session.request_cast(FIREBALL)
+	_press_ability(FIREBALL)
 	print("DEMO cast %s %d" % [FIREBALL, hostile_id])
 	if not await _wait_until(
 		func() -> bool:
@@ -166,7 +188,7 @@ func _cast_interrupt(hostile_id: int) -> bool:
 	_effects.clear()
 	_cast_seen.clear()
 	var mana_before := _session.mana_for(_session.own_id()).x
-	_session.request_cast(FIREBALL)
+	_press_ability(FIREBALL)
 	print("DEMO castinterrupt %s %d" % [FIREBALL, hostile_id])
 	if not await _wait_until(
 		func() -> bool:
@@ -198,6 +220,103 @@ func _cast_interrupt(hostile_id: int) -> bool:
 		return false
 	print("DEMO castcancel %s %d" % [FIREBALL, hostile_id])
 	return true
+
+
+func _sweep_demo_requested() -> bool:
+	return OS.get_cmdline_user_args().has("--cast-bar-sweep-demo")
+
+
+func _run_sweep_demo(hostile_id: int) -> int:
+	if not await _cast_resolve(hostile_id):
+		return 1
+	if not await _wait_for_sweep(FIREBALL, true):
+		return 1
+	if not await _sweep_observation("appearing", 1):
+		return 1
+	await _wait_msec(600)
+	if not await _sweep_observation("draining", 2):
+		return 1
+	if not await _sweep_observation("idle", 3):
+		return 1
+	_cast_phases.clear()
+	_press_ability("heal")
+	if not await _wait_until(func() -> bool: return _phase_count("heal", "resolve") > 0, CAST_TIMEOUT_MSEC):
+		return _fail("heal did not resolve before welcome resync")
+	if _session.cooldown_remaining("heal") <= 0:
+		return _fail("heal resolve did not anchor its cooldown")
+	if not await _reconnect_with_cooldowns():
+		return 1
+	var welcome_remaining := _snapshot_remaining(_welcome_cooldowns.back(), FIREBALL)
+	var resynced_remaining := _session.cooldown_remaining(FIREBALL)
+	print("DEMO sweep resync fireball remaining=%d welcome=%d" % [resynced_remaining, welcome_remaining])
+	if absi(resynced_remaining - welcome_remaining) > 2:
+		return _fail("sweep differs from welcome cooldown by more than two ticks")
+	if not await _capture(4):
+		return 1
+	if not _session.select_player(_hostile_dummy_id()):
+		return _fail("could not reselect hostile dummy after sweep reconnect")
+	if not await _wait_for_ready(FIREBALL):
+		return 1
+	var cache: Dictionary = _session.get("_cooldown_cache")
+	cache[FIREBALL] = {"remaining": 7, "tick": _session.tick_clock().estimated_tick()}
+	print("DEMO sweep wrong_anchor fireball=7")
+	_cast_phases.clear()
+	_press_ability(FIREBALL)
+	if not await _wait_until(func() -> bool: return _phase_count(FIREBALL, "resolve") > 0, CAST_TIMEOUT_MSEC):
+		return _fail("re-anchor cast did not resolve")
+	if _session.cooldown_remaining(FIREBALL) < 70:
+		return _fail("resolve did not replace deliberately wrong cooldown anchor")
+	if not await _sweep_observation("re-anchor", 5):
+		return 1
+	if not await _wait_for_ready(FIREBALL):
+		return 1
+	if not await _sweep_observation("clear", 6):
+		return 1
+	await _wait_msec(HOLD_MSEC)
+	print("DEMO done")
+	return 0
+
+
+func _wait_for_sweep(ability_id: String, visible: bool) -> bool:
+	return await _wait_until(
+		func() -> bool: return (_session.cooldown_remaining(ability_id) > 0) == visible,
+		CASTBAR_TIMEOUT_MSEC,
+	)
+
+
+func _sweep_observation(state: String, shot: int) -> bool:
+	await _tree.process_frame
+	var hotbar: HotbarScript = _session.get("_hotbar") as HotbarScript
+	if hotbar != null:
+		hotbar.refresh_cooldowns()
+	var slot: Variant = hotbar.slot_2 if hotbar != null else null
+	var remaining := _session.cooldown_remaining(FIREBALL)
+	var total := int(AbilityDefs.get_ability(hotbar.catalog(), FIREBALL).get("cooldown_ticks", 0)) if hotbar != null else 0
+	var overlay: bool = slot != null and slot.cooling != null and slot.cooling.visible
+	var fraction := 0.0
+	if overlay:
+		fraction = 1.0 - slot.cooling.anchor_top
+	print("DEMO sweep %s ability=fireball remaining=%d total=%d overlay=%d fraction=%.3f" % [state, remaining, total, int(overlay), fraction])
+	if state == "appearing" and (remaining <= 0 or not overlay):
+		_fail("cooldown overlay did not appear")
+		return false
+	if state == "draining" and (remaining <= 0 or (_sweep_previous_remaining > 0 and remaining >= _sweep_previous_remaining)):
+		_fail("cooldown did not drain between samples")
+		return false
+	if state == "idle":
+		var heal_slot: Variant = hotbar.slot_1 if hotbar != null else null
+		if heal_slot == null or heal_slot.cooling == null or heal_slot.cooling.visible:
+			_fail("ready heal slot showed an overlay")
+			return false
+	if state == "clear" and (remaining != 0 or overlay):
+		_fail("cooldown overlay remained after reaching zero")
+		return false
+	if remaining > 0 and (not overlay or absf(fraction - float(remaining) / total) > 0.1):
+		_fail("overlay fraction is not within 0.1 of authoritative remaining/total")
+		return false
+	if state == "draining":
+		_sweep_previous_remaining = remaining
+	return await _capture(shot)
 
 
 func _cooldown_proof_requested() -> bool:
@@ -254,7 +373,7 @@ func _run_cooldown_proof(hostile_id: int) -> int:
 func _heal_resolve() -> bool:
 	var resolve_before := _phase_count("heal", "resolve")
 	var mana_before := _session.mana_for(_session.own_id()).x
-	_session.request_cast("heal")
+	_press_ability("heal")
 	print("DEMO cooldown_cast heal")
 	if not await _wait_until(
 		func() -> bool: return _phase_count("heal", "resolve") > resolve_before,
@@ -279,7 +398,7 @@ func _refuse_inside_cooldown(ability_id: String) -> bool:
 	var refusals_before := _refusals.size()
 	var begins_before := _phase_count(ability_id, "begin")
 	var mana_before := _session.mana_for(_session.own_id()).x
-	_session.request_cast(ability_id)
+	_press_ability(ability_id)
 	print("DEMO cooldown_press %s mana=%d begins=%d" % [ability_id, mana_before, begins_before])
 	if not await _wait_until(
 		func() -> bool: return _refusals.size() > refusals_before,
@@ -329,7 +448,7 @@ func _cancel_then_resolve(hostile_id: int) -> bool:
 	_cast_seen.clear()
 	var begin_before := _phase_count(FIREBALL, "begin")
 	var cancel_before := _phase_count(FIREBALL, "cancel")
-	_session.request_cast(FIREBALL)
+	_press_ability(FIREBALL)
 	print("DEMO cooldown_cancel_start %s" % FIREBALL)
 	if not await _wait_until(
 		func() -> bool: return _phase_count(FIREBALL, "begin") > begin_before and _cast_progress() >= 1,
@@ -382,6 +501,8 @@ func _wait_for_ready(ability_id: String) -> bool:
 	):
 		_fail("%s never became ready after %dms" % [ability_id, COOLDOWN_WAIT_MSEC])
 		return false
+	var tick_msec := int(_session.get("_tick_ms"))
+	await _wait_msec(COOLDOWN_READY_GUARD_TICKS * tick_msec)
 	print("DEMO cooldown_ready %s" % ability_id)
 	return true
 

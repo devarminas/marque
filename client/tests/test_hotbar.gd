@@ -51,6 +51,7 @@ func _ready() -> void:
 	_test_cast_frame_shape()
 	await _test_click_slot_sends_heal_on_self()
 	await _test_click_fireball_uses_selection()
+	await _test_server_anchored_sweep_states()
 
 	print(
 		"HOTBAR RAN: %d assertions, %d failed"
@@ -100,6 +101,8 @@ func _test_chrome_from_json() -> void:
 		and is_equal_approx(_hotbar.anchor_bottom, 1.0)
 	)
 	_check(anchors_ok, "hotbar is center-bottom anchored")
+	var hotbar_source := FileAccess.get_file_as_string("res://scripts/hotbar.gd")
+	_check(not hotbar_source.contains("add_child("), "hotbar slot chrome stays scene-authored")
 
 
 func _test_cast_frame_shape() -> void:
@@ -135,6 +138,36 @@ func _test_click_fireball_uses_selection() -> void:
 	if _casts.size() == 1:
 		_check(_casts[0]["ability"] == "fireball", "fireball ability id")
 		_check(_casts[0]["player"] == 22, "fireball uses tab selection")
+
+
+func _test_server_anchored_sweep_states() -> void:
+	_session.set("_you", 11)
+	_session.set("_tick_ms", 150)
+	_session.tick_clock().anchor(100, 150)
+	_session._on_cooldowns_received([{"ability": "fireball", "remaining": 60}])
+	await get_tree().process_frame
+	var slot: HotbarSlotScript = _hotbar.slot_2
+	var fireball: Dictionary = _hotbar.catalog()["by_id"]["fireball"]
+	var total := int(fireball["cooldown_ticks"])
+	var fraction := 1.0 - slot.cooling.anchor_top
+	_check(slot.state == HotbarSlotScript.STATE_COOLING and slot.cooling.visible, "remaining server cooldown displays the cooling state")
+	_check(absf(fraction - float(60) / total) < 0.01, "overlay fraction equals remaining over catalog total")
+	_check(slot.cooldown_label.visible and slot.cooldown_label.text == "9", "remaining seconds render in the slot")
+	_check(not _hotbar.slot_1.cooling.visible, "other ready ability slot stays idle")
+
+	_session._on_cast_cooldown_observed(11, "fireball", 75)
+	_check(_session.cooldown_remaining("fireball") >= 74, "resolve replaces a stale cooldown anchor")
+	_session._on_disconnected(0, "test teardown")
+	await get_tree().process_frame
+	_check(_session.cooldown_remaining("fireball") == 0 and not slot.cooling.visible, "teardown clears cached sweep")
+	_session.tick_clock().anchor(200, 150)
+	_session._on_cooldowns_received([{"ability": "fireball", "remaining": 30}])
+	await get_tree().process_frame
+	_check(_session.cooldown_remaining("fireball") == 30 and slot.cooling.visible, "welcome snapshot restores a mid-cooldown sweep")
+	_session._on_cooldowns_received([{"ability": "fireball", "remaining": 0}])
+	await get_tree().process_frame
+	_check(not slot.cooling.visible and not slot.disabled and slot.state == HotbarSlotScript.STATE_READY, "zero remaining hides overlay and leaves slot enabled")
+	_check(_hotbar.slot_3.disabled and _hotbar.slot_3.state == HotbarSlotScript.STATE_EMPTY, "empty slots retain the empty state")
 
 
 func _check(cond: bool, msg: String) -> void:

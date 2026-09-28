@@ -18,6 +18,8 @@ signal ability_activated(ability_id: String)
 
 var _catalog: Dictionary = AbilityDefs._empty_catalog()
 var _slot_ability := {}
+var _cooldown_source: Node
+var _cooldowns := {}
 
 
 func _slot_widgets() -> Array:
@@ -33,6 +35,47 @@ func _ready() -> void:
 		var slot_n := i + 1
 		widget.pressed.connect(_activate_slot.bind(slot_n))
 	reload_from_json()
+
+
+func set_cooldown_source(source: Node) -> void:
+	_cooldown_source = source
+	if source != null and source.has_signal("cooldowns_changed"):
+		source.cooldowns_changed.connect(_sync_cooldown_cache)
+	_sync_cooldown_cache()
+
+
+func _process(_delta: float) -> void:
+	refresh_cooldowns()
+
+
+func _sync_cooldown_cache() -> void:
+	_cooldowns.clear()
+	if _cooldown_source == null or not _cooldown_source.has_method("cooldown_remaining"):
+		return
+	var tick := int(_cooldown_source.estimated_tick())
+	for slot_n in _slot_ability.keys():
+		var ability_id := ability_id_in_slot(int(slot_n))
+		var remaining := int(_cooldown_source.cooldown_remaining(ability_id))
+		if remaining > 0:
+			_cooldowns[ability_id] = {"remaining": remaining, "tick": tick}
+
+
+func refresh_cooldowns() -> void:
+	var widgets := _slot_widgets()
+	var tick := int(_cooldown_source.estimated_tick()) if _cooldown_source != null else -1
+	for i in SLOT_COUNT:
+		var widget: HotbarSlotScript = widgets[i]
+		var ability_id := ability_id_in_slot(i + 1)
+		if widget == null or ability_id.is_empty():
+			continue
+		var ability: Dictionary = AbilityDefs.get_ability(_catalog, ability_id)
+		var total := int(ability.get("cooldown_ticks", 0))
+		var remaining := 0
+		if _cooldowns.has(ability_id) and tick >= 0:
+			var anchor: Dictionary = _cooldowns[ability_id]
+			remaining = maxi(0, int(anchor["remaining"]) - (tick - int(anchor["tick"])))
+		var tick_msec := int(_cooldown_source.get("_tick_ms")) if _cooldown_source != null else 150
+		widget.show_cooldown(remaining, total, tick_msec)
 
 
 func reload_from_json() -> void:
