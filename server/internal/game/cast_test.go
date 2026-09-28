@@ -50,6 +50,106 @@ func TestCastFireballDamagesHostileInRange(t *testing.T) {
 	}
 }
 
+func TestCooldownsTrackAbilityReadyTicks(t *testing.T) {
+	var got cooldowns
+	if !got.ready("fireball", 0) {
+		t.Fatal("a new ability must be ready")
+	}
+	got.start("fireball", 75, 0)
+	if got.ready("fireball", 74) || got.remaining("fireball", 74) != 1 {
+		t.Fatal("cooldown must remain active through tick 74")
+	}
+	if !got.ready("fireball", 75) || got.remaining("fireball", 75) != 0 {
+		t.Fatal("cooldown must be ready at tick 75")
+	}
+	if got.remaining("heal", 1) != 0 {
+		t.Fatal("cooldown leaked across abilities")
+	}
+	snapshot := got.snapshot(20)
+	if len(snapshot) != 1 || snapshot[0] != (mnet.Cooldown{Ability: "fireball", Remaining: 55}) {
+		t.Fatalf("snapshot=%+v, want fireball with 55 ticks", snapshot)
+	}
+}
+
+func TestCastFireballRefusesInsideCooldownWithoutDebitOrBegin(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
+	bob.pos = Point{X: 2, Z: 0}
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
+	pw.w.stepNForTest(alice.castTotal)
+	mana := alice.mana
+	begins := len(pw.events(EvCastBegin))
+
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 2)
+
+	if alice.mana != mana || len(pw.events(EvCastBegin)) != begins {
+		t.Fatalf("cooldown refusal changed mana or began a cast: mana %d -> %d, begins %d -> %d", mana, alice.mana, begins, len(pw.events(EvCastBegin)))
+	}
+	rejected := pw.events(EvCastRejected)
+	if len(rejected) != 1 || rejected[0]["reason"] != "cooldown" {
+		t.Fatalf("rejections=%v, want cooldown", rejected)
+	}
+	if got := alice.cooldowns.remaining("fireball", pw.w.tick); got != 75 {
+		t.Fatalf("remaining=%d, want 75", got)
+	}
+}
+
+func TestCastCanBeginAfterCooldownElapses(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
+	bob.pos = Point{X: 2, Z: 0}
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
+	pw.w.stepNForTest(alice.castTotal)
+	mana := alice.mana
+	pw.w.tick += 75
+
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 2)
+
+	if !alice.casting() || alice.mana != mana || len(pw.events(EvCastBegin)) != 2 {
+		t.Fatalf("ready cast did not begin cleanly: casting=%v mana=%d/%d begins=%d", alice.casting(), alice.mana, mana, len(pw.events(EvCastBegin)))
+	}
+	pw.w.stepNForTest(alice.castTotal)
+	spends := pw.events(EvManaSpend)
+	if len(spends) != 2 || spends[1]["amount"] != float64(25) {
+		t.Fatalf("mana spend events=%v, want second spend of 25", spends)
+	}
+}
+
+func TestInstantHealCooldownRefusesWithoutDebit(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	alice := pw.joinWithClass("mage")
+	alice.hp = 40
+	pw.w.cast(alice, mnet.Cast{Ability: "heal", Player: alice.id}, 1)
+	mana := alice.mana
+	pw.w.cast(alice, mnet.Cast{Ability: "heal", Player: alice.id}, 2)
+
+	if alice.mana != mana || alice.hp != 65 || len(pw.events(EvCastBegin)) != 0 {
+		t.Fatalf("heal refusal mutated state: hp=%d mana=%d begins=%d", alice.hp, alice.mana, len(pw.events(EvCastBegin)))
+	}
+	rejected := pw.events(EvCastRejected)
+	if len(rejected) != 1 || rejected[0]["reason"] != "cooldown" {
+		t.Fatalf("rejections=%v, want cooldown", rejected)
+	}
+}
+
+func TestCancelledCastStartsNoCooldown(t *testing.T) {
+	pw := newClassProbe(t)
+	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))
+	alice := pw.joinWithClass("mage")
+	bob := pw.joinBare()
+	bob.pos = Point{X: 2, Z: 0}
+	pw.w.cast(alice, mnet.Cast{Ability: "fireball", Player: bob.id}, 1)
+	pw.w.cancelCast(alice, CauseReplaced)
+	if got := alice.cooldowns.remaining("fireball", pw.w.tick); got != 0 {
+		t.Fatalf("cancelled cast started cooldown, remaining=%d", got)
+	}
+}
+
 func TestCastFireballRefusesFriendlySelf(t *testing.T) {
 	pw := newClassProbe(t)
 	pw.w.SetAbilities(mustParseAbilities(t, sharedAbilitiesJSON))

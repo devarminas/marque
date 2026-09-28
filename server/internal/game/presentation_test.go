@@ -411,7 +411,7 @@ func TestPlayerFireballBeginsThenResolves(t *testing.T) {
 	begin := mnet.CastPhase{ID: alice.id, Ability: "fireball", Target: bob.id, Phase: mnet.CastPhaseBegin}
 	resolve := mnet.CastPhase{
 		ID: alice.id, Ability: "fireball", Target: bob.id, Phase: mnet.CastPhaseResolve,
-		Amount: hpBefore - bob.hp, Effect: "damage",
+		Amount: hpBefore - bob.hp, Effect: "damage", Cooldown: 75,
 	}
 	if got := castPhasesOf(t, obs.flush(), alice.id); !slices.Equal(got, []mnet.CastPhase{begin, resolve}) {
 		t.Fatalf("cast_phase frames=%+v, want begin then resolve", got)
@@ -431,7 +431,7 @@ func TestInstantHealResolvesWithoutBegin(t *testing.T) {
 
 	want := mnet.CastPhase{
 		ID: alice.id, Ability: "heal", Target: alice.id, Phase: mnet.CastPhaseResolve,
-		Amount: alice.hp - hpBefore, Effect: "heal",
+		Amount: alice.hp - hpBefore, Effect: "heal", Cooldown: 38,
 	}
 	if got := castPhasesOf(t, obs.flush(), alice.id); !slices.Equal(got, []mnet.CastPhase{want}) {
 		t.Fatalf("cast_phase frames=%+v, want only %+v", got, want)

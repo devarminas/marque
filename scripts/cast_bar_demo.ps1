@@ -3,7 +3,8 @@ param(
     [string] $Godot = $(if ($env:GODOT) { $env:GODOT } else { "godot" }),
     [string] $OutDir = (Join-Path ([System.IO.Path]::GetTempPath()) "marque-cast-bar"),
     [int] $ReadyTimeoutSeconds = 20,
-    [int] $ClientTimeoutSeconds = 90
+    [int] $ClientTimeoutSeconds = 90,
+    [switch] $CooldownProof
 )
 
 Set-StrictMode -Version Latest
@@ -14,7 +15,6 @@ $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
 $serverDir = Join-Path $repo "server"
 $clientDir = Join-Path $repo "client"
-
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("marque-cast-bar-" + [guid]::NewGuid().ToString("n"))
 New-Item -ItemType Directory -Path $work | Out-Null
 
@@ -24,7 +24,6 @@ $serverErr = Join-Path $OutDir "server.stderr.log"
 $clientOut = Join-Path $OutDir "client.stdout.log"
 $clientErr = Join-Path $OutDir "client.stderr.log"
 $prefix = Join-Path $OutDir "c"
-
 $server = $null
 $failures = New-MarqueDemoFailures
 
@@ -37,6 +36,13 @@ function Read-ClientReport([string] $path) {
         CastCancel = $false
         CastBarVisible = $false
         CastBarHidden = $false
+        CooldownFirstReady = $false
+        CooldownFireballRefused = $false
+        CooldownHealRefused = $false
+        CooldownWelcome = $false
+        CooldownCancelled = $false
+        CooldownAfterReady = $false
+        CooldownResolves = New-Object System.Collections.Generic.List[string]
     }
     if (-not (Test-Path $path)) { return $report }
     foreach ($line in Get-Content -Path $path) {
@@ -48,6 +54,13 @@ function Read-ClientReport([string] $path) {
             '^DEMO castcancel ' { $report.CastCancel = $true }
             '^DEMO castbar .+ visible=1\s*$' { $report.CastBarVisible = $true }
             '^DEMO castbar .+ visible=0\s*$' { $report.CastBarHidden = $true }
+            '^DEMO cooldown first_ready fireball\s*$' { $report.CooldownFirstReady = $true }
+            '^DEMO cooldown_refuse fireball ' { $report.CooldownFireballRefused = $true }
+            '^DEMO cooldown_refuse heal ' { $report.CooldownHealRefused = $true }
+            '^DEMO cooldown_welcome fireball=\d+ heal=\d+\s*$' { $report.CooldownWelcome = $true }
+            '^DEMO cooldown_cancel fireball remaining=0\s*$' { $report.CooldownCancelled = $true }
+            '^DEMO cooldown_after_ready fireball cooldown=75\s*$' { $report.CooldownAfterReady = $true }
+            '^DEMO cooldown_resolve (fireball|heal) cooldown=(75|38)\s*$' { $report.CooldownResolves.Add("$($Matches[1])=$($Matches[2])") }
         }
     }
     return $report
@@ -71,9 +84,7 @@ try {
         -NoNewWindow -PassThru -Wait `
         -RedirectStandardOutput (Join-Path $OutDir "warm.stdout.log") `
         -RedirectStandardError (Join-Path $OutDir "warm.stderr.log")
-    if ($warm.ExitCode -ne 0) {
-        throw "the Godot warm-up run exited $($warm.ExitCode)"
-    }
+    if ($warm.ExitCode -ne 0) { throw "the Godot warm-up run exited $($warm.ExitCode)" }
 
     Write-Host "==> starting marqued on a free port (-admin; kit via client /give)"
     $server = Start-Process -FilePath $binary `
@@ -85,9 +96,7 @@ try {
     $address = $null
     $deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        if ($server.HasExited) {
-            throw "marqued exited with code $($server.ExitCode) before it announced an address"
-        }
+        if ($server.HasExited) { throw "marqued exited with code $($server.ExitCode) before it announced an address" }
         if (Test-Path $serverOut) {
             $line = Select-String -Path $serverOut -Pattern '"ev":"server_started"' -List
             if ($null -ne $line) {
@@ -102,17 +111,18 @@ try {
     Write-Host "==> marqued listening at $url (pid $($server.Id))"
 
     Write-Host "==> launching cast-bar client"
+    $clientArgs = @(
+        "--path", ('"' + $clientDir + '"'),
+        "--position", "40,60",
+        "--",
+        "--server", $url,
+        "--cast-bar-shots", ('"' + $prefix + '"')
+    )
+    if ($CooldownProof) { $clientArgs += "--cast-bar-cooldown-proof" }
     $client = Start-Process -FilePath $Godot -NoNewWindow -PassThru `
-        -ArgumentList @(
-            "--path", ('"' + $clientDir + '"'),
-            "--position", "40,60",
-            "--",
-            "--server", $url,
-            "--cast-bar-shots", ('"' + $prefix + '"')
-        ) `
+        -ArgumentList $clientArgs `
         -RedirectStandardOutput $clientOut -RedirectStandardError $clientErr
     $null = $client.Handle
-
     if ($client.WaitForExit($ClientTimeoutSeconds * 1000)) {
         $client.WaitForExit()
     } else {
@@ -122,7 +132,6 @@ try {
 
     Show-File "client stdout" $clientOut
     Show-File "client stderr" $clientErr
-
     if ($client.HasExited) {
         $code = $client.ExitCode
         if ($null -eq $code) {
@@ -140,9 +149,21 @@ try {
     if (-not $report.CastCancel) { Add-Failure "missing DEMO castcancel" }
     if (-not $report.CastBarVisible) { Add-Failure "missing DEMO castbar visible=1" }
     if (-not $report.CastBarHidden) { Add-Failure "missing DEMO castbar visible=0" }
+    if ($CooldownProof) {
+        if (-not $report.CooldownFirstReady) { Add-Failure "missing DEMO cooldown first_ready" }
+        if (-not $report.CooldownFireballRefused) { Add-Failure "missing DEMO fireball cooldown refusal" }
+        if (-not $report.CooldownHealRefused) { Add-Failure "missing DEMO heal cooldown refusal" }
+        if (-not $report.CooldownWelcome) { Add-Failure "missing DEMO cooldown welcome resync" }
+        if (-not $report.CooldownCancelled) { Add-Failure "missing DEMO cancelled cast has no cooldown" }
+        if (-not $report.CooldownAfterReady) { Add-Failure "missing DEMO after-ready fireball resolve" }
+        foreach ($expected in @("fireball=75", "heal=38")) {
+            if (-not $report.CooldownResolves.Contains($expected)) { Add-Failure "missing DEMO resolve cooldown $expected" }
+        }
+    }
 
     # PNG artifacts only (ARM-289); DEMO cast lines + GAMELOG are the proof.
-    foreach ($index in 1..3) {
+    $shotCount = 3
+    foreach ($index in 1..$shotCount) {
         $shot = "${prefix}_$index.png"
         if (Test-Path $shot) {
             $size = (Get-Item $shot).Length
@@ -160,28 +181,37 @@ try {
         $cast = Select-Events $events "cast" $player
         $effect = Select-Events $events "cast_effect" $player
         $cancelled = Select-Events $events "cast_cancelled" $player
-        if ($begin.Count -lt 2) {
-            Add-Failure "cast_begin=$($begin.Count), want >= 2 (resolve + interrupt)"
-        }
-        if ($cast.Count -lt 1) {
-            Add-Failure "cast=$($cast.Count), want >= 1 resolve"
-        } elseif ([string]$cast[0].ability -ne "fireball") {
-            Add-Failure "cast ability '$($cast[0].ability)', want fireball"
-        }
-        if ($effect.Count -lt 1) {
-            Add-Failure "cast_effect=$($effect.Count), want >= 1"
-        }
         $moveCancel = @($cancelled | Where-Object { [string]$_.cause -eq "move" })
-        if ($moveCancel.Count -lt 1) {
-            Add-Failure "cast_cancelled with cause=move=$($moveCancel.Count), want >= 1"
+        if ($CooldownProof) {
+            $fireballBegin = @($begin | Where-Object { [string]$_.ability -eq "fireball" })
+            $healBegin = @($begin | Where-Object { [string]$_.ability -eq "heal" })
+            $fireballCast = @($cast | Where-Object { [string]$_.ability -eq "fireball" })
+            $healCast = @($cast | Where-Object { [string]$_.ability -eq "heal" })
+            $spends = Select-Events $events "mana_spend" $player
+            if ($fireballBegin.Count -ne 4) { Add-Failure "fireball cast_begin=$($fireballBegin.Count), want 4 (first, after-ready, cancelled, final)" }
+            if ($healBegin.Count -ne 0) { Add-Failure "heal cast_begin=$($healBegin.Count), want 0 for instant heal" }
+            if ($fireballCast.Count -ne 3 -or $healCast.Count -ne 1) { Add-Failure "resolved casts fireball=$($fireballCast.Count), heal=$($healCast.Count), want 3 and 1" }
+            if ($spends.Count -ne 4) { Add-Failure "mana_spend=$($spends.Count), want 4 successful resolves only" }
+            if ($moveCancel.Count -ne 1) { Add-Failure "cast_cancelled cause=move=$($moveCancel.Count), want 1" }
+            $rejected = Select-Events $events "cast_rejected" $player
+            $cooldownRejected = @($rejected | Where-Object { [string]$_.reason -eq "cooldown" })
+            if ($rejected.Count -ne 2 -or $cooldownRejected.Count -ne 2) { Add-Failure "cast_rejected cooldown=$($cooldownRejected.Count)/total=$($rejected.Count), want exactly 2 cooldown refusals" }
         } else {
-            Write-Host "==> server: player $player cast_cancelled cause=$($moveCancel[0].cause)"
+            if ($begin.Count -lt 2) { Add-Failure "cast_begin=$($begin.Count), want >= 2 (resolve + interrupt)" }
+            if ($cast.Count -lt 1) {
+                Add-Failure "cast=$($cast.Count), want >= 1 resolve"
+            } elseif ([string]$cast[0].ability -ne "fireball") {
+                Add-Failure "cast ability '$($cast[0].ability)', want fireball"
+            }
+            if ($effect.Count -lt 1) { Add-Failure "cast_effect=$($effect.Count), want >= 1" }
+            if ($moveCancel.Count -lt 1) {
+                Add-Failure "cast_cancelled with cause=move=$($moveCancel.Count), want >= 1"
+            } else {
+                Write-Host "==> server: player $player cast_cancelled cause=$($moveCancel[0].cause)"
+            }
+            $rejected = Select-Events $events "cast_rejected"
+            if ($rejected.Count -gt 0) { Add-Failure "the server logged $($rejected.Count) cast_rejected event(s)" }
         }
-    }
-
-    $rejected = Select-Events $events "cast_rejected"
-    if ($rejected.Count -gt 0) {
-        Add-Failure "the server logged $($rejected.Count) cast_rejected event(s)"
     }
 } catch {
     Add-Failure "$($_.Exception.Message)"

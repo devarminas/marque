@@ -12,7 +12,7 @@ Accepted (M13b). Implements the default tick locked by `docs/adr/0001-movement-a
    - Fireball `cast_ticks: 38` → **1520 ms**
    - Fireball `cooldown_ticks: 75` → **3000 ms**
    - Heal `cooldown_ticks: 38` → **1520 ms**
-4. **Cooldown enforcement.** `cooldown_ticks` is stored in the ability catalog. Server-side runtime enforcement is not yet implemented.
+4. **Cooldown enforcement.** `cooldown_ticks` is enforced per ability by the server. A successful resolve starts the cooldown; cancellation does not. `welcome.cooldowns` resyncs remaining ticks and a resolve carries the catalog cooldown. There is no global cooldown.
 5. **Heartbeat.** `HeartbeatEveryTicks = 10` is unchanged here. Client liveness stays `3 × heartbeat_ticks × tick_ms` (1200 ms at the new tick). Period retune is deferred.
 
 ## Out of scope

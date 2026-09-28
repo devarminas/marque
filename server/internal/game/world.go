@@ -205,6 +205,8 @@ type player struct {
 
 	skillXP map[string]int64
 
+	cooldowns cooldowns
+
 	combatExpiresTick int64
 
 	lastSeq mnet.Seq
@@ -579,6 +581,7 @@ func (w *World) sendJoinStep(p *player) {
 		TickMS:         int(TickDuration.Milliseconds()),
 		Tick:           w.tick,
 		HeartbeatTicks: HeartbeatEveryTicks,
+		Cooldowns:      p.cooldowns.snapshot(w.tick),
 		Map:            w.MapID(),
 		Players:        states,
 		Items:          w.groundItemStates(),

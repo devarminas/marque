@@ -111,6 +111,11 @@ type EquipmentSlot struct {
 
 type ServerMessage interface{ isServerMessage() }
 
+type Cooldown struct {
+	Ability   string `json:"ability"`
+	Remaining int    `json:"remaining"`
+}
+
 type Welcome struct {
 	You            PlayerID      `json:"you"`
 	Session        string        `json:"session"`
@@ -123,6 +128,7 @@ type Welcome struct {
 	Items          []ItemState   `json:"items"`
 	Nodes          []NodeState   `json:"nodes"`
 	Npcs           []NpcState    `json:"npcs"`
+	Cooldowns      []Cooldown    `json:"cooldowns,omitempty"`
 }
 
 type Spawn PlayerState
@@ -251,12 +257,13 @@ const (
 // after its clamp and Effect is the ability's effect kind; only a resolve frame
 // carries them, so begin and cancel frames keep their earlier bytes.
 type CastPhase struct {
-	ID      PlayerID      `json:"id"`
-	Ability string        `json:"ability"`
-	Target  PlayerID      `json:"target"`
-	Phase   CastPhaseKind `json:"phase"`
-	Amount  int           `json:"amount,omitempty"`
-	Effect  string        `json:"effect,omitempty"`
+	ID       PlayerID      `json:"id"`
+	Ability  string        `json:"ability"`
+	Target   PlayerID      `json:"target"`
+	Phase    CastPhaseKind `json:"phase"`
+	Amount   int           `json:"amount,omitempty"`
+	Effect   string        `json:"effect,omitempty"`
+	Cooldown int           `json:"cooldown,omitempty"`
 }
 
 type GatherStarted struct {
@@ -598,6 +605,7 @@ const (
 	ReasonWrongTarget      RejectReason = "wrong_target"
 	ReasonInsufficientMana RejectReason = "insufficient_mana"
 	ReasonOutOfRange       RejectReason = "out_of_range"
+	ReasonCooldown         RejectReason = "cooldown"
 	ReasonUnknownSender    RejectReason = "unknown_sender"
 	ReasonBinaryFrame      RejectReason = "binary_frame"
 	ReasonNoDialog         RejectReason = "no_dialog"

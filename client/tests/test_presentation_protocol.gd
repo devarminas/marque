@@ -10,10 +10,17 @@ class Recorder:
 
 	var net: NetClientScript
 	var events: Array[Dictionary] = []
+	var cooldowns: Array = []
+	var cooldown_updates: Array[Dictionary] = []
 
 	func _init() -> void:
 		net = NetClientScript.new()
 		net.welcomed.connect(func(_you, _tick_ms, _tick, _hb, _ids, _positions) -> void: events.append({"signal": "welcomed"}))
+		net.cooldowns_received.connect(func(value: Array) -> void: cooldowns = value)
+		net.cast_cooldown_observed.connect(
+			func(id: int, ability: String, remaining: int) -> void:
+				cooldown_updates.append({"id": id, "ability": ability, "remaining": remaining})
+		)
 		net.spawned.connect(func(id: int, _position: Vector2) -> void: events.append({"signal": "spawned", "id": id}))
 		net.worn_changed.connect(
 			func(id: int, names: PackedStringArray, kinds: PackedStringArray) -> void:
@@ -98,7 +105,7 @@ func _test_cast_phase_and_gather_parse_without_warning(assertions: Assertions, r
 			"cast_phase %s parses as a known message and forwards no effect facts, got %s" % [phase, events],
 		)
 	var resolve := recorder.feed(
-		'{"cast_phase":{"id":1000004,"ability":"fireball","target":7,"phase":"resolve","amount":22,"effect":"damage"}}'
+		'{"cast_phase":{"id":1000004,"ability":"fireball","target":7,"phase":"resolve","amount":22,"effect":"damage","cooldown":75}}'
 	)
 	assertions.check(
 		resolve == [
@@ -106,6 +113,10 @@ func _test_cast_phase_and_gather_parse_without_warning(assertions: Assertions, r
 			{"signal": "cast_effect_observed", "id": 1000004, "amount": 22, "effect": "damage"},
 		],
 		"a resolve frame forwards its amount and effect, got %s" % [resolve],
+	)
+	assertions.check(
+		recorder.cooldown_updates.back() == {"id": 1000004, "ability": "fireball", "remaining": 75},
+		"a resolve forwards the server cooldown ticks, got %s" % [recorder.cooldown_updates],
 	)
 	var zero_delta := recorder.feed(
 		'{"cast_phase":{"id":1000004,"ability":"heal","target":7,"phase":"resolve","effect":"heal"}}'
@@ -163,13 +174,17 @@ func _test_worn_broadcast(assertions: Assertions, recorder: Recorder) -> void:
 
 func _test_welcome_and_spawn_carry_worn(assertions: Assertions, recorder: Recorder) -> void:
 	var events := recorder.feed(
-		'{"welcome":{"you":1,"tick_ms":40,"tick":1,"heartbeat_ticks":10,"players":['
+		'{"welcome":{"you":1,"tick_ms":40,"tick":1,"heartbeat_ticks":10,"cooldowns":[{"ability":"fireball","remaining":12}],"players":['
 		+ '{"id":1,"x":0,"z":0,"worn":[]},'
 		+ '{"id":2,"x":1,"z":1,"worn":[{"slot":"chest","kind":"cloth_robe"}]},'
 		+ '{"id":3,"x":2,"z":2}'
 		+ ']}}'
 	)
 	var names := events.map(func(event: Dictionary) -> String: return event["signal"])
+	assertions.check(
+		recorder.cooldowns == [{"ability": "fireball", "remaining": 12}],
+		"welcome forwards the server cooldown snapshot, got %s" % [recorder.cooldowns],
+	)
 	assertions.check(
 		names == ["welcomed", "worn_changed", "worn_changed"],
 		"welcome emits worn_changed after welcomed for each player that carries worn, got %s" % [names],

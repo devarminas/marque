@@ -127,9 +127,9 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			name: "cast_phase resolve",
 			msg: mnet.CastPhase{
 				ID: 1000005, Ability: "fireball", Target: 1, Phase: mnet.CastPhaseResolve,
-				Amount: 22, Effect: "damage",
+				Amount: 22, Effect: "damage", Cooldown: 75,
 			},
-			want: `{"cast_phase":{"id":1000005,"ability":"fireball","target":1,"phase":"resolve","amount":22,"effect":"damage"}}`,
+			want: `{"cast_phase":{"id":1000005,"ability":"fireball","target":1,"phase":"resolve","amount":22,"effect":"damage","cooldown":75}}`,
 		},
 		{
 			name: "cast_phase resolve that moved no hp",
@@ -251,6 +251,16 @@ func TestEncodeProducesKeyAsTagEnvelope(t *testing.T) {
 			name: "tick",
 			msg:  mnet.Tick{T: 10},
 			want: `{"tick":{"t":10}}`,
+		},
+		{
+			name: "welcome resyncs ability cooldowns",
+			msg: mnet.Welcome{
+				You: 1, Session: "0123456789abcdef0123456789abcdef", TickMS: 40, Tick: 38,
+				Map: "village", Players: []mnet.PlayerState{}, Items: []mnet.ItemState{},
+				Nodes: []mnet.NodeState{}, Npcs: []mnet.NpcState{},
+				Cooldowns: []mnet.Cooldown{{Ability: "fireball", Remaining: 75}},
+			},
+			want: `{"welcome":{"you":1,"session":"0123456789abcdef0123456789abcdef","last_seq":0,"tick_ms":40,"tick":38,"map":"village","players":[],"items":[],"nodes":[],"npcs":[],"cooldowns":[{"ability":"fireball","remaining":75}]}}`,
 		},
 		{
 			name: "welcome naming the heartbeat period",

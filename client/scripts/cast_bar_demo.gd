@@ -17,12 +17,12 @@ const MAGE_KINDS: Array[String] = [
 
 const STEER_DX := 1.0
 const STEER_DZ := 0.0
-const SCREENSHOT_WARMUP_FRAMES := 15
+const SCREENSHOT_WARMUP_FRAMES := 1
 const JOIN_TIMEOUT_MSEC := 20000
 const CLASS_TIMEOUT_MSEC := 15000
 const CAST_TIMEOUT_MSEC := 12000
 const CASTBAR_TIMEOUT_MSEC := 4000
-const COOLDOWN_WAIT_MSEC := 2000
+const COOLDOWN_WAIT_MSEC := 6000
 const HOLD_MSEC := 800
 const SPIN_USEC := 20000
 
@@ -34,6 +34,11 @@ var _cast_bar: CastBarScript
 var _prefix: String
 var _effects: Array = []
 var _cast_seen: Array = []
+var _cast_phases: Array = []
+var _refusals: Array = []
+var _cooldown_updates: Array = []
+var _welcome_cooldowns: Array = []
+var _ticks_received := 0
 
 
 func run(
@@ -52,6 +57,11 @@ func run(
 	var net: Node = _session.get("net")
 	if net != null and net.has_signal("casting_changed"):
 		net.casting_changed.connect(_on_casting_changed)
+		net.cast_phase_observed.connect(_on_cast_phase)
+		net.server_error.connect(_on_server_error)
+		net.cast_cooldown_observed.connect(_on_cast_cooldown)
+		net.cooldowns_received.connect(_on_cooldowns_received)
+		net.tick_received.connect(_on_tick_received)
 
 	if not await _wait_until(_world_ready, JOIN_TIMEOUT_MSEC):
 		return _fail("no welcome with hostile practice dummy after %dms" % JOIN_TIMEOUT_MSEC)
@@ -74,14 +84,17 @@ func run(
 		return _fail("could not select hostile dummy %d" % hostile_id)
 	print("DEMO select %d hostile" % hostile_id)
 
+	if _cooldown_proof_requested():
+		return await _run_cooldown_proof(hostile_id)
+
 	if not await _capture(1):
 		return 1
 	if not await _cast_resolve(hostile_id):
 		return 1
 	if not await _capture(2):
 		return 1
-
-	await _wait_msec(COOLDOWN_WAIT_MSEC)
+	if not await _wait_for_ready(FIREBALL):
+		return 1
 	if not await _cast_interrupt(hostile_id):
 		return 1
 	if not await _capture(3):
@@ -187,9 +200,248 @@ func _cast_interrupt(hostile_id: int) -> bool:
 	return true
 
 
+func _cooldown_proof_requested() -> bool:
+	return OS.get_cmdline_user_args().has("--cast-bar-cooldown-proof")
+
+
+func _run_cooldown_proof(hostile_id: int) -> int:
+	print("DEMO cooldown first_ready %s" % FIREBALL)
+	if not await _cast_resolve(hostile_id):
+		return 1
+	if not _has_cooldown_update(FIREBALL, 75):
+		return _fail("fireball resolve did not carry cooldown=75")
+	print("DEMO cooldown_resolve %s cooldown=75" % FIREBALL)
+	if not await _refuse_inside_cooldown(FIREBALL):
+		return 1
+	if not await _capture(1):
+		return 1
+	if not await _wait_for_connection():
+		return 1
+	if not await _wait_for_ready(FIREBALL):
+		return 1
+	if not await _cast_resolve(hostile_id):
+		return 1
+	print("DEMO cooldown_after_ready %s cooldown=75" % FIREBALL)
+
+	if not await _heal_resolve():
+		return 1
+	if not _has_cooldown_update("heal", 38):
+		return _fail("heal resolve did not carry cooldown=38")
+	print("DEMO cooldown_resolve heal cooldown=38")
+	if not await _refuse_inside_cooldown("heal"):
+		return 1
+
+	if not await _reconnect_with_cooldowns():
+		return 1
+	if not await _capture(2):
+		return 1
+	if not await _wait_for_connection():
+		return 1
+	if not _session.select_player(_hostile_dummy_id()):
+		return _fail("could not reselect hostile dummy after reconnect")
+	if not await _wait_for_ready(FIREBALL):
+		return 1
+	if not await _cancel_then_resolve(hostile_id):
+		return 1
+	if not await _capture(3):
+		return 1
+
+	await _wait_msec(HOLD_MSEC)
+	print("DEMO done")
+	return 0
+
+
+func _heal_resolve() -> bool:
+	var resolve_before := _phase_count("heal", "resolve")
+	var mana_before := _session.mana_for(_session.own_id()).x
+	_session.request_cast("heal")
+	print("DEMO cooldown_cast heal")
+	if not await _wait_until(
+		func() -> bool: return _phase_count("heal", "resolve") > resolve_before,
+		CAST_TIMEOUT_MSEC,
+	):
+		_fail("heal never resolved")
+		return false
+	if not await _wait_until(
+		func() -> bool: return _has_cooldown_update("heal", 38),
+		CASTBAR_TIMEOUT_MSEC,
+	):
+		_fail("heal resolve did not reach the client cooldown cache")
+		return false
+	var mana_after := _session.mana_for(_session.own_id()).x
+	if mana_before >= 0 and mana_after >= mana_before:
+		_fail("heal resolve did not spend mana (%d -> %d)" % [mana_before, mana_after])
+		return false
+	return true
+
+
+func _refuse_inside_cooldown(ability_id: String) -> bool:
+	var refusals_before := _refusals.size()
+	var begins_before := _phase_count(ability_id, "begin")
+	var mana_before := _session.mana_for(_session.own_id()).x
+	_session.request_cast(ability_id)
+	print("DEMO cooldown_press %s mana=%d begins=%d" % [ability_id, mana_before, begins_before])
+	if not await _wait_until(
+		func() -> bool: return _refusals.size() > refusals_before,
+		CASTBAR_TIMEOUT_MSEC,
+	):
+		_fail("%s cooldown press produced no refusal frame" % ability_id)
+		return false
+	var refusal: Dictionary = _refusals.back()
+	if String(refusal.get("re", "")) != "cast" or String(refusal.get("message", "")) != "ability is on cooldown":
+		_fail("%s refusal was not the cooldown wire error: %s" % [ability_id, refusal])
+		return false
+	await _wait_msec(100)
+	if _phase_count(ability_id, "begin") != begins_before:
+		_fail("%s cooldown refusal began a cast" % ability_id)
+		return false
+	print("DEMO cooldown_refuse %s mana_before=%d begins=%d" % [ability_id, mana_before, begins_before])
+	return true
+
+
+func _reconnect_with_cooldowns() -> bool:
+	var net: Node = _session.get("net")
+	if net == null or not net.has_method("abandon"):
+		_fail("net client cannot abandon for cooldown welcome resync")
+		return false
+	var welcomes_before := _welcome_cooldowns.size()
+	net.abandon()
+	if not await _wait_until(
+		func() -> bool: return _welcome_cooldowns.size() > welcomes_before,
+		JOIN_TIMEOUT_MSEC,
+	):
+		_fail("reconnect did not deliver a cooldown welcome")
+		return false
+	var snapshot: Array = _welcome_cooldowns.back()
+	var fireball_remaining := _snapshot_remaining(snapshot, FIREBALL)
+	var heal_remaining := _snapshot_remaining(snapshot, "heal")
+	if fireball_remaining <= 0 or fireball_remaining >= 75 or heal_remaining <= 0 or heal_remaining >= 38:
+		_fail("welcome cooldowns were not mid-cooldown values: %s" % [snapshot])
+		return false
+	if _session.cooldown_remaining(FIREBALL) <= 0 or _session.cooldown_remaining("heal") <= 0:
+		_fail("welcome cooldowns did not re-anchor the client cache")
+		return false
+	print("DEMO cooldown_welcome fireball=%d heal=%d" % [fireball_remaining, heal_remaining])
+	return true
+
+
+func _cancel_then_resolve(hostile_id: int) -> bool:
+	_cast_seen.clear()
+	var begin_before := _phase_count(FIREBALL, "begin")
+	var cancel_before := _phase_count(FIREBALL, "cancel")
+	_session.request_cast(FIREBALL)
+	print("DEMO cooldown_cancel_start %s" % FIREBALL)
+	if not await _wait_until(
+		func() -> bool: return _phase_count(FIREBALL, "begin") > begin_before and _cast_progress() >= 1,
+		CASTBAR_TIMEOUT_MSEC,
+	):
+		_fail("cancel proof fireball did not begin")
+		return false
+	_session.request_move(STEER_DX, STEER_DZ)
+	await _tree.create_timer(0.05).timeout
+	_session.request_move(0.0, 0.0)
+	if not await _wait_until(
+		func() -> bool: return _phase_count(FIREBALL, "cancel") > cancel_before,
+		CAST_TIMEOUT_MSEC,
+	):
+		_fail("cancel proof fireball did not cancel on movement")
+		return false
+	if _session.cooldown_remaining(FIREBALL) != 0:
+		_fail("cancelled fireball started a cooldown")
+		return false
+	print("DEMO cooldown_cancel %s remaining=0" % FIREBALL)
+	print("DEMO castcancel %s %d" % [FIREBALL, hostile_id])
+	if not await _cast_resolve(hostile_id):
+		return false
+	if not _has_cooldown_update(FIREBALL, 75):
+		_fail("after-ready fireball resolve did not carry cooldown=75")
+		return false
+	print("DEMO cooldown_after_ready %s cooldown=75" % FIREBALL)
+	return true
+
+
+func _wait_for_connection() -> bool:
+	var net: Node = _session.get("net")
+	if net == null or not net.has_method("is_open"):
+		_fail("net client cannot report whether it is connected")
+		return false
+	var ticks_before := _ticks_received
+	if not await _wait_until(
+		func() -> bool: return net.is_open() and _ticks_received > ticks_before,
+		JOIN_TIMEOUT_MSEC,
+	):
+		_fail("client did not receive a fresh server tick after screenshot")
+		return false
+	return true
+
+
+func _wait_for_ready(ability_id: String) -> bool:
+	if not await _wait_until(
+		func() -> bool: return _session.cooldown_remaining(ability_id) == 0,
+		COOLDOWN_WAIT_MSEC,
+	):
+		_fail("%s never became ready after %dms" % [ability_id, COOLDOWN_WAIT_MSEC])
+		return false
+	print("DEMO cooldown_ready %s" % ability_id)
+	return true
+
+
+func _phase_count(ability_id: String, phase: String) -> int:
+	var count := 0
+	for entry: Variant in _cast_phases:
+		var row: Dictionary = entry
+		if String(row.get("ability", "")) == ability_id and String(row.get("phase", "")) == phase:
+			count += 1
+	return count
+
+
+func _has_cooldown_update(ability_id: String, cooldown: int) -> bool:
+	for entry: Variant in _cooldown_updates:
+		var row: Dictionary = entry
+		if String(row.get("ability", "")) == ability_id and int(row.get("cooldown", 0)) == cooldown:
+			return true
+	return false
+
+
+func _snapshot_remaining(snapshot: Array, ability_id: String) -> int:
+	for entry: Variant in snapshot:
+		var row: Dictionary = entry
+		if String(row.get("ability", "")) == ability_id:
+			return int(row.get("remaining", 0))
+	return 0
+
+
 func _on_cast_effect(target_id: int, ability_id: String) -> void:
 	_effects.append({"target": target_id, "ability": ability_id})
 	print("DEMO castfx %d %s" % [target_id, ability_id])
+
+
+func _on_cast_phase(id: int, ability_id: String, target_id: int, phase: String) -> void:
+	if id != _session.own_id():
+		return
+	_cast_phases.append({"ability": ability_id, "target": target_id, "phase": phase})
+	print("DEMO castphase %s %s" % [ability_id, phase])
+
+
+func _on_server_error(re: String, message: String) -> void:
+	_refusals.append({"re": re, "message": message})
+	print("DEMO castrefusal %s %s" % [re, message])
+
+
+func _on_cast_cooldown(id: int, ability_id: String, cooldown: int) -> void:
+	if id != _session.own_id():
+		return
+	_cooldown_updates.append({"ability": ability_id, "cooldown": cooldown})
+	print("DEMO castcooldown %s %d" % [ability_id, cooldown])
+
+
+func _on_cooldowns_received(cooldowns: Array) -> void:
+	_welcome_cooldowns.append(cooldowns.duplicate(true))
+	print("DEMO cooldown_welcome_frame %s" % [cooldowns])
+
+
+func _on_tick_received(_tick: int) -> void:
+	_ticks_received += 1
 
 
 func _on_casting_changed(ability: String, progress: int, total: int) -> void:

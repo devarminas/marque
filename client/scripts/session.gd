@@ -176,6 +176,7 @@ var _hp := {}
 var _mana := {}
 var _local: PlayerAvatarScript = null
 var _clock := TickClock.new()
+var _cooldown_cache: Dictionary = {}
 var _you := 0
 var _tick_ms := 0
 var _heartbeat_ticks := 0
@@ -246,6 +247,8 @@ func _ready() -> void:
 	_net.welcome_nodes.connect(_on_welcome_nodes)
 	_net.welcome_npcs.connect(_on_welcome_npcs)
 	_net.tick_received.connect(_on_tick_received)
+	_net.cooldowns_received.connect(_on_cooldowns_received)
+	_net.cast_cooldown_observed.connect(_on_cast_cooldown_observed)
 	_net.spawned.connect(_on_spawned)
 	_net.despawned.connect(_on_despawned)
 	_net.path_assigned.connect(_on_path_assigned)
@@ -1066,6 +1069,8 @@ func _on_welcomed(
 			_local_mover = _make_local_mover()
 			_local_mover.reset_at(tick, _local.position.x, _local.position.z)
 
+	_cooldown_cache.clear()
+
 	if previous_you != 0 and previous_you == _you:
 		print("session: resumed as %d at tick %d, %d player(s)" % [_you, tick, _avatars.size()])
 		resumed.emit(_you)
@@ -1156,6 +1161,31 @@ func _on_welcome_npcs(
 	_sync_npc_overhead_proximity()
 	if not _npcs.is_empty():
 		print("session: %d practice npc(s) in the world" % _npcs.size())
+
+
+func _on_cooldowns_received(cooldowns: Array) -> void:
+	_cooldown_cache.clear()
+	var tick := _clock.estimated_tick()
+	if tick < 0:
+		return
+	for entry: Variant in cooldowns:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var value: Dictionary = entry
+		_cooldown_cache[value["ability"]] = {"remaining": int(value["remaining"]), "tick": tick}
+
+
+func _on_cast_cooldown_observed(id: int, ability: String, cooldown: int) -> void:
+	if id != _you or cooldown <= 0:
+		return
+	_cooldown_cache[ability] = {"remaining": cooldown, "tick": _clock.estimated_tick()}
+
+
+func cooldown_remaining(ability: String) -> int:
+	if not _cooldown_cache.has(ability) or not _clock.is_anchored():
+		return 0
+	var anchor: Dictionary = _cooldown_cache[ability]
+	return maxi(0, int(anchor["remaining"]) - (_clock.estimated_tick() - int(anchor["tick"])))
 
 
 func _on_tick_received(t: int) -> void:

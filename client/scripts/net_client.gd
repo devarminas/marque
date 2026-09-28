@@ -15,6 +15,8 @@ signal welcomed(
 )
 
 signal tick_received(t: int)
+signal cooldowns_received(cooldowns: Array)
+signal cast_cooldown_observed(id: int, ability: String, cooldown: int)
 
 signal welcome_items(
 	item_ids: PackedInt64Array,
@@ -652,6 +654,7 @@ func _on_welcome(body: Dictionary, text: String) -> void:
 		hp_changed.emit(int(hp_ids[index]), hps[index], max_hps[index])
 	for index in mana_ids.size():
 		mana_changed.emit(int(mana_ids[index]), manas[index], max_manas[index])
+	cooldowns_received.emit(_cooldowns_of(body, text))
 	welcome_items.emit(item_ids, item_kinds, item_positions)
 	welcome_nodes.emit(node_ids, node_kinds, node_positions, node_states)
 	welcome_npcs.emit(
@@ -675,6 +678,24 @@ static func _heartbeat_ticks_of(body: Dictionary, text: String) -> int:
 		)
 		return 0
 	return ticks
+
+
+static func _cooldowns_of(body: Dictionary, text: String) -> Array:
+	var result: Array = []
+	var raw: Variant = body.get("cooldowns", [])
+	if typeof(raw) != TYPE_ARRAY:
+		push_error("net_client: welcome.cooldowns is not an array: %s" % text)
+		return result
+	for entry: Variant in raw as Array:
+		if typeof(entry) != TYPE_DICTIONARY:
+			push_error("net_client: welcome.cooldowns entry is not an object: %s" % text)
+			return []
+		var cooldown: Dictionary = entry
+		if typeof(cooldown.get("ability")) != TYPE_STRING or not _is_number(cooldown.get("remaining")) or int(cooldown["remaining"]) < 0:
+			push_error("net_client: welcome.cooldowns entry is invalid: %s" % text)
+			return []
+		result.append({"ability": cooldown["ability"], "remaining": int(cooldown["remaining"])})
+	return result
 
 
 static func _session_of(body: Dictionary, text: String) -> String:
@@ -947,6 +968,11 @@ func _on_cast_phase(body: Dictionary, text: String) -> void:
 		return
 	var id := int(body["id"])
 	cast_phase_observed.emit(id, body["ability"], int(body["target"]), body["phase"])
+	if body.has("cooldown"):
+		if not _is_number(body["cooldown"]) or int(body["cooldown"]) < 0:
+			push_error("net_client: cast_phase.cooldown must be a non-negative number: %s" % text)
+			return
+		cast_cooldown_observed.emit(id, body["ability"], int(body["cooldown"]))
 	if not body.has("effect"):
 		return
 	cast_effect_observed.emit(id, _optional_int(body, "amount", text), _optional_text(body, "effect", text))
