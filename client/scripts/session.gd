@@ -198,7 +198,6 @@ var _quest_objectives := PackedStringArray()
 var _quest_statuses := PackedStringArray()
 var _give_dismissed := false
 var _selected_player_id := 0
-var _casts_awaiting_mana: Array = []
 var _last_move_dx := 0.0
 var _last_move_dz := 0.0
 var _last_move_sent_msec := 0
@@ -637,19 +636,9 @@ func request_cast(ability_id: String) -> void:
 		push_warning("session: cast %s dropped, the socket is not open" % ability_id)
 		return
 	if target_id < 1:
-		if _net.send_cast(ability_id, 0) == OK:
-			await_mana_for_cast(ability_id, 0)
+		_net.send_cast(ability_id, 0)
 		return
-	if _net.send_cast(ability_id, target_id) == OK:
-		await_mana_for_cast(ability_id, target_id)
-
-
-func await_mana_for_cast(ability_id: String, target_id: int) -> void:
-	_casts_awaiting_mana.append({"ability": ability_id, "target": target_id})
-
-
-func casts_awaiting_mana_count() -> int:
-	return _casts_awaiting_mana.size()
+	_net.send_cast(ability_id, target_id)
 
 
 func _on_hotbar_ability(ability_id: String) -> void:
@@ -1033,7 +1022,6 @@ func _on_welcomed(
 	_clear_hit_points()
 	_clear_class_state()
 	_clear_look()
-	_casts_awaiting_mana.clear()
 	if _panel != null:
 		_panel.clear()
 	_you = you
@@ -1500,8 +1488,6 @@ func _on_pose_received(id: int, tick: int, x: float, y: float, z: float) -> void
 
 
 func _on_server_error(re: String, message: String) -> void:
-	if re == "cast" and not _casts_awaiting_mana.is_empty():
-		_casts_awaiting_mana.pop_front()
 	push_warning('session: server refused "%s": %s' % [re, message])
 	if _error_hud != null:
 		_error_hud.show_refusal(player_refusal_text(re, message))
@@ -1528,7 +1514,6 @@ static func _use_refusal_text(message: String) -> String:
 func _on_disconnected(code: int, reason: String) -> void:
 	_connection_over = true
 	_liveness_deadline_msec = 0
-	_casts_awaiting_mana.clear()
 	if _admin_console != null and _admin_console.is_open():
 		_close_admin_console()
 	if _cast_bar != null:
@@ -1891,8 +1876,12 @@ func _on_swing_observed(id: int, _target: int, weapon: String) -> void:
 	push_warning("session: swing for unknown actor %d; ignoring" % id)
 
 
-func _on_cast_phase_observed(id: int, ability: String, _target: int, phase: String) -> void:
+func _on_cast_phase_observed(id: int, ability: String, target: int, phase: String) -> void:
 	_record_hostile_cast(id, ability, phase)
+	# A resolve frame settles it. A cancelled cast sends no resolve, and the frame
+	# order against the mana spend and the cast bar clear stops mattering.
+	if phase == "resolve" and id == _you:
+		_play_cast_effect_on_target(target, ability)
 	var avatar: PlayerAvatarScript = _avatars.get(id)
 	if avatar != null:
 		avatar.cast_phase(phase, ability)
@@ -1935,26 +1924,12 @@ func _on_hp_changed(id: int, hp: int, max_hp: int) -> void:
 
 
 func _on_mana_changed(id: int, mana: int, max_mana: int) -> void:
-	var prior := -1
-	if id == _you:
-		prior = mana_for(_you).x
 	_apply_mana(id, mana, max_mana)
-	if id == _you and prior >= 0 and mana < prior and not _casts_awaiting_mana.is_empty():
-		_resolve_cast_on_mana_spend()
 
 
 func _on_casting_changed(ability: String, progress: int, total: int) -> void:
 	if _cast_bar != null:
 		_cast_bar.apply(ability, progress, total)
-	if ability.is_empty() and total <= 0 and not _casts_awaiting_mana.is_empty():
-		_casts_awaiting_mana.pop_front()
-
-
-func _resolve_cast_on_mana_spend() -> void:
-	var pending: Dictionary = _casts_awaiting_mana.pop_front()
-	var ability_id := String(pending.get("ability", ""))
-	var target_id := int(pending.get("target", 0))
-	_play_cast_effect_on_target(target_id, ability_id)
 
 
 func _play_cast_effect_on_target(target_id: int, ability_id: String) -> void:
