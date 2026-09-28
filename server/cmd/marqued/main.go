@@ -126,6 +126,7 @@ func run() error {
 	npcArchetypesPath := flag.String("npc-archetypes", "", "path to shared/npc_archetypes.json (default: search from cwd, or MARQUE_NPC_ARCHETYPES)")
 	questsPath := flag.String("quests", "", "path to shared/quests.json (default: search from cwd, or MARQUE_QUESTS)")
 	friendlyHP := flag.Int("friendly-hp", 0, "if >0, set seeded friendly practice dummy HP after spawn (demo harness)")
+	whiteMissPct := flag.Int("white-miss-pct", game.DefaultWhiteMissPct, "white swing miss chance in percent (0-100)")
 	seedClassKits := flag.Bool("seed-class-kits", false, "retired: hard-errors; use -admin and /give instead")
 	var seeds itemSeeds
 	flag.Var(&seeds, "item", "place a ground item at x,z (or x,z,kind; kind defaults to \""+game.KindAcorn+"\").\nRepeat the flag for more items. Omit it entirely for an empty world.")
@@ -136,6 +137,9 @@ func run() error {
 	flag.Var(&adminPlayers, "admin-player", "allow this player id to run admin commands.\nRepeat the flag for more ids. Ignored when -admin is set.")
 	flag.Parse()
 
+	if *whiteMissPct < 0 || *whiteMissPct > 100 {
+		return fmt.Errorf("-white-miss-pct must be between 0 and 100, got %d", *whiteMissPct)
+	}
 	if *seedClassKits {
 		return fmt.Errorf("-seed-class-kits retired; start with -admin (or -admin-player) and /give <kind> via the admin bus")
 	}
@@ -223,6 +227,7 @@ func run() error {
 	}
 	world.SetAbilities(abilities)
 	world.SetWeapons(weapons)
+	world.SetWhiteMissPct(*whiteMissPct)
 	world.SetNPCArchetypes(npcArchetypes)
 	world.SetClasses(classes)
 	world.SetQuests(quests)
@@ -250,6 +255,7 @@ func run() error {
 		"path":                wsPath,
 		"tick_ms":             int(game.TickDuration.Milliseconds()),
 		"walk_speed":          game.WalkSpeed,
+		"white_miss_pct":      *whiteMissPct,
 		"map":                 world.MapID(),
 		"world_half_extent":   world.HalfExtent(),
 		"inventory_size":      game.InventorySize,

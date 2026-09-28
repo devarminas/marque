@@ -816,14 +816,18 @@ func TestAttackHitLogsTheCritFlag(t *testing.T) {
 	cases := []struct {
 		name     string
 		dex      int
+		missPct  int
 		wantCrit bool
+		wantMiss bool
 	}{
 		{name: "baseline roll", dex: AttrBaseline},
 		{name: "guaranteed crit", dex: AttrBaseline + 100, wantCrit: true},
+		{name: "guaranteed miss despite crit chance", dex: AttrBaseline + 100, missPct: 100, wantMiss: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			pw := newClassProbe(t)
+			pw.w.SetWhiteMissPct(tc.missPct)
 			alice := pw.joinWithClass("knight")
 			hostile := pw.seedHostile()
 			hostile.pos = Point{X: 1, Z: 0}
@@ -831,7 +835,7 @@ func TestAttackHitLogsTheCritFlag(t *testing.T) {
 			alice.attrs.DEX = tc.dex
 
 			pw.w.attack(alice, mnet.Attack{Player: hostile.id}, 0)
-			for i := 0; i < 50 && hostile.hp == DummyMaxHP; i++ {
+			for i := 0; i < 50 && len(pw.events(EvAttackHit)) == 0; i++ {
 				pw.w.step()
 			}
 			hits := pw.events(EvAttackHit)
@@ -841,8 +845,15 @@ func TestAttackHitLogsTheCritFlag(t *testing.T) {
 			if got := hits[0]["crit"]; got != tc.wantCrit {
 				t.Fatalf("attack_hit crit=%v, want %v", got, tc.wantCrit)
 			}
-			// The miss pin lands with the miss roll in ARM-312. `miss` is a
-			// hardcoded false at every emit site, so asserting it pins nothing.
+			if got := hits[0]["miss"]; got != tc.wantMiss {
+				t.Fatalf("attack_hit miss=%v, want %v", got, tc.wantMiss)
+			}
+			if tc.wantMiss {
+				if hostile.hp != DummyMaxHP || hits[0]["damage"] != float64(0) || hits[0]["applied"] != float64(0) {
+					t.Fatalf("miss debited dummy hp=%d, hit=%v", hostile.hp, hits[0])
+				}
+				return
+			}
 
 			weapon := pw.weapon(pw.w.playerWeaponID(alice))
 			worstNormalHit := weapon.DamageMax + alice.attrs.AP() - hostile.attrs.Armor()

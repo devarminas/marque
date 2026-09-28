@@ -23,12 +23,18 @@ var _tree: SceneTree
 var _root: Node
 var _session: SessionScript
 var _refuses: Array = []
+var _swings: Array = []
 
 
-func run(root: Node, session: SessionScript) -> int:
+func run(root: Node, session: SessionScript, expect_white_miss: bool = false, shot_path: String = "", review: bool = false) -> int:
 	_root = root
 	_tree = root.get_tree()
 	_session = session
+	var net: Node = _session.get("_net")
+	net.swing_hit_observed.connect(
+		func(id: int, amount: int, crit: bool, miss: bool) -> void:
+			_swings.append({"id": id, "amount": amount, "crit": crit, "miss": miss})
+	)
 	_session.attack_refused.connect(
 		func(id: int, reason: String) -> void:
 			_refuses.append({"player": id, "reason": reason})
@@ -91,18 +97,46 @@ func run(root: Node, session: SessionScript) -> int:
 			"hostile right-click did not select %d, got %d"
 			% [hostile_id, _session.selected_player_id()]
 		)
-	if not await _wait_hp_drop(hostile_id, hostile_hp_before):
-		return _fail("hostile dummy hp never dropped after right-click attack")
-	print("DEMO attackok %d %d" % [hostile_id, _session.hit_points_for(hostile_id).x])
+	if expect_white_miss:
+		if not await _wait_swing_miss():
+			return _fail("no server swing miss after right-click attack")
+		print("DEMO miss %d amount=0 crit=false hp=%d" % [hostile_id, _session.hit_points_for(hostile_id).x])
+		if not shot_path.is_empty():
+			await RenderingServer.frame_post_draw
+			var shot_error := _root.get_viewport().get_texture().get_image().save_png(shot_path)
+			if shot_error != OK:
+				return _fail("miss screenshot failed: %d" % shot_error)
+			print("DEMO missshot %s" % shot_path)
+		if review:
+			for frame in range(30):
+				await RenderingServer.frame_post_draw
+				var review_path := "%s-%02d.png" % [shot_path.get_basename(), frame]
+				var review_error := _root.get_viewport().get_texture().get_image().save_png(review_path)
+				if review_error != OK:
+					return _fail("miss review frame failed: %d" % review_error)
+				await _wait_msec(1000)
+			print("DEMO missframes 30")
+		else:
+			await _wait_msec(6000)
+		if _session.hit_points_for(hostile_id).x != hostile_hp_before:
+			return _fail("miss changed dummy hp from %d to %d" % [hostile_hp_before, _session.hit_points_for(hostile_id).x])
+		for swing: Dictionary in _swings:
+			if swing["id"] == _session.own_id() and (not swing["miss"] or swing["crit"] or swing["amount"] != 0):
+				return _fail("white swing was not a miss: %s" % [swing])
+		print("DEMO misshp %d unchanged=%d" % [hostile_id, hostile_hp_before])
+	else:
+		if not await _wait_hp_drop(hostile_id, hostile_hp_before):
+			return _fail("hostile dummy hp never dropped after right-click attack")
+		print("DEMO attackok %d %d" % [hostile_id, _session.hit_points_for(hostile_id).x])
 
-	var hp_after_first := _session.hit_points_for(hostile_id).x
-	await _wait_msec(6000)
-	var hp_after_sustain := _session.hit_points_for(hostile_id).x
-	if hp_after_sustain <= 0:
-		return _fail("hostile dummy died during sustained attack: hp=%d" % hp_after_sustain)
-	if hp_after_sustain >= hp_after_first:
-		return _fail("hostile dummy hp did not keep falling: %d -> %d" % [hp_after_first, hp_after_sustain])
-	print("DEMO immortal %d hp=%d" % [hostile_id, hp_after_sustain])
+		var hp_after_first := _session.hit_points_for(hostile_id).x
+		await _wait_msec(6000)
+		var hp_after_sustain := _session.hit_points_for(hostile_id).x
+		if hp_after_sustain <= 0:
+			return _fail("hostile dummy died during sustained attack: hp=%d" % hp_after_sustain)
+		if hp_after_sustain >= hp_after_first:
+			return _fail("hostile dummy hp did not keep falling: %d -> %d" % [hp_after_first, hp_after_sustain])
+		print("DEMO immortal %d hp=%d" % [hostile_id, hp_after_sustain])
 
 	await _wait_msec(HOLD_MSEC)
 	print("DEMO done")
@@ -180,6 +214,16 @@ func _has_practice_dummy_pair() -> bool:
 		elif body.faction == NpcDummyScript.FactionHostile:
 			hostile = true
 	return friendly and hostile
+
+
+func _wait_swing_miss() -> bool:
+	var deadline := Time.get_ticks_msec() + HIT_WAIT_MSEC
+	while Time.get_ticks_msec() < deadline:
+		for swing: Dictionary in _swings:
+			if swing["id"] == _session.own_id():
+				return swing["miss"] and not swing["crit"] and swing["amount"] == 0
+		await _tree.create_timer(SPIN_USEC / 1_000_000.0).timeout
+	return false
 
 
 func _wait_hp_drop(id: int, baseline: int) -> bool:

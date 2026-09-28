@@ -156,6 +156,7 @@ func (w *World) stepImpAttack(n *npc) {
 		Weapon: weaponID,
 		Amount: applied,
 		Crit:   hit.crit,
+		Miss:   hit.miss,
 	}, nil)
 	w.markCombat(target)
 	fields := gamelog.Fields{
@@ -165,10 +166,12 @@ func (w *World) stepImpAttack(n *npc) {
 		"applied":   applied,
 		"target_hp": target.hp,
 		"crit":      hit.crit,
-		"miss":      false,
+		"miss":      hit.miss,
 	}
 	w.log.Event(w.tick, EvAttackHit, fields)
-	w.broadcastHP(target)
+	if !hit.miss {
+		w.broadcastHP(target)
+	}
 	if target.dead() {
 		w.kill(target, n.id)
 		w.beginImpLeash(n)

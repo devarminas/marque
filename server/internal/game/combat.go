@@ -168,14 +168,16 @@ func (w *World) attackPeriodTicks(weaponID string) int {
 	return w.weaponDef(weaponID).AttackPeriodTicks
 }
 
-// whiteRoll is one resolved white swing: the damage left after armor, and whether
-// the roll doubled the pre-armor amount.
 type whiteRoll struct {
 	damage int
 	crit   bool
+	miss   bool
 }
 
 func (w *World) rollWhiteDamage(weaponID string, ap, crit, armor int) whiteRoll {
+	if w.whiteMissPct > 0 && w.intN(100) < w.whiteMissPct {
+		return whiteRoll{miss: true}
+	}
 	weapon := w.weaponDef(weaponID)
 	span := weapon.DamageMax - weapon.DamageMin
 	dmg := weapon.DamageMin
@@ -297,6 +299,7 @@ func (w *World) resolveAttack(p *player) {
 		Weapon: weaponID,
 		Amount: applied,
 		Crit:   hit.crit,
+		Miss:   hit.miss,
 	}, nil)
 	w.markCombat(p)
 	w.markCombat(target)
@@ -305,9 +308,11 @@ func (w *World) resolveAttack(p *player) {
 	fields["applied"] = applied
 	fields["target_hp"] = target.hp
 	fields["crit"] = hit.crit
-	fields["miss"] = false
+	fields["miss"] = hit.miss
 	w.log.Event(w.tick, EvAttackHit, fields)
-	w.broadcastHP(target)
+	if !hit.miss {
+		w.broadcastHP(target)
+	}
 	if target.hp == 0 {
 		w.kill(target, p.id)
 	}
@@ -348,6 +353,7 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 		Weapon: weaponID,
 		Amount: applied,
 		Crit:   hit.crit,
+		Miss:   hit.miss,
 	}, nil)
 	w.markCombat(p)
 	fields := playerTargetFields(p.id, target.id)
@@ -355,9 +361,11 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 	fields["applied"] = applied
 	fields["target_hp"] = target.hp
 	fields["crit"] = hit.crit
-	fields["miss"] = false
+	fields["miss"] = hit.miss
 	w.log.Event(w.tick, EvAttackHit, fields)
-	w.broadcastNPCHP(target)
+	if !hit.miss {
+		w.broadcastNPCHP(target)
+	}
 	if target.dead() {
 		w.clearAttacksOn(target.id)
 		if target.kind == KindImp {

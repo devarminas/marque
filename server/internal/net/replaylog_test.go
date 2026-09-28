@@ -79,7 +79,7 @@ func TestHaltedPlayerLogsNoReplay(t *testing.T) {
 	bob.welcome()
 	alice.spawn()
 
-	halt := haltMidSteer(t, alice)
+	halt := haltMidSteer(t, h, alice)
 	bob.drain()
 
 	carol := h.dial("carol")
