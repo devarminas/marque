@@ -9,7 +9,7 @@ import (
 )
 
 // SchemaHash identifies the schema this file was generated from.
-const SchemaHash uint64 = 0x2ef628405f0bc103
+const SchemaHash uint64 = 0x939f35c2cdc94ad8
 
 type Message interface {
 	MessageID() uint32
@@ -18,14 +18,28 @@ type Message interface {
 	String() string
 }
 
-type ToServer interface {
+// StateMsg is a message sent on the state channel.
+type StateMsg interface {
 	Message
-	toServer()
+	stateMsg()
 }
 
-type ToClient interface {
+// EventsMsg is a message sent on the events channel.
+type EventsMsg interface {
 	Message
-	toClient()
+	eventsMsg()
+}
+
+// InputMsg is a message sent on the input channel.
+type InputMsg interface {
+	Message
+	inputMsg()
+}
+
+// IntentsMsg is a message sent on the intents channel.
+type IntentsMsg interface {
+	Message
+	intentsMsg()
 }
 
 var quantCoord = codec.Quant{Min: -10, Max: 10, PerUnit: 4, Steps: 80, Width: 1}
@@ -181,7 +195,7 @@ func (v Probe) encode(w *codec.Writer) {
 func decodeProbe(r *codec.Reader) (v Probe) {
 	v.Label = r.String(8)
 	v.Ratio = r.F32()
-	if n := r.Count(3); n > 0 {
+	if n := r.Count(3, 6); n > 0 {
 		v.Pairs = make([]Pair, n)
 		for i := range v.Pairs {
 			v.Pairs[i] = decodePair(r)
@@ -190,7 +204,7 @@ func decodeProbe(r *codec.Reader) (v Probe) {
 	v.Flag = r.Bool()
 	v.Color = decodeColor(r)
 	v.At = r.Quant(quantCoord)
-	if n := r.Count(2); n > 0 {
+	if n := r.Count(2, 2); n > 0 {
 		v.Shorts = make([]uint16, n)
 		for i := range v.Shorts {
 			v.Shorts[i] = r.U16()
@@ -216,7 +230,7 @@ func (Probe) MessageID() uint32 { return 1 }
 
 func (Probe) Channel() codec.Channel { return codec.ChannelEvents }
 
-func (Probe) toClient() {}
+func (Probe) eventsMsg() {}
 
 func (v Probe) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
@@ -246,7 +260,7 @@ func (Ping) MessageID() uint32 { return 2 }
 
 func (Ping) Channel() codec.Channel { return codec.ChannelIntents }
 
-func (Ping) toServer() {}
+func (Ping) intentsMsg() {}
 
 func (v Ping) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
@@ -255,15 +269,64 @@ func (v Ping) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// DecodeToServer decodes exactly one message; any byte left over is an error.
-func DecodeToServer(b []byte) (ToServer, error) {
-	r := codec.NewReader(b)
-	var m ToServer
+type Crowd struct {
+	Pairs []Pair
+}
+
+func (v Crowd) encode(w *codec.Writer) {
+	w.Count(len(v.Pairs), 65535)
+	for _, e := range v.Pairs {
+		e.encode(w)
+	}
+}
+
+func decodeCrowd(r *codec.Reader) (v Crowd) {
+	if n := r.Count(65535, 6); n > 0 {
+		v.Pairs = make([]Pair, n)
+		for i := range v.Pairs {
+			v.Pairs[i] = decodePair(r)
+		}
+	}
+	return v
+}
+
+func (v Crowd) String() string {
+	return fmt.Sprintf("crowd{pairs:%v}", v.Pairs)
+}
+
+func (Crowd) MessageID() uint32 { return 3 }
+
+func (Crowd) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (Crowd) eventsMsg() {}
+
+func (v Crowd) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(3)
+	v.encode(&w)
+	return w.Result()
+}
+
+// DecodeNextState reads one state message and leaves r after it. An id from
+// another channel fails with codec.ErrUnknownMessage.
+func DecodeNextState(r *codec.Reader) (StateMsg, error) {
+	var m StateMsg
 	switch r.Varint() {
-	case 2:
-		m = decodePing(&r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
+	}
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeState decodes exactly one state message; any byte left over is an error.
+func DecodeState(b []byte) (StateMsg, error) {
+	r := codec.NewReader(b)
+	m, err := DecodeNextState(r)
+	if err != nil {
+		return nil, err
 	}
 	if err := r.Finish(); err != nil {
 		return nil, err
@@ -271,15 +334,86 @@ func DecodeToServer(b []byte) (ToServer, error) {
 	return m, nil
 }
 
-// DecodeToClient decodes exactly one message; any byte left over is an error.
-func DecodeToClient(b []byte) (ToClient, error) {
-	r := codec.NewReader(b)
-	var m ToClient
+// DecodeNextEvents reads one events message and leaves r after it. An id from
+// another channel fails with codec.ErrUnknownMessage.
+func DecodeNextEvents(r *codec.Reader) (EventsMsg, error) {
+	var m EventsMsg
 	switch r.Varint() {
 	case 1:
-		m = decodeProbe(&r)
+		m = decodeProbe(r)
+	case 3:
+		m = decodeCrowd(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
+	}
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeEvents decodes exactly one events message; any byte left over is an error.
+func DecodeEvents(b []byte) (EventsMsg, error) {
+	r := codec.NewReader(b)
+	m, err := DecodeNextEvents(r)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.Finish(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeNextInput reads one input message and leaves r after it. An id from
+// another channel fails with codec.ErrUnknownMessage.
+func DecodeNextInput(r *codec.Reader) (InputMsg, error) {
+	var m InputMsg
+	switch r.Varint() {
+	default:
+		r.Fail(codec.ErrUnknownMessage)
+	}
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeInput decodes exactly one input message; any byte left over is an error.
+func DecodeInput(b []byte) (InputMsg, error) {
+	r := codec.NewReader(b)
+	m, err := DecodeNextInput(r)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.Finish(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeNextIntents reads one intents message and leaves r after it. An id from
+// another channel fails with codec.ErrUnknownMessage.
+func DecodeNextIntents(r *codec.Reader) (IntentsMsg, error) {
+	var m IntentsMsg
+	switch r.Varint() {
+	case 2:
+		m = decodePing(r)
+	default:
+		r.Fail(codec.ErrUnknownMessage)
+	}
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeIntents decodes exactly one intents message; any byte left over is an error.
+func DecodeIntents(b []byte) (IntentsMsg, error) {
+	r := codec.NewReader(b)
+	m, err := DecodeNextIntents(r)
+	if err != nil {
+		return nil, err
 	}
 	if err := r.Finish(); err != nil {
 		return nil, err

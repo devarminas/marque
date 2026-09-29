@@ -52,7 +52,7 @@ namespace {
 
 [[maybe_unused]] Color read_Color(codec::Reader& r) {
     const auto v = static_cast<Color>(r.varint());
-    if (!r.failed() && !valid(v)) r.fail(codec::Error::bad_enum);
+    if (!r.error() && !valid(v)) r.fail(codec::Error::bad_enum);
     return v;
 }
 
@@ -97,14 +97,14 @@ namespace {
     Probe v;
     v.label = r.string(8);
     v.ratio = r.f32();
-    v.pairs.resize(r.count(3));
+    v.pairs.resize(r.count(3, 6));
     for (std::size_t i = 0; i < v.pairs.size(); ++i) {
         v.pairs[i] = read_Pair(r);
     }
     v.flag = r.boolean();
     v.color = read_Color(r);
     v.at = r.quant(quant_coord);
-    v.shorts.resize(r.count(2));
+    v.shorts.resize(r.count(2, 2));
     for (std::size_t i = 0; i < v.shorts.size(); ++i) {
         v.shorts[i] = r.u16();
     }
@@ -130,6 +130,22 @@ namespace {
     return v;
 }
 
+[[maybe_unused]] void write(codec::Writer& w, const Crowd& v) {
+    w.count(v.pairs.size(), 65535);
+    for (const auto& e : v.pairs) {
+        write(w, e);
+    }
+}
+
+[[maybe_unused]] Crowd read_Crowd(codec::Reader& r) {
+    Crowd v;
+    v.pairs.resize(r.count(65535, 6));
+    for (std::size_t i = 0; i < v.pairs.size(); ++i) {
+        v.pairs[i] = read_Pair(r);
+    }
+    return v;
+}
+
 }
 
 std::expected<void, codec::Error> encode(const Probe& m, std::vector<std::uint8_t>& out) {
@@ -146,9 +162,78 @@ std::expected<void, codec::Error> encode(const Ping& m, std::vector<std::uint8_t
     return w.finish();
 }
 
-std::expected<ToServer, codec::Error> decode_to_server(std::span<const std::uint8_t> bytes) {
+std::expected<void, codec::Error> encode(const Crowd& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Crowd::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r) {
+    StateMsg m;
+    switch (r.varint()) {
+    default:
+        r.fail(codec::Error::unknown_message);
+        break;
+    }
+    if (auto err = r.error()) return std::unexpected(*err);
+    return m;
+}
+
+std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes) {
     codec::Reader r{bytes};
-    ToServer m;
+    auto m = decode_next_state(r);
+    if (!m) return m;
+    if (auto err = r.finish()) return std::unexpected(*err);
+    return m;
+}
+
+std::expected<EventsMsg, codec::Error> decode_next_events(codec::Reader& r) {
+    EventsMsg m;
+    switch (r.varint()) {
+    case Probe::message_id:
+        m = read_Probe(r);
+        break;
+    case Crowd::message_id:
+        m = read_Crowd(r);
+        break;
+    default:
+        r.fail(codec::Error::unknown_message);
+        break;
+    }
+    if (auto err = r.error()) return std::unexpected(*err);
+    return m;
+}
+
+std::expected<EventsMsg, codec::Error> decode_events(std::span<const std::uint8_t> bytes) {
+    codec::Reader r{bytes};
+    auto m = decode_next_events(r);
+    if (!m) return m;
+    if (auto err = r.finish()) return std::unexpected(*err);
+    return m;
+}
+
+std::expected<InputMsg, codec::Error> decode_next_input(codec::Reader& r) {
+    InputMsg m;
+    switch (r.varint()) {
+    default:
+        r.fail(codec::Error::unknown_message);
+        break;
+    }
+    if (auto err = r.error()) return std::unexpected(*err);
+    return m;
+}
+
+std::expected<InputMsg, codec::Error> decode_input(std::span<const std::uint8_t> bytes) {
+    codec::Reader r{bytes};
+    auto m = decode_next_input(r);
+    if (!m) return m;
+    if (auto err = r.finish()) return std::unexpected(*err);
+    return m;
+}
+
+std::expected<IntentsMsg, codec::Error> decode_next_intents(codec::Reader& r) {
+    IntentsMsg m;
     switch (r.varint()) {
     case Ping::message_id:
         m = read_Ping(r);
@@ -157,21 +242,14 @@ std::expected<ToServer, codec::Error> decode_to_server(std::span<const std::uint
         r.fail(codec::Error::unknown_message);
         break;
     }
-    if (auto err = r.finish()) return std::unexpected(*err);
+    if (auto err = r.error()) return std::unexpected(*err);
     return m;
 }
 
-std::expected<ToClient, codec::Error> decode_to_client(std::span<const std::uint8_t> bytes) {
+std::expected<IntentsMsg, codec::Error> decode_intents(std::span<const std::uint8_t> bytes) {
     codec::Reader r{bytes};
-    ToClient m;
-    switch (r.varint()) {
-    case Probe::message_id:
-        m = read_Probe(r);
-        break;
-    default:
-        r.fail(codec::Error::unknown_message);
-        break;
-    }
+    auto m = decode_next_intents(r);
+    if (!m) return m;
     if (auto err = r.finish()) return std::unexpected(*err);
     return m;
 }

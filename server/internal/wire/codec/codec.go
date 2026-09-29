@@ -161,10 +161,8 @@ func (w *Writer) fixed(v uint64, width int) {
 		w.U8(uint8(v))
 	case 2:
 		w.U16(uint16(v))
-	case 4:
-		w.U32(uint32(v))
 	default:
-		w.U64(v)
+		w.U32(uint32(v))
 	}
 }
 
@@ -173,7 +171,10 @@ type Reader struct {
 	err error
 }
 
-func NewReader(b []byte) Reader { return Reader{buf: b} }
+func NewReader(b []byte) *Reader { return &Reader{buf: b} }
+
+// Len is the number of unread bytes.
+func (r *Reader) Len() int { return len(r.buf) }
 
 func (r *Reader) Err() error { return r.err }
 
@@ -278,10 +279,16 @@ func (r *Reader) Varint() uint32 {
 	return 0
 }
 
-func (r *Reader) Count(bound int) int {
+// Count reads a length and fails with ErrTruncated when n elements of at
+// least minElem bytes each cannot fit in what remains, so a hostile count
+// never sizes an allocation.
+func (r *Reader) Count(bound, minElem int) int {
 	n := r.Varint()
 	if r.err == nil && uint64(n) > uint64(bound) {
 		r.Fail(ErrOverBound)
+	}
+	if r.err == nil && uint64(n)*uint64(minElem) > uint64(len(r.buf)) {
+		r.Fail(ErrTruncated)
 	}
 	if r.err != nil {
 		return 0
@@ -290,7 +297,7 @@ func (r *Reader) Count(bound int) int {
 }
 
 func (r *Reader) String(bound int) string {
-	b := r.take(r.Count(bound))
+	b := r.take(r.Count(bound, 1))
 	if r.err != nil {
 		return ""
 	}
@@ -308,10 +315,8 @@ func (r *Reader) Quant(q Quant) float64 {
 		n = uint64(r.U8())
 	case 2:
 		n = uint64(r.U16())
-	case 4:
-		n = uint64(r.U32())
 	default:
-		n = r.U64()
+		n = uint64(r.U32())
 	}
 	if r.err == nil && n > q.Steps {
 		r.Fail(ErrOutOfRange)

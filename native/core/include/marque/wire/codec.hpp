@@ -75,7 +75,8 @@ public:
     explicit Reader(std::span<const std::uint8_t> bytes) : buf_(bytes) {}
 
     void fail(Error e);
-    bool failed() const { return err_.has_value(); }
+    std::optional<Error> error() const { return err_; }
+    std::size_t remaining() const { return buf_.size(); }
     std::uint8_t u8();
     std::uint16_t u16();
     std::uint32_t u32();
@@ -83,7 +84,10 @@ public:
     bool boolean();
     float f32();
     std::uint32_t varint();
-    std::size_t count(std::size_t bound);
+    // Fails with Error::truncated when n elements of at least min_elem bytes
+    // each cannot fit in what remains, so a hostile count never sizes an
+    // allocation.
+    std::size_t count(std::size_t bound, std::size_t min_elem);
     std::string string(std::size_t bound);
     double quant(const Quant& q);
 

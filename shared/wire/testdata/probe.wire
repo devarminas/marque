@@ -41,3 +41,9 @@ message probe = 1 on events s2c {
 message ping = 2 on intents c2s {
   nonce u8
 }
+
+# A count near the bound with no element bytes behind it must fail before the
+# decoder allocates room for the elements.
+message crowd = 3 on events s2c {
+  pairs list(Pair, 65535)
+}

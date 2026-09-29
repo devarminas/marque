@@ -9,7 +9,7 @@ import (
 )
 
 // SchemaHash identifies the schema this file was generated from.
-const SchemaHash uint64 = 0xf08364ad37fc2e6e
+const SchemaHash uint64 = 0x60dfa19f4dc9df6f
 
 type Message interface {
 	MessageID() uint32
@@ -18,14 +18,28 @@ type Message interface {
 	String() string
 }
 
-type ToServer interface {
+// StateMsg is a message sent on the state channel.
+type StateMsg interface {
 	Message
-	toServer()
+	stateMsg()
 }
 
-type ToClient interface {
+// EventsMsg is a message sent on the events channel.
+type EventsMsg interface {
 	Message
-	toClient()
+	eventsMsg()
+}
+
+// InputMsg is a message sent on the input channel.
+type InputMsg interface {
+	Message
+	inputMsg()
+}
+
+// IntentsMsg is a message sent on the intents channel.
+type IntentsMsg interface {
+	Message
+	intentsMsg()
 }
 
 var quantPos = codec.Quant{Min: -4096, Max: 4096, PerUnit: 100, Steps: 819200, Width: 4}
@@ -198,7 +212,7 @@ func (Input) MessageID() uint32 { return 1 }
 
 func (Input) Channel() codec.Channel { return codec.ChannelInput }
 
-func (Input) toServer() {}
+func (Input) inputMsg() {}
 
 func (v Input) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
@@ -237,7 +251,7 @@ func (Pose) MessageID() uint32 { return 2 }
 
 func (Pose) Channel() codec.Channel { return codec.ChannelState }
 
-func (Pose) toClient() {}
+func (Pose) stateMsg() {}
 
 func (v Pose) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
@@ -273,7 +287,7 @@ func (Hp) MessageID() uint32 { return 3 }
 
 func (Hp) Channel() codec.Channel { return codec.ChannelState }
 
-func (Hp) toClient() {}
+func (Hp) stateMsg() {}
 
 func (v Hp) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
@@ -309,7 +323,7 @@ func (Refused) MessageID() uint32 { return 4 }
 
 func (Refused) Channel() codec.Channel { return codec.ChannelEvents }
 
-func (Refused) toClient() {}
+func (Refused) eventsMsg() {}
 
 func (v Refused) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
@@ -318,15 +332,30 @@ func (v Refused) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// DecodeToServer decodes exactly one message; any byte left over is an error.
-func DecodeToServer(b []byte) (ToServer, error) {
-	r := codec.NewReader(b)
-	var m ToServer
+// DecodeNextState reads one state message and leaves r after it. An id from
+// another channel fails with codec.ErrUnknownMessage.
+func DecodeNextState(r *codec.Reader) (StateMsg, error) {
+	var m StateMsg
 	switch r.Varint() {
-	case 1:
-		m = decodeInput(&r)
+	case 2:
+		m = decodePose(r)
+	case 3:
+		m = decodeHp(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
+	}
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeState decodes exactly one state message; any byte left over is an error.
+func DecodeState(b []byte) (StateMsg, error) {
+	r := codec.NewReader(b)
+	m, err := DecodeNextState(r)
+	if err != nil {
+		return nil, err
 	}
 	if err := r.Finish(); err != nil {
 		return nil, err
@@ -334,19 +363,84 @@ func DecodeToServer(b []byte) (ToServer, error) {
 	return m, nil
 }
 
-// DecodeToClient decodes exactly one message; any byte left over is an error.
-func DecodeToClient(b []byte) (ToClient, error) {
-	r := codec.NewReader(b)
-	var m ToClient
+// DecodeNextEvents reads one events message and leaves r after it. An id from
+// another channel fails with codec.ErrUnknownMessage.
+func DecodeNextEvents(r *codec.Reader) (EventsMsg, error) {
+	var m EventsMsg
 	switch r.Varint() {
-	case 2:
-		m = decodePose(&r)
-	case 3:
-		m = decodeHp(&r)
 	case 4:
-		m = decodeRefused(&r)
+		m = decodeRefused(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
+	}
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeEvents decodes exactly one events message; any byte left over is an error.
+func DecodeEvents(b []byte) (EventsMsg, error) {
+	r := codec.NewReader(b)
+	m, err := DecodeNextEvents(r)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.Finish(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeNextInput reads one input message and leaves r after it. An id from
+// another channel fails with codec.ErrUnknownMessage.
+func DecodeNextInput(r *codec.Reader) (InputMsg, error) {
+	var m InputMsg
+	switch r.Varint() {
+	case 1:
+		m = decodeInput(r)
+	default:
+		r.Fail(codec.ErrUnknownMessage)
+	}
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeInput decodes exactly one input message; any byte left over is an error.
+func DecodeInput(b []byte) (InputMsg, error) {
+	r := codec.NewReader(b)
+	m, err := DecodeNextInput(r)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.Finish(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeNextIntents reads one intents message and leaves r after it. An id from
+// another channel fails with codec.ErrUnknownMessage.
+func DecodeNextIntents(r *codec.Reader) (IntentsMsg, error) {
+	var m IntentsMsg
+	switch r.Varint() {
+	default:
+		r.Fail(codec.ErrUnknownMessage)
+	}
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// DecodeIntents decodes exactly one intents message; any byte left over is an error.
+func DecodeIntents(b []byte) (IntentsMsg, error) {
+	r := codec.NewReader(b)
+	m, err := DecodeNextIntents(r)
+	if err != nil {
+		return nil, err
 	}
 	if err := r.Finish(); err != nil {
 		return nil, err
