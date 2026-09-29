@@ -53,3 +53,9 @@ set_target_properties(marque_gdext PROPERTIES
     PREFIX "lib"
     OUTPUT_NAME "marque${GODOTCPP_SUFFIX}"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../client/bin")
+
+add_custom_target(marque_gdext_register ALL
+    COMMAND ${CMAKE_COMMAND} -DCLIENT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/../client
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/gdext/register_extension.cmake
+    DEPENDS marque_gdext
+    VERBATIM)
