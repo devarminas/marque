@@ -93,8 +93,8 @@ func cppDecodeField(f Field) string {
 	if f.Type.Kind != KindList {
 		return fmt.Sprintf("    %s = %s;\n", dst, cppDecode(f.Type))
 	}
-	return fmt.Sprintf("    %s.resize(r.count(%d));\n    for (std::size_t i = 0; i < %s.size(); ++i) {\n        %s[i] = %s;\n    }\n",
-		dst, f.Type.Bound, dst, dst, cppDecode(*f.Type.Elem))
+	return fmt.Sprintf("    %s.resize(r.count(%d, %d));\n    for (std::size_t i = 0; i < %s.size(); ++i) {\n        %s[i] = %s;\n    }\n",
+		dst, f.Type.Bound, f.Type.Elem.MinSize(), dst, dst, cppDecode(*f.Type.Elem))
 }
 
 func cppStructBody(b *strings.Builder, name string, fields []Field) {
@@ -103,8 +103,6 @@ func cppStructBody(b *strings.Builder, name string, fields []Field) {
 	}
 	fmt.Fprintf(b, "\n    bool operator==(const %s&) const = default;\n};\n\n", name)
 }
-
-func cppChannel(c string) string { return "codec::Channel::" + c }
 
 func genCppHeader(s *Schema, schemaPath, ns string) []byte {
 	var b strings.Builder
@@ -129,42 +127,43 @@ func genCppHeader(s *Schema, schemaPath, ns string) []byte {
 	}
 	for _, m := range s.Messages {
 		name := goName(m.Name)
-		fmt.Fprintf(&b, "struct %s {\n    static constexpr std::uint32_t message_id = %d;\n    static constexpr codec::Channel channel = %s;\n\n", name, m.ID, cppChannel(m.Channel))
+		fmt.Fprintf(&b, "struct %s {\n    static constexpr std::uint32_t message_id = %d;\n    static constexpr codec::Channel channel = codec::Channel::%s;\n\n", name, m.ID, m.Channel)
 		cppStructBody(&b, name, m.Fields)
 	}
-	for _, d := range cppDirections(s) {
-		fmt.Fprintf(&b, "using %s = std::variant<%s>;\n", d.alias, strings.Join(d.names, ", "))
+	for _, c := range cppChannels(s) {
+		if len(c.names) == 0 {
+			fmt.Fprintf(&b, "// No %s messages yet. std::variant<> is ill-formed, so the channel holds\n// std::monostate, which its decoder never returns.\n", c.name)
+			fmt.Fprintf(&b, "using %s = std::variant<std::monostate>;\n", c.alias)
+			continue
+		}
+		fmt.Fprintf(&b, "using %s = std::variant<%s>;\n", c.alias, strings.Join(c.names, ", "))
 	}
 	b.WriteString("\n")
 	for _, m := range s.Messages {
 		fmt.Fprintf(&b, "std::expected<void, codec::Error> encode(const %s& m, std::vector<std::uint8_t>& out);\n", goName(m.Name))
 	}
 	b.WriteString("\n")
-	for _, d := range cppDirections(s) {
-		fmt.Fprintf(&b, "// Decodes exactly one message; any byte left over is an error.\nstd::expected<%s, codec::Error> %s(std::span<const std::uint8_t> bytes);\n", d.alias, d.fn)
+	for _, c := range cppChannels(s) {
+		fmt.Fprintf(&b, "// Reads one %[1]s message and leaves r after it. An id from another channel\n// fails with codec::Error::unknown_message.\nstd::expected<%[2]s, codec::Error> decode_next_%[1]s(codec::Reader& r);\n", c.name, c.alias)
+		fmt.Fprintf(&b, "// Decodes exactly one %[1]s message; any byte left over is an error.\nstd::expected<%[2]s, codec::Error> decode_%[1]s(std::span<const std::uint8_t> bytes);\n", c.name, c.alias)
 	}
 	b.WriteString("\n}\n")
 	return []byte(b.String())
 }
 
-type cppDirection struct {
-	alias, fn string
-	msgs      []*Message
-	names     []string
+type cppChannel struct {
+	name, alias string
+	names       []string
 }
 
-// cppDirections skips a direction with no messages, since std::variant<> is
-// ill-formed.
-func cppDirections(s *Schema) []cppDirection {
-	var out []cppDirection
-	for _, d := range []cppDirection{{alias: "ToServer", fn: "decode_to_server"}, {alias: "ToClient", fn: "decode_to_client"}} {
-		d.msgs = s.MessagesTo(map[string]string{"ToServer": "c2s", "ToClient": "s2c"}[d.alias])
-		for _, m := range d.msgs {
-			d.names = append(d.names, goName(m.Name))
+func cppChannels(s *Schema) []cppChannel {
+	var out []cppChannel
+	for _, ch := range channels {
+		c := cppChannel{name: ch, alias: goName(ch) + "Msg"}
+		for _, m := range s.MessagesOn(ch) {
+			c.names = append(c.names, goName(m.Name))
 		}
-		if len(d.msgs) > 0 {
-			out = append(out, d)
-		}
+		out = append(out, c)
 	}
 	return out
 }
@@ -207,7 +206,7 @@ func genCppSource(s *Schema, schemaPath, ns, header string) []byte {
 			fmt.Fprintf(&b, "    case %s::%s:\n", e.Name, m.Name)
 		}
 		b.WriteString("        return true;\n    }\n    return false;\n}\n\n")
-		fmt.Fprintf(&b, "[[maybe_unused]] void write(codec::Writer& w, %[1]s v) {\n    if (!valid(v)) {\n        w.fail(codec::Error::bad_enum);\n        return;\n    }\n    w.varint(static_cast<std::uint32_t>(v));\n}\n\n[[maybe_unused]] %[1]s read_%[1]s(codec::Reader& r) {\n    const auto v = static_cast<%[1]s>(r.varint());\n    if (!r.failed() && !valid(v)) r.fail(codec::Error::bad_enum);\n    return v;\n}\n\n", e.Name)
+		fmt.Fprintf(&b, "[[maybe_unused]] void write(codec::Writer& w, %[1]s v) {\n    if (!valid(v)) {\n        w.fail(codec::Error::bad_enum);\n        return;\n    }\n    w.varint(static_cast<std::uint32_t>(v));\n}\n\n[[maybe_unused]] %[1]s read_%[1]s(codec::Reader& r) {\n    const auto v = static_cast<%[1]s>(r.varint());\n    if (!r.error() && !valid(v)) r.fail(codec::Error::bad_enum);\n    return v;\n}\n\n", e.Name)
 	}
 	for _, st := range s.Structs {
 		cppRecordCodec(&b, st.Name, st.Fields)
@@ -220,12 +219,13 @@ func genCppSource(s *Schema, schemaPath, ns, header string) []byte {
 		name := goName(m.Name)
 		fmt.Fprintf(&b, "std::expected<void, codec::Error> encode(const %[1]s& m, std::vector<std::uint8_t>& out) {\n    codec::Writer w{out};\n    w.varint(%[1]s::message_id);\n    write(w, m);\n    return w.finish();\n}\n\n", name)
 	}
-	for _, d := range cppDirections(s) {
-		fmt.Fprintf(&b, "std::expected<%s, codec::Error> %s(std::span<const std::uint8_t> bytes) {\n    codec::Reader r{bytes};\n    %s m;\n    switch (r.varint()) {\n", d.alias, d.fn, d.alias)
-		for _, name := range d.names {
+	for _, c := range cppChannels(s) {
+		fmt.Fprintf(&b, "std::expected<%s, codec::Error> decode_next_%s(codec::Reader& r) {\n    %s m;\n    switch (r.varint()) {\n", c.alias, c.name, c.alias)
+		for _, name := range c.names {
 			fmt.Fprintf(&b, "    case %[1]s::message_id:\n        m = read_%[1]s(r);\n        break;\n", name)
 		}
-		b.WriteString("    default:\n        r.fail(codec::Error::unknown_message);\n        break;\n    }\n    if (auto err = r.finish()) return std::unexpected(*err);\n    return m;\n}\n\n")
+		b.WriteString("    default:\n        r.fail(codec::Error::unknown_message);\n        break;\n    }\n    if (auto err = r.error()) return std::unexpected(*err);\n    return m;\n}\n\n")
+		fmt.Fprintf(&b, "std::expected<%[1]s, codec::Error> decode_%[2]s(std::span<const std::uint8_t> bytes) {\n    codec::Reader r{bytes};\n    auto m = decode_next_%[2]s(r);\n    if (!m) return m;\n    if (auto err = r.finish()) return std::unexpected(*err);\n    return m;\n}\n\n", c.alias, c.name)
 	}
 	b.WriteString("}\n")
 	return []byte(b.String())

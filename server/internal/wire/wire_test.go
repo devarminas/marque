@@ -52,18 +52,19 @@ type vector struct {
 	decode func([]byte) (wire.Message, error)
 }
 
-func toClient(b []byte) (wire.Message, error) { return wire.DecodeToClient(b) }
-func toServer(b []byte) (wire.Message, error) { return wire.DecodeToServer(b) }
+func onState(b []byte) (wire.Message, error)  { return wire.DecodeState(b) }
+func onEvents(b []byte) (wire.Message, error) { return wire.DecodeEvents(b) }
+func onInput(b []byte) (wire.Message, error)  { return wire.DecodeInput(b) }
 
 var starter = []vector{
 	{"input", wire.Input{Dx: 0.5, Dz: -1, Jump: true, Seq: 300},
-		"input{dx:0.5 dz:-1 jump:true seq:300}", toServer},
+		"input{dx:0.5 dz:-1 jump:true seq:300}", onInput},
 	{"pose", wire.Pose{Id: wire.PlayerId{Index: 7, Gen: 2}, X: 12.34, Y: 0.5, Z: -100.25},
-		"pose{id:PlayerId(7/2) x:12.34 y:0.5 z:-100.25}", toClient},
+		"pose{id:PlayerId(7/2) x:12.34 y:0.5 z:-100.25}", onState},
 	{"hp", wire.Hp{Id: wire.PlayerId{Index: 7, Gen: 2}, Hp: 85, MaxHp: 120},
-		"hp{id:PlayerId(7/2) hp:85 max_hp:120}", toClient},
+		"hp{id:PlayerId(7/2) hp:85 max_hp:120}", onState},
 	{"refused", wire.Refused{Tick: 1000, Seq: 42, Reason: wire.RefuseReasonCooldown},
-		"refused{tick:1000 seq:42 reason:cooldown}", toClient},
+		"refused{tick:1000 seq:42 reason:cooldown}", onEvents},
 }
 
 func TestStarterVectors(t *testing.T) {
@@ -94,7 +95,7 @@ func TestQuantizationSnapsToGrid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := wire.DecodeToServer(b)
+	m, err := wire.DecodeInput(b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,8 +133,8 @@ func TestProbeVectors(t *testing.T) {
 		msg    probe.Message
 		decode func([]byte) (probe.Message, error)
 	}{
-		{"probe", probeValue, func(b []byte) (probe.Message, error) { return probe.DecodeToClient(b) }},
-		{"ping", probe.Ping{Nonce: 42}, func(b []byte) (probe.Message, error) { return probe.DecodeToServer(b) }},
+		{"probe", probeValue, func(b []byte) (probe.Message, error) { return probe.DecodeEvents(b) }},
+		{"ping", probe.Ping{Nonce: 42}, func(b []byte) (probe.Message, error) { return probe.DecodeIntents(b) }},
 	}
 	for _, c := range cases {
 		got, err := c.msg.Append(nil)
@@ -160,20 +161,25 @@ func TestDecodeRejects(t *testing.T) {
 		decode func([]byte) error
 		want   error
 	}{
-		{"empty input", "", clientErr, codec.ErrTruncated},
-		{"truncated pose", "020702d244060032400600d71806", clientErr, codec.ErrTruncated},
-		{"trailing byte after input", "019600012c01000000", serverErr, codec.ErrTrailing},
-		{"unknown message id", "7f", clientErr, codec.ErrUnknownMessage},
-		{"client-bound pose sent to the server", "020702d244060032400600d7180600", serverErr, codec.ErrUnknownMessage},
-		{"overlong varint id", "8100", clientErr, codec.ErrBadVarint},
-		{"wish above its range", "01c900012c010000", serverErr, codec.ErrOutOfRange},
-		{"bool byte 2", "019600022c010000", serverErr, codec.ErrBadBool},
-		{"refuse reason 0", "04e80300002a00000000", clientErr, codec.ErrBadEnum},
+		{"empty input", "", stateErr, codec.ErrTruncated},
+		{"truncated pose", "020702d244060032400600d71806", stateErr, codec.ErrTruncated},
+		{"trailing byte after input", "019600012c01000000", inputErr, codec.ErrTrailing},
+		{"trailing byte after hp", "030702550000007800000000", stateErr, codec.ErrTrailing},
+		{"unknown message id", "7f", stateErr, codec.ErrUnknownMessage},
+		{"pose on the events channel", "020702d244060032400600d7180600", eventsErr, codec.ErrUnknownMessage},
+		{"refused on the state channel", "04e80300002a00000006", stateErr, codec.ErrUnknownMessage},
+		{"input on the intents channel", "019600012c010000", intentsErr, codec.ErrUnknownMessage},
+		{"pose on the input channel", "020702d244060032400600d7180600", inputErr, codec.ErrUnknownMessage},
+		{"overlong varint id", "8100", stateErr, codec.ErrBadVarint},
+		{"wish above its range", "01c900012c010000", inputErr, codec.ErrOutOfRange},
+		{"bool byte 2", "019600022c010000", inputErr, codec.ErrBadBool},
+		{"refuse reason 0", "04e80300002a00000000", eventsErr, codec.ErrBadEnum},
 		{"string over bound", "0109616161616161616161", probeErr, codec.ErrOverBound},
 		{"string not utf-8", "0101ff", probeErr, codec.ErrBadUTF8},
 		{"f32 NaN", "01000000c07f", probeErr, codec.ErrNonFinite},
 		{"f32 +Inf", "01000000807f", probeErr, codec.ErrNonFinite},
 		{"list over bound", "01000000803f04", probeErr, codec.ErrOverBound},
+		{"count with no elements behind it", "03ff7f", probeErr, codec.ErrTruncated},
 	}
 	for _, c := range cases {
 		if err := c.decode(mustHex(t, c.hex)); !errors.Is(err, c.want) {
@@ -182,9 +188,50 @@ func TestDecodeRejects(t *testing.T) {
 	}
 }
 
-func clientErr(b []byte) error { _, err := wire.DecodeToClient(b); return err }
-func serverErr(b []byte) error { _, err := wire.DecodeToServer(b); return err }
-func probeErr(b []byte) error  { _, err := probe.DecodeToClient(b); return err }
+func stateErr(b []byte) error   { _, err := wire.DecodeState(b); return err }
+func eventsErr(b []byte) error  { _, err := wire.DecodeEvents(b); return err }
+func inputErr(b []byte) error   { _, err := wire.DecodeInput(b); return err }
+func intentsErr(b []byte) error { _, err := wire.DecodeIntents(b); return err }
+func probeErr(b []byte) error   { _, err := probe.DecodeEvents(b); return err }
+
+// Crowd's list bound is 65535 and each Pair is at least 6 bytes, so the 3-byte
+// payload 03 ff7f claims 16383 pairs (98298 bytes) with none behind it.
+func TestHostileCountFailsBeforeAllocating(t *testing.T) {
+	b := mustHex(t, "03ff7f")
+	var err error
+	allocs := testing.AllocsPerRun(100, func() { _, err = probe.DecodeEvents(b) })
+	if !errors.Is(err, codec.ErrTruncated) {
+		t.Fatalf("got %v, want %v", err, codec.ErrTruncated)
+	}
+	if allocs != 0 {
+		t.Fatalf("hostile count cost %v allocations, want 0", allocs)
+	}
+}
+
+func TestDecodeNextReadsPackedMessagesInOrder(t *testing.T) {
+	b := mustHex(t, "020702d244060032400600d7180600"+"0307025500000078000000"+"020100881300000000000000000000")
+	r := codec.NewReader(b)
+	want := []wire.StateMsg{
+		wire.Pose{Id: wire.PlayerId{Index: 7, Gen: 2}, X: 12.34, Y: 0.5, Z: -100.25},
+		wire.Hp{Id: wire.PlayerId{Index: 7, Gen: 2}, Hp: 85, MaxHp: 120},
+		wire.Pose{Id: wire.PlayerId{Index: 1, Gen: 0}, X: -4046, Y: -4096, Z: -4096},
+	}
+	for i, w := range want {
+		got, err := wire.DecodeNextState(r)
+		if err != nil {
+			t.Fatalf("message %d: %v", i, err)
+		}
+		if !reflect.DeepEqual(got, w) {
+			t.Fatalf("message %d: got %v, want %v", i, got, w)
+		}
+	}
+	if r.Len() != 0 {
+		t.Fatalf("%d bytes left after three messages", r.Len())
+	}
+	if err := r.Finish(); err != nil {
+		t.Fatalf("Finish after three messages: %v", err)
+	}
+}
 
 func TestEncodeRejectsAndLeavesBufferUnchanged(t *testing.T) {
 	prefix := []byte{0xaa}

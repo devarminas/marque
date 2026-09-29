@@ -82,8 +82,8 @@ func goDecodeField(f Field) string {
 	if f.Type.Kind != KindList {
 		return fmt.Sprintf("%s = %s", dst, goDecode(f.Type))
 	}
-	return fmt.Sprintf("if n := r.Count(%d); n > 0 {\n%s = make(%s, n)\nfor i := range %s {\n%s[i] = %s\n}\n}",
-		f.Type.Bound, dst, goType(f.Type), dst, dst, goDecode(*f.Type.Elem))
+	return fmt.Sprintf("if n := r.Count(%d, %d); n > 0 {\n%s = make(%s, n)\nfor i := range %s {\n%s[i] = %s\n}\n}",
+		f.Type.Bound, f.Type.Elem.MinSize(), dst, goType(f.Type), dst, dst, goDecode(*f.Type.Elem))
 }
 
 // goRecord emits a struct type, its encode method, its decoder, and String.
@@ -132,17 +132,10 @@ func genGo(s *Schema, schemaPath, pkg string) ([]byte, error) {
 	String() string
 }
 
-type ToServer interface {
-	Message
-	toServer()
-}
-
-type ToClient interface {
-	Message
-	toClient()
-}
-
 `)
+	for _, ch := range channels {
+		fmt.Fprintf(&b, "// %[1]sMsg is a message sent on the %[2]s channel.\ntype %[1]sMsg interface {\nMessage\n%[2]sMsg()\n}\n\n", goName(ch), ch)
+	}
 
 	for _, q := range s.Quants {
 		fmt.Fprintf(&b, "var quant%s = codec.Quant{Min: %d, Max: %d, PerUnit: %d, Steps: %d, Width: %d}\n\n",
@@ -218,12 +211,11 @@ func decode%[1]s(r *codec.Reader) %[1]s {
 	for _, m := range s.Messages {
 		name := goName(m.Name)
 		goRecord(&b, name, m.Name, m.Fields)
-		marker := map[string]string{"c2s": "toServer", "s2c": "toClient"}[m.Direction]
 		fmt.Fprintf(&b, `func (%[1]s) MessageID() uint32 { return %[2]d }
 
 func (%[1]s) Channel() codec.Channel { return codec.Channel%[3]s }
 
-func (%[1]s) %[4]s() {}
+func (%[1]s) %[4]sMsg() {}
 
 func (v %[1]s) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
@@ -232,15 +224,30 @@ func (v %[1]s) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-`, name, m.ID, goName(m.Channel), marker)
+`, name, m.ID, goName(m.Channel), m.Channel)
 	}
 
-	for _, d := range []struct{ dir, iface string }{{"c2s", "ToServer"}, {"s2c", "ToClient"}} {
-		fmt.Fprintf(&b, "// Decode%[1]s decodes exactly one message; any byte left over is an error.\nfunc Decode%[1]s(b []byte) (%[1]s, error) {\nr := codec.NewReader(b)\nvar m %[1]s\nswitch r.Varint() {\n", d.iface)
-		for _, m := range s.MessagesTo(d.dir) {
-			fmt.Fprintf(&b, "case %d:\nm = decode%s(&r)\n", m.ID, goName(m.Name))
+	for _, ch := range channels {
+		c := goName(ch)
+		fmt.Fprintf(&b, "// DecodeNext%[1]s reads one %[2]s message and leaves r after it. An id from\n// another channel fails with codec.ErrUnknownMessage.\nfunc DecodeNext%[1]s(r *codec.Reader) (%[1]sMsg, error) {\nvar m %[1]sMsg\nswitch r.Varint() {\n", c, ch)
+		for _, m := range s.MessagesOn(ch) {
+			fmt.Fprintf(&b, "case %d:\nm = decode%s(r)\n", m.ID, goName(m.Name))
 		}
-		b.WriteString("default:\nr.Fail(codec.ErrUnknownMessage)\n}\nif err := r.Finish(); err != nil {\nreturn nil, err\n}\nreturn m, nil\n}\n\n")
+		b.WriteString("default:\nr.Fail(codec.ErrUnknownMessage)\n}\nif err := r.Err(); err != nil {\nreturn nil, err\n}\nreturn m, nil\n}\n\n")
+		fmt.Fprintf(&b, `// Decode%[1]s decodes exactly one %[2]s message; any byte left over is an error.
+func Decode%[1]s(b []byte) (%[1]sMsg, error) {
+	r := codec.NewReader(b)
+	m, err := DecodeNext%[1]s(r)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.Finish(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+`, c, ch)
 	}
 
 	out, err := format.Source([]byte(b.String()))

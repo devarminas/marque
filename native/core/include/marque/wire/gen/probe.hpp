@@ -13,7 +13,7 @@
 
 namespace marque::wire::probe {
 
-inline constexpr std::uint64_t schema_hash = 0x2ef628405f0bc103ULL;
+inline constexpr std::uint64_t schema_hash = 0x939f35c2cdc94ad8ULL;
 
 // Pairs a slot index with the generation that slot had when the entity was
 // created, so a reused index never names the old entity.
@@ -79,15 +79,47 @@ struct Ping {
     bool operator==(const Ping&) const = default;
 };
 
-using ToServer = std::variant<Ping>;
-using ToClient = std::variant<Probe>;
+struct Crowd {
+    static constexpr std::uint32_t message_id = 3;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    std::vector<Pair> pairs{};
+
+    bool operator==(const Crowd&) const = default;
+};
+
+// No state messages yet. std::variant<> is ill-formed, so the channel holds
+// std::monostate, which its decoder never returns.
+using StateMsg = std::variant<std::monostate>;
+using EventsMsg = std::variant<Probe, Crowd>;
+// No input messages yet. std::variant<> is ill-formed, so the channel holds
+// std::monostate, which its decoder never returns.
+using InputMsg = std::variant<std::monostate>;
+using IntentsMsg = std::variant<Ping>;
 
 std::expected<void, codec::Error> encode(const Probe& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Ping& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Crowd& m, std::vector<std::uint8_t>& out);
 
-// Decodes exactly one message; any byte left over is an error.
-std::expected<ToServer, codec::Error> decode_to_server(std::span<const std::uint8_t> bytes);
-// Decodes exactly one message; any byte left over is an error.
-std::expected<ToClient, codec::Error> decode_to_client(std::span<const std::uint8_t> bytes);
+// Reads one state message and leaves r after it. An id from another channel
+// fails with codec::Error::unknown_message.
+std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r);
+// Decodes exactly one state message; any byte left over is an error.
+std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes);
+// Reads one events message and leaves r after it. An id from another channel
+// fails with codec::Error::unknown_message.
+std::expected<EventsMsg, codec::Error> decode_next_events(codec::Reader& r);
+// Decodes exactly one events message; any byte left over is an error.
+std::expected<EventsMsg, codec::Error> decode_events(std::span<const std::uint8_t> bytes);
+// Reads one input message and leaves r after it. An id from another channel
+// fails with codec::Error::unknown_message.
+std::expected<InputMsg, codec::Error> decode_next_input(codec::Reader& r);
+// Decodes exactly one input message; any byte left over is an error.
+std::expected<InputMsg, codec::Error> decode_input(std::span<const std::uint8_t> bytes);
+// Reads one intents message and leaves r after it. An id from another channel
+// fails with codec::Error::unknown_message.
+std::expected<IntentsMsg, codec::Error> decode_next_intents(codec::Reader& r);
+// Decodes exactly one intents message; any byte left over is an error.
+std::expected<IntentsMsg, codec::Error> decode_intents(std::span<const std::uint8_t> bytes);
 
 }

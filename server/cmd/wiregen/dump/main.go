@@ -36,22 +36,33 @@ func main() {
 	}
 }
 
-// dump tries the client-bound decoder first. Message ids are unique across
-// both directions, so at most one decoder knows any id.
+// channels pairs each channel's decoder with its direction.
+var channels = []struct {
+	dir    string
+	decode func([]byte) (wire.Message, error)
+}{
+	{"s2c", func(b []byte) (wire.Message, error) { return wire.DecodeState(b) }},
+	{"s2c", func(b []byte) (wire.Message, error) { return wire.DecodeEvents(b) }},
+	{"c2s", func(b []byte) (wire.Message, error) { return wire.DecodeInput(b) }},
+	{"c2s", func(b []byte) (wire.Message, error) { return wire.DecodeIntents(b) }},
+}
+
+// dump tries each channel's decoder. Message ids are unique across channels,
+// so at most one decoder knows any id.
 func dump(h string) (string, error) {
 	b, err := hex.DecodeString(h)
 	if err != nil {
 		return "", err
 	}
-	if m, err := wire.DecodeToClient(b); !errors.Is(err, codec.ErrUnknownMessage) {
+	for _, c := range channels {
+		m, err := c.decode(b)
+		if errors.Is(err, codec.ErrUnknownMessage) {
+			continue
+		}
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%s s2c %v", m.Channel(), m), nil
+		return fmt.Sprintf("%s %s %v", m.Channel(), c.dir, m), nil
 	}
-	m, err := wire.DecodeToServer(b)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s c2s %v", m.Channel(), m), nil
+	return "", codec.ErrUnknownMessage
 }

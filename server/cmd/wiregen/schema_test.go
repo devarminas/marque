@@ -49,7 +49,8 @@ func mustParse(t *testing.T, src string) *Schema {
 
 func TestCanonicalIgnoresWhitespaceAndComments(t *testing.T) {
 	a, b := mustParse(t, tidy), mustParse(t, messy)
-	want := "handle PlayerId\n" +
+	want := "wire 1\n" +
+		"handle PlayerId\n" +
 		"quant pos min -8 max 8 per_unit 10\n" +
 		"enum Mood {\ncalm = 1\n}\n" +
 		"struct Tag {\ntext string(4)\n}\n" +
@@ -60,7 +61,7 @@ func TestCanonicalIgnoresWhitespaceAndComments(t *testing.T) {
 	if a.Hash() != b.Hash() {
 		t.Fatalf("whitespace changed the hash: %#x vs %#x", a.Hash(), b.Hash())
 	}
-	if a.Hash() != 0x9c57fe2b9cb6198b {
+	if a.Hash() != 0x3796531fac0fb050 {
 		t.Fatalf("hash %#x is not the first 8 bytes of sha256(canonical)", a.Hash())
 	}
 }
@@ -96,11 +97,20 @@ func TestParseRejects(t *testing.T) {
 		{"quant p min 5 max 5 per_unit 1", "need min < max"},
 		{"quant p min 0 max 100000 per_unit 100000", "more than 2^32 steps"},
 		{"message a = 1 on state s2c {\n  x u8", "missing closing }"},
+		{"message a = 1 on state s2c {\n  x list(\n}", "schema line 2: missing type"},
+		{"message a = 1 on state s2c {\n  constexpr u8\n}", `field name "constexpr"`},
+		{"enum E {\n  delete = 1\n}", `enum member "delete" must be snake_case and not a C++ keyword`},
+		{"enum E {\n}", "schema line 1: enum E has no members"},
+		{"handle Message", `type name "Message" is reserved`},
+		{"struct StateMsg {\n  x u8\n}", `type name "StateMsg" is reserved`},
+		{"message decode_next_state = 1 on state s2c {\n}", "becomes DecodeNextState, which is reserved"},
+		{"\nstruct Empty {\n}", "schema line 2: struct Empty has no fields"},
+		{"quant p min 2000000000 max 2000000001 per_unit 2000000000", "exceeds 2^53"},
 	}
 	for _, c := range cases {
 		_, err := Parse(c.src)
-		if err == nil || !strings.Contains(err.Error(), c.want) {
-			t.Errorf("Parse(%q) = %v, want error containing %q", c.src, err, c.want)
+		if err == nil || !strings.Contains(err.Error(), c.want) || !strings.HasPrefix(err.Error(), "schema line ") {
+			t.Errorf("Parse(%q) = %v, want error with a line number containing %q", c.src, err, c.want)
 		}
 	}
 }

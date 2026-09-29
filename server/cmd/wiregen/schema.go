@@ -91,6 +91,27 @@ type Type struct {
 	Struct *Struct
 }
 
+// MinSize is the fewest bytes any value of t encodes to. List decoders use it
+// to refuse a count the remaining bytes cannot hold before allocating.
+func (t Type) MinSize() int {
+	switch t.Kind {
+	case KindPrim:
+		return primSize[t.Prim]
+	case KindQuant:
+		return t.Quant.Width()
+	case KindString, KindEnum, KindList:
+		return 1
+	case KindHandle:
+		return 2
+	default:
+		n := 0
+		for _, f := range t.Struct.Fields {
+			n += f.Type.MinSize()
+		}
+		return n
+	}
+}
+
 func (t Type) Canonical() string {
 	switch t.Kind {
 	case KindPrim:
@@ -110,36 +131,64 @@ func (t Type) Canonical() string {
 	}
 }
 
-var prims = map[string]bool{
-	"u8": true, "u16": true, "u32": true, "u64": true,
-	"i8": true, "i16": true, "i32": true, "i64": true,
-	"bool": true, "f32": true,
+// primSize is each primitive's encoded width in bytes.
+var primSize = map[string]int{
+	"u8": 1, "u16": 2, "u32": 4, "u64": 8,
+	"i8": 1, "i16": 2, "i32": 4, "i64": 8,
+	"bool": 1, "f32": 4,
 }
+
+// codecVersion opens the canonical form, so a change to the byte rules changes
+// the hash even when the schema text does not. Bump it with any codec rule.
+const codecVersion = 1
+
+// channels lists the fixed channels in ADR 0018 section 1.3 order. Each one
+// gets its own generated message interface and decoder.
+var channels = []string{"state", "events", "input", "intents"}
 
 var channelDirection = map[string]string{
 	"state": "s2c", "events": "s2c", "input": "c2s", "intents": "c2s",
 }
 
-// Reserved field names collide with generated members (Go methods MessageID,
-// Channel, Append, String; C++ message_id, channel) or with C++ keywords.
-var reservedFields = map[string]bool{
-	"message_id": true, "channel": true, "append": true, "string": true,
-	"alignas": true, "alignof": true, "and": true, "asm": true, "auto": true,
-	"bool": true, "break": true, "case": true, "catch": true, "char": true,
-	"class": true, "const": true, "continue": true, "default": true,
-	"delete": true, "do": true, "double": true, "else": true, "enum": true,
-	"explicit": true, "export": true, "extern": true, "false": true,
-	"float": true, "for": true, "friend": true, "goto": true, "if": true,
-	"inline": true, "int": true, "long": true, "mutable": true,
-	"namespace": true, "new": true, "noexcept": true, "not": true,
-	"nullptr": true, "operator": true, "or": true, "private": true,
-	"protected": true, "public": true, "register": true, "return": true,
-	"short": true, "signed": true, "sizeof": true, "static": true,
-	"struct": true, "switch": true, "template": true, "this": true,
-	"throw": true, "true": true, "try": true, "typedef": true,
-	"typeid": true, "typename": true, "union": true, "unsigned": true,
-	"using": true, "virtual": true, "void": true, "volatile": true,
-	"while": true, "xor": true,
+// cppKeywords is the C++23 keyword list. Fields and enum members are emitted
+// verbatim as C++ identifiers, so none may be a keyword.
+var cppKeywords = setOf(
+	"alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor",
+	"bool", "break", "case", "catch", "char", "char8_t", "char16_t",
+	"char32_t", "class", "compl", "concept", "const", "consteval",
+	"constexpr", "constinit", "const_cast", "continue", "co_await",
+	"co_return", "co_yield", "decltype", "default", "delete", "do", "double",
+	"dynamic_cast", "else", "enum", "explicit", "export", "extern", "false",
+	"float", "for", "friend", "goto", "if", "inline", "int", "long",
+	"mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr",
+	"operator", "or", "or_eq", "private", "protected", "public", "register",
+	"reinterpret_cast", "requires", "return", "short", "signed", "sizeof",
+	"static", "static_assert", "static_cast", "struct", "switch", "template",
+	"this", "thread_local", "throw", "true", "try", "typedef", "typeid",
+	"typename", "union", "unsigned", "using", "virtual", "void", "volatile",
+	"wchar_t", "while", "xor", "xor_eq",
+)
+
+// generatedMembers collide with generated message members (Go methods
+// MessageID, Channel, Append, String; C++ message_id, channel).
+var generatedMembers = setOf("message_id", "channel", "append", "string")
+
+// reservedTypes are the package-level names the Go generator emits.
+var reservedTypes = func() map[string]bool {
+	out := setOf("Message", "SchemaHash")
+	for _, ch := range channels {
+		c := goName(ch)
+		out[c+"Msg"], out["Decode"+c], out["DecodeNext"+c] = true, true, true
+	}
+	return out
+}()
+
+func setOf(names ...string) map[string]bool {
+	out := make(map[string]bool, len(names))
+	for _, n := range names {
+		out[n] = true
+	}
+	return out
 }
 
 var (
@@ -189,15 +238,22 @@ func tokenize(line string) []string {
 }
 
 func (p *parser) errf(format string, args ...any) error {
-	return fmt.Errorf("schema line %d: %s", p.lineNo[p.pos], fmt.Sprintf(format, args...))
+	return p.errAt(p.lineNo[p.pos], format, args...)
 }
 
-func (p *parser) declareType(name string, t Type) error {
+func (p *parser) errAt(line int, format string, args ...any) error {
+	return fmt.Errorf("schema line %d: %s", line, fmt.Sprintf(format, args...))
+}
+
+func (p *parser) declareType(name string, t Type, line int) error {
 	if !pascalName.MatchString(name) {
-		return p.errf("type name %q must be PascalCase", name)
+		return p.errAt(line, "type name %q must be PascalCase", name)
+	}
+	if reservedTypes[name] {
+		return p.errAt(line, "type name %q is reserved for generated code", name)
 	}
 	if p.names[name] {
-		return p.errf("duplicate name %q", name)
+		return p.errAt(line, "duplicate name %q", name)
 	}
 	p.names[name] = true
 	p.types[name] = t
@@ -212,7 +268,7 @@ func (p *parser) decl() error {
 			return p.errf("want: handle <Name>")
 		}
 		h := &Handle{Name: toks[1]}
-		if err := p.declareType(h.Name, Type{Kind: KindHandle, Handle: h}); err != nil {
+		if err := p.declareType(h.Name, Type{Kind: KindHandle, Handle: h}, p.lineNo[p.pos]); err != nil {
 			return err
 		}
 		p.schema.Handles = append(p.schema.Handles, h)
@@ -249,7 +305,7 @@ func (p *parser) quant(toks []string) error {
 	if !snakeName.MatchString(q.Name) {
 		return p.errf("quant name %q must be snake_case", q.Name)
 	}
-	if _, dup := p.types[q.Name]; dup || prims[q.Name] || q.Name == "string" || q.Name == "list" {
+	if _, dup := p.types[q.Name]; dup || primSize[q.Name] > 0 || q.Name == "string" || q.Name == "list" {
 		return p.errf("duplicate name %q", q.Name)
 	}
 	if q.Min >= q.Max || q.PerUnit < 1 {
@@ -257,6 +313,9 @@ func (p *parser) quant(toks []string) error {
 	}
 	if q.Steps() > 0xffffffff {
 		return p.errf("quant %s: more than 2^32 steps", q.Name)
+	}
+	if max(-q.Min, q.Max)*q.PerUnit > 1<<53 {
+		return p.errf("quant %s: max(|min|, |max|) * per_unit exceeds 2^53, so v * per_unit is not exact in a double", q.Name)
 	}
 	p.types[q.Name] = Type{Kind: KindQuant, Quant: q}
 	p.schema.Quants = append(p.schema.Quants, q)
@@ -293,7 +352,8 @@ func (p *parser) enum(toks []string) error {
 		return err
 	}
 	e := &Enum{Name: toks[1]}
-	if err := p.declareType(e.Name, Type{Kind: KindEnum, Enum: e}); err != nil {
+	header := p.lineNo[p.pos]
+	if err := p.declareType(e.Name, Type{Kind: KindEnum, Enum: e}, header); err != nil {
 		return err
 	}
 	seenName, seenValue := map[string]bool{}, map[uint32]bool{}
@@ -305,8 +365,8 @@ func (p *parser) enum(toks []string) error {
 		if err != nil {
 			return p.errf("enum value %q is not a u32", t[2])
 		}
-		if !snakeName.MatchString(t[0]) {
-			return p.errf("enum member %q must be snake_case", t[0])
+		if !snakeName.MatchString(t[0]) || cppKeywords[t[0]] {
+			return p.errf("enum member %q must be snake_case and not a C++ keyword", t[0])
 		}
 		if seenName[t[0]] || seenValue[uint32(v)] {
 			return p.errf("enum %s: duplicate member or value in %q", e.Name, strings.Join(t, " "))
@@ -316,7 +376,7 @@ func (p *parser) enum(toks []string) error {
 		return nil
 	})
 	if err == nil && len(e.Members) == 0 {
-		return fmt.Errorf("enum %s has no members", e.Name)
+		return p.errAt(header, "enum %s has no members", e.Name)
 	}
 	p.schema.Enums = append(p.schema.Enums, e)
 	return err
@@ -327,12 +387,16 @@ func (p *parser) structDecl(toks []string) error {
 		return err
 	}
 	s := &Struct{Name: toks[1]}
+	header := p.lineNo[p.pos]
 	fields, err := p.fields()
 	if err != nil {
 		return err
 	}
+	if len(fields) == 0 {
+		return p.errAt(header, "struct %s has no fields; a zero-byte list element would make any count free to send", s.Name)
+	}
 	s.Fields = fields
-	if err := p.declareType(s.Name, Type{Kind: KindStruct, Struct: s}); err != nil {
+	if err := p.declareType(s.Name, Type{Kind: KindStruct, Struct: s}, header); err != nil {
 		return err
 	}
 	p.schema.Structs = append(p.schema.Structs, s)
@@ -363,6 +427,9 @@ func (p *parser) message(toks []string) error {
 		return p.errf("channel %s is %s, message says %s", m.Channel, dir, m.Direction)
 	}
 	pascal := goName(m.Name)
+	if reservedTypes[pascal] {
+		return p.errf("message name %q becomes %s, which is reserved for generated code", m.Name, pascal)
+	}
 	if p.names[pascal] {
 		return p.errf("duplicate name %q", pascal)
 	}
@@ -386,7 +453,7 @@ func (p *parser) fields() ([]Field, error) {
 			return p.errf("want: <field> <type>")
 		}
 		name := t[0]
-		if !snakeName.MatchString(name) || reservedFields[name] {
+		if !snakeName.MatchString(name) || cppKeywords[name] || generatedMembers[name] {
 			return p.errf("field name %q must be snake_case and not reserved", name)
 		}
 		if seen[name] {
@@ -411,9 +478,12 @@ func (p *parser) fields() ([]Field, error) {
 
 // typ parses one type from the front of toks and returns the unread tail.
 func (p *parser) typ(toks []string) (Type, []string, error) {
+	if len(toks) == 0 {
+		return Type{}, nil, p.errf("missing type")
+	}
 	head := toks[0]
 	switch {
-	case prims[head]:
+	case primSize[head] > 0:
 		return Type{Kind: KindPrim, Prim: head}, toks[1:], nil
 	case head == "string":
 		if len(toks) < 4 || toks[1] != "(" || toks[3] != ")" {
@@ -452,12 +522,13 @@ func (p *parser) bound(tok string) (int, error) {
 	return int(n), nil
 }
 
-// Canonical is the hashed form of the schema: every declaration in a fixed
-// category order (handles, quants, enums, structs, messages), each category in
-// source order, one line per declaration header, member, or field, with single
-// spaces and no comments.
+// Canonical is the hashed form of the schema: a "wire <codecVersion>" line,
+// then every declaration in a fixed category order (handles, quants, enums,
+// structs, messages), each category in source order, one line per declaration
+// header, member, or field, with single spaces and no comments.
 func (s *Schema) Canonical() string {
 	var b strings.Builder
+	fmt.Fprintf(&b, "wire %d\n", codecVersion)
 	for _, h := range s.Handles {
 		fmt.Fprintf(&b, "handle %s\n", h.Name)
 	}
@@ -495,10 +566,10 @@ func (s *Schema) Hash() uint64 {
 	return binary.BigEndian.Uint64(sum[:8])
 }
 
-func (s *Schema) MessagesTo(dir string) []*Message {
+func (s *Schema) MessagesOn(channel string) []*Message {
 	var out []*Message
 	for _, m := range s.Messages {
-		if m.Direction == dir {
+		if m.Channel == channel {
 			out = append(out, m)
 		}
 	}

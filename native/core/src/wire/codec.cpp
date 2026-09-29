@@ -199,14 +199,15 @@ std::uint32_t Reader::varint() {
     return 0;
 }
 
-std::size_t Reader::count(std::size_t bound) {
-    const auto n = varint();
+std::size_t Reader::count(std::size_t bound, std::size_t min_elem) {
+    const std::uint64_t n = varint();
     if (!err_ && n > bound) fail(Error::over_bound);
-    return err_ ? 0 : n;
+    if (!err_ && n * min_elem > buf_.size()) fail(Error::truncated);
+    return err_ ? 0 : static_cast<std::size_t>(n);
 }
 
 std::string Reader::string(std::size_t bound) {
-    auto b = take(count(bound));
+    auto b = take(count(bound, 1));
     if (err_) return {};
     std::string s(b.begin(), b.end());
     if (!valid_utf8(s)) {

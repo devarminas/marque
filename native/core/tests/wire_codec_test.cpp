@@ -113,46 +113,69 @@ void starter_vectors() {
     check(encode_hex(hp_value) == v.at("hp"), "hp encodes to the committed vector");
     check(encode_hex(refused_value) == v.at("refused"), "refused encodes to the committed vector");
 
-    check(round_trips(wire::decode_to_server, v.at("input"), input_value), "input round trips");
-    check(round_trips(wire::decode_to_client, v.at("pose"), pose_value), "pose round trips");
-    check(round_trips(wire::decode_to_client, v.at("hp"), hp_value), "hp round trips");
-    check(round_trips(wire::decode_to_client, v.at("refused"), refused_value), "refused round trips");
+    check(round_trips(wire::decode_input, v.at("input"), input_value), "input round trips");
+    check(round_trips(wire::decode_state, v.at("pose"), pose_value), "pose round trips");
+    check(round_trips(wire::decode_state, v.at("hp"), hp_value), "hp round trips");
+    check(round_trips(wire::decode_events, v.at("refused"), refused_value), "refused round trips");
 }
 
 void probe_vectors() {
     const auto v = read_vectors("probe.vec");
     check(probe_encode_hex(probe_value) == v.at("probe"), "probe encodes to the committed vector");
     check(probe_encode_hex(probe::Ping{.nonce = 42}) == v.at("ping"), "ping encodes to the committed vector");
-    check(round_trips(probe::decode_to_client, v.at("probe"), probe_value), "probe round trips");
-    check(round_trips(probe::decode_to_server, v.at("ping"), probe::Ping{.nonce = 42}), "ping round trips");
+    check(round_trips(probe::decode_events, v.at("probe"), probe_value), "probe round trips");
+    check(round_trips(probe::decode_intents, v.at("ping"), probe::Ping{.nonce = 42}), "ping round trips");
 }
 
 void quantization_snaps_to_grid() {
     std::vector<std::uint8_t> out;
     check(wire::encode(wire::Input{.dx = 0.123, .dz = -0.456, .seq = 1}, out).has_value(), "off-grid input encodes");
-    auto got = wire::decode_to_server(out);
+    auto got = wire::decode_input(out);
     check(got.has_value() && std::get<wire::Input>(*got).dx == 0.12 && std::get<wire::Input>(*got).dz == -0.46,
           "off-grid wish decodes to 0.12 and -0.46");
 }
 
 void decode_rejects() {
-    const auto client = wire::decode_to_client;
-    const auto server = wire::decode_to_server;
-    const auto pr = probe::decode_to_client;
-    check(rejects(client, "", Error::truncated), "empty input is truncated");
-    check(rejects(client, "020702d244060032400600d71806", Error::truncated), "short pose is truncated");
-    check(rejects(server, "019600012c01000000", Error::trailing), "byte after input is trailing");
-    check(rejects(client, "7f", Error::unknown_message), "id 127 is unknown");
-    check(rejects(server, "020702d244060032400600d7180600", Error::unknown_message), "pose is unknown to the server");
-    check(rejects(client, "8100", Error::bad_varint), "overlong varint id");
-    check(rejects(server, "01c900012c010000", Error::out_of_range), "wish above its range");
-    check(rejects(server, "019600022c010000", Error::bad_bool), "bool byte 2");
-    check(rejects(client, "04e80300002a00000000", Error::bad_enum), "refuse reason 0");
+    const auto state = wire::decode_state;
+    const auto events = wire::decode_events;
+    const auto input = wire::decode_input;
+    const auto intents = wire::decode_intents;
+    const auto pr = probe::decode_events;
+    check(rejects(state, "", Error::truncated), "empty input is truncated");
+    check(rejects(state, "020702d244060032400600d71806", Error::truncated), "short pose is truncated");
+    check(rejects(input, "019600012c01000000", Error::trailing), "byte after input is trailing");
+    check(rejects(state, "030702550000007800000000", Error::trailing), "byte after hp is trailing");
+    check(rejects(state, "7f", Error::unknown_message), "id 127 is unknown");
+    check(rejects(events, "020702d244060032400600d7180600", Error::unknown_message), "pose is refused on events");
+    check(rejects(state, "04e80300002a00000006", Error::unknown_message), "refused is refused on state");
+    check(rejects(intents, "019600012c010000", Error::unknown_message), "input is refused on intents");
+    check(rejects(input, "020702d244060032400600d7180600", Error::unknown_message), "pose is refused on input");
+    check(rejects(state, "8100", Error::bad_varint), "overlong varint id");
+    check(rejects(input, "01c900012c010000", Error::out_of_range), "wish above its range");
+    check(rejects(input, "019600022c010000", Error::bad_bool), "bool byte 2");
+    check(rejects(events, "04e80300002a00000000", Error::bad_enum), "refuse reason 0");
     check(rejects(pr, "0109616161616161616161", Error::over_bound), "string over bound");
     check(rejects(pr, "0101ff", Error::bad_utf8), "string not utf-8");
     check(rejects(pr, "01000000c07f", Error::non_finite), "f32 NaN");
     check(rejects(pr, "01000000807f", Error::non_finite), "f32 +Inf");
     check(rejects(pr, "01000000803f04", Error::over_bound), "list over bound");
+    check(rejects(pr, "03ff7f", Error::truncated), "count with no elements behind it");
+}
+
+void decode_next_reads_packed_messages_in_order() {
+    const auto bytes = from_hex("020702d244060032400600d7180600"
+                                "0307025500000078000000"
+                                "020100881300000000000000000000");
+    wire::codec::Reader r{bytes};
+    const wire::Pose third{.id = {1, 0}, .x = -4046, .y = -4096, .z = -4096};
+    auto a = wire::decode_next_state(r);
+    check(a.has_value() && std::get<wire::Pose>(*a) == pose_value, "first packed message is the pose");
+    auto b = wire::decode_next_state(r);
+    check(b.has_value() && std::get<wire::Hp>(*b) == hp_value, "second packed message is the hp");
+    auto c = wire::decode_next_state(r);
+    check(c.has_value() && std::get<wire::Pose>(*c) == third, "third packed message is the second pose");
+    check(r.remaining() == 0, "reader is empty after three messages");
+    check(!r.finish().has_value(), "finish succeeds after three messages");
 }
 
 template <typename Msg, typename Encode>
@@ -184,6 +207,7 @@ int main() {
     probe_vectors();
     quantization_snaps_to_grid();
     decode_rejects();
+    decode_next_reads_packed_messages_in_order();
     encode_rejects_and_leaves_buffer_unchanged();
     return marque::test::check_finish();
 }
