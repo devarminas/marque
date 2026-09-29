@@ -1,0 +1,6 @@
+# Encoded messages both implementations must produce byte for byte.
+# Each line is <name> <hex>. The Go and C++ tests build the same values.
+input 019600012c010000
+pose 020702d244060032400600d7180600
+hp 0307025500000078000000
+refused 04e80300002a00000006

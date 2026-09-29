@@ -1,0 +1,3 @@
+# Probe fixture (shared/wire/testdata/probe.wire). Same format as starter.vec.
+probe 010668c3a96c6c6f0000c03f0203000000803ec80101000000c001ac021f020100ffffff3412efbeadde0807060504030201fffefffdfffffffcffffffffffffff80800105
+ping 022a

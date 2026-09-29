@@ -1,0 +1,43 @@
+# Codec fixture: one message that uses every field type, so both languages
+# prove every encoding rule without adding fake messages to the real schema.
+
+handle PlayerId
+handle NpcId
+
+quant coord min -10 max 10 per_unit 4
+
+enum Color {
+  red = 0
+  green = 7
+  blue = 300
+}
+
+struct Pair {
+  who NpcId
+  weight f32
+}
+
+# Field order puts the bounded and checked types first so rejection tests can
+# use short literal inputs.
+message probe = 1 on events s2c {
+  label string(8)
+  ratio f32
+  pairs list(Pair, 3)
+  flag bool
+  color Color
+  at coord
+  shorts list(u16, 2)
+  a_u8 u8
+  a_u16 u16
+  a_u32 u32
+  a_u64 u64
+  a_i8 i8
+  a_i16 i16
+  a_i32 i32
+  a_i64 i64
+  owner PlayerId
+}
+
+message ping = 2 on intents c2s {
+  nonce u8
+}
