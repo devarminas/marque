@@ -1,0 +1,43 @@
+package transport
+
+// Endpoint is both halves of a connection driven from one goroutine: the
+// client core, tests, and the conformance vectors use it. The server splits
+// the halves across the reader goroutine and the tick loop instead (udp.go).
+type Endpoint struct {
+	rx *Receiver
+	tx *Sender
+}
+
+func NewEndpoint(role Role, cfg Config, now uint64) (*Endpoint, error) {
+	rx, err := NewReceiver(role, cfg)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := NewSender(role, cfg, now)
+	if err != nil {
+		return nil, err
+	}
+	return &Endpoint{rx: rx, tx: tx}, nil
+}
+
+// Receive applies one datagram that arrived at now.
+func (e *Endpoint) Receive(d []byte, now uint64) (Received, error) {
+	if e.tx.State() != Open {
+		return Received{}, ErrClosed
+	}
+	r, err := e.rx.Receive(d)
+	if err == nil {
+		e.tx.Observe(r.PeerAck, r.OwnAck, now)
+	}
+	return r, err
+}
+
+func (e *Endpoint) Send(msg []byte) error { return e.tx.Send(msg) }
+
+func (e *Endpoint) Flush(now uint64, u Unreliable) Flushed { return e.tx.Flush(now, u) }
+
+func (e *Endpoint) State() State { return e.tx.State() }
+
+func (e *Endpoint) Backlog() int { return e.tx.Backlog() }
+
+func (e *Endpoint) Stats() Stats { return e.rx.Stats() }
