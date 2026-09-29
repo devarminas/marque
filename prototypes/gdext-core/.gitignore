@@ -1,0 +1,7 @@
+/godot-cpp/
+/api/
+/build/
+/build-editor/
+/project/.godot/
+/project/bin/*.so
+*.uid
