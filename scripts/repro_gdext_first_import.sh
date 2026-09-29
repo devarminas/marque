@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# ARM-348 repro: clone the repo fresh, build the native tree (which builds the
+# marque GDExtension into client/bin), then run Godot's first import of the
+# client. Exit code is the import's exit code; 134 is the SIGABRT Godot raises
+# after the crash handler.
+#
+# The import runs under scripts/repro_gdext_doc_race.c, which makes the
+# editor's doc-generation race lose every time instead of only when the rest
+# of the import is short. The shim holds the second doc cache load, so the
+# script first warms the editor doc cache when this machine has none. Set
+# REPRO_NO_RACE_SHIM=1 to import without the shim.
+#
+#   scripts/repro_gdext_first_import.sh [rev] [repo]
+#
+# rev defaults to HEAD, repo to this checkout. Pass a URL and branch to test a
+# pushed branch.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+rev="${1:-HEAD}"
+repo="${2:-$repo_root}"
+if [[ "$repo" == "$repo_root" ]]; then
+    rev="$(git -C "$repo_root" rev-parse "$rev")"
+fi
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+clone="$work/marque"
+
+git clone -q "$repo" "$clone"
+git -C "$clone" checkout -q "$rev"
+echo "clone: $repo @ $(git -C "$clone" rev-parse --short HEAD)"
+
+if ! "$clone/scripts/native_test.sh" > "$work/native.log" 2>&1; then
+    tail -20 "$work/native.log"
+    echo "native build failed"
+    exit 2
+fi
+echo "native build: ok ($(ls "$clone/client/bin"/*.so))"
+
+preload=""
+if [[ -z "${REPRO_NO_RACE_SHIM:-}" ]]; then
+    doc_cache="${XDG_CACHE_HOME:-$HOME/.cache}/godot/editor_doc_cache-4.7.res"
+    if [[ ! -f "$doc_cache" ]]; then
+        mkdir "$work/empty"
+        echo "config_version=5" > "$work/empty/project.godot"
+        godot --headless --path "$work/empty" --editor --quit > /dev/null 2>&1
+        echo "doc cache warmed: $doc_cache"
+    fi
+    cc -shared -fPIC -O2 -o "$work/doc_race.so" "$clone/scripts/repro_gdext_doc_race.c"
+    preload="$work/doc_race.so"
+fi
+LD_PRELOAD="$preload" godot --headless --path "$clone/client" --import > "$work/import.log" 2>&1
+status=$?
+grep -a "repro_gdext_doc_race" "$work/import.log"
+tail -3 "$work/import.log"
+echo "first import exit status: $status"
+exit "$status"

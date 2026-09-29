@@ -29,3 +29,27 @@ foreach(test_source ${MARQUE_CORE_TEST_SOURCES})
     target_compile_options(${test_name} PRIVATE -Wall -Wextra -Werror)
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
+
+# marque_gdext: the GDExtension binding Godot loads from client/bin. godot-cpp
+# is pinned by commit hash; it bundles the 4.7 extension API, matching
+# compatibility_minimum in client/bin/marque.gdextension.
+include(FetchContent)
+set(GODOTCPP_API_VERSION "4.7" CACHE STRING "")
+FetchContent_Declare(godot-cpp
+    GIT_REPOSITORY https://github.com/godotengine/godot-cpp.git
+    GIT_TAG 507ed9d840c01a3c5b2a39af8bb4000bfac30bf5
+    SYSTEM)
+FetchContent_MakeAvailable(godot-cpp)
+
+file(GLOB_RECURSE MARQUE_GDEXT_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/gdext/src/*.cpp")
+
+add_library(marque_gdext SHARED ${MARQUE_GDEXT_SOURCES})
+target_link_libraries(marque_gdext PRIVATE marque_core godot-cpp)
+target_compile_options(marque_gdext PRIVATE -Wall -Wextra -Werror)
+get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
+set_target_properties(marque_gdext PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    PREFIX "lib"
+    OUTPUT_NAME "marque${GODOTCPP_SUFFIX}"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../client/bin")

@@ -1,4 +1,4 @@
-#include "world_client.hpp"
+#include "marque_core.hpp"
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/class_db.hpp>
@@ -10,7 +10,7 @@ static void initialize_marque(ModuleInitializationLevel level) {
     if (level != MODULE_INITIALIZATION_LEVEL_SCENE) {
         return;
     }
-    GDREGISTER_CLASS(WorldClient);
+    GDREGISTER_CLASS(MarqueCore);
 }
 
 static void uninitialize_marque(ModuleInitializationLevel) {}
