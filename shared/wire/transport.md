@@ -233,6 +233,12 @@ A connection has one of three states: `open`, `timed_out`, or `slow_client`. It 
 
 A seal has an overhead and two operations. `seal(header, body)` returns the sealed body. `open(header, sealed)` returns the body or fails. The 20-byte header is sent in the clear and is the associated data. Packing reserves the overhead inside `MaxDatagram`. Until the handshake exists (ARM-354), the seal is the identity with overhead 0.
 
+The seal owns the nonce and replay protection. The transport does not.
+
+- Each direction of a connection has its own 64-bit nonce. The sealing side counts its datagrams from 0 and never reuses a value under one key. The nonce travels inside the overhead. The header's 16-bit sequence cannot be the nonce, because it repeats every 65536 datagrams.
+- `open` rejects a nonce it has already accepted, or one too old for its replay window, before the transport's sequence window sees the datagram. The receiver then refuses the datagram as `malformed`, like any datagram that fails to open. Without this, one replayed authentic datagram whose sequence is about 32767 ahead of `latest` moves `latest` forward, and every genuine datagram after it is `too_old`.
+- There is one seal per connection. The server's reader goroutine calls `open` and the tick loop calls `seal` on the same connection's seal at the same time, so a seal must be safe for concurrent `seal` and `open`. Keeping the send nonce and the receive window apart is enough for that.
+
 A connection starts established. The handshake creates it after the handshake completes.
 
 ## Server threading
