@@ -171,7 +171,7 @@ A sender that follows this document never triggers rules 2 and 4 and never sends
 
 `send(msg)` appends one reliable message to the queue. It refuses a message of 0 bytes or more than `MaxMessage` bytes with `message`, and refuses any message on a closed connection with `closed`. Ids go up by 1 from 0 in queue order. Each fragment has three facts: acked, sent, and the time it was last sent.
 
-The queue holds every message that is not yet fully acked. Its first message is the oldest unacked one. Its length is the backlog. If a send makes the backlog greater than `BacklogLimit`, the connection closes as `slow_client`. The message is never dropped before that.
+The queue holds every message that is not yet fully acked. Its first message is the oldest unacked one. Its length is the backlog, and the sum of its message sizes is the backlog bytes. If a send makes the backlog greater than `BacklogLimit` or the backlog bytes greater than `BacklogBytes`, the connection closes as `slow_client`. The message is never dropped before that. Closing frees the queue and the ring (see "Acks"), so a closed connection holds no message bytes and reports a backlog of 0.
 
 ### Window and due fragments
 
@@ -182,6 +182,8 @@ A fragment of a message inside the window is due at time `now` when it is not ac
 ### Acks
 
 When the receiver accepts a datagram, the sender takes the header's ack and ack bits. It treats sequence `ack` as acked, and `ack - 1 - i` for every set bit `i`. The sender remembers the fragment list of each datagram it sent in a ring of 256 slots, indexed by `sequence mod 256`. For each acked sequence whose slot holds that sequence and is not yet acked, it marks the slot acked and marks each listed fragment acked, if the message is still in the queue. Then it removes fully acked messages from the front of the queue.
+
+A ring slot names each fragment by its message instance, not by its `u16` id. An id comes back every 65536 messages, and a slot can outlive the message it names: the message may be acked through a resend while the slot of an earlier datagram that carried it is still waiting. An ack for such a slot must not touch the newer message that reuses the id. The Go sender counts every message it ever queued in a `u64` and stores that count; the id is its low 16 bits.
 
 The sender also takes the receiver's current window to put in the headers it writes, and sets `last_receive = max(last_receive, now)`.
 
@@ -280,5 +282,6 @@ Each side picks these for itself. The defaults are unmeasured. ARM-362 measures 
 | Parameter | Default | Meaning |
 |---|---|---|
 | `TickBudget` | 4800 bytes | Most bytes one flush emits, keepalives aside. At least `MaxDatagram`. |
-| `BacklogLimit` | 1024 messages | Most reliable messages queued and unacked before `slow_client`. |
+| `BacklogLimit` | 1024 messages | Most reliable messages queued and unacked before `slow_client`. From 1 to `65536 - WindowMessages` (65280), so no two queued messages share an id, with `WindowMessages` ids to spare. |
+| `BacklogBytes` | 262144 bytes | Most reliable message bytes queued and unacked before `slow_client`. At least 1. The default is 4 `MaxMessage`: a full window plus three largest messages behind it, and about 2.2 s of sending at the default `TickBudget` and 25 Hz. Above that the client is not reading, and the server stops holding memory for it. |
 | `ResendAfter` | 200000 µs (200 ms) | Wait before an unacked fragment is due again. |

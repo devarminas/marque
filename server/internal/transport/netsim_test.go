@@ -221,7 +221,7 @@ func TestStoppedReaderTriggersSlowClient(t *testing.T) {
 				s.step(Unreliable{}, Unreliable{})
 				if s.srv.ep.State() == SlowClient {
 					got := fmt.Sprintf("tick=%d backlog=%d sent=%d", n, s.srv.ep.Backlog(), sent)
-					want := fmt.Sprintf("tick=%d backlog=%d sent=%d", tc.tick, DefaultBacklogLimit+1, tc.sent)
+					want := fmt.Sprintf("tick=%d backlog=0 sent=%d", tc.tick, tc.sent)
 					if got != want {
 						t.Fatalf("got %s, want %s", got, want)
 					}

@@ -46,8 +46,9 @@ type Sender struct {
 	sent    [256]sentPacket
 	own     AckWindow
 
-	base  uint16
-	queue []*outMsg
+	front  uint64
+	queue  []*outMsg
+	queued int
 
 	lastSend, lastRecv uint64
 	state              State
@@ -81,8 +82,8 @@ type sentPacket struct {
 }
 
 type fragRef struct {
-	msg   *outMsg
-	index uint8
+	serial uint64
+	index  uint8
 }
 
 func NewSender(role Role, cfg Config, now uint64) (*Sender, error) {
@@ -109,10 +110,18 @@ func (s *Sender) Send(msg []byte) error {
 	}
 	n := (len(msg) + FragmentSize - 1) / FragmentSize
 	s.queue = append(s.queue, &outMsg{data: bytes.Clone(msg), frags: make([]outFrag, n)})
-	if len(s.queue) > s.cfg.BacklogLimit {
-		s.state = SlowClient
+	s.queued += len(msg)
+	if len(s.queue) > s.cfg.BacklogLimit || s.queued > s.cfg.BacklogBytes {
+		s.close(SlowClient)
 	}
 	return nil
+}
+
+func (s *Sender) close(state State) {
+	s.state = state
+	s.queue = nil
+	s.queued = 0
+	s.sent = [256]sentPacket{}
 }
 
 // Observe feeds the sender what the Receiver learned from one accepted
@@ -130,9 +139,10 @@ func (s *Sender) Observe(peer, own AckWindow, now uint64) {
 		}
 	}
 	for len(s.queue) > 0 && s.queue[0].done() {
+		s.queued -= len(s.queue[0].data)
 		s.queue[0] = nil
 		s.queue = s.queue[1:]
-		s.base++
+		s.front++
 	}
 }
 
@@ -143,8 +153,11 @@ func (s *Sender) ack(seq uint16) {
 	}
 	p.live = false
 	for _, f := range p.frags {
-		f.msg.frags[f.index].acked = true
+		if i := f.serial - s.front; i < uint64(len(s.queue)) {
+			s.queue[i].frags[f.index].acked = true
+		}
 	}
+	p.frags = nil
 }
 
 func (m *outMsg) done() bool {
@@ -168,7 +181,7 @@ type datagram struct {
 // keepalive if nothing went out and KeepaliveAfter has passed.
 func (s *Sender) Flush(now uint64, u Unreliable) (Flushed, error) {
 	if s.state == Open && elapsed(now, s.lastRecv) >= TimeoutAfter {
-		s.state = TimedOut
+		s.close(TimedOut)
 	}
 	if s.state != Open {
 		return Flushed{State: s.state}, nil
@@ -197,7 +210,7 @@ func (s *Sender) Flush(now uint64, u Unreliable) (Flushed, error) {
 		cur = &datagram{size: empty, cap: min(MaxDatagram, left)}
 	}
 
-	s.eachDue(now, func(id uint16, m *outMsg, index int) bool {
+	s.eachDue(now, func(serial uint64, m *outMsg, index int) bool {
 		lo := index * FragmentSize
 		data := m.data[lo:min(lo+FragmentSize, len(m.data))]
 		add := entrySize(data)
@@ -208,8 +221,8 @@ func (s *Sender) Flush(now uint64, u Unreliable) (Flushed, error) {
 			open()
 		}
 		cur.size += add + sectionCost(cur.entries)
-		cur.entries = append(cur.entries, entry{id: id, index: uint8(index), count: uint8(len(m.frags)), data: data})
-		cur.refs = append(cur.refs, fragRef{msg: m, index: uint8(index)})
+		cur.entries = append(cur.entries, entry{id: uint16(serial), index: uint8(index), count: uint8(len(m.frags)), data: data})
+		cur.refs = append(cur.refs, fragRef{serial: serial, index: uint8(index)})
 		m.frags[index].sent = true
 		m.frags[index].lastSent = now
 		return true
@@ -249,7 +262,7 @@ func (s *Sender) Flush(now uint64, u Unreliable) (Flushed, error) {
 	return out, nil
 }
 
-func (s *Sender) eachDue(now uint64, f func(id uint16, m *outMsg, index int) bool) {
+func (s *Sender) eachDue(now uint64, f func(serial uint64, m *outMsg, index int) bool) {
 	total := 0
 	for i, m := range s.queue {
 		total += len(m.data)
@@ -260,7 +273,7 @@ func (s *Sender) eachDue(now uint64, f func(id uint16, m *outMsg, index int) boo
 			if !fr.due(now, s.cfg.ResendAfter) {
 				continue
 			}
-			if !f(s.base+uint16(i), m, j) {
+			if !f(s.front+uint64(i), m, j) {
 				return
 			}
 		}
