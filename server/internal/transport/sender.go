@@ -132,6 +132,9 @@ func (s *Sender) Observe(peer, own AckWindow, now uint64) {
 	}
 	s.lastRecv = max(s.lastRecv, now)
 	s.own = own
+	if peer == NoAcks {
+		return
+	}
 	s.ack(peer.Latest)
 	for i := uint16(0); i < AckBits; i++ {
 		if peer.Bits&(1<<i) != 0 {

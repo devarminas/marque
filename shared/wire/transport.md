@@ -21,6 +21,8 @@ The core tolerates that lag with two rules:
 - Elapsed time saturates at zero. Wherever this document writes `now - last_x` for a time `last_x` (`last_receive`, `last_send`, a fragment's `last_sent`), it means `now - last_x` when `now >= last_x`, and `0` otherwise.
 - `last_receive` never moves backwards. Accepting a datagram at `now` sets `last_receive = max(last_receive, now)`.
 
+With both rules a `now` behind a stored time delays keepalives, resends and the timeout, and never closes a connection early.
+
 ## Constants
 
 | Name | Value | Meaning |
@@ -66,7 +68,7 @@ A datagram is a header, then at most one unreliable section, then at most one re
 | 14 | `u16` | ack: the newest sequence received from the peer |
 | 16 | `u32` | ack bits: bit `i` set means sequence `ack - 1 - i` was received |
 
-Before a side has received anything, it sends ack `0xffff` and ack bits `0`. Each side numbers its datagrams from 0, one per datagram, keepalives included.
+Before a side has received anything, it sends ack `0xffff` and ack bits `0`. A sender treats that exact pair as no ack at all. A peer whose newest sequence is 65535 with none of the 32 before it received sends the same pair; sequence 65535 is then acked by a later header or its fragments are resent. Each side numbers its datagrams from 0, one per datagram, keepalives included.
 
 ### Unreliable section
 
@@ -98,7 +100,7 @@ The index is below the count. A fragment whose index is below `count - 1` carrie
 
 ### A keepalive
 
-A keepalive is a header with no body. It is 20 bytes.
+A keepalive is a header with an empty body, sealed like any other datagram. It is `HeaderSize + seal overhead` bytes: 20 with the identity seal.
 
 ### Worked example
 
@@ -143,7 +145,7 @@ The receiver keeps `latest`, `bits`, and whether it has received anything. It st
 - If `1 <= ahead < 32768`, `s` is newer. Accept it. The new bits are `bits << ahead | 1 << (ahead - 1)` when `ahead < 32`, `1 << 31` when `ahead == 32`, and `0` when `ahead > 32`. Set `latest = s`. Implement the shifts with these three cases, since shifting a 32-bit value by 32 or more is undefined in C++.
 - Otherwise `s` is older. Let `behind = latest - s`. If `behind > 32`, refuse it as `too_old`. If bit `behind - 1` is set, refuse it as `duplicate`. Otherwise set that bit and accept it.
 
-The header's ack and ack bits are this window. Because the window only accepts sequences it can acknowledge, every accepted datagram is acknowledged in the next 33 datagrams the receiver sends.
+The header's ack and ack bits are this window. Every datagram the receiver sends acknowledges an accepted sequence until 32 newer sequences have arrived after it. Later datagrams no longer carry it.
 
 ### Unreliable staleness
 
@@ -169,7 +171,7 @@ A sender that follows this document never triggers rules 2 and 4 and never sends
 
 ### Reliable queue
 
-`send(msg)` appends one reliable message to the queue. It refuses a message of 0 bytes or more than `MaxMessage` bytes with `message`, and refuses any message on a closed connection with `closed`. Ids go up by 1 from 0 in queue order. Each fragment has three facts: acked, sent, and the time it was last sent.
+`send(msg)` appends one reliable message to the queue. It refuses any message on a closed connection with `closed`, and otherwise refuses a message of 0 bytes or more than `MaxMessage` bytes with `message`. A 0-byte send on a closed connection is `closed`. Ids go up by 1 from 0 in queue order. Each fragment has three facts: acked, sent, and the time it was last sent.
 
 The queue holds every message that is not yet fully acked. Its first message is the oldest unacked one. Its length is the backlog, and the sum of its message sizes is the backlog bytes. If a send makes the backlog greater than `BacklogLimit` or the backlog bytes greater than `BacklogBytes`, the connection closes as `slow_client`. The message is never dropped before that. Closing frees the queue and the ring (see "Acks"), so a closed connection holds no message bytes and reports a backlog of 0.
 
