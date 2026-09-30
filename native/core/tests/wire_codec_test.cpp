@@ -169,9 +169,8 @@ void quantization_snaps_to_grid() {
           "off-grid wish decodes to 0.12 and -0.46");
 }
 
-template <typename T, typename F>
-bool refuses(F fields, Error want) {
-    auto got = T::build(std::move(fields));
+template <typename T>
+bool refuses(const std::expected<T, Error>& got, Error want) {
     return !got.has_value() && got.error() == want;
 }
 
@@ -186,36 +185,36 @@ void build_refuses_what_decoders_refuse() {
     const auto offer = [](probe::PlayerId owner, std::uint32_t item) {
         return must(probe::Offer::build({.owner = owner, .item = {item, 0}}));
     };
-    check(refuses<probe::Give>(probe::GiveFields{.npc = npc, .slot = 40}, Error::rule), "give slot 40");
-    check(refuses<probe::BagSlot>(probe::BagSlotFields{.slot = 40}, Error::rule), "bag slot 40");
-    check(refuses<probe::Inventory>(probe::InventoryFields{}, Error::rule), "inventory size 0");
-    check(refuses<probe::Zone>(probe::ZoneFields{.tilt = 46}, Error::rule), "tilt 46");
-    check(refuses<probe::Zone>(probe::ZoneFields{.lo = -8.25, .hi = -8}, Error::rule), "lo -8.25");
-    check(refuses<probe::Zone>(probe::ZoneFields{.hi = 5.5}, Error::rule), "hi 5.5");
-    check(refuses<probe::Zone>(probe::ZoneFields{.lo = 11}, Error::out_of_range), "lo 11");
-    check(refuses<probe::Dialog>(probe::DialogFields{.lines = {501}}, Error::rule), "line 501");
-    check(refuses<probe::Pick>(probe::PickFields{.option = probe::Option::trade}, Error::rule), "pick trade");
-    check(refuses<probe::Pick>(probe::PickFields{.option = static_cast<probe::Option>(9)}, Error::bad_enum),
+    check(refuses(probe::Give::build({.npc = npc, .slot = 40}), Error::rule), "give slot 40");
+    check(refuses(probe::BagSlot::build({.slot = 40}), Error::rule), "bag slot 40");
+    check(refuses(probe::Inventory::build({}), Error::rule), "inventory size 0");
+    check(refuses(probe::Zone::build({.tilt = 46}), Error::rule), "tilt 46");
+    check(refuses(probe::Zone::build({.lo = -8.25, .hi = -8}), Error::rule), "lo -8.25");
+    check(refuses(probe::Zone::build({.hi = 5.5}), Error::rule), "hi 5.5");
+    check(refuses(probe::Zone::build({.lo = 11}), Error::out_of_range), "lo 11");
+    check(refuses(probe::Dialog::build({.lines = {501}}), Error::rule), "line 501");
+    check(refuses(probe::Pick::build({.option = probe::Option::trade}), Error::rule), "pick trade");
+    check(refuses(probe::Pick::build({.option = static_cast<probe::Option>(9)}), Error::bad_enum),
           "pick undeclared");
-    check(refuses<probe::Dialog>(probe::DialogFields{.options = std::vector<probe::Option>(5)}, Error::over_bound),
+    check(refuses(probe::Dialog::build({.options = std::vector<probe::Option>(5)}), Error::over_bound),
           "five options");
-    check(refuses<probe::Party>(probe::PartyFields{.leader = p1, .members = {p1, p1}}, Error::rule), "repeated member");
-    check(refuses<probe::Inventory>(probe::InventoryFields{.size = 10, .slots = {slot(0, 5), slot(0, 6)}}, Error::rule),
+    check(refuses(probe::Party::build({.leader = p1, .members = {p1, p1}}), Error::rule), "repeated member");
+    check(refuses(probe::Inventory::build({.size = 10, .slots = {slot(0, 5), slot(0, 6)}}), Error::rule),
           "repeated slot");
-    check(refuses<probe::Party>(probe::PartyFields{.leader = p2, .members = {p1}}, Error::rule), "leader outside");
-    check(refuses<probe::Inventory>(probe::InventoryFields{.size = 9, .slots = {slot(9, 6)}}, Error::rule),
+    check(refuses(probe::Party::build({.leader = p2, .members = {p1}}), Error::rule), "leader outside");
+    check(refuses(probe::Inventory::build({.size = 9, .slots = {slot(9, 6)}}), Error::rule),
           "slot at size");
-    check(refuses<probe::Zone>(probe::ZoneFields{.lo = 2, .hi = 1.75}, Error::rule), "lo above hi");
+    check(refuses(probe::Zone::build({.lo = 2, .hi = 1.75}), Error::rule), "lo above hi");
     check(probe::Zone::build({.lo = 2.1, .hi = 2}).has_value(), "lo above hi on the grid is accepted");
-    check(refuses<probe::Trade>(probe::TradeFields{.from = p1, .offers = {offer(p1, 5), offer(p2, 6)}}, Error::rule),
+    check(refuses(probe::Trade::build({.from = p1, .offers = {offer(p1, 5), offer(p2, 6)}}), Error::rule),
           "foreign offer");
-    check(refuses<probe::Trade>(probe::TradeFields{.from = p1, .offers = {offer(p1, 5), offer(p1, 5)}}, Error::rule),
+    check(refuses(probe::Trade::build({.from = p1, .offers = {offer(p1, 5), offer(p1, 5)}}), Error::rule),
           "repeated item");
-    check(refuses<probe::Duel>(probe::DuelFields{.challenger = p1, .target = p1}, Error::rule), "duel self");
-    check(refuses<wire::Input>(wire::InputFields{.dx = std::nan("")}, Error::non_finite), "NaN wish");
-    check(refuses<wire::Input>(wire::InputFields{.dz = 1.01}, Error::out_of_range), "wish above range");
-    check(refuses<probe::Probe>(probe::ProbeFields{.label = "123456789"}, Error::over_bound), "label over bound");
-    check(refuses<probe::Probe>(probe::ProbeFields{.ratio = -std::numeric_limits<float>::infinity()}, Error::non_finite),
+    check(refuses(probe::Duel::build({.challenger = p1, .target = p1}), Error::rule), "duel self");
+    check(refuses(wire::Input::build({.dx = std::nan("")}), Error::non_finite), "NaN wish");
+    check(refuses(wire::Input::build({.dz = 1.01}), Error::out_of_range), "wish above range");
+    check(refuses(probe::Probe::build({.label = "123456789"}), Error::over_bound), "label over bound");
+    check(refuses(probe::Probe::build({.ratio = -std::numeric_limits<float>::infinity()}), Error::non_finite),
           "infinite ratio");
 }
 

@@ -136,9 +136,10 @@ func must[T any](m T, err error) T {
 	return m
 }
 
+func errOf[T any](_ T, err error) error { return err }
+
 func TestBuiltMessagesEncodeToVectorBytes(t *testing.T) {
 	id := wire.PlayerId{Index: 7, Gen: 2}
-	party, err := probe.PartyFields{Leader: probe.PlayerId{Index: 1}, Members: []probe.PlayerId{{Index: 1}, {Index: 2}}}.Build()
 	cases := []struct {
 		msg  message
 		want string
@@ -147,7 +148,7 @@ func TestBuiltMessagesEncodeToVectorBytes(t *testing.T) {
 		{must(wire.PoseFields{Id: id, X: 12.34, Y: 0.5, Z: -100.25}.Build()), "020702d244060032400600d7180600"},
 		{must(wire.HpFields{Id: id, Hp: 85, MaxHp: 120}.Build()), "0307025500000078000000"},
 		{must(wire.RefusedFields{Tick: 1000, Seq: 42, Reason: wire.RefuseReasonCooldown}.Build()), "04e80300002a00000006"},
-		{must(party, err), "0401000201000200"},
+		{must(probe.PartyFields{Leader: probe.PlayerId{Index: 1}, Members: []probe.PlayerId{{Index: 1}, {Index: 2}}}.Build()), "0401000201000200"},
 	}
 	for _, c := range cases {
 		got, err := c.msg.Append(nil)
@@ -184,56 +185,38 @@ func TestBuildRefusesWhatDecodersRefuse(t *testing.T) {
 		return must(probe.OfferFields{Owner: owner, Item: probe.ItemId{Index: item}}.Build())
 	}
 	cases := []struct {
-		name  string
-		build func() error
-		want  error
+		name string
+		err  error
+		want error
 	}{
-		{"give slot 40", func() error { _, err := probe.GiveFields{Npc: npc, Slot: 40}.Build(); return err }, codec.ErrRule},
-		{"bag slot 40", func() error { _, err := probe.BagSlotFields{Slot: 40}.Build(); return err }, codec.ErrRule},
-		{"inventory size 0", func() error { _, err := probe.InventoryFields{}.Build(); return err }, codec.ErrRule},
-		{"tilt 46", func() error { _, err := probe.ZoneFields{Tilt: 46}.Build(); return err }, codec.ErrRule},
-		{"lo -8.25", func() error { _, err := probe.ZoneFields{Lo: -8.25, Hi: -8}.Build(); return err }, codec.ErrRule},
-		{"hi 5.5", func() error { _, err := probe.ZoneFields{Hi: 5.5}.Build(); return err }, codec.ErrRule},
-		{"lo 11", func() error { _, err := probe.ZoneFields{Lo: 11}.Build(); return err }, codec.ErrOutOfRange},
-		{"line 501", func() error { _, err := probe.DialogFields{Lines: []uint16{501}}.Build(); return err }, codec.ErrRule},
-		{"pick trade", func() error { _, err := probe.PickFields{Option: probe.OptionTrade}.Build(); return err }, codec.ErrRule},
-		{"pick undeclared", func() error { _, err := probe.PickFields{Option: 9}.Build(); return err }, codec.ErrBadEnum},
-		{"five options", func() error { _, err := probe.DialogFields{Options: make([]probe.Option, 5)}.Build(); return err }, codec.ErrOverBound},
-		{"repeated member", func() error {
-			_, err := probe.PartyFields{Leader: p1, Members: []probe.PlayerId{p1, p1}}.Build()
-			return err
-		}, codec.ErrRule},
-		{"repeated slot", func() error {
-			_, err := probe.InventoryFields{Size: 10, Slots: []probe.BagSlot{slot(0, 5), slot(0, 6)}}.Build()
-			return err
-		}, codec.ErrRule},
-		{"leader outside", func() error {
-			_, err := probe.PartyFields{Leader: p2, Members: []probe.PlayerId{p1}}.Build()
-			return err
-		}, codec.ErrRule},
-		{"slot at size", func() error {
-			_, err := probe.InventoryFields{Size: 9, Slots: []probe.BagSlot{slot(9, 6)}}.Build()
-			return err
-		}, codec.ErrRule},
-		{"lo above hi", func() error { _, err := probe.ZoneFields{Lo: 2, Hi: 1.75}.Build(); return err }, codec.ErrRule},
-		{"lo above hi on the grid", func() error { _, err := probe.ZoneFields{Lo: 2.1, Hi: 2}.Build(); return err }, nil},
-		{"foreign offer", func() error {
-			_, err := probe.TradeFields{From: p1, Offers: []probe.Offer{offer(p1, 5), offer(p2, 6)}}.Build()
-			return err
-		}, codec.ErrRule},
-		{"repeated item", func() error {
-			_, err := probe.TradeFields{From: p1, Offers: []probe.Offer{offer(p1, 5), offer(p1, 5)}}.Build()
-			return err
-		}, codec.ErrRule},
-		{"duel self", func() error { _, err := probe.DuelFields{Challenger: p1, Target: p1}.Build(); return err }, codec.ErrRule},
-		{"NaN wish", func() error { _, err := wire.InputFields{Dx: math.NaN()}.Build(); return err }, codec.ErrNonFinite},
-		{"wish above range", func() error { _, err := wire.InputFields{Dz: 1.01}.Build(); return err }, codec.ErrOutOfRange},
-		{"label over bound", func() error { _, err := probe.ProbeFields{Label: "123456789"}.Build(); return err }, codec.ErrOverBound},
-		{"infinite ratio", func() error { _, err := probe.ProbeFields{Ratio: float32(math.Inf(-1))}.Build(); return err }, codec.ErrNonFinite},
+		{"give slot 40", errOf(probe.GiveFields{Npc: npc, Slot: 40}.Build()), codec.ErrRule},
+		{"bag slot 40", errOf(probe.BagSlotFields{Slot: 40}.Build()), codec.ErrRule},
+		{"inventory size 0", errOf(probe.InventoryFields{}.Build()), codec.ErrRule},
+		{"tilt 46", errOf(probe.ZoneFields{Tilt: 46}.Build()), codec.ErrRule},
+		{"lo -8.25", errOf(probe.ZoneFields{Lo: -8.25, Hi: -8}.Build()), codec.ErrRule},
+		{"hi 5.5", errOf(probe.ZoneFields{Hi: 5.5}.Build()), codec.ErrRule},
+		{"lo 11", errOf(probe.ZoneFields{Lo: 11}.Build()), codec.ErrOutOfRange},
+		{"line 501", errOf(probe.DialogFields{Lines: []uint16{501}}.Build()), codec.ErrRule},
+		{"pick trade", errOf(probe.PickFields{Option: probe.OptionTrade}.Build()), codec.ErrRule},
+		{"pick undeclared", errOf(probe.PickFields{Option: 9}.Build()), codec.ErrBadEnum},
+		{"five options", errOf(probe.DialogFields{Options: make([]probe.Option, 5)}.Build()), codec.ErrOverBound},
+		{"repeated member", errOf(probe.PartyFields{Leader: p1, Members: []probe.PlayerId{p1, p1}}.Build()), codec.ErrRule},
+		{"repeated slot", errOf(probe.InventoryFields{Size: 10, Slots: []probe.BagSlot{slot(0, 5), slot(0, 6)}}.Build()), codec.ErrRule},
+		{"leader outside", errOf(probe.PartyFields{Leader: p2, Members: []probe.PlayerId{p1}}.Build()), codec.ErrRule},
+		{"slot at size", errOf(probe.InventoryFields{Size: 9, Slots: []probe.BagSlot{slot(9, 6)}}.Build()), codec.ErrRule},
+		{"lo above hi", errOf(probe.ZoneFields{Lo: 2, Hi: 1.75}.Build()), codec.ErrRule},
+		{"lo above hi on the grid", errOf(probe.ZoneFields{Lo: 2.1, Hi: 2}.Build()), nil},
+		{"foreign offer", errOf(probe.TradeFields{From: p1, Offers: []probe.Offer{offer(p1, 5), offer(p2, 6)}}.Build()), codec.ErrRule},
+		{"repeated item", errOf(probe.TradeFields{From: p1, Offers: []probe.Offer{offer(p1, 5), offer(p1, 5)}}.Build()), codec.ErrRule},
+		{"duel self", errOf(probe.DuelFields{Challenger: p1, Target: p1}.Build()), codec.ErrRule},
+		{"NaN wish", errOf(wire.InputFields{Dx: math.NaN()}.Build()), codec.ErrNonFinite},
+		{"wish above range", errOf(wire.InputFields{Dz: 1.01}.Build()), codec.ErrOutOfRange},
+		{"label over bound", errOf(probe.ProbeFields{Label: "123456789"}.Build()), codec.ErrOverBound},
+		{"infinite ratio", errOf(probe.ProbeFields{Ratio: float32(math.Inf(-1))}.Build()), codec.ErrNonFinite},
 	}
 	for _, c := range cases {
-		if err := c.build(); !errors.Is(err, c.want) {
-			t.Errorf("%s: got %v, want %v", c.name, err, c.want)
+		if !errors.Is(c.err, c.want) {
+			t.Errorf("%s: got %v, want %v", c.name, c.err, c.want)
 		}
 	}
 }

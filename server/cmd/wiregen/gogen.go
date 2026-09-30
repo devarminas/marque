@@ -182,10 +182,10 @@ func goChecks(x string, f Field) string {
 	return b.String()
 }
 
-func goOperand(o Operand, each string) string {
+func goOperand(o Operand) string {
 	expr := "f." + goName(o.Field.Name)
 	if o.Each() {
-		expr = each
+		expr = "e"
 	}
 	if o.Sub != nil {
 		expr += ".f." + goName(o.Sub.Name)
@@ -195,7 +195,7 @@ func goOperand(o Operand, each string) string {
 
 func goRelation(x string, r Relation) string {
 	fail := fmt.Sprintf("{\n%s.Fail(codec.ErrRule)\n}\n", x)
-	l, rt := goOperand(r.Left, "e"), goOperand(r.Right, "e")
+	l, rt := goOperand(r.Left), goOperand(r.Right)
 	switch {
 	case r.Op == "in":
 		return fmt.Sprintf("if %s.Err() == nil && !slices.ContainsFunc(f.%s, func(e %s) bool { return %s == %s }) %s",
@@ -414,9 +414,10 @@ func (v %[1]s) Append(dst []byte) ([]byte, error) {
 		}
 	}
 	fmt.Fprintf(&head, "\n%q\n)\n\n", codecImport)
-	out, err := format.Source([]byte(head.String() + body))
+	src := head.String() + body
+	out, err := format.Source([]byte(src))
 	if err != nil {
-		return nil, fmt.Errorf("gofmt generated Go: %w\n%s", err, head.String()+body)
+		return nil, fmt.Errorf("gofmt generated Go: %w\n%s", err, src)
 	}
 	return out, nil
 }

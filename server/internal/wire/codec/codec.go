@@ -10,6 +10,7 @@ import (
 	"errors"
 	"iter"
 	"math"
+	"slices"
 	"unicode/utf8"
 )
 
@@ -379,11 +380,5 @@ func (l List[T]) Len() int { return len(l.s) }
 func (l List[T]) At(i int) T { return l.s[i] }
 
 func (l List[T]) All() iter.Seq2[int, T] {
-	return func(yield func(int, T) bool) {
-		for i, v := range l.s {
-			if !yield(i, v) {
-				return
-			}
-		}
-	}
+	return slices.All(l.s)
 }

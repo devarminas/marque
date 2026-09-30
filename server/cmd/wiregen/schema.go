@@ -135,13 +135,17 @@ type Operand struct {
 func (o Operand) Each() bool { return o.Field.Type.Kind == KindList }
 
 func (o Operand) Leaf() Type {
-	switch {
-	case o.Sub != nil:
+	if o.Sub != nil {
 		return o.Sub.Type
-	case o.Each():
-		return *o.Field.Type.Elem
 	}
-	return o.Field.Type
+	return o.Field.Type.each()
+}
+
+func (t Type) each() Type {
+	if t.Kind == KindList {
+		return *t.Elem
+	}
+	return t
 }
 
 func (o Operand) String() string {
@@ -684,10 +688,7 @@ func (p *parser) where(t Type, toks []string) ([]Term, error) {
 }
 
 func (p *parser) term(t Type, toks []string) (Term, []string, error) {
-	elem := t
-	if t.Kind == KindList {
-		elem = *t.Elem
-	}
+	elem := t.each()
 	switch {
 	case len(toks) == 0:
 		return Term{}, nil, p.errf("missing term after where")
@@ -804,16 +805,13 @@ var intLimits = map[string][2]*big.Int{
 // must be integers inside the type. Quant bounds must sit on the quant's grid
 // inside its range, and become bounds on the wire integer.
 func (p *parser) rangeTerm(t Type, loTok, hiTok string) (Term, error) {
-	var lo, hi *big.Rat
-	for _, b := range []struct {
-		dst **big.Rat
-		tok string
-	}{{&lo, loTok}, {&hi, hiTok}} {
-		r, ok := new(big.Rat).SetString(b.tok)
-		if !decimal.MatchString(b.tok) || !ok {
-			return Term{}, p.errf("range bound %q is not a decimal number", b.tok)
-		}
-		*b.dst = r
+	lo, err := p.rangeBound(loTok)
+	if err != nil {
+		return Term{}, err
+	}
+	hi, err := p.rangeBound(hiTok)
+	if err != nil {
+		return Term{}, err
 	}
 	if lo.Cmp(hi) > 0 {
 		return Term{}, p.errf("range %s..%s: low bound above high bound", loTok, hiTok)
@@ -852,16 +850,20 @@ func (p *parser) rangeTerm(t Type, loTok, hiTok string) (Term, error) {
 
 // canonDecimal prints r with the fewest decimals that spell it exactly. Every
 // bound parsed from decimal text has such a spelling.
-func canonDecimal(r *big.Rat) string {
-	for prec := 0; ; prec++ {
-		s := r.FloatString(prec)
-		if back, _ := new(big.Rat).SetString(s); back.Cmp(r) == 0 {
-			if s == "-0" {
-				return "0"
-			}
-			return s
-		}
+func (p *parser) rangeBound(tok string) (*big.Rat, error) {
+	r, ok := new(big.Rat).SetString(tok)
+	if !decimal.MatchString(tok) || !ok {
+		return nil, p.errf("range bound %q is not a decimal number", tok)
 	}
+	return r, nil
+}
+
+func canonDecimal(r *big.Rat) string {
+	prec, _ := r.FloatPrec()
+	if s := r.FloatString(prec); s != "-0" {
+		return s
+	}
+	return "0"
 }
 
 func (p *parser) relation(fields []Field, toks []string, line int) (Relation, error) {
@@ -913,10 +915,7 @@ func (p *parser) operand(fields []Field, tok string, line int) (Operand, error) 
 	if !dotted {
 		return o, nil
 	}
-	st := f.Type
-	if st.Kind == KindList {
-		st = *st.Elem
-	}
+	st := f.Type.each()
 	if st.Kind != KindStruct {
 		return Operand{}, p.errAt(line, "rule operand %q: %s is not a struct or a list of structs", tok, head)
 	}

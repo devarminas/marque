@@ -37,15 +37,13 @@ for vec in "${repo_root}"/shared/wire/vectors/*.vec; do
     done <"${vec}"
 done
 
-pascal() { echo "${1^}"; }
-
 pids=()
 names=()
 for schema in "${schemas[@]}"; do
     for channel in "${channels[@]}"; do
         target="${schema}_${channel}"
         mkdir -p "${build}/corpus/${target}"
-        (cd "${repo_root}/server" && go test -run '^$' -fuzz "^Fuzz$(pascal "${schema}")$(pascal "${channel}")\$" \
+        (cd "${repo_root}/server" && go test -run '^$' -fuzz "^Fuzz${schema^}${channel^}\$" \
             -fuzztime "${seconds}s" -parallel 1 ./internal/wire/) >"${logs}/go_${target}.log" 2>&1 &
         pids+=($!)
         names+=("go_${target}")
