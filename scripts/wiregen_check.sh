@@ -18,15 +18,6 @@ while IFS= read -r path; do
     fi
 done < <(cd "${fresh}" && find . -type f | sed 's|^\./||' | sort)
 
-# The vector copy is wholly generated, so a copy whose source was deleted is stale too.
-vectors="server/internal/wire/testdata/vectors"
-for path in "${repo_root}/${vectors}"/*; do
-    if [[ ! -e "${fresh}/${vectors}/$(basename "${path}")" ]]; then
-        echo "${vectors}/$(basename "${path}") has no source in shared/wire/vectors" >&2
-        stale=1
-    fi
-done
-
 if [[ ${stale} -ne 0 ]]; then
     echo "wiregen output is stale; run scripts/wiregen.sh and commit the result" >&2
     exit 1

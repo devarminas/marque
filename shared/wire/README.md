@@ -163,7 +163,7 @@ reject party_leader_outside events 0403000201000200 rule
 - The `schema` line names the schema the lines after it use: `wire` for `schema.wire` or `probe` for `testdata/probe.wire`.
 - `accept <name> <channel> <hex> <text>` must decode on that channel's single-message decoder to exactly `<text>`, and the decoded message must encode back to exactly `<hex>`.
 - `reject <name> <channel> <hex> <error>` must fail with that error. The error is the C++ `codec::Error` enumerator name (`truncated`, `trailing`, `unknown_message`, `over_bound`, `non_finite`, `out_of_range`, `bad_bool`, `bad_enum`, `bad_varint`, `bad_utf8`, `rule`). Go maps each name to its `codec.Err...` value.
-- `scripts/wiregen.sh` copies the files into `server/internal/wire/testdata/vectors`, and the Go test embeds that copy. go test tracks embedded files, so a vector edit reruns the test instead of hitting the cache. `scripts/wiregen_check.sh` fails when the copy is stale.
+- `scripts/wiregen.sh` writes every file's text into `server/internal/wire/vectors_gen_test.go`, a source file of the test package. go test ignores files outside the module when it decides whether a cached result still holds, but never ignores its own package's sources, so a regenerated vector always reruns the test. `scripts/wiregen_check.sh` fails when that file does not match `vectors/`, so an edit that skipped regeneration fails the gate instead of passing on the old copy.
 
 ## Fuzzing
 

@@ -1,16 +1,16 @@
 package wire_test
 
 import (
-	"bufio"
 	"bytes"
-	"embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"os/exec"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,18 +19,11 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/probe"
 )
 
-// The vectors are embedded from wiregen's copy inside the module, so go test
-// reruns whenever a vector changes.
-//
-//go:embed testdata/vectors/*.vec
-var vectorFiles embed.FS
-
 type message interface {
 	Append(dst []byte) ([]byte, error)
 	String() string
 }
 
-// decoders maps "<schema>/<channel>" to that channel's single-message decoder.
 var decoders = map[string]func([]byte) (message, error){
 	"wire/state":    func(b []byte) (message, error) { return wire.DecodeState(b) },
 	"wire/events":   func(b []byte) (message, error) { return wire.DecodeEvents(b) },
@@ -42,8 +35,6 @@ var decoders = map[string]func([]byte) (message, error){
 	"probe/intents": func(b []byte) (message, error) { return probe.DecodeIntents(b) },
 }
 
-// errorNames spells each codec error the way the vectors and the C++
-// codec::Error enum do.
 var errorNames = map[string]error{
 	"truncated":       codec.ErrTruncated,
 	"trailing":        codec.ErrTrailing,
@@ -59,31 +50,22 @@ var errorNames = map[string]error{
 }
 
 type vector struct {
-	where   string // file:line
-	accept  bool
-	name    string
-	decoder string // "<schema>/<channel>"
-	bytes   []byte
-	want    string // decoded text, or the error name
+	where       string
+	accept      bool
+	name        string
+	decoder     string
+	bytes       []byte
+	textOrError string
 }
 
 func loadVectors(tb testing.TB) []vector {
 	tb.Helper()
-	files, err := vectorFiles.ReadDir("testdata/vectors")
-	if err != nil {
-		tb.Fatal(err)
-	}
 	var out []vector
-	for _, f := range files {
-		body, err := vectorFiles.ReadFile("testdata/vectors/" + f.Name())
-		if err != nil {
-			tb.Fatal(err)
-		}
+	for _, file := range slices.Sorted(maps.Keys(vectorFiles)) {
 		schema := ""
-		sc := bufio.NewScanner(bytes.NewReader(body))
-		for n := 1; sc.Scan(); n++ {
-			line := strings.TrimSpace(sc.Text())
-			where := fmt.Sprintf("%s:%d", f.Name(), n)
+		for n, line := range strings.Split(vectorFiles[file], "\n") {
+			line = strings.TrimSpace(line)
+			where := fmt.Sprintf("%s:%d", file, n+1)
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
 			}
@@ -103,8 +85,8 @@ func loadVectors(tb testing.TB) []vector {
 			if decoders[v.decoder] == nil {
 				tb.Fatalf("%s: no decoder %s", where, v.decoder)
 			}
-			if !v.accept && errorNames[v.want] == nil {
-				tb.Fatalf("%s: unknown error %q", where, v.want)
+			if !v.accept && errorNames[v.textOrError] == nil {
+				tb.Fatalf("%s: unknown error %q", where, v.textOrError)
 			}
 			out = append(out, v)
 		}
@@ -119,8 +101,8 @@ func TestVectors(t *testing.T) {
 	for _, v := range loadVectors(t) {
 		m, err := decoders[v.decoder](v.bytes)
 		if !v.accept {
-			if !errors.Is(err, errorNames[v.want]) {
-				t.Errorf("%s %s: got %v, want %s", v.where, v.name, err, v.want)
+			if !errors.Is(err, errorNames[v.textOrError]) {
+				t.Errorf("%s %s: got %v, want %s", v.where, v.name, err, v.textOrError)
 			}
 			continue
 		}
@@ -128,8 +110,8 @@ func TestVectors(t *testing.T) {
 			t.Errorf("%s %s: decode: %v", v.where, v.name, err)
 			continue
 		}
-		if m.String() != v.want {
-			t.Errorf("%s %s: text\n  got  %s\n  want %s", v.where, v.name, m.String(), v.want)
+		if m.String() != v.textOrError {
+			t.Errorf("%s %s: text\n  got  %s\n  want %s", v.where, v.name, m.String(), v.textOrError)
 		}
 		back, err := m.Append(nil)
 		if err != nil || !bytes.Equal(back, v.bytes) {
