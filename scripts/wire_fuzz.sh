@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fuzzes every generated wire decoder for <seconds> each, all at once: the Go
-# channel decoders under Go's native fuzzer, and the C++ ones under libFuzzer
-# with ASan and UBSan (clang). Both start from the inputs in
-# shared/wire/vectors. Each run's log lands in native/build/wire-fuzz/logs, and the
-# script prints each run's final stats line. Exit 0 only if every run ends
-# without a crash.
-#
-# Usage: scripts/wire_fuzz.sh <seconds>
-
 seconds="${1:?usage: scripts/wire_fuzz.sh <seconds>}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build="${repo_root}/native/build/wire-fuzz"
@@ -22,7 +13,6 @@ cmake --build "${build}"
 rm -rf "${logs}" "${build}/corpus"
 mkdir -p "${logs}"
 
-# One seed file per vector line, in the corpus of the decoder it names.
 for vec in "${repo_root}"/shared/wire/vectors/*.vec; do
     schema=""
     while read -r verdict name channel hex _; do

@@ -173,8 +173,6 @@ func TestQuantizationSnapsToGrid(t *testing.T) {
 	}
 }
 
-// Build runs the encoder's checks, so it refuses a value with the error the
-// decoder gives for the same value's bytes in rules.vec.
 func TestBuildRefusesWhatDecodersRefuse(t *testing.T) {
 	npc := probe.NpcId{Index: 7}
 	p1, p2 := probe.PlayerId{Index: 1}, probe.PlayerId{Index: 2}
@@ -221,8 +219,6 @@ func TestBuildRefusesWhatDecodersRefuse(t *testing.T) {
 	}
 }
 
-// A built message owns its lists; changing the caller's slice afterwards
-// cannot make it break a rule.
 func TestBuildCopiesLists(t *testing.T) {
 	members := []probe.PlayerId{{Index: 1}, {Index: 2}}
 	party := must(probe.PartyFields{Leader: members[0], Members: members}.Build())
@@ -232,8 +228,6 @@ func TestBuildCopiesLists(t *testing.T) {
 	}
 }
 
-// The zero value is the one message Build never checked; Append refuses it
-// when it breaks the schema and leaves the buffer as it was.
 func TestAppendRefusesInvalidZeroValue(t *testing.T) {
 	prefix := []byte{0xaa}
 	cases := []struct {
@@ -309,8 +303,6 @@ func TestDecodeNextReadsPackedMessagesInOrder(t *testing.T) {
 	}
 }
 
-// Each ok snippet proves the harness builds valid code, so the matching bad
-// snippet's failure can only come from the line it names.
 func TestGeneratedTypesRefuseMisuse(t *testing.T) {
 	build := func(dir string) (string, error) {
 		out, err := exec.Command("go", "build", "-o", os.DevNull, "./testdata/kindcheck/"+dir).CombinedOutput()

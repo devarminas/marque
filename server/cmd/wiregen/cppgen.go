@@ -99,8 +99,6 @@ func cppDecodeField(f Field) string {
 		dst, f.Type.Bound, f.Type.Elem.MinSize(), dst, dst, cppDecode(*f.Type.Elem))
 }
 
-// cppText returns statements that append the text form of expr to out, the
-// same text the Go String() methods produce.
 func cppText(t Type, expr string) string {
 	switch t.Kind {
 	case KindPrim:
@@ -124,7 +122,6 @@ func cppText(t Type, expr string) string {
 	return fmt.Sprintf("text(out, %s);", expr)
 }
 
-// cppValue is the expression a rule compares: quants by wire integer.
 func cppValue(t Type, expr string) string {
 	if t.Kind == KindQuant {
 		return fmt.Sprintf("%s.step(%s)", cppQuantVar(t.Quant), expr)
@@ -132,8 +129,6 @@ func cppValue(t Type, expr string) string {
 	return expr
 }
 
-// cppLiteral spells an integer bound in the field's own type, so comparisons
-// never mix signedness.
 func cppLiteral(prim, v string) string {
 	switch prim {
 	case "u64":
@@ -169,7 +164,6 @@ func cppTermCond(term Term, t Type, v string) string {
 	return ""
 }
 
-// cppChecks mirrors goChecks: the same rules in the same order.
 func cppChecks(x string, f Field) string {
 	var b strings.Builder
 	fail := fmt.Sprintf(") %s.fail(codec::Error::rule);\n", x)
@@ -244,9 +238,6 @@ func cppRecords(s *Schema) []cppRecordDecl {
 	return out
 }
 
-// cppClass emits <Name>Fields, the aggregate a caller fills, and <Name>, which
-// holds a validated copy behind const getters. A default-constructed <Name>
-// is the zero value, which encode refuses when it breaks a rule.
 func cppClass(b *strings.Builder, r cppRecordDecl) {
 	fmt.Fprintf(b, "struct %sFields {\n", r.name)
 	for _, f := range r.fields {

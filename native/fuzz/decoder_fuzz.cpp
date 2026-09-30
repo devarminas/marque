@@ -1,8 +1,3 @@
-// libFuzzer body for one generated channel decoder, chosen at build time by
-// MARQUE_FUZZ_NS and MARQUE_FUZZ_CHANNEL (native/fuzz/CMakeLists.txt). No input
-// may crash the decoder, and any input that decodes must re-encode to exactly
-// its own bytes.
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>

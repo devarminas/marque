@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// fuzzDecoder seeds one channel decoder with every vector sent on that
-// channel, then checks that no input panics and that any input which decodes
-// re-encodes to exactly its own bytes.
 func fuzzDecoder(f *testing.F, key string) {
 	for _, v := range loadVectors(f) {
 		if v.decoder == key {

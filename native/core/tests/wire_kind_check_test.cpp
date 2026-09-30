@@ -1,8 +1,3 @@
-// Proves the generated types refuse misuse at compile time. An NpcId cannot
-// stand in for a PlayerId, and a built message's fields cannot be written.
-// Each bad snippet differs from the good one in one line, so its failure can
-// only come from that line. The compiler is $CXX, or c++ when CXX is unset.
-
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>

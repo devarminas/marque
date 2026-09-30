@@ -1,5 +1,3 @@
-# One libFuzzer executable per generated channel decoder, named
-# fuzz_<schema>_<channel>. Only built when MARQUE_FUZZ is on.
 set(MARQUE_FUZZ_NS_wire marque::wire)
 set(MARQUE_FUZZ_NS_probe marque::wire::probe)
 

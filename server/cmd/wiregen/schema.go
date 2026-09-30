@@ -65,8 +65,6 @@ type Message struct {
 	Rules     []Relation
 }
 
-// Field is one field of a struct or message. Where holds the terms of its
-// where clause in source order, at most one of each kind.
 type Field struct {
 	Name  string
 	Type  Type
@@ -81,21 +79,13 @@ const (
 	TermUnique
 )
 
-// Term is one where-clause check. Range and set terms check the field's value,
-// or each element when the field is a list. A unique term checks the list.
 type Term struct {
-	Kind TermKind
-	// TermRange: inclusive bounds as canonical decimal text. CheckLo and CheckHi
-	// are false when a bound is the type's own limit, so no always-true
-	// comparison is emitted. For a quant, LoStep and HiStep bound the wire
-	// integer, so both languages compare exact integers, never doubles.
+	Kind             TermKind
 	Lo, Hi           string
 	CheckLo, CheckHi bool
 	LoStep, HiStep   uint64
 	Members          []EnumMember
-	// TermUnique: nil compares whole elements, otherwise this field of each
-	// struct element.
-	By *Field
+	By               *Field
 }
 
 func (t Term) Canonical() string {
@@ -115,7 +105,6 @@ func (t Term) Canonical() string {
 	return "unique"
 }
 
-// Relation is a rule line, Left Op Right, with Op one of <, <=, ==, !=, in.
 type Relation struct {
 	Left, Right Operand
 	Op          string
@@ -125,8 +114,6 @@ func (r Relation) Canonical() string {
 	return fmt.Sprintf("rule %s %s %s", r.Left, r.Op, r.Right)
 }
 
-// Operand names a field of the record, or a field (Sub) of that field's
-// struct. When Field is a list, the operand stands for every element.
 type Operand struct {
 	Field *Field
 	Sub   *Field
@@ -220,14 +207,10 @@ func (t Type) Canonical() string {
 	}
 }
 
-// ordered types take < and <=; the generated code compares quants by their
-// wire integer.
 func (t Type) ordered() bool {
 	return t.Kind == KindQuant || t.Kind == KindPrim && t.Prim != "bool" && t.Prim != "f32"
 }
 
-// comparable types take ==, !=, in, and unique. f32 never takes part in a rule,
-// because float equality is a trap.
 func (t Type) comparable() bool {
 	switch t.Kind {
 	case KindPrim:
@@ -244,7 +227,6 @@ func (t Type) comparable() bool {
 	return true
 }
 
-// scalar types are comparable and not structs; relation operands must be.
 func (t Type) scalar() bool { return t.comparable() && t.Kind != KindStruct }
 
 // primSize is each primitive's encoded width in bytes.
@@ -254,8 +236,6 @@ var primSize = map[string]int{
 	"bool": 1, "f32": 4,
 }
 
-// uniqueMaxBound caps lists that take a unique term. The check compares every
-// pair, so a bound of 256 costs at most 32640 comparisons per list.
 const uniqueMaxBound = 256
 
 // codecVersion opens the canonical form, so a change to the byte rules changes
@@ -289,9 +269,6 @@ var cppKeywords = setOf(
 	"wchar_t", "while", "xor", "xor_eq",
 )
 
-// generatedMembers collide with generated members (Go methods MessageID,
-// Channel, Append, String, and Build on the Fields type; C++ message_id,
-// channel, and the static build).
 var generatedMembers = setOf("message_id", "channel", "append", "string", "build")
 
 // reservedTypes are the package-level names the Go generator emits.
@@ -352,7 +329,6 @@ func Parse(src string) (*Schema, error) {
 	return p.schema, nil
 }
 
-// operators are the multi-byte tokens, matched before single punctuation.
 var operators = []string{"..", "<=", "==", "!="}
 
 const punctuation = "(){},=<"
@@ -399,8 +375,6 @@ func (p *parser) errAt(line int, format string, args ...any) error {
 	return fmt.Errorf("schema line %d: %s", line, fmt.Sprintf(format, args...))
 }
 
-// claim registers a Go name, and for a record the <Name>Fields builder type
-// the Go generator emits beside it.
 func (p *parser) claim(name string, record bool, line int) error {
 	names := []string{name}
 	if record {
@@ -608,8 +582,6 @@ func (p *parser) message(toks []string) error {
 	return nil
 }
 
-// fields parses a struct or message body. Rule lines may name any field of
-// the block, so they resolve after the last field.
 func (p *parser) fields() ([]Field, []Relation, error) {
 	var out []Field
 	type pending struct {
@@ -801,9 +773,6 @@ var intLimits = map[string][2]*big.Int{
 	"i32": {big.NewInt(math.MinInt32), big.NewInt(math.MaxInt32)}, "i64": {big.NewInt(math.MinInt64), big.NewInt(math.MaxInt64)},
 }
 
-// rangeTerm checks lo..hi against t and records the bounds. Integer bounds
-// must be integers inside the type. Quant bounds must sit on the quant's grid
-// inside its range, and become bounds on the wire integer.
 func (p *parser) rangeTerm(t Type, loTok, hiTok string) (Term, error) {
 	lo, err := p.rangeBound(loTok)
 	if err != nil {
@@ -848,8 +817,6 @@ func (p *parser) rangeTerm(t Type, loTok, hiTok string) (Term, error) {
 	return term, nil
 }
 
-// canonDecimal prints r with the fewest decimals that spell it exactly. Every
-// bound parsed from decimal text has such a spelling.
 func (p *parser) rangeBound(tok string) (*big.Rat, error) {
 	r, ok := new(big.Rat).SetString(tok)
 	if !decimal.MatchString(tok) || !ok {
@@ -971,11 +938,6 @@ func (p *parser) bound(tok string) (int, error) {
 	return int(n), nil
 }
 
-// Canonical is the hashed form of the schema: a "wire <codecVersion>" line,
-// then every declaration in a fixed category order (handles, quants, enums,
-// structs, messages), each category in source order, one line per declaration
-// header, member, field, or rule, with single spaces and no comments. A field
-// line carries its where clause; rule lines follow the fields.
 func (s *Schema) Canonical() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "wire %d\n", codecVersion)

@@ -116,7 +116,6 @@ func goText(t Type, expr string) string {
 	return fmt.Sprintf("b = append(b, '[')\nfor i, e := range %s {\nif i > 0 {\nb = append(b, ' ')\n}\n%s\n}\nb = append(b, ']')", expr, goText(*t.Elem, "e"))
 }
 
-// goValue is the expression a rule compares: quants by wire integer.
 func goValue(t Type, expr string) string {
 	if t.Kind == KindQuant {
 		return fmt.Sprintf("%s.Step(%s)", goQuantVar(t.Quant), expr)
@@ -124,8 +123,6 @@ func goValue(t Type, expr string) string {
 	return expr
 }
 
-// goTermCond is the condition one range or set term requires of v, or "" when
-// the term can never fail (a range spanning the whole type).
 func goTermCond(term Term, t Type, v string) string {
 	var parts []string
 	switch term.Kind {
@@ -151,9 +148,6 @@ func goTermCond(term Term, t Type, v string) string {
 	return ""
 }
 
-// goChecks emits every rule of a record, failing x (the Writer w or Reader r)
-// with ErrRule. Encode and decode run the same checks in the same order, so
-// both report the same first error.
 func goChecks(x string, f Field) string {
 	var b strings.Builder
 	fail := fmt.Sprintf("{\n%s.Fail(codec.ErrRule)\n}\n", x)
@@ -211,10 +205,6 @@ func goRelation(x string, r Relation) string {
 	return fmt.Sprintf("if %s.Err() == nil && !(%s %s %s) %s", x, l, r.Op, rt, fail)
 }
 
-// goRecord emits a record as two types: <Name>Fields, a plain struct the
-// caller fills, and <Name>, which holds a validated copy behind getters.
-// Decoding and <Name>Fields.Build are the only ways to fill a <Name>, so a
-// non-zero <Name> is valid and nothing can change it afterwards.
 func goRecord(b *strings.Builder, name, textName string, fields []Field, rules []Relation) {
 	fmt.Fprintf(b, "type %[1]sFields struct {\n", name)
 	for _, f := range fields {

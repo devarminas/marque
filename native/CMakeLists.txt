@@ -5,8 +5,6 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Opt-in libFuzzer build of every generated wire decoder (scripts/wire_fuzz.sh).
-# It instruments the whole tree, so it gets its own build directory.
 option(MARQUE_FUZZ "Build libFuzzer targets for the wire decoders (clang only)" OFF)
 if(MARQUE_FUZZ)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")

@@ -237,9 +237,6 @@ std::optional<Error> Reader::finish() {
 
 namespace {
 
-// Lays out the shortest round-trip digits the way Go's fmtEFG does for 'g'
-// with precision -1: exponent form when the decimal exponent is below -4 or at
-// least 6, otherwise plain decimals.
 template <typename F>
 void text_float(std::string& out, F v) {
     char buf[64];
@@ -294,8 +291,6 @@ void hex_digits(std::string& out, std::uint32_t v, int n) {
 void text_f64(std::string& out, double v) { text_float(out, v); }
 void text_f32(std::string& out, float v) { text_float(out, v); }
 
-// Matches strconv.AppendQuoteToASCII on valid UTF-8, which is all a message
-// string can hold.
 void text_quoted(std::string& out, std::string_view s) {
     out += '"';
     for (std::size_t i = 0; i < s.size();) {

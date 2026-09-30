@@ -1,7 +1,5 @@
 # Codec fixture: one message that uses every field type, so both languages
 # prove every encoding rule without adding fake messages to the real schema.
-# Messages 4 and up carry one or more of each rule kind, shaped after the
-# party, inventory, dialog, and give messages in server/internal/net/protocol.go.
 
 handle PlayerId
 handle NpcId
@@ -86,7 +84,6 @@ message dialog = 6 on events s2c {
   lines list(u16, 8) where 1..500
 }
 
-# A player may pick any option except trade, which opens its own window.
 message pick = 7 on intents c2s {
   npc NpcId
   option Option where {accept_quest, turn_in_quest, stop_talking}

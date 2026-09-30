@@ -55,7 +55,6 @@ Outcome run(std::span<const std::uint8_t> bytes) {
     return o;
 }
 
-// Keyed "<schema>/<channel>", like the Go test's decoders map.
 const std::map<std::string, std::function<Outcome(std::span<const std::uint8_t>)>> decoders{
     {"wire/state", run<wire::decode_state, wire::text_state, wire::encode_state>},
     {"wire/events", run<wire::decode_events, wire::text_events, wire::encode_events>},
@@ -174,7 +173,6 @@ bool refuses(const std::expected<T, Error>& got, Error want) {
     return !got.has_value() && got.error() == want;
 }
 
-// Mirrors the Go TestBuildRefusesWhatDecodersRefuse table.
 void build_refuses_what_decoders_refuse() {
     const probe::NpcId npc{7, 0};
     const probe::PlayerId p1{1, 0};
@@ -218,8 +216,6 @@ void build_refuses_what_decoders_refuse() {
           "infinite ratio");
 }
 
-// A default-constructed message is the one value build() never checked;
-// encode refuses it when it breaks the schema and leaves out unchanged.
 void encode_refuses_invalid_default_value() {
     const auto refuses_default = [](const auto& m, Error want) {
         std::vector<std::uint8_t> out{0xaa};
@@ -249,8 +245,6 @@ void decode_next_reads_packed_messages_in_order() {
     check(!r.finish().has_value(), "finish succeeds after three messages");
 }
 
-// Expected strings are Go's strconv.FormatFloat(v, 'g', -1, 64 or 32) and
-// strconv.QuoteToASCII output for the same inputs.
 void text_matches_go() {
     const std::pair<double, const char*> f64[] = {
         {0.0, "0"},

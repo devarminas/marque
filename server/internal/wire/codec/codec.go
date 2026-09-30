@@ -59,12 +59,8 @@ type Quant struct {
 	Width             int
 }
 
-// Step is the wire integer for v. Call it only on a finite v inside the
-// range; generated rule checks compare quants by Step, never as doubles.
 func (q Quant) Step(v float64) uint64 { return uint64(math.Round(v*q.PerUnit) - q.Min*q.PerUnit) }
 
-// Writer appends encoded values to a buffer. A checking Writer (NewChecker)
-// runs every check and appends nothing.
 type Writer struct {
 	buf   []byte
 	start int
@@ -74,8 +70,6 @@ type Writer struct {
 
 func NewWriter(dst []byte) Writer { return Writer{buf: dst, start: len(dst)} }
 
-// NewChecker returns a Writer that validates without writing, so Build refuses
-// exactly what Append refuses without allocating.
 func NewChecker() Writer { return Writer{check: true} }
 
 func (w *Writer) Fail(err error) {
@@ -345,8 +339,6 @@ func (r *Reader) Quant(q Quant) float64 {
 	return (float64(n) + q.Min*q.PerUnit) / q.PerUnit
 }
 
-// Unique reports whether no two of n elements are equal. It compares every
-// pair; the schema caps unique lists at 256 elements.
 func Unique(n int, equal func(i, j int) bool) bool {
 	for i := 1; i < n; i++ {
 		for j := 0; j < i; j++ {
@@ -358,8 +350,6 @@ func Unique(n int, equal func(i, j int) bool) bool {
 	return true
 }
 
-// Clone copies s so a built message shares no memory with its caller. An
-// empty list becomes nil, which is what a decoder produces.
 func Clone[T any](s []T) []T {
 	if len(s) == 0 {
 		return nil
@@ -367,12 +357,8 @@ func Clone[T any](s []T) []T {
 	return append([]T(nil), s...)
 }
 
-// List is a read-only view of a decoded or built list. Generated getters
-// return it so no caller can change a message after it was validated.
 type List[T any] struct{ s []T }
 
-// ListOf wraps s without copying; the generated code passes only slices no
-// caller can reach.
 func ListOf[T any](s []T) List[T] { return List[T]{s} }
 
 func (l List[T]) Len() int { return len(l.s) }
