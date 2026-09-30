@@ -194,12 +194,10 @@ func inputErr(b []byte) error   { _, err := wire.DecodeInput(b); return err }
 func intentsErr(b []byte) error { _, err := wire.DecodeIntents(b); return err }
 func probeErr(b []byte) error   { _, err := probe.DecodeEvents(b); return err }
 
-// Crowd's list bound is 65535 and each Pair is at least 6 bytes, so the 3-byte
-// payload 03 ff7f claims 16383 pairs (98298 bytes) with none behind it.
 func TestHostileCountFailsBeforeAllocating(t *testing.T) {
-	b := mustHex(t, "03ff7f")
+	claims16383PairsWithNoneBehindIt := mustHex(t, "03ff7f")
 	var err error
-	allocs := testing.AllocsPerRun(100, func() { _, err = probe.DecodeEvents(b) })
+	allocs := testing.AllocsPerRun(100, func() { _, err = probe.DecodeEvents(claims16383PairsWithNoneBehindIt) })
 	if !errors.Is(err, codec.ErrTruncated) {
 		t.Fatalf("got %v, want %v", err, codec.ErrTruncated)
 	}
@@ -258,8 +256,6 @@ func TestEncodeRejectsAndLeavesBufferUnchanged(t *testing.T) {
 	}
 }
 
-// The ok snippet proves the harness builds valid code, so the wrong snippet's
-// failure can only come from the NpcId/PlayerId mismatch it names.
 func TestEntityKindsDoNotMix(t *testing.T) {
 	build := func(dir string) (string, error) {
 		out, err := exec.Command("go", "build", "-o", os.DevNull, "./testdata/kindcheck/"+dir).CombinedOutput()

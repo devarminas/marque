@@ -21,8 +21,6 @@ const char* to_string(Error e) {
     return "unknown error";
 }
 
-// Accepts exactly what Go's utf8.Valid accepts: no overlong forms, no
-// surrogates, nothing above U+10FFFF.
 bool valid_utf8(std::string_view s) {
     std::size_t i = 0;
     while (i < s.size()) {
@@ -175,7 +173,6 @@ float Reader::f32() {
     return v;
 }
 
-// Rejects overlong forms so every value has exactly one encoding.
 std::uint32_t Reader::varint() {
     std::uint32_t v = 0;
     for (int i = 0; i < 5; ++i) {

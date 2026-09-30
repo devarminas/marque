@@ -24,7 +24,6 @@ type Quant struct {
 	Min, Max, PerUnit int64
 }
 
-// Steps is the largest encoded value; the wire value runs 0..Steps.
 func (q *Quant) Steps() uint64 { return uint64((q.Max - q.Min) * q.PerUnit) }
 
 func (q *Quant) Width() int {
@@ -78,8 +77,6 @@ const (
 	KindStruct
 )
 
-// Type is a field type. Prim is set for KindPrim, Bound for strings and lists,
-// Elem for lists, and exactly one of the declaration pointers for named types.
 type Type struct {
 	Kind   Kind
 	Prim   string
@@ -91,8 +88,6 @@ type Type struct {
 	Struct *Struct
 }
 
-// MinSize is the fewest bytes any value of t encodes to. List decoders use it
-// to refuse a count the remaining bytes cannot hold before allocating.
 func (t Type) MinSize() int {
 	switch t.Kind {
 	case KindPrim:
@@ -131,27 +126,20 @@ func (t Type) Canonical() string {
 	}
 }
 
-// primSize is each primitive's encoded width in bytes.
 var primSize = map[string]int{
 	"u8": 1, "u16": 2, "u32": 4, "u64": 8,
 	"i8": 1, "i16": 2, "i32": 4, "i64": 8,
 	"bool": 1, "f32": 4,
 }
 
-// codecVersion opens the canonical form, so a change to the byte rules changes
-// the hash even when the schema text does not. Bump it with any codec rule.
 const codecVersion = 1
 
-// channels lists the fixed channels in ADR 0018 section 1.3 order. Each one
-// gets its own generated message interface and decoder.
 var channels = []string{"state", "events", "input", "intents"}
 
 var channelDirection = map[string]string{
 	"state": "s2c", "events": "s2c", "input": "c2s", "intents": "c2s",
 }
 
-// cppKeywords is the C++23 keyword list. Fields and enum members are emitted
-// verbatim as C++ identifiers, so none may be a keyword.
 var cppKeywords = setOf(
 	"alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor",
 	"bool", "break", "case", "catch", "char", "char8_t", "char16_t",
@@ -169,11 +157,8 @@ var cppKeywords = setOf(
 	"wchar_t", "while", "xor", "xor_eq",
 )
 
-// generatedMembers collide with generated message members (Go methods
-// MessageID, Channel, Append, String; C++ message_id, channel).
 var generatedMembers = setOf("message_id", "channel", "append", "string")
 
-// reservedTypes are the package-level names the Go generator emits.
 var reservedTypes = func() map[string]bool {
 	out := setOf("Message", "SchemaHash")
 	for _, ch := range channels {
@@ -330,7 +315,6 @@ func (p *parser) openBlock(toks []string, want int) error {
 	return nil
 }
 
-// block calls line for each body line until the closing brace.
 func (p *parser) block(line func([]string) error) error {
 	p.pos++
 	for ; p.pos < len(p.lines); p.pos++ {
@@ -476,7 +460,6 @@ func (p *parser) fields() ([]Field, error) {
 	return out, err
 }
 
-// typ parses one type from the front of toks and returns the unread tail.
 func (p *parser) typ(toks []string) (Type, []string, error) {
 	if len(toks) == 0 {
 		return Type{}, nil, p.errf("missing type")
@@ -522,10 +505,6 @@ func (p *parser) bound(tok string) (int, error) {
 	return int(n), nil
 }
 
-// Canonical is the hashed form of the schema: a "wire <codecVersion>" line,
-// then every declaration in a fixed category order (handles, quants, enums,
-// structs, messages), each category in source order, one line per declaration
-// header, member, or field, with single spaces and no comments.
 func (s *Schema) Canonical() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "wire %d\n", codecVersion)
@@ -559,8 +538,6 @@ func (s *Schema) Canonical() string {
 	return b.String()
 }
 
-// Hash is the first 8 bytes of SHA-256(Canonical()), read big-endian, so its
-// hex spelling equals the first 16 hex digits of `wiregen canon | sha256sum`.
 func (s *Schema) Hash() uint64 {
 	sum := sha256.Sum256([]byte(s.Canonical()))
 	return binary.BigEndian.Uint64(sum[:8])
@@ -576,7 +553,6 @@ func (s *Schema) MessagesOn(channel string) []*Message {
 	return out
 }
 
-// goName turns snake_case into PascalCase: max_hp -> MaxHp.
 func goName(snake string) string {
 	var b strings.Builder
 	for _, part := range strings.Split(snake, "_") {

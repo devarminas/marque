@@ -2,6 +2,8 @@
 
 `schema.wire` describes every message on the wire (ADR 0018 section 2). `server/cmd/wiregen` reads it and writes the Go and C++ codecs. Regenerate with `scripts/wiregen.sh`. `scripts/wiregen_check.sh` fails when the committed output is stale.
 
+`wiregen gen [-root <dir>] [-src <dir>]` (from `server/`) writes every target's generated files under `-root` (default `..`), reading the schemas from `-src` (default `..`). `wiregen canon [schema]` prints the canonical form `SchemaHash` hashes; with no argument it reads `shared/wire/schema.wire`. Paths are relative to the repository root, which is the parent of the `server` module.
+
 ## Grammar
 
 One declaration or field per line. `#` starts a comment. Names are declared before use.
@@ -82,8 +84,21 @@ Each handle is its own type in both languages, so an `NpcId` does not compile wh
 
 `SchemaHash` (Go) and `schema_hash` (C++) are the first 8 bytes, read big-endian, of SHA-256 over the canonical form. The canonical form starts with `wire 1`, the codec version, which changes whenever a byte rule changes. It then lists handles, quants, enums, structs, and messages in that order, each in source order, one line per header, member, or field, with single spaces and no comments. Whitespace and comments therefore do not change the hash. Every name, id, type, bound, and field order does. `go run ./cmd/wiregen canon` (from `server/`) prints the canonical form.
 
+## Runtime codec
+
+`server/internal/wire/codec` (Go) and `native/core/{include,src}/wire/codec` (C++) are the
+hand-written runtime the generated message code builds on; they are not generated. Both keep only
+the first error a `Writer` or `Reader` hits and turn every later call into a no-op, so generated
+code needs no per-field checks. A varint that is overlong, or whose fifth byte carries bits above
+`0x0f`, is refused so every value has exactly one encoding. `Reader.Count`/`count` fails with
+truncated before the decoder can size an allocation from a count whose claimed elements cannot fit
+in the remaining bytes — proved by `TestHostileCountFailsBeforeAllocating` (Go) and
+`wire_hostile_count_test.cpp` (C++), which counts heap allocations around the decode. C++
+`valid_utf8` accepts exactly what Go's `utf8.Valid` accepts: no overlong forms, no surrogates,
+nothing above U+10FFFF.
+
 ## Files
 
 - `testdata/probe.wire` is a fixture that uses every field type. It generates `server/internal/wire/probe` and `marque/wire/gen/probe.hpp`, and exists only for tests. Its `crowd` message carries the hostile-count tests.
-- `vectors/*.vec` hold the committed encodings. The Go and C++ tests build the same values and assert these bytes.
-- `go run ./cmd/wiregen/dump <hex>...` (from `server/`) prints encoded messages as text.
+- `vectors/*.vec` hold the committed encodings the Go and C++ tests build the same values against and assert these bytes. Each line is `<name> <hex>`.
+- `go run ./cmd/wiregen/dump <hex>...` (from `server/`) prints encoded messages as text. It lives in its own package apart from `wiregen` so the generator never imports the package it generates: a broken generated package must not stop regeneration.

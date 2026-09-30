@@ -8,7 +8,6 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-// SchemaHash identifies the schema this file was generated from.
 const SchemaHash uint64 = 0x60dfa19f4dc9df6f
 
 type Message interface {
@@ -18,25 +17,21 @@ type Message interface {
 	String() string
 }
 
-// StateMsg is a message sent on the state channel.
 type StateMsg interface {
 	Message
 	stateMsg()
 }
 
-// EventsMsg is a message sent on the events channel.
 type EventsMsg interface {
 	Message
 	eventsMsg()
 }
 
-// InputMsg is a message sent on the input channel.
 type InputMsg interface {
 	Message
 	inputMsg()
 }
 
-// IntentsMsg is a message sent on the intents channel.
 type IntentsMsg interface {
 	Message
 	intentsMsg()
@@ -46,8 +41,6 @@ var quantPos = codec.Quant{Min: -4096, Max: 4096, PerUnit: 100, Steps: 819200, W
 
 var quantWish = codec.Quant{Min: -1, Max: 1, PerUnit: 100, Steps: 200, Width: 1}
 
-// PlayerId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type PlayerId struct {
 	Index uint32
 	Gen   uint32
@@ -66,8 +59,6 @@ func decodePlayerId(r *codec.Reader) (v PlayerId) {
 
 func (v PlayerId) String() string { return fmt.Sprintf("PlayerId(%d/%d)", v.Index, v.Gen) }
 
-// NpcId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type NpcId struct {
 	Index uint32
 	Gen   uint32
@@ -86,8 +77,6 @@ func decodeNpcId(r *codec.Reader) (v NpcId) {
 
 func (v NpcId) String() string { return fmt.Sprintf("NpcId(%d/%d)", v.Index, v.Gen) }
 
-// ItemId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type ItemId struct {
 	Index uint32
 	Gen   uint32
@@ -106,8 +95,6 @@ func decodeItemId(r *codec.Reader) (v ItemId) {
 
 func (v ItemId) String() string { return fmt.Sprintf("ItemId(%d/%d)", v.Index, v.Gen) }
 
-// NodeId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type NodeId struct {
 	Index uint32
 	Gen   uint32
@@ -332,8 +319,6 @@ func (v Refused) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// DecodeNextState reads one state message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	var m StateMsg
 	switch r.Varint() {
@@ -350,7 +335,6 @@ func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	return m, nil
 }
 
-// DecodeState decodes exactly one state message; any byte left over is an error.
 func DecodeState(b []byte) (StateMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextState(r)
@@ -363,8 +347,6 @@ func DecodeState(b []byte) (StateMsg, error) {
 	return m, nil
 }
 
-// DecodeNextEvents reads one events message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextEvents(r *codec.Reader) (EventsMsg, error) {
 	var m EventsMsg
 	switch r.Varint() {
@@ -379,7 +361,6 @@ func DecodeNextEvents(r *codec.Reader) (EventsMsg, error) {
 	return m, nil
 }
 
-// DecodeEvents decodes exactly one events message; any byte left over is an error.
 func DecodeEvents(b []byte) (EventsMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextEvents(r)
@@ -392,8 +373,6 @@ func DecodeEvents(b []byte) (EventsMsg, error) {
 	return m, nil
 }
 
-// DecodeNextInput reads one input message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextInput(r *codec.Reader) (InputMsg, error) {
 	var m InputMsg
 	switch r.Varint() {
@@ -408,7 +387,6 @@ func DecodeNextInput(r *codec.Reader) (InputMsg, error) {
 	return m, nil
 }
 
-// DecodeInput decodes exactly one input message; any byte left over is an error.
 func DecodeInput(b []byte) (InputMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextInput(r)
@@ -421,8 +399,6 @@ func DecodeInput(b []byte) (InputMsg, error) {
 	return m, nil
 }
 
-// DecodeNextIntents reads one intents message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextIntents(r *codec.Reader) (IntentsMsg, error) {
 	var m IntentsMsg
 	switch r.Varint() {
@@ -435,7 +411,6 @@ func DecodeNextIntents(r *codec.Reader) (IntentsMsg, error) {
 	return m, nil
 }
 
-// DecodeIntents decodes exactly one intents message; any byte left over is an error.
 func DecodeIntents(b []byte) (IntentsMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextIntents(r)

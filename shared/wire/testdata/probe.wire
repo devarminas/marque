@@ -1,6 +1,3 @@
-# Codec fixture: one message that uses every field type, so both languages
-# prove every encoding rule without adding fake messages to the real schema.
-
 handle PlayerId
 handle NpcId
 
@@ -17,8 +14,6 @@ struct Pair {
   weight f32
 }
 
-# Field order puts the bounded and checked types first so rejection tests can
-# use short literal inputs.
 message probe = 1 on events s2c {
   label string(8)
   ratio f32
@@ -42,8 +37,6 @@ message ping = 2 on intents c2s {
   nonce u8
 }
 
-# A count near the bound with no element bytes behind it must fail before the
-# decoder allocates room for the elements.
 message crowd = 3 on events s2c {
   pairs list(Pair, 65535)
 }

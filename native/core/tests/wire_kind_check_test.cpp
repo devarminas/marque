@@ -1,7 +1,3 @@
-// Proves an NpcId cannot stand in for a PlayerId: the same snippet compiles
-// with a PlayerId and fails with an NpcId, and the failure names both types.
-// The compiler is $CXX, or c++ when CXX is unset.
-
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>

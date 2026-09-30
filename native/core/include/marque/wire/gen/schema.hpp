@@ -15,8 +15,6 @@ namespace marque::wire {
 
 inline constexpr std::uint64_t schema_hash = 0x60dfa19f4dc9df6fULL;
 
-// Pairs a slot index with the generation that slot had when the entity was
-// created, so a reused index never names the old entity.
 struct PlayerId {
     std::uint32_t index = 0;
     std::uint32_t gen = 0;
@@ -24,8 +22,6 @@ struct PlayerId {
     bool operator==(const PlayerId&) const = default;
 };
 
-// Pairs a slot index with the generation that slot had when the entity was
-// created, so a reused index never names the old entity.
 struct NpcId {
     std::uint32_t index = 0;
     std::uint32_t gen = 0;
@@ -33,8 +29,6 @@ struct NpcId {
     bool operator==(const NpcId&) const = default;
 };
 
-// Pairs a slot index with the generation that slot had when the entity was
-// created, so a reused index never names the old entity.
 struct ItemId {
     std::uint32_t index = 0;
     std::uint32_t gen = 0;
@@ -42,8 +36,6 @@ struct ItemId {
     bool operator==(const ItemId&) const = default;
 };
 
-// Pairs a slot index with the generation that slot had when the entity was
-// created, so a reused index never names the old entity.
 struct NodeId {
     std::uint32_t index = 0;
     std::uint32_t gen = 0;
@@ -110,8 +102,6 @@ struct Refused {
 using StateMsg = std::variant<Pose, Hp>;
 using EventsMsg = std::variant<Refused>;
 using InputMsg = std::variant<Input>;
-// No intents messages yet. std::variant<> is ill-formed, so the channel holds
-// std::monostate, which its decoder never returns.
 using IntentsMsg = std::variant<std::monostate>;
 
 std::expected<void, codec::Error> encode(const Input& m, std::vector<std::uint8_t>& out);
@@ -119,25 +109,13 @@ std::expected<void, codec::Error> encode(const Pose& m, std::vector<std::uint8_t
 std::expected<void, codec::Error> encode(const Hp& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Refused& m, std::vector<std::uint8_t>& out);
 
-// Reads one state message and leaves r after it. An id from another channel
-// fails with codec::Error::unknown_message.
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r);
-// Decodes exactly one state message; any byte left over is an error.
 std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes);
-// Reads one events message and leaves r after it. An id from another channel
-// fails with codec::Error::unknown_message.
 std::expected<EventsMsg, codec::Error> decode_next_events(codec::Reader& r);
-// Decodes exactly one events message; any byte left over is an error.
 std::expected<EventsMsg, codec::Error> decode_events(std::span<const std::uint8_t> bytes);
-// Reads one input message and leaves r after it. An id from another channel
-// fails with codec::Error::unknown_message.
 std::expected<InputMsg, codec::Error> decode_next_input(codec::Reader& r);
-// Decodes exactly one input message; any byte left over is an error.
 std::expected<InputMsg, codec::Error> decode_input(std::span<const std::uint8_t> bytes);
-// Reads one intents message and leaves r after it. An id from another channel
-// fails with codec::Error::unknown_message.
 std::expected<IntentsMsg, codec::Error> decode_next_intents(codec::Reader& r);
-// Decodes exactly one intents message; any byte left over is an error.
 std::expected<IntentsMsg, codec::Error> decode_intents(std::span<const std::uint8_t> bytes);
 
 }

@@ -69,7 +69,6 @@ std::string probe_encode_hex(const Msg& m) {
     return to_hex(out);
 }
 
-// Decodes hex and reports whether it came back as exactly want.
 template <typename Msg, typename Decode>
 bool round_trips(Decode decode, const std::string& hex, const Msg& want) {
     auto got = decode(from_hex(hex));

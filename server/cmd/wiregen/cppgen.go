@@ -11,8 +11,6 @@ var cppPrim = map[string]string{
 	"bool": "bool", "f32": "float",
 }
 
-// cppWire maps each primitive to the Writer/Reader method that carries it and
-// the unsigned type a signed value converts through.
 var cppWire = map[string][2]string{
 	"u8": {"u8", ""}, "u16": {"u16", ""}, "u32": {"u32", ""}, "u64": {"u64", ""},
 	"i8": {"u8", "std::uint8_t"}, "i16": {"u16", "std::uint16_t"}, "i32": {"u32", "std::uint32_t"}, "i64": {"u64", "std::uint64_t"},
@@ -112,7 +110,7 @@ func genCppHeader(s *Schema, schemaPath, ns string) []byte {
 	fmt.Fprintf(&b, "inline constexpr std::uint64_t schema_hash = 0x%016xULL;\n\n", s.Hash())
 
 	for _, h := range s.Handles {
-		fmt.Fprintf(&b, "// Pairs a slot index with the generation that slot had when the entity was\n// created, so a reused index never names the old entity.\nstruct %s {\n    std::uint32_t index = 0;\n    std::uint32_t gen = 0;\n\n    bool operator==(const %s&) const = default;\n};\n\n", h.Name, h.Name)
+		fmt.Fprintf(&b, "struct %s {\n    std::uint32_t index = 0;\n    std::uint32_t gen = 0;\n\n    bool operator==(const %s&) const = default;\n};\n\n", h.Name, h.Name)
 	}
 	for _, e := range s.Enums {
 		fmt.Fprintf(&b, "enum class %s : std::uint32_t {\n", e.Name)
@@ -132,7 +130,6 @@ func genCppHeader(s *Schema, schemaPath, ns string) []byte {
 	}
 	for _, c := range cppChannels(s) {
 		if len(c.names) == 0 {
-			fmt.Fprintf(&b, "// No %s messages yet. std::variant<> is ill-formed, so the channel holds\n// std::monostate, which its decoder never returns.\n", c.name)
 			fmt.Fprintf(&b, "using %s = std::variant<std::monostate>;\n", c.alias)
 			continue
 		}
@@ -144,8 +141,8 @@ func genCppHeader(s *Schema, schemaPath, ns string) []byte {
 	}
 	b.WriteString("\n")
 	for _, c := range cppChannels(s) {
-		fmt.Fprintf(&b, "// Reads one %[1]s message and leaves r after it. An id from another channel\n// fails with codec::Error::unknown_message.\nstd::expected<%[2]s, codec::Error> decode_next_%[1]s(codec::Reader& r);\n", c.name, c.alias)
-		fmt.Fprintf(&b, "// Decodes exactly one %[1]s message; any byte left over is an error.\nstd::expected<%[2]s, codec::Error> decode_%[1]s(std::span<const std::uint8_t> bytes);\n", c.name, c.alias)
+		fmt.Fprintf(&b, "std::expected<%[2]s, codec::Error> decode_next_%[1]s(codec::Reader& r);\n", c.name, c.alias)
+		fmt.Fprintf(&b, "std::expected<%[2]s, codec::Error> decode_%[1]s(std::span<const std::uint8_t> bytes);\n", c.name, c.alias)
 	}
 	b.WriteString("\n}\n")
 	return []byte(b.String())

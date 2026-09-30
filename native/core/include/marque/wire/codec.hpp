@@ -1,11 +1,5 @@
 #pragma once
 
-// Hand-written runtime under the wiregen-generated message code. The byte
-// rules match server/internal/wire/codec exactly: little-endian, byte-aligned,
-// canonical 32-bit LEB128 varints for ids, handle parts, enums, and lengths.
-// Writer and Reader keep the first error and turn every later call into a
-// no-op, so generated code needs no per-field checks.
-
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -34,7 +28,6 @@ enum class Error : std::uint8_t {
 
 const char* to_string(Error e);
 
-// Maps a double onto 0..steps: q = round(v * per_unit) - min * per_unit.
 struct Quant {
     double min;
     double max;
@@ -59,7 +52,6 @@ public:
     void string(std::string_view s, std::size_t bound);
     void quant(double v, const Quant& q);
 
-    // Returns the first error and truncates out back to its starting size.
     std::expected<void, Error> finish();
 
 private:
@@ -84,14 +76,10 @@ public:
     bool boolean();
     float f32();
     std::uint32_t varint();
-    // Fails with Error::truncated when n elements of at least min_elem bytes
-    // each cannot fit in what remains, so a hostile count never sizes an
-    // allocation.
     std::size_t count(std::size_t bound, std::size_t min_elem);
     std::string string(std::size_t bound);
     double quant(const Quant& q);
 
-    // The first error, or Error::trailing when bytes remain.
     std::optional<Error> finish();
 
 private:

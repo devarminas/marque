@@ -1,10 +1,3 @@
-// Command wiregen reads a wire schema and writes the Go and C++ codecs for it.
-//
-//	wiregen gen [-root <dir>]   write every target's generated files under root
-//	wiregen canon [schema]      print the canonical form that SchemaHash hashes
-//
-// Paths are relative to the repository root, which defaults to the parent of
-// the server module (wiregen runs from server/).
 package main
 
 import (
