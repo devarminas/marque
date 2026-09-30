@@ -1,8 +1,5 @@
 package transport
 
-// Endpoint is both halves of a connection driven from one goroutine: the
-// client core, tests, and the conformance vectors use it. The server splits
-// the halves across the reader goroutine and the tick loop instead (udp.go).
 type Endpoint struct {
 	rx *Receiver
 	tx *Sender

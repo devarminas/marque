@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// TestSpecExample is the worked example in shared/wire/transport.md.
 func TestSpecExample(t *testing.T) {
 	ep := mustEndpoint(Server, testConfig(), 0)
 	if err := ep.Send([]byte{0x04, 0x07, 0x09, 0x06}); err != nil {

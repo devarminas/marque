@@ -5,21 +5,11 @@ import (
 	"slices"
 )
 
-// Received is what one accepted datagram yields. Every byte slice is owned by
-// the caller; none aliases the datagram.
 type Received struct {
-	// PeerAck is the peer's view of our packets, for Sender.Observe.
 	PeerAck AckWindow
-	// OwnAck is our view of the peer's packets after this datagram, for the
-	// headers Sender writes.
 	OwnAck AckWindow
-	// Unreliable holds the unreliable section when it was present and newer
-	// than every stamp delivered before. Items is nil otherwise.
 	Unreliable Unreliable
-	// Stale is set when an unreliable section was present but not newer.
 	Stale bool
-	// Reliable holds the reliable messages completed by this datagram, in
-	// channel order.
 	Reliable [][]byte
 }
 
@@ -27,9 +17,6 @@ type Stats struct {
 	Accepted, Duplicate, TooOld, Malformed, Foreign, Stale uint64
 }
 
-// Receiver is the receive half of a connection: the packet window, the
-// unreliable staleness rule, and reliable reassembly. It shares nothing with
-// Sender, so it can live on the socket reader goroutine.
 type Receiver struct {
 	from   Role
 	hash   uint64
@@ -72,8 +59,6 @@ func NewReceiver(role Role, cfg Config) (*Receiver, error) {
 
 func (r *Receiver) Stats() Stats { return r.stats }
 
-// Receive applies one datagram. It either commits the whole datagram or
-// returns an error and changes nothing but Stats.
 func (r *Receiver) Receive(d []byte) (Received, error) {
 	if len(d) < HeaderSize+r.seal.Overhead() || len(d) > MaxDatagram {
 		r.stats.Malformed++

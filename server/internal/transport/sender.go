@@ -2,16 +2,11 @@ package transport
 
 import "bytes"
 
-// State is a connection's lifecycle. It only ever leaves Open once.
 type State uint8
 
 const (
 	Open State = iota
-	// TimedOut: nothing arrived for TimeoutAfter.
 	TimedOut
-	// SlowClient: the reliable backlog passed Config.BacklogLimit. On the
-	// server this is ADR 0018's slow_client; the client applies the same rule
-	// to intents.
 	SlowClient
 )
 
@@ -29,15 +24,10 @@ func (s State) String() string {
 
 type Flushed struct {
 	Datagrams [][]byte
-	// UnreliableSent is how many leading items of the Unreliable passed to
-	// Flush made it into a datagram. The rest were trimmed by the budget.
 	UnreliableSent int
 	State          State
 }
 
-// Sender is the send half of a connection: packet sequencing, the reliable
-// queue and its resends, the per-tick budget, keepalive, and timeout. It
-// owns no receive state; Observe hands it what the Receiver learned.
 type Sender struct {
 	role Role
 	cfg  Config
@@ -95,12 +85,8 @@ func NewSender(role Role, cfg Config, now uint64) (*Sender, error) {
 
 func (s *Sender) State() State { return s.state }
 
-// Backlog is how many reliable messages are queued and not fully acked.
 func (s *Sender) Backlog() int { return len(s.queue) }
 
-// Send queues one reliable message: one encoded schema message on this
-// role's reliable channel. It is never dropped; if the backlog passes
-// BacklogLimit the connection closes as SlowClient instead.
 func (s *Sender) Send(msg []byte) error {
 	if s.state != Open {
 		return ErrClosed
@@ -124,8 +110,6 @@ func (s *Sender) close(state State) {
 	s.sent = [256]sentPacket{}
 }
 
-// Observe feeds the sender what the Receiver learned from one accepted
-// datagram at now.
 func (s *Sender) Observe(peer, own AckWindow, now uint64) {
 	if s.state != Open {
 		return
@@ -179,9 +163,6 @@ type datagram struct {
 	refs       []fragRef
 }
 
-// Flush builds this tick's datagrams at now: due reliable fragments first,
-// then as many leading items of u as the remaining budget allows, then a
-// keepalive if nothing went out and KeepaliveAfter has passed.
 func (s *Sender) Flush(now uint64, u Unreliable) (Flushed, error) {
 	if s.state == Open && elapsed(now, s.lastRecv) >= TimeoutAfter {
 		s.close(TimedOut)

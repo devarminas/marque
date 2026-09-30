@@ -1,11 +1,3 @@
-// Package transport is the reliable-UDP protocol of ADR 0018 section 1. The
-// byte layout and every rule below are specified in shared/wire/transport.md;
-// the C++ client core implements the same spec, and the vectors under
-// shared/wire/vectors/transport hold both to it.
-//
-// The core is sans-IO. Receiver, Sender, and Endpoint take bytes and a
-// caller-supplied clock in microseconds and return bytes; nothing here opens
-// a socket, starts a goroutine, or reads wall time. udp.go is the thin shell.
 package transport
 
 import (
@@ -44,8 +36,6 @@ var (
 	ErrItem      = errors.New("transport: unreliable item empty or too large for one datagram")
 )
 
-// Role fixes which channels a side sends and receives. A server sends state
-// and events and receives input and intents; a client is the mirror.
 type Role uint8
 
 const (
@@ -69,9 +59,6 @@ func (r Role) channels() (unreliable, reliable codec.Channel) {
 
 func (r Role) peer() Role { return 1 - r }
 
-// AckWindow is what one side has received from the other: the newest packet
-// sequence and a bit per packet before it (bit i is Latest-1-i). NoAcks is
-// the value before anything has arrived.
 type AckWindow struct {
 	Latest uint16
 	Bits   uint32
@@ -106,9 +93,6 @@ func readHeader(b []byte) header {
 	}
 }
 
-// Unreliable is one unreliable-channel payload: a stamp (the tick for state,
-// the input sequence for input) and encoded schema messages, none empty, in
-// priority order.
 type Unreliable struct {
 	Stamp uint32
 	Items [][]byte

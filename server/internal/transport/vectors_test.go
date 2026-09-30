@@ -18,8 +18,6 @@ var update = flag.Bool("update", false, "rewrite shared/wire/vectors/transport f
 
 const vectorDir = "../../../shared/wire/vectors/transport"
 
-// script drives one endpoint and records each op followed by its outputs, in
-// the vector format of shared/wire/transport.md.
 type script struct {
 	ep    *Endpoint
 	lines []string
@@ -104,8 +102,6 @@ func errName(err error) string {
 	return err.Error()
 }
 
-// runOp executes one vector op line and returns its output lines. This is
-// the whole vector interpreter; the C++ runner mirrors it.
 func runOp(ep **Endpoint, line string) ([]string, error) {
 	f := strings.Fields(line)
 	num := func(i int) uint64 {

@@ -10,20 +10,11 @@ const (
 	DefaultResendAfter  uint64 = 200_000
 )
 
-// Config holds what one side chooses for itself. Nothing here has to match
-// the peer except SchemaHash and the Seal.
 type Config struct {
-	// SchemaHash goes in every header; a datagram carrying another hash is
-	// refused. Production passes wire.SchemaHash.
 	SchemaHash uint64
-	// TickBudget caps the bytes one Flush emits, keepalives aside.
 	TickBudget int
-	// BacklogLimit is how many reliable messages may be queued and not yet
-	// acknowledged. One more closes the connection as SlowClient.
 	BacklogLimit int
 	BacklogBytes int
-	// ResendAfter is how long an unacknowledged fragment waits, in
-	// microseconds, before it is due again.
 	ResendAfter uint64
 	Seal        Seal
 }
