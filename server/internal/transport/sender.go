@@ -64,7 +64,14 @@ type outFrag struct {
 }
 
 func (f outFrag) due(now, resendAfter uint64) bool {
-	return !f.acked && (!f.sent || now-f.lastSent >= resendAfter)
+	return !f.acked && (!f.sent || elapsed(now, f.lastSent) >= resendAfter)
+}
+
+func elapsed(now, since uint64) uint64 {
+	if now < since {
+		return 0
+	}
+	return now - since
 }
 
 type sentPacket struct {
@@ -114,7 +121,7 @@ func (s *Sender) Observe(peer, own AckWindow, now uint64) {
 	if s.state != Open {
 		return
 	}
-	s.lastRecv = now
+	s.lastRecv = max(s.lastRecv, now)
 	s.own = own
 	s.ack(peer.Latest)
 	for i := uint16(0); i < AckBits; i++ {
@@ -160,7 +167,7 @@ type datagram struct {
 // then as many leading items of u as the remaining budget allows, then a
 // keepalive if nothing went out and KeepaliveAfter has passed.
 func (s *Sender) Flush(now uint64, u Unreliable) Flushed {
-	if s.state == Open && now-s.lastRecv >= TimeoutAfter {
+	if s.state == Open && elapsed(now, s.lastRecv) >= TimeoutAfter {
 		s.state = TimedOut
 	}
 	if s.state != Open {
@@ -223,7 +230,7 @@ func (s *Sender) Flush(now uint64, u Unreliable) Flushed {
 	if cur != nil {
 		done = append(done, cur)
 	}
-	if len(done) == 0 && now-s.lastSend >= KeepaliveAfter {
+	if len(done) == 0 && elapsed(now, s.lastSend) >= KeepaliveAfter {
 		done = append(done, &datagram{})
 	}
 

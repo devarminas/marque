@@ -9,8 +9,17 @@ The transport knows nothing about the schema. It moves schema messages as opaque
 - Integers are little-endian and fixed width unless the field says "length".
 - A length is 1 or 2 bytes. A value below 128 is one byte. A value from 128 to 16383 is two bytes, `v & 0x7f | 0x80` then `v >> 7`, and the second byte must be 1 to 127. A length is always at least 1. Every length in this protocol fits in two bytes.
 - Sequence numbers and reliable message ids are `u16` and wrap from 65535 to 0. `a - b` on them means `(a - b) mod 65536`.
-- Time is a `u64` count of microseconds from a clock the caller supplies. The core never reads a clock itself.
+- Time is a `u64` count of microseconds from a clock the caller supplies. The core never reads a clock itself. See "Time" for what the caller must guarantee.
 - "Peer" means the other side of the connection. A connection has a role, `server` or `client`.
+
+## Time
+
+Every operation that takes `now` reads one clock per side. The caller keeps `now` non-decreasing across successive `flush` calls. The `now` that goes with a received datagram may lag behind the latest `flush` time: the server stamps it on the reader goroutine, and the tick loop may apply it after a `flush` that read the clock later.
+
+The core tolerates that lag with two rules:
+
+- Elapsed time saturates at zero. Wherever this document writes `now - last_x` for a time `last_x` (`last_receive`, `last_send`, a fragment's `last_sent`), it means `now - last_x` when `now >= last_x`, and `0` otherwise.
+- `last_receive` never moves backwards. Accepting a datagram at `now` sets `last_receive = max(last_receive, now)`.
 
 ## Constants
 
@@ -174,7 +183,7 @@ A fragment of a message inside the window is due at time `now` when it is not ac
 
 When the receiver accepts a datagram, the sender takes the header's ack and ack bits. It treats sequence `ack` as acked, and `ack - 1 - i` for every set bit `i`. The sender remembers the fragment list of each datagram it sent in a ring of 256 slots, indexed by `sequence mod 256`. For each acked sequence whose slot holds that sequence and is not yet acked, it marks the slot acked and marks each listed fragment acked, if the message is still in the queue. Then it removes fully acked messages from the front of the queue.
 
-The sender also takes the receiver's current window to put in the headers it writes, and records `now` as the last receive time.
+The sender also takes the receiver's current window to put in the headers it writes, and sets `last_receive = max(last_receive, now)`.
 
 ### Flush
 
