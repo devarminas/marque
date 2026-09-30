@@ -1,6 +1,7 @@
 #include "marque/wire/codec.hpp"
 
 #include <bit>
+#include <charconv>
 #include <cmath>
 
 namespace marque::wire::codec {
@@ -17,6 +18,7 @@ const char* to_string(Error e) {
     case Error::bad_enum: return "unknown enum value";
     case Error::bad_varint: return "overlong or oversized varint";
     case Error::bad_utf8: return "string is not valid UTF-8";
+    case Error::rule: return "value breaks a schema rule";
     }
     return "unknown error";
 }
@@ -63,7 +65,7 @@ void Writer::fail(Error e) {
 }
 
 void Writer::u8(std::uint8_t v) {
-    if (!err_) out_.push_back(v);
+    if (writing()) out_->push_back(v);
 }
 
 void Writer::u16(std::uint16_t v) { fixed(v, 2); }
@@ -71,9 +73,9 @@ void Writer::u32(std::uint32_t v) { fixed(v, 4); }
 void Writer::u64(std::uint64_t v) { fixed(v, 8); }
 
 void Writer::fixed(std::uint64_t v, int width) {
-    if (err_) return;
+    if (!writing()) return;
     for (int i = 0; i < width; ++i) {
-        out_.push_back(static_cast<std::uint8_t>(v >> (8 * i)));
+        out_->push_back(static_cast<std::uint8_t>(v >> (8 * i)));
     }
 }
 
@@ -86,12 +88,12 @@ void Writer::f32(float v) {
 }
 
 void Writer::varint(std::uint32_t v) {
-    if (err_) return;
+    if (!writing()) return;
     while (v >= 0x80) {
-        out_.push_back(static_cast<std::uint8_t>(v | 0x80));
+        out_->push_back(static_cast<std::uint8_t>(v | 0x80));
         v >>= 7;
     }
-    out_.push_back(static_cast<std::uint8_t>(v));
+    out_->push_back(static_cast<std::uint8_t>(v));
 }
 
 void Writer::count(std::size_t n, std::size_t bound) {
@@ -108,7 +110,7 @@ void Writer::string(std::string_view s, std::size_t bound) {
         return;
     }
     count(s.size(), bound);
-    if (!err_) out_.insert(out_.end(), s.begin(), s.end());
+    if (writing()) out_->insert(out_->end(), s.begin(), s.end());
 }
 
 void Writer::quant(double v, const Quant& q) {
@@ -120,12 +122,16 @@ void Writer::quant(double v, const Quant& q) {
         fail(Error::out_of_range);
         return;
     }
-    fixed(static_cast<std::uint64_t>(std::round(v * q.per_unit) - q.min * q.per_unit), q.width);
+    fixed(q.step(v), q.width);
+}
+
+std::uint64_t Quant::step(double v) const {
+    return static_cast<std::uint64_t>(std::round(v * per_unit) - min * per_unit);
 }
 
 std::expected<void, Error> Writer::finish() {
     if (err_) {
-        out_.resize(start_);
+        if (out_ != nullptr) out_->resize(start_);
         return std::unexpected(*err_);
     }
     return {};
@@ -227,6 +233,110 @@ double Reader::quant(const Quant& q) {
 std::optional<Error> Reader::finish() {
     if (!err_ && !buf_.empty()) err_ = Error::trailing;
     return err_;
+}
+
+namespace {
+
+// Lays out the shortest round-trip digits the way Go's fmtEFG does for 'g'
+// with precision -1: exponent form when the decimal exponent is below -4 or at
+// least 6, otherwise plain decimals.
+template <typename F>
+void text_float(std::string& out, F v) {
+    char buf[64];
+    const auto res = std::to_chars(buf, buf + sizeof buf, v, std::chars_format::scientific);
+    std::string_view sci(buf, static_cast<std::size_t>(res.ptr - buf));
+    if (sci.front() == '-') {
+        out += '-';
+        sci.remove_prefix(1);
+    }
+    const auto e = sci.find('e');
+    std::string digits;
+    for (char c : sci.substr(0, e)) {
+        if (c != '.') digits += c;
+    }
+    auto exp_text = sci.substr(e + 1);
+    if (exp_text.front() == '+') exp_text.remove_prefix(1);
+    int exp = 0;
+    std::from_chars(exp_text.data(), exp_text.data() + exp_text.size(), exp);
+
+    const int nd = static_cast<int>(digits.size());
+    if (exp < -4 || exp >= 6) {
+        out += digits[0];
+        if (nd > 1) {
+            out += '.';
+            out.append(digits, 1);
+        }
+        out += exp < 0 ? "e-" : "e+";
+        const int mag = exp < 0 ? -exp : exp;
+        if (mag < 10) out += '0';
+        out += std::to_string(mag);
+        return;
+    }
+    const int dp = exp + 1;
+    if (dp > 0) {
+        for (int i = 0; i < dp; ++i) out += i < nd ? digits[static_cast<std::size_t>(i)] : '0';
+    } else {
+        out += '0';
+    }
+    if (nd > dp) {
+        out += '.';
+        for (int j = dp; j < nd; ++j) out += j >= 0 ? digits[static_cast<std::size_t>(j)] : '0';
+    }
+}
+
+void hex_digits(std::string& out, std::uint32_t v, int n) {
+    static constexpr char digits[] = "0123456789abcdef";
+    for (int i = n - 1; i >= 0; --i) out += digits[(v >> (4 * i)) & 0xf];
+}
+
+}
+
+void text_f64(std::string& out, double v) { text_float(out, v); }
+void text_f32(std::string& out, float v) { text_float(out, v); }
+
+// Matches strconv.AppendQuoteToASCII on valid UTF-8, which is all a message
+// string can hold.
+void text_quoted(std::string& out, std::string_view s) {
+    out += '"';
+    for (std::size_t i = 0; i < s.size();) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        const std::size_t len = c < 0x80 ? 1 : c < 0xe0 ? 2 : c < 0xf0 ? 3 : 4;
+        std::uint32_t r = len == 1 ? c : c & (0x7f >> len);
+        for (std::size_t k = 1; k < len && i + k < s.size(); ++k) {
+            r = (r << 6) | (static_cast<unsigned char>(s[i + k]) & 0x3f);
+        }
+        i += len;
+        if (r == '"' || r == '\\') {
+            out += '\\';
+            out += static_cast<char>(r);
+        } else if (r >= 0x20 && r < 0x7f) {
+            out += static_cast<char>(r);
+        } else if (r == '\a') {
+            out += "\\a";
+        } else if (r == '\b') {
+            out += "\\b";
+        } else if (r == '\f') {
+            out += "\\f";
+        } else if (r == '\n') {
+            out += "\\n";
+        } else if (r == '\r') {
+            out += "\\r";
+        } else if (r == '\t') {
+            out += "\\t";
+        } else if (r == '\v') {
+            out += "\\v";
+        } else if (r < 0x20 || r == 0x7f) {
+            out += "\\x";
+            hex_digits(out, r, 2);
+        } else if (r < 0x10000) {
+            out += "\\u";
+            hex_digits(out, r, 4);
+        } else {
+            out += "\\U";
+            hex_digits(out, r, 8);
+        }
+    }
+    out += '"';
 }
 
 }

@@ -3,6 +3,10 @@
 //	wiregen gen [-root <dir>]   write every target's generated files under root
 //	wiregen canon [schema]      print the canonical form that SchemaHash hashes
 //
+// gen also copies shared/wire/vectors into the server module, because go test
+// caches results across edits to files outside the module but tracks files a
+// test embeds. scripts/wiregen_check.sh then fails on a stale copy.
+//
 // Paths are relative to the repository root, which defaults to the parent of
 // the server module (wiregen runs from server/).
 package main
@@ -44,6 +48,11 @@ var targets = []target{
 
 const includeRoot = "native/core/include/"
 
+const (
+	vectorSrc  = "shared/wire/vectors"
+	vectorCopy = "server/internal/wire/testdata/vectors"
+)
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "wiregen:", err)
@@ -68,7 +77,7 @@ func run(args []string) error {
 				return err
 			}
 		}
-		return nil
+		return copyVectors(*src, *root)
 	case "canon":
 		path := filepath.Join("..", targets[0].schema)
 		if len(args) > 1 {
@@ -111,6 +120,10 @@ func generate(t target, src, root string) error {
 		t.cppHeader: genCppHeader(s, t.schema, t.cppNS),
 		t.cppSource: genCppSource(s, t.schema, t.cppNS, header),
 	}
+	return writeAll(root, files)
+}
+
+func writeAll(root string, files map[string][]byte) error {
 	for path, body := range files {
 		full := filepath.Join(root, path)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
@@ -121,4 +134,22 @@ func generate(t target, src, root string) error {
 		}
 	}
 	return nil
+}
+
+func copyVectors(src, root string) error {
+	paths, err := filepath.Glob(filepath.Join(src, vectorSrc, "*.vec"))
+	if err != nil {
+		return err
+	}
+	files := map[string][]byte{}
+	for _, p := range paths {
+		body, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		name := filepath.Base(p)
+		header := fmt.Sprintf("# Copied by wiregen from %s/%s. DO NOT EDIT.\n", vectorSrc, name)
+		files[filepath.Join(vectorCopy, name)] = append([]byte(header), body...)
+	}
+	return writeAll(root, files)
 }

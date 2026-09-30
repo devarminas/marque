@@ -8,6 +8,7 @@ package codec
 import (
 	"encoding/binary"
 	"errors"
+	"iter"
 	"math"
 	"unicode/utf8"
 )
@@ -46,6 +47,7 @@ var (
 	ErrBadEnum        = errors.New("wire: unknown enum value")
 	ErrBadVarint      = errors.New("wire: overlong or oversized varint")
 	ErrBadUTF8        = errors.New("wire: string is not valid UTF-8")
+	ErrRule           = errors.New("wire: value breaks a schema rule")
 )
 
 // Quant maps a float onto the integers 0..Steps: q = round(v*PerUnit) - Min*PerUnit.
@@ -56,19 +58,34 @@ type Quant struct {
 	Width             int
 }
 
+// Step is the wire integer for v. Call it only on a finite v inside the
+// range; generated rule checks compare quants by Step, never as doubles.
+func (q Quant) Step(v float64) uint64 { return uint64(math.Round(v*q.PerUnit) - q.Min*q.PerUnit) }
+
+// Writer appends encoded values to a buffer. A checking Writer (NewChecker)
+// runs every check and appends nothing.
 type Writer struct {
 	buf   []byte
 	start int
 	err   error
+	check bool
 }
 
 func NewWriter(dst []byte) Writer { return Writer{buf: dst, start: len(dst)} }
+
+// NewChecker returns a Writer that validates without writing, so Build refuses
+// exactly what Append refuses without allocating.
+func NewChecker() Writer { return Writer{check: true} }
 
 func (w *Writer) Fail(err error) {
 	if w.err == nil {
 		w.err = err
 	}
 }
+
+func (w *Writer) Err() error { return w.err }
+
+func (w *Writer) writing() bool { return w.err == nil && !w.check }
 
 // Result returns the grown buffer, or the caller's buffer unchanged on error.
 func (w *Writer) Result() ([]byte, error) {
@@ -79,25 +96,25 @@ func (w *Writer) Result() ([]byte, error) {
 }
 
 func (w *Writer) U8(v uint8) {
-	if w.err == nil {
+	if w.writing() {
 		w.buf = append(w.buf, v)
 	}
 }
 
 func (w *Writer) U16(v uint16) {
-	if w.err == nil {
+	if w.writing() {
 		w.buf = binary.LittleEndian.AppendUint16(w.buf, v)
 	}
 }
 
 func (w *Writer) U32(v uint32) {
-	if w.err == nil {
+	if w.writing() {
 		w.buf = binary.LittleEndian.AppendUint32(w.buf, v)
 	}
 }
 
 func (w *Writer) U64(v uint64) {
-	if w.err == nil {
+	if w.writing() {
 		w.buf = binary.LittleEndian.AppendUint64(w.buf, v)
 	}
 }
@@ -119,7 +136,7 @@ func (w *Writer) F32(v float32) {
 }
 
 func (w *Writer) Varint(v uint32) {
-	if w.err == nil {
+	if w.writing() {
 		w.buf = binary.AppendUvarint(w.buf, uint64(v))
 	}
 }
@@ -138,7 +155,7 @@ func (w *Writer) String(s string, bound int) {
 		return
 	}
 	w.Count(len(s), bound)
-	if w.err == nil {
+	if w.writing() {
 		w.buf = append(w.buf, s...)
 	}
 }
@@ -152,7 +169,7 @@ func (w *Writer) Quant(v float64, q Quant) {
 		w.Fail(ErrOutOfRange)
 		return
 	}
-	w.fixed(uint64(math.Round(v*q.PerUnit)-q.Min*q.PerUnit), q.Width)
+	w.fixed(q.Step(v), q.Width)
 }
 
 func (w *Writer) fixed(v uint64, width int) {
@@ -325,4 +342,48 @@ func (r *Reader) Quant(q Quant) float64 {
 		return 0
 	}
 	return (float64(n) + q.Min*q.PerUnit) / q.PerUnit
+}
+
+// Unique reports whether no two of n elements are equal. It compares every
+// pair; the schema caps unique lists at 256 elements.
+func Unique(n int, equal func(i, j int) bool) bool {
+	for i := 1; i < n; i++ {
+		for j := 0; j < i; j++ {
+			if equal(i, j) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// Clone copies s so a built message shares no memory with its caller. An
+// empty list becomes nil, which is what a decoder produces.
+func Clone[T any](s []T) []T {
+	if len(s) == 0 {
+		return nil
+	}
+	return append([]T(nil), s...)
+}
+
+// List is a read-only view of a decoded or built list. Generated getters
+// return it so no caller can change a message after it was validated.
+type List[T any] struct{ s []T }
+
+// ListOf wraps s without copying; the generated code passes only slices no
+// caller can reach.
+func ListOf[T any](s []T) List[T] { return List[T]{s} }
+
+func (l List[T]) Len() int { return len(l.s) }
+
+func (l List[T]) At(i int) T { return l.s[i] }
+
+func (l List[T]) All() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
+		for i, v := range l.s {
+			if !yield(i, v) {
+				return
+			}
+		}
+	}
 }

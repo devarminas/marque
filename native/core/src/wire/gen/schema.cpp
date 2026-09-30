@@ -2,7 +2,26 @@
 
 #include "marque/wire/gen/schema.hpp"
 
+#include <algorithm>
+#include <utility>
+
 namespace marque::wire {
+
+// The one door into a record's fields: generated readers fill them, and
+// writers and text forms read them.
+struct detail::Access {
+    template <typename T>
+    static const auto& fields(const T& v) {
+        return v.f_;
+    }
+
+    template <typename T, typename F>
+    static T make(F&& f) {
+        T v;
+        v.f_ = std::forward<F>(f);
+        return v;
+    }
+};
 
 namespace {
 
@@ -21,6 +40,14 @@ namespace {
     return v;
 }
 
+[[maybe_unused]] void text(std::string& out, const PlayerId& v) {
+    out += "PlayerId(";
+    out += std::to_string(v.index);
+    out += '/';
+    out += std::to_string(v.gen);
+    out += ')';
+}
+
 [[maybe_unused]] void write(codec::Writer& w, const NpcId& v) {
     w.varint(v.index);
     w.varint(v.gen);
@@ -31,6 +58,14 @@ namespace {
     v.index = r.varint();
     v.gen = r.varint();
     return v;
+}
+
+[[maybe_unused]] void text(std::string& out, const NpcId& v) {
+    out += "NpcId(";
+    out += std::to_string(v.index);
+    out += '/';
+    out += std::to_string(v.gen);
+    out += ')';
 }
 
 [[maybe_unused]] void write(codec::Writer& w, const ItemId& v) {
@@ -45,6 +80,14 @@ namespace {
     return v;
 }
 
+[[maybe_unused]] void text(std::string& out, const ItemId& v) {
+    out += "ItemId(";
+    out += std::to_string(v.index);
+    out += '/';
+    out += std::to_string(v.gen);
+    out += ')';
+}
+
 [[maybe_unused]] void write(codec::Writer& w, const NodeId& v) {
     w.varint(v.index);
     w.varint(v.gen);
@@ -55,6 +98,14 @@ namespace {
     v.index = r.varint();
     v.gen = r.varint();
     return v;
+}
+
+[[maybe_unused]] void text(std::string& out, const NodeId& v) {
+    out += "NodeId(";
+    out += std::to_string(v.index);
+    out += '/';
+    out += std::to_string(v.gen);
+    out += ')';
 }
 
 [[maybe_unused]] bool valid(RefuseReason v) {
@@ -85,66 +136,213 @@ namespace {
     return v;
 }
 
-[[maybe_unused]] void write(codec::Writer& w, const Input& v) {
-    w.quant(v.dx, quant_wish);
-    w.quant(v.dz, quant_wish);
-    w.boolean(v.jump);
-    w.u32(v.seq);
+[[maybe_unused]] void text(std::string& out, RefuseReason v) {
+    switch (v) {
+    case RefuseReason::unknown_ability:
+        out += "unknown_ability";
+        return;
+    case RefuseReason::no_target:
+        out += "no_target";
+        return;
+    case RefuseReason::wrong_target:
+        out += "wrong_target";
+        return;
+    case RefuseReason::insufficient_mana:
+        out += "insufficient_mana";
+        return;
+    case RefuseReason::out_of_range:
+        out += "out_of_range";
+        return;
+    case RefuseReason::cooldown:
+        out += "cooldown";
+        return;
+    case RefuseReason::dead:
+        out += "dead";
+        return;
+    }
+    out += "RefuseReason(" + std::to_string(static_cast<std::uint32_t>(v)) + ")";
 }
+
+[[maybe_unused]] void write(codec::Writer& w, const InputFields& f) {
+    w.quant(f.dx, quant_wish);
+    w.quant(f.dz, quant_wish);
+    w.boolean(f.jump);
+    w.u32(f.seq);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Input& v) { write(w, detail::Access::fields(v)); }
 
 [[maybe_unused]] Input read_Input(codec::Reader& r) {
-    Input v;
-    v.dx = r.quant(quant_wish);
-    v.dz = r.quant(quant_wish);
-    v.jump = r.boolean();
-    v.seq = r.u32();
-    return v;
+    InputFields f;
+    f.dx = r.quant(quant_wish);
+    f.dz = r.quant(quant_wish);
+    f.jump = r.boolean();
+    f.seq = r.u32();
+    return detail::Access::make<Input>(std::move(f));
 }
 
-[[maybe_unused]] void write(codec::Writer& w, const Pose& v) {
-    write(w, v.id);
-    w.quant(v.x, quant_pos);
-    w.quant(v.y, quant_pos);
-    w.quant(v.z, quant_pos);
+[[maybe_unused]] void text(std::string& out, const InputFields& f) {
+    out += "input{dx:";
+    codec::text_f64(out, f.dx);
+    out += " dz:";
+    codec::text_f64(out, f.dz);
+    out += " jump:";
+    out += f.jump ? "true" : "false";
+    out += " seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += '}';
 }
+
+[[maybe_unused]] void text(std::string& out, const Input& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const PoseFields& f) {
+    write(w, f.id);
+    w.quant(f.x, quant_pos);
+    w.quant(f.y, quant_pos);
+    w.quant(f.z, quant_pos);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Pose& v) { write(w, detail::Access::fields(v)); }
 
 [[maybe_unused]] Pose read_Pose(codec::Reader& r) {
-    Pose v;
-    v.id = read_PlayerId(r);
-    v.x = r.quant(quant_pos);
-    v.y = r.quant(quant_pos);
-    v.z = r.quant(quant_pos);
-    return v;
+    PoseFields f;
+    f.id = read_PlayerId(r);
+    f.x = r.quant(quant_pos);
+    f.y = r.quant(quant_pos);
+    f.z = r.quant(quant_pos);
+    return detail::Access::make<Pose>(std::move(f));
 }
 
-[[maybe_unused]] void write(codec::Writer& w, const Hp& v) {
-    write(w, v.id);
-    w.u32(v.hp);
-    w.u32(v.max_hp);
+[[maybe_unused]] void text(std::string& out, const PoseFields& f) {
+    out += "pose{id:";
+    text(out, f.id);
+    out += " x:";
+    codec::text_f64(out, f.x);
+    out += " y:";
+    codec::text_f64(out, f.y);
+    out += " z:";
+    codec::text_f64(out, f.z);
+    out += '}';
 }
+
+[[maybe_unused]] void text(std::string& out, const Pose& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const HpFields& f) {
+    write(w, f.id);
+    w.u32(f.hp);
+    w.u32(f.max_hp);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Hp& v) { write(w, detail::Access::fields(v)); }
 
 [[maybe_unused]] Hp read_Hp(codec::Reader& r) {
-    Hp v;
-    v.id = read_PlayerId(r);
-    v.hp = r.u32();
-    v.max_hp = r.u32();
-    return v;
+    HpFields f;
+    f.id = read_PlayerId(r);
+    f.hp = r.u32();
+    f.max_hp = r.u32();
+    return detail::Access::make<Hp>(std::move(f));
 }
 
-[[maybe_unused]] void write(codec::Writer& w, const Refused& v) {
-    w.u32(v.tick);
-    w.u32(v.seq);
-    write(w, v.reason);
+[[maybe_unused]] void text(std::string& out, const HpFields& f) {
+    out += "hp{id:";
+    text(out, f.id);
+    out += " hp:";
+    out += std::to_string(static_cast<unsigned long long>(f.hp));
+    out += " max_hp:";
+    out += std::to_string(static_cast<unsigned long long>(f.max_hp));
+    out += '}';
 }
+
+[[maybe_unused]] void text(std::string& out, const Hp& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const RefusedFields& f) {
+    w.u32(f.tick);
+    w.u32(f.seq);
+    write(w, f.reason);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Refused& v) { write(w, detail::Access::fields(v)); }
 
 [[maybe_unused]] Refused read_Refused(codec::Reader& r) {
-    Refused v;
-    v.tick = r.u32();
-    v.seq = r.u32();
-    v.reason = read_RefuseReason(r);
+    RefusedFields f;
+    f.tick = r.u32();
+    f.seq = r.u32();
+    f.reason = read_RefuseReason(r);
+    return detail::Access::make<Refused>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const RefusedFields& f) {
+    out += "refused{tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " reason:";
+    text(out, f.reason);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Refused& v) { text(out, detail::Access::fields(v)); }
+
+}
+
+std::expected<Input, codec::Error> Input::build(InputFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    Input v;
+    v.f_ = std::move(f);
     return v;
 }
 
+std::string to_text(const Input& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Pose, codec::Error> Pose::build(PoseFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    Pose v;
+    v.f_ = std::move(f);
+    return v;
+}
+
+std::string to_text(const Pose& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Hp, codec::Error> Hp::build(HpFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    Hp v;
+    v.f_ = std::move(f);
+    return v;
+}
+
+std::string to_text(const Hp& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Refused, codec::Error> Refused::build(RefusedFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    Refused v;
+    v.f_ = std::move(f);
+    return v;
+}
+
+std::string to_text(const Refused& v) {
+    std::string out;
+    text(out, v);
+    return out;
 }
 
 std::expected<void, codec::Error> encode(const Input& m, std::vector<std::uint8_t>& out) {
@@ -200,6 +398,14 @@ std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t>
     return m;
 }
 
+std::expected<void, codec::Error> encode_state(const StateMsg& m, std::vector<std::uint8_t>& out) {
+    return std::visit([&](const auto& v) { return encode(v, out); }, m);
+}
+
+std::string text_state(const StateMsg& m) {
+    return std::visit([](const auto& v) { return to_text(v); }, m);
+}
+
 std::expected<EventsMsg, codec::Error> decode_next_events(codec::Reader& r) {
     EventsMsg m;
     switch (r.varint()) {
@@ -220,6 +426,14 @@ std::expected<EventsMsg, codec::Error> decode_events(std::span<const std::uint8_
     if (!m) return m;
     if (auto err = r.finish()) return std::unexpected(*err);
     return m;
+}
+
+std::expected<void, codec::Error> encode_events(const EventsMsg& m, std::vector<std::uint8_t>& out) {
+    return std::visit([&](const auto& v) { return encode(v, out); }, m);
+}
+
+std::string text_events(const EventsMsg& m) {
+    return std::visit([](const auto& v) { return to_text(v); }, m);
 }
 
 std::expected<InputMsg, codec::Error> decode_next_input(codec::Reader& r) {
@@ -244,6 +458,14 @@ std::expected<InputMsg, codec::Error> decode_input(std::span<const std::uint8_t>
     return m;
 }
 
+std::expected<void, codec::Error> encode_input(const InputMsg& m, std::vector<std::uint8_t>& out) {
+    return std::visit([&](const auto& v) { return encode(v, out); }, m);
+}
+
+std::string text_input(const InputMsg& m) {
+    return std::visit([](const auto& v) { return to_text(v); }, m);
+}
+
 std::expected<IntentsMsg, codec::Error> decode_next_intents(codec::Reader& r) {
     IntentsMsg m;
     switch (r.varint()) {
@@ -262,5 +484,11 @@ std::expected<IntentsMsg, codec::Error> decode_intents(std::span<const std::uint
     if (auto err = r.finish()) return std::unexpected(*err);
     return m;
 }
+
+std::expected<void, codec::Error> encode_intents(const IntentsMsg&, std::vector<std::uint8_t>&) {
+    return std::unexpected(codec::Error::unknown_message);
+}
+
+std::string text_intents(const IntentsMsg&) { return {}; }
 
 }

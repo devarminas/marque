@@ -13,7 +13,11 @@
 
 namespace marque::wire::probe {
 
-inline constexpr std::uint64_t schema_hash = 0x939f35c2cdc94ad8ULL;
+inline constexpr std::uint64_t schema_hash = 0x807af558ef3a158cULL;
+
+namespace detail {
+struct Access;
+}
 
 // Pairs a slot index with the generation that slot had when the entity was
 // created, so a reused index never names the old entity.
@@ -33,23 +37,101 @@ struct NpcId {
     bool operator==(const NpcId&) const = default;
 };
 
+// Pairs a slot index with the generation that slot had when the entity was
+// created, so a reused index never names the old entity.
+struct ItemId {
+    std::uint32_t index = 0;
+    std::uint32_t gen = 0;
+
+    bool operator==(const ItemId&) const = default;
+};
+
 enum class Color : std::uint32_t {
     red = 0,
     green = 7,
     blue = 300,
 };
 
-struct Pair {
+enum class Option : std::uint32_t {
+    accept_quest = 1,
+    turn_in_quest = 2,
+    stop_talking = 3,
+    trade = 4,
+};
+
+struct PairFields {
     NpcId who{};
     float weight = 0;
 
-    bool operator==(const Pair&) const = default;
+    bool operator==(const PairFields&) const = default;
 };
 
-struct Probe {
-    static constexpr std::uint32_t message_id = 1;
-    static constexpr codec::Channel channel = codec::Channel::events;
+// Read-only. Decoding and build() are the only ways to fill a Pair, so it
+// holds a value the schema allows.
+class Pair {
+public:
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Pair, codec::Error> build(PairFields f);
 
+    const NpcId& who() const { return f_.who; }
+    const float& weight() const { return f_.weight; }
+
+    bool operator==(const Pair&) const = default;
+
+private:
+    friend struct detail::Access;
+    PairFields f_;
+};
+
+struct BagSlotFields {
+    std::uint8_t slot = 0;
+    ItemId item{};
+
+    bool operator==(const BagSlotFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a BagSlot, so it
+// holds a value the schema allows.
+class BagSlot {
+public:
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<BagSlot, codec::Error> build(BagSlotFields f);
+
+    const std::uint8_t& slot() const { return f_.slot; }
+    const ItemId& item() const { return f_.item; }
+
+    bool operator==(const BagSlot&) const = default;
+
+private:
+    friend struct detail::Access;
+    BagSlotFields f_;
+};
+
+struct OfferFields {
+    PlayerId owner{};
+    ItemId item{};
+
+    bool operator==(const OfferFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Offer, so it
+// holds a value the schema allows.
+class Offer {
+public:
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Offer, codec::Error> build(OfferFields f);
+
+    const PlayerId& owner() const { return f_.owner; }
+    const ItemId& item() const { return f_.item; }
+
+    bool operator==(const Offer&) const = default;
+
+private:
+    friend struct detail::Access;
+    OfferFields f_;
+};
+
+struct ProbeFields {
     std::string label{};
     float ratio = 0;
     std::vector<Pair> pairs{};
@@ -67,59 +149,378 @@ struct Probe {
     std::int64_t a_i64 = 0;
     PlayerId owner{};
 
-    bool operator==(const Probe&) const = default;
+    bool operator==(const ProbeFields&) const = default;
 };
 
-struct Ping {
+// Read-only. Decoding and build() are the only ways to fill a Probe, so it
+// holds a value the schema allows.
+class Probe {
+public:
+    static constexpr std::uint32_t message_id = 1;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Probe, codec::Error> build(ProbeFields f);
+
+    const std::string& label() const { return f_.label; }
+    const float& ratio() const { return f_.ratio; }
+    const std::vector<Pair>& pairs() const { return f_.pairs; }
+    const bool& flag() const { return f_.flag; }
+    const Color& color() const { return f_.color; }
+    const double& at() const { return f_.at; }
+    const std::vector<std::uint16_t>& shorts() const { return f_.shorts; }
+    const std::uint8_t& a_u8() const { return f_.a_u8; }
+    const std::uint16_t& a_u16() const { return f_.a_u16; }
+    const std::uint32_t& a_u32() const { return f_.a_u32; }
+    const std::uint64_t& a_u64() const { return f_.a_u64; }
+    const std::int8_t& a_i8() const { return f_.a_i8; }
+    const std::int16_t& a_i16() const { return f_.a_i16; }
+    const std::int32_t& a_i32() const { return f_.a_i32; }
+    const std::int64_t& a_i64() const { return f_.a_i64; }
+    const PlayerId& owner() const { return f_.owner; }
+
+    bool operator==(const Probe&) const = default;
+
+private:
+    friend struct detail::Access;
+    ProbeFields f_;
+};
+
+struct PingFields {
+    std::uint8_t nonce = 0;
+
+    bool operator==(const PingFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Ping, so it
+// holds a value the schema allows.
+class Ping {
+public:
     static constexpr std::uint32_t message_id = 2;
     static constexpr codec::Channel channel = codec::Channel::intents;
 
-    std::uint8_t nonce = 0;
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Ping, codec::Error> build(PingFields f);
+
+    const std::uint8_t& nonce() const { return f_.nonce; }
 
     bool operator==(const Ping&) const = default;
+
+private:
+    friend struct detail::Access;
+    PingFields f_;
 };
 
-struct Crowd {
+struct CrowdFields {
+    std::vector<Pair> pairs{};
+
+    bool operator==(const CrowdFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Crowd, so it
+// holds a value the schema allows.
+class Crowd {
+public:
     static constexpr std::uint32_t message_id = 3;
     static constexpr codec::Channel channel = codec::Channel::events;
 
-    std::vector<Pair> pairs{};
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Crowd, codec::Error> build(CrowdFields f);
+
+    const std::vector<Pair>& pairs() const { return f_.pairs; }
 
     bool operator==(const Crowd&) const = default;
+
+private:
+    friend struct detail::Access;
+    CrowdFields f_;
 };
 
-// No state messages yet. std::variant<> is ill-formed, so the channel holds
-// std::monostate, which its decoder never returns.
-using StateMsg = std::variant<std::monostate>;
-using EventsMsg = std::variant<Probe, Crowd>;
+struct PartyFields {
+    PlayerId leader{};
+    std::vector<PlayerId> members{};
+
+    bool operator==(const PartyFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Party, so it
+// holds a value the schema allows.
+class Party {
+public:
+    static constexpr std::uint32_t message_id = 4;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Party, codec::Error> build(PartyFields f);
+
+    const PlayerId& leader() const { return f_.leader; }
+    const std::vector<PlayerId>& members() const { return f_.members; }
+
+    bool operator==(const Party&) const = default;
+
+private:
+    friend struct detail::Access;
+    PartyFields f_;
+};
+
+struct InventoryFields {
+    std::uint8_t size = 0;
+    std::vector<BagSlot> slots{};
+
+    bool operator==(const InventoryFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Inventory, so it
+// holds a value the schema allows.
+class Inventory {
+public:
+    static constexpr std::uint32_t message_id = 5;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Inventory, codec::Error> build(InventoryFields f);
+
+    const std::uint8_t& size() const { return f_.size; }
+    const std::vector<BagSlot>& slots() const { return f_.slots; }
+
+    bool operator==(const Inventory&) const = default;
+
+private:
+    friend struct detail::Access;
+    InventoryFields f_;
+};
+
+struct DialogFields {
+    NpcId npc{};
+    std::vector<Option> options{};
+    std::vector<std::uint16_t> lines{};
+
+    bool operator==(const DialogFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Dialog, so it
+// holds a value the schema allows.
+class Dialog {
+public:
+    static constexpr std::uint32_t message_id = 6;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Dialog, codec::Error> build(DialogFields f);
+
+    const NpcId& npc() const { return f_.npc; }
+    const std::vector<Option>& options() const { return f_.options; }
+    const std::vector<std::uint16_t>& lines() const { return f_.lines; }
+
+    bool operator==(const Dialog&) const = default;
+
+private:
+    friend struct detail::Access;
+    DialogFields f_;
+};
+
+struct PickFields {
+    NpcId npc{};
+    Option option{};
+
+    bool operator==(const PickFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Pick, so it
+// holds a value the schema allows.
+class Pick {
+public:
+    static constexpr std::uint32_t message_id = 7;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Pick, codec::Error> build(PickFields f);
+
+    const NpcId& npc() const { return f_.npc; }
+    const Option& option() const { return f_.option; }
+
+    bool operator==(const Pick&) const = default;
+
+private:
+    friend struct detail::Access;
+    PickFields f_;
+};
+
+struct GiveFields {
+    NpcId npc{};
+    std::uint8_t slot = 0;
+
+    bool operator==(const GiveFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Give, so it
+// holds a value the schema allows.
+class Give {
+public:
+    static constexpr std::uint32_t message_id = 8;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Give, codec::Error> build(GiveFields f);
+
+    const NpcId& npc() const { return f_.npc; }
+    const std::uint8_t& slot() const { return f_.slot; }
+
+    bool operator==(const Give&) const = default;
+
+private:
+    friend struct detail::Access;
+    GiveFields f_;
+};
+
+struct TradeFields {
+    PlayerId from{};
+    std::vector<Offer> offers{};
+
+    bool operator==(const TradeFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Trade, so it
+// holds a value the schema allows.
+class Trade {
+public:
+    static constexpr std::uint32_t message_id = 9;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Trade, codec::Error> build(TradeFields f);
+
+    const PlayerId& from() const { return f_.from; }
+    const std::vector<Offer>& offers() const { return f_.offers; }
+
+    bool operator==(const Trade&) const = default;
+
+private:
+    friend struct detail::Access;
+    TradeFields f_;
+};
+
+struct DuelFields {
+    PlayerId challenger{};
+    PlayerId target{};
+
+    bool operator==(const DuelFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Duel, so it
+// holds a value the schema allows.
+class Duel {
+public:
+    static constexpr std::uint32_t message_id = 10;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Duel, codec::Error> build(DuelFields f);
+
+    const PlayerId& challenger() const { return f_.challenger; }
+    const PlayerId& target() const { return f_.target; }
+
+    bool operator==(const Duel&) const = default;
+
+private:
+    friend struct detail::Access;
+    DuelFields f_;
+};
+
+struct ZoneFields {
+    double lo = 0;
+    double hi = 0;
+    std::int8_t tilt = 0;
+
+    bool operator==(const ZoneFields&) const = default;
+};
+
+// Read-only. Decoding and build() are the only ways to fill a Zone, so it
+// holds a value the schema allows.
+class Zone {
+public:
+    static constexpr std::uint32_t message_id = 11;
+    static constexpr codec::Channel channel = codec::Channel::state;
+
+    // Refuses f with the error a decoder gives for the same value's bytes.
+    static std::expected<Zone, codec::Error> build(ZoneFields f);
+
+    const double& lo() const { return f_.lo; }
+    const double& hi() const { return f_.hi; }
+    const std::int8_t& tilt() const { return f_.tilt; }
+
+    bool operator==(const Zone&) const = default;
+
+private:
+    friend struct detail::Access;
+    ZoneFields f_;
+};
+
+using StateMsg = std::variant<Zone>;
+using EventsMsg = std::variant<Probe, Crowd, Party, Inventory, Dialog, Trade, Duel>;
 // No input messages yet. std::variant<> is ill-formed, so the channel holds
 // std::monostate, which its decoder never returns.
 using InputMsg = std::variant<std::monostate>;
-using IntentsMsg = std::variant<Ping>;
+using IntentsMsg = std::variant<Ping, Pick, Give>;
 
 std::expected<void, codec::Error> encode(const Probe& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Ping& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Crowd& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Party& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Inventory& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Dialog& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Pick& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Give& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Trade& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Duel& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Zone& m, std::vector<std::uint8_t>& out);
+
+// Text forms, identical to the Go String() methods.
+std::string to_text(const Pair& v);
+std::string to_text(const BagSlot& v);
+std::string to_text(const Offer& v);
+std::string to_text(const Probe& v);
+std::string to_text(const Ping& v);
+std::string to_text(const Crowd& v);
+std::string to_text(const Party& v);
+std::string to_text(const Inventory& v);
+std::string to_text(const Dialog& v);
+std::string to_text(const Pick& v);
+std::string to_text(const Give& v);
+std::string to_text(const Trade& v);
+std::string to_text(const Duel& v);
+std::string to_text(const Zone& v);
 
 // Reads one state message and leaves r after it. An id from another channel
 // fails with codec::Error::unknown_message.
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r);
 // Decodes exactly one state message; any byte left over is an error.
 std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes);
+std::expected<void, codec::Error> encode_state(const StateMsg& m, std::vector<std::uint8_t>& out);
+std::string text_state(const StateMsg& m);
+
 // Reads one events message and leaves r after it. An id from another channel
 // fails with codec::Error::unknown_message.
 std::expected<EventsMsg, codec::Error> decode_next_events(codec::Reader& r);
 // Decodes exactly one events message; any byte left over is an error.
 std::expected<EventsMsg, codec::Error> decode_events(std::span<const std::uint8_t> bytes);
+std::expected<void, codec::Error> encode_events(const EventsMsg& m, std::vector<std::uint8_t>& out);
+std::string text_events(const EventsMsg& m);
+
 // Reads one input message and leaves r after it. An id from another channel
 // fails with codec::Error::unknown_message.
 std::expected<InputMsg, codec::Error> decode_next_input(codec::Reader& r);
 // Decodes exactly one input message; any byte left over is an error.
 std::expected<InputMsg, codec::Error> decode_input(std::span<const std::uint8_t> bytes);
+std::expected<void, codec::Error> encode_input(const InputMsg& m, std::vector<std::uint8_t>& out);
+std::string text_input(const InputMsg& m);
+
 // Reads one intents message and leaves r after it. An id from another channel
 // fails with codec::Error::unknown_message.
 std::expected<IntentsMsg, codec::Error> decode_next_intents(codec::Reader& r);
 // Decodes exactly one intents message; any byte left over is an error.
 std::expected<IntentsMsg, codec::Error> decode_intents(std::span<const std::uint8_t> bytes);
+std::expected<void, codec::Error> encode_intents(const IntentsMsg& m, std::vector<std::uint8_t>& out);
+std::string text_intents(const IntentsMsg& m);
 
 }

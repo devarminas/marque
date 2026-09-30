@@ -30,6 +30,7 @@ enum class Error : std::uint8_t {
     bad_enum,
     bad_varint,
     bad_utf8,
+    rule,
 };
 
 const char* to_string(Error e);
@@ -41,13 +42,21 @@ struct Quant {
     double per_unit;
     std::uint64_t steps;
     int width;
+
+    // The wire integer for v. Call it only on a finite v inside the range;
+    // generated rule checks compare quants by step, never as doubles.
+    std::uint64_t step(double v) const;
 };
 
 class Writer {
 public:
-    explicit Writer(std::vector<std::uint8_t>& out) : out_(out), start_(out.size()) {}
+    // A Writer made without a buffer runs every check and appends nothing, so
+    // build() refuses exactly what encode() refuses.
+    Writer() = default;
+    explicit Writer(std::vector<std::uint8_t>& out) : out_(&out), start_(out.size()) {}
 
     void fail(Error e);
+    std::optional<Error> error() const { return err_; }
     void u8(std::uint8_t v);
     void u16(std::uint16_t v);
     void u32(std::uint32_t v);
@@ -63,10 +72,11 @@ public:
     std::expected<void, Error> finish();
 
 private:
+    bool writing() const { return !err_ && out_ != nullptr; }
     void fixed(std::uint64_t v, int width);
 
-    std::vector<std::uint8_t>& out_;
-    std::size_t start_;
+    std::vector<std::uint8_t>* out_ = nullptr;
+    std::size_t start_ = 0;
     std::optional<Error> err_;
 };
 
@@ -103,5 +113,24 @@ private:
 };
 
 bool valid_utf8(std::string_view s);
+
+// Reports whether no two of n elements are equal. It compares every pair; the
+// schema caps unique lists at 256 elements.
+template <typename Equal>
+bool unique(std::size_t n, Equal equal) {
+    for (std::size_t i = 1; i < n; ++i) {
+        for (std::size_t j = 0; j < i; ++j) {
+            if (equal(i, j)) return false;
+        }
+    }
+    return true;
+}
+
+// Text form helpers. Each appends exactly what the Go generated String()
+// writes: strconv.AppendFloat(v, 'g', -1, 64 or 32) for numbers and
+// strconv.AppendQuoteToASCII for strings.
+void text_f64(std::string& out, double v);
+void text_f32(std::string& out, float v);
+void text_quoted(std::string& out, std::string_view s);
 
 }

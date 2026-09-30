@@ -1,3 +1,4 @@
+# Copied by wiregen from shared/wire/vectors/probe.vec. DO NOT EDIT.
 # Codec vectors for shared/wire/testdata/probe.wire: every field type and every
 # type-level refusal. Format: shared/wire/README.md.
 schema probe
