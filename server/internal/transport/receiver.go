@@ -1,6 +1,9 @@
 package transport
 
-import "bytes"
+import (
+	"bytes"
+	"slices"
+)
 
 // Received is what one accepted datagram yields. Every byte slice is owned by
 // the caller; none aliases the datagram.
@@ -45,8 +48,13 @@ type Receiver struct {
 }
 
 type inMsg struct {
-	frags [][]byte
-	got   int
+	count uint8
+	frags []inFrag
+}
+
+type inFrag struct {
+	index uint8
+	data  []byte
 }
 
 func NewReceiver(role Role, cfg Config) (*Receiver, error) {
@@ -115,8 +123,11 @@ func (r *Receiver) Receive(d []byte) (Received, error) {
 	for _, e := range b.entries {
 		r.store(e)
 	}
-	for m := r.partial[r.next]; m != nil && m.got == len(m.frags); m = r.partial[r.next] {
-		msg := bytes.Join(m.frags, nil)
+	for m := r.partial[r.next]; m != nil && len(m.frags) == int(m.count); m = r.partial[r.next] {
+		var msg []byte
+		for _, f := range m.frags {
+			msg = append(msg, f.data...)
+		}
 		r.buffered -= len(msg)
 		out.Reliable = append(out.Reliable, msg)
 		delete(r.partial, r.next)
@@ -130,18 +141,24 @@ func (r *Receiver) store(e entry) {
 		return
 	}
 	m := r.partial[e.id]
-	if m != nil && (len(m.frags) != int(e.count) || m.frags[e.index] != nil) {
+	if m != nil && m.count != e.count {
 		return
+	}
+	at := 0
+	if m != nil {
+		at, _ = slices.BinarySearchFunc(m.frags, e.index, func(f inFrag, index uint8) int { return int(f.index) - int(index) })
+		if at < len(m.frags) && m.frags[at].index == e.index {
+			return
+		}
 	}
 	if r.buffered+len(e.data) > WindowBytes {
 		return
 	}
 	if m == nil {
-		m = &inMsg{frags: make([][]byte, e.count)}
+		m = &inMsg{count: e.count}
 		r.partial[e.id] = m
 	}
-	m.frags[e.index] = bytes.Clone(e.data)
-	m.got++
+	m.frags = slices.Insert(m.frags, at, inFrag{index: e.index, data: bytes.Clone(e.data)})
 	r.buffered += len(e.data)
 }
 
