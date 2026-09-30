@@ -10,7 +10,6 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-// SchemaHash identifies the schema this file was generated from.
 const SchemaHash uint64 = 0x807af558ef3a158c
 
 type Message interface {
@@ -20,25 +19,21 @@ type Message interface {
 	String() string
 }
 
-// StateMsg is a message sent on the state channel.
 type StateMsg interface {
 	Message
 	stateMsg()
 }
 
-// EventsMsg is a message sent on the events channel.
 type EventsMsg interface {
 	Message
 	eventsMsg()
 }
 
-// InputMsg is a message sent on the input channel.
 type InputMsg interface {
 	Message
 	inputMsg()
 }
 
-// IntentsMsg is a message sent on the intents channel.
 type IntentsMsg interface {
 	Message
 	intentsMsg()
@@ -46,8 +41,6 @@ type IntentsMsg interface {
 
 var quantCoord = codec.Quant{Min: -10, Max: 10, PerUnit: 4, Steps: 80, Width: 1}
 
-// PlayerId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type PlayerId struct {
 	Index uint32
 	Gen   uint32
@@ -74,8 +67,6 @@ func (v PlayerId) appendText(b []byte) []byte {
 
 func (v PlayerId) String() string { return string(v.appendText(nil)) }
 
-// NpcId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type NpcId struct {
 	Index uint32
 	Gen   uint32
@@ -102,8 +93,6 @@ func (v NpcId) appendText(b []byte) []byte {
 
 func (v NpcId) String() string { return string(v.appendText(nil)) }
 
-// ItemId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type ItemId struct {
 	Index uint32
 	Gen   uint32
@@ -221,19 +210,15 @@ func decodeOption(r *codec.Reader) Option {
 	return v
 }
 
-// PairFields is what a caller fills. Build validates it into a Pair.
 type PairFields struct {
 	Who    NpcId
 	Weight float32
 }
 
-// Pair is read-only. Decoding and PairFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Pair struct {
 	f PairFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f PairFields) Build() (Pair, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -269,19 +254,15 @@ func (f PairFields) appendText(b []byte) []byte {
 
 func (v Pair) String() string { return string(v.f.appendText(nil)) }
 
-// BagSlotFields is what a caller fills. Build validates it into a BagSlot.
 type BagSlotFields struct {
 	Slot uint8
 	Item ItemId
 }
 
-// BagSlot is read-only. Decoding and BagSlotFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type BagSlot struct {
 	f BagSlotFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f BagSlotFields) Build() (BagSlot, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -323,19 +304,15 @@ func (f BagSlotFields) appendText(b []byte) []byte {
 
 func (v BagSlot) String() string { return string(v.f.appendText(nil)) }
 
-// OfferFields is what a caller fills. Build validates it into a Offer.
 type OfferFields struct {
 	Owner PlayerId
 	Item  ItemId
 }
 
-// Offer is read-only. Decoding and OfferFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Offer struct {
 	f OfferFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f OfferFields) Build() (Offer, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -371,7 +348,6 @@ func (f OfferFields) appendText(b []byte) []byte {
 
 func (v Offer) String() string { return string(v.f.appendText(nil)) }
 
-// ProbeFields is what a caller fills. Build validates it into a Probe.
 type ProbeFields struct {
 	Label  string
 	Ratio  float32
@@ -391,13 +367,10 @@ type ProbeFields struct {
 	Owner  PlayerId
 }
 
-// Probe is read-only. Decoding and ProbeFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Probe struct {
 	f ProbeFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f ProbeFields) Build() (Probe, error) {
 	f.Pairs = codec.Clone(f.Pairs)
 	f.Shorts = codec.Clone(f.Shorts)
@@ -562,18 +535,14 @@ func (v Probe) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// PingFields is what a caller fills. Build validates it into a Ping.
 type PingFields struct {
 	Nonce uint8
 }
 
-// Ping is read-only. Decoding and PingFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Ping struct {
 	f PingFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f PingFields) Build() (Ping, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -616,18 +585,14 @@ func (v Ping) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// CrowdFields is what a caller fills. Build validates it into a Crowd.
 type CrowdFields struct {
 	Pairs []Pair
 }
 
-// Crowd is read-only. Decoding and CrowdFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Crowd struct {
 	f CrowdFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f CrowdFields) Build() (Crowd, error) {
 	f.Pairs = codec.Clone(f.Pairs)
 	w := codec.NewChecker()
@@ -686,19 +651,15 @@ func (v Crowd) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// PartyFields is what a caller fills. Build validates it into a Party.
 type PartyFields struct {
 	Leader  PlayerId
 	Members []PlayerId
 }
 
-// Party is read-only. Decoding and PartyFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Party struct {
 	f PartyFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f PartyFields) Build() (Party, error) {
 	f.Members = codec.Clone(f.Members)
 	w := codec.NewChecker()
@@ -775,19 +736,15 @@ func (v Party) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// InventoryFields is what a caller fills. Build validates it into a Inventory.
 type InventoryFields struct {
 	Size  uint8
 	Slots []BagSlot
 }
 
-// Inventory is read-only. Decoding and InventoryFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Inventory struct {
 	f InventoryFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f InventoryFields) Build() (Inventory, error) {
 	f.Slots = codec.Clone(f.Slots)
 	w := codec.NewChecker()
@@ -870,20 +827,16 @@ func (v Inventory) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// DialogFields is what a caller fills. Build validates it into a Dialog.
 type DialogFields struct {
 	Npc     NpcId
 	Options []Option
 	Lines   []uint16
 }
 
-// Dialog is read-only. Decoding and DialogFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Dialog struct {
 	f DialogFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f DialogFields) Build() (Dialog, error) {
 	f.Options = codec.Clone(f.Options)
 	f.Lines = codec.Clone(f.Lines)
@@ -982,19 +935,15 @@ func (v Dialog) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// PickFields is what a caller fills. Build validates it into a Pick.
 type PickFields struct {
 	Npc    NpcId
 	Option Option
 }
 
-// Pick is read-only. Decoding and PickFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Pick struct {
 	f PickFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f PickFields) Build() (Pick, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -1049,19 +998,15 @@ func (v Pick) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// GiveFields is what a caller fills. Build validates it into a Give.
 type GiveFields struct {
 	Npc  NpcId
 	Slot uint8
 }
 
-// Give is read-only. Decoding and GiveFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Give struct {
 	f GiveFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f GiveFields) Build() (Give, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -1116,19 +1061,15 @@ func (v Give) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// TradeFields is what a caller fills. Build validates it into a Trade.
 type TradeFields struct {
 	From   PlayerId
 	Offers []Offer
 }
 
-// Trade is read-only. Decoding and TradeFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Trade struct {
 	f TradeFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f TradeFields) Build() (Trade, error) {
 	f.Offers = codec.Clone(f.Offers)
 	w := codec.NewChecker()
@@ -1205,19 +1146,15 @@ func (v Trade) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// DuelFields is what a caller fills. Build validates it into a Duel.
 type DuelFields struct {
 	Challenger PlayerId
 	Target     PlayerId
 }
 
-// Duel is read-only. Decoding and DuelFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Duel struct {
 	f DuelFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f DuelFields) Build() (Duel, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -1272,20 +1209,16 @@ func (v Duel) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// ZoneFields is what a caller fills. Build validates it into a Zone.
 type ZoneFields struct {
 	Lo   float64
 	Hi   float64
 	Tilt int8
 }
 
-// Zone is read-only. Decoding and ZoneFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Zone struct {
 	f ZoneFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f ZoneFields) Build() (Zone, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -1364,8 +1297,6 @@ func (v Zone) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// DecodeNextState reads one state message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	var m StateMsg
 	switch r.Varint() {
@@ -1380,7 +1311,6 @@ func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	return m, nil
 }
 
-// DecodeState decodes exactly one state message; any byte left over is an error.
 func DecodeState(b []byte) (StateMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextState(r)
@@ -1393,8 +1323,6 @@ func DecodeState(b []byte) (StateMsg, error) {
 	return m, nil
 }
 
-// DecodeNextEvents reads one events message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextEvents(r *codec.Reader) (EventsMsg, error) {
 	var m EventsMsg
 	switch r.Varint() {
@@ -1421,7 +1349,6 @@ func DecodeNextEvents(r *codec.Reader) (EventsMsg, error) {
 	return m, nil
 }
 
-// DecodeEvents decodes exactly one events message; any byte left over is an error.
 func DecodeEvents(b []byte) (EventsMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextEvents(r)
@@ -1434,8 +1361,6 @@ func DecodeEvents(b []byte) (EventsMsg, error) {
 	return m, nil
 }
 
-// DecodeNextInput reads one input message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextInput(r *codec.Reader) (InputMsg, error) {
 	var m InputMsg
 	switch r.Varint() {
@@ -1448,7 +1373,6 @@ func DecodeNextInput(r *codec.Reader) (InputMsg, error) {
 	return m, nil
 }
 
-// DecodeInput decodes exactly one input message; any byte left over is an error.
 func DecodeInput(b []byte) (InputMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextInput(r)
@@ -1461,8 +1385,6 @@ func DecodeInput(b []byte) (InputMsg, error) {
 	return m, nil
 }
 
-// DecodeNextIntents reads one intents message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextIntents(r *codec.Reader) (IntentsMsg, error) {
 	var m IntentsMsg
 	switch r.Varint() {
@@ -1481,7 +1403,6 @@ func DecodeNextIntents(r *codec.Reader) (IntentsMsg, error) {
 	return m, nil
 }
 
-// DecodeIntents decodes exactly one intents message; any byte left over is an error.
 func DecodeIntents(b []byte) (IntentsMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextIntents(r)

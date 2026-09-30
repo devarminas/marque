@@ -9,7 +9,6 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-// SchemaHash identifies the schema this file was generated from.
 const SchemaHash uint64 = 0x60dfa19f4dc9df6f
 
 type Message interface {
@@ -19,25 +18,21 @@ type Message interface {
 	String() string
 }
 
-// StateMsg is a message sent on the state channel.
 type StateMsg interface {
 	Message
 	stateMsg()
 }
 
-// EventsMsg is a message sent on the events channel.
 type EventsMsg interface {
 	Message
 	eventsMsg()
 }
 
-// InputMsg is a message sent on the input channel.
 type InputMsg interface {
 	Message
 	inputMsg()
 }
 
-// IntentsMsg is a message sent on the intents channel.
 type IntentsMsg interface {
 	Message
 	intentsMsg()
@@ -47,8 +42,6 @@ var quantPos = codec.Quant{Min: -4096, Max: 4096, PerUnit: 100, Steps: 819200, W
 
 var quantWish = codec.Quant{Min: -1, Max: 1, PerUnit: 100, Steps: 200, Width: 1}
 
-// PlayerId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type PlayerId struct {
 	Index uint32
 	Gen   uint32
@@ -75,8 +68,6 @@ func (v PlayerId) appendText(b []byte) []byte {
 
 func (v PlayerId) String() string { return string(v.appendText(nil)) }
 
-// NpcId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type NpcId struct {
 	Index uint32
 	Gen   uint32
@@ -103,8 +94,6 @@ func (v NpcId) appendText(b []byte) []byte {
 
 func (v NpcId) String() string { return string(v.appendText(nil)) }
 
-// ItemId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type ItemId struct {
 	Index uint32
 	Gen   uint32
@@ -131,8 +120,6 @@ func (v ItemId) appendText(b []byte) []byte {
 
 func (v ItemId) String() string { return string(v.appendText(nil)) }
 
-// NodeId pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
 type NodeId struct {
 	Index uint32
 	Gen   uint32
@@ -215,7 +202,6 @@ func decodeRefuseReason(r *codec.Reader) RefuseReason {
 	return v
 }
 
-// InputFields is what a caller fills. Build validates it into a Input.
 type InputFields struct {
 	Dx   float64
 	Dz   float64
@@ -223,13 +209,10 @@ type InputFields struct {
 	Seq  uint32
 }
 
-// Input is read-only. Decoding and InputFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Input struct {
 	f InputFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f InputFields) Build() (Input, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -290,7 +273,6 @@ func (v Input) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// PoseFields is what a caller fills. Build validates it into a Pose.
 type PoseFields struct {
 	Id PlayerId
 	X  float64
@@ -298,13 +280,10 @@ type PoseFields struct {
 	Z  float64
 }
 
-// Pose is read-only. Decoding and PoseFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Pose struct {
 	f PoseFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f PoseFields) Build() (Pose, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -365,20 +344,16 @@ func (v Pose) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// HpFields is what a caller fills. Build validates it into a Hp.
 type HpFields struct {
 	Id    PlayerId
 	Hp    uint32
 	MaxHp uint32
 }
 
-// Hp is read-only. Decoding and HpFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Hp struct {
 	f HpFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f HpFields) Build() (Hp, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -433,20 +408,16 @@ func (v Hp) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// RefusedFields is what a caller fills. Build validates it into a Refused.
 type RefusedFields struct {
 	Tick   uint32
 	Seq    uint32
 	Reason RefuseReason
 }
 
-// Refused is read-only. Decoding and RefusedFields.Build are the only ways to
-// fill one, so it holds a value the schema allows.
 type Refused struct {
 	f RefusedFields
 }
 
-// Build copies f and refuses it with the error a decoder would give.
 func (f RefusedFields) Build() (Refused, error) {
 	w := codec.NewChecker()
 	f.encode(&w)
@@ -501,8 +472,6 @@ func (v Refused) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// DecodeNextState reads one state message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	var m StateMsg
 	switch r.Varint() {
@@ -519,7 +488,6 @@ func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	return m, nil
 }
 
-// DecodeState decodes exactly one state message; any byte left over is an error.
 func DecodeState(b []byte) (StateMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextState(r)
@@ -532,8 +500,6 @@ func DecodeState(b []byte) (StateMsg, error) {
 	return m, nil
 }
 
-// DecodeNextEvents reads one events message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextEvents(r *codec.Reader) (EventsMsg, error) {
 	var m EventsMsg
 	switch r.Varint() {
@@ -548,7 +514,6 @@ func DecodeNextEvents(r *codec.Reader) (EventsMsg, error) {
 	return m, nil
 }
 
-// DecodeEvents decodes exactly one events message; any byte left over is an error.
 func DecodeEvents(b []byte) (EventsMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextEvents(r)
@@ -561,8 +526,6 @@ func DecodeEvents(b []byte) (EventsMsg, error) {
 	return m, nil
 }
 
-// DecodeNextInput reads one input message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextInput(r *codec.Reader) (InputMsg, error) {
 	var m InputMsg
 	switch r.Varint() {
@@ -577,7 +540,6 @@ func DecodeNextInput(r *codec.Reader) (InputMsg, error) {
 	return m, nil
 }
 
-// DecodeInput decodes exactly one input message; any byte left over is an error.
 func DecodeInput(b []byte) (InputMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextInput(r)
@@ -590,8 +552,6 @@ func DecodeInput(b []byte) (InputMsg, error) {
 	return m, nil
 }
 
-// DecodeNextIntents reads one intents message and leaves r after it. An id from
-// another channel fails with codec.ErrUnknownMessage.
 func DecodeNextIntents(r *codec.Reader) (IntentsMsg, error) {
 	var m IntentsMsg
 	switch r.Varint() {
@@ -604,7 +564,6 @@ func DecodeNextIntents(r *codec.Reader) (IntentsMsg, error) {
 	return m, nil
 }
 
-// DecodeIntents decodes exactly one intents message; any byte left over is an error.
 func DecodeIntents(b []byte) (IntentsMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNextIntents(r)

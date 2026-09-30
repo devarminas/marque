@@ -216,14 +216,14 @@ func goRelation(x string, r Relation) string {
 // Decoding and <Name>Fields.Build are the only ways to fill a <Name>, so a
 // non-zero <Name> is valid and nothing can change it afterwards.
 func goRecord(b *strings.Builder, name, textName string, fields []Field, rules []Relation) {
-	fmt.Fprintf(b, "// %[1]sFields is what a caller fills. Build validates it into a %[1]s.\ntype %[1]sFields struct {\n", name)
+	fmt.Fprintf(b, "type %[1]sFields struct {\n", name)
 	for _, f := range fields {
 		fmt.Fprintf(b, "%s %s\n", goName(f.Name), goType(f.Type))
 	}
 	b.WriteString("}\n\n")
-	fmt.Fprintf(b, "// %[1]s is read-only. Decoding and %[1]sFields.Build are the only ways to\n// fill one, so it holds a value the schema allows.\ntype %[1]s struct {\nf %[1]sFields\n}\n\n", name)
+	fmt.Fprintf(b, "type %[1]s struct {\nf %[1]sFields\n}\n\n", name)
 
-	fmt.Fprintf(b, "// Build copies f and refuses it with the error a decoder would give.\nfunc (f %[1]sFields) Build() (%[1]s, error) {\n", name)
+	fmt.Fprintf(b, "func (f %[1]sFields) Build() (%[1]s, error) {\n", name)
 	for _, f := range fields {
 		if f.Type.Kind == KindList {
 			fmt.Fprintf(b, "f.%[1]s = codec.Clone(f.%[1]s)\n", goName(f.Name))
@@ -273,7 +273,7 @@ func goRecord(b *strings.Builder, name, textName string, fields []Field, rules [
 
 func genGo(s *Schema, schemaPath, pkg string) ([]byte, error) {
 	var b strings.Builder
-	fmt.Fprintf(&b, "// SchemaHash identifies the schema this file was generated from.\nconst SchemaHash uint64 = 0x%016x\n\n", s.Hash())
+	fmt.Fprintf(&b, "const SchemaHash uint64 = 0x%016x\n\n", s.Hash())
 
 	b.WriteString(`type Message interface {
 	MessageID() uint32
@@ -284,7 +284,7 @@ func genGo(s *Schema, schemaPath, pkg string) ([]byte, error) {
 
 `)
 	for _, ch := range channels {
-		fmt.Fprintf(&b, "// %[1]sMsg is a message sent on the %[2]s channel.\ntype %[1]sMsg interface {\nMessage\n%[2]sMsg()\n}\n\n", goName(ch), ch)
+		fmt.Fprintf(&b, "type %[1]sMsg interface {\nMessage\n%[2]sMsg()\n}\n\n", goName(ch), ch)
 	}
 
 	for _, q := range s.Quants {
@@ -293,9 +293,7 @@ func genGo(s *Schema, schemaPath, pkg string) ([]byte, error) {
 	}
 
 	for _, h := range s.Handles {
-		fmt.Fprintf(&b, `// %[1]s pairs a slot index with the generation that slot had when the
-// entity was created, so a reused index never names the old entity.
-type %[1]s struct {
+		fmt.Fprintf(&b, `type %[1]s struct {
 	Index uint32
 	Gen   uint32
 }
@@ -387,13 +385,12 @@ func (v %[1]s) Append(dst []byte) ([]byte, error) {
 
 	for _, ch := range channels {
 		c := goName(ch)
-		fmt.Fprintf(&b, "// DecodeNext%[1]s reads one %[2]s message and leaves r after it. An id from\n// another channel fails with codec.ErrUnknownMessage.\nfunc DecodeNext%[1]s(r *codec.Reader) (%[1]sMsg, error) {\nvar m %[1]sMsg\nswitch r.Varint() {\n", c, ch)
+		fmt.Fprintf(&b, "func DecodeNext%[1]s(r *codec.Reader) (%[1]sMsg, error) {\nvar m %[1]sMsg\nswitch r.Varint() {\n", c, ch)
 		for _, m := range s.MessagesOn(ch) {
 			fmt.Fprintf(&b, "case %d:\nm = decode%s(r)\n", m.ID, goName(m.Name))
 		}
 		b.WriteString("default:\nr.Fail(codec.ErrUnknownMessage)\n}\nif err := r.Err(); err != nil {\nreturn nil, err\n}\nreturn m, nil\n}\n\n")
-		fmt.Fprintf(&b, `// Decode%[1]s decodes exactly one %[2]s message; any byte left over is an error.
-func Decode%[1]s(b []byte) (%[1]sMsg, error) {
+		fmt.Fprintf(&b, `func Decode%[1]s(b []byte) (%[1]sMsg, error) {
 	r := codec.NewReader(b)
 	m, err := DecodeNext%[1]s(r)
 	if err != nil {

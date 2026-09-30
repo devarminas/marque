@@ -7,8 +7,6 @@
 
 namespace marque::wire {
 
-// The one door into a record's fields: generated readers fill them, and
-// writers and text forms read them.
 struct detail::Access {
     template <typename T>
     static const auto& fields(const T& v) {
