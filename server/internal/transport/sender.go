@@ -27,7 +27,6 @@ func (s State) String() string {
 	return "state?"
 }
 
-// Flushed is what one Flush produced.
 type Flushed struct {
 	Datagrams [][]byte
 	// UnreliableSent is how many leading items of the Unreliable passed to
@@ -64,6 +63,10 @@ type outFrag struct {
 	lastSent    uint64
 }
 
+func (f outFrag) due(now, resendAfter uint64) bool {
+	return !f.acked && (!f.sent || now-f.lastSent >= resendAfter)
+}
+
 type sentPacket struct {
 	live  bool
 	seq   uint16
@@ -71,12 +74,10 @@ type sentPacket struct {
 }
 
 type fragRef struct {
-	id    uint16
+	msg   *outMsg
 	index uint8
 }
 
-// NewSender makes the send half of a connection that is established at now.
-// ARM-354 calls it once the handshake completes.
 func NewSender(role Role, cfg Config, now uint64) (*Sender, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -135,9 +136,7 @@ func (s *Sender) ack(seq uint16) {
 	}
 	p.live = false
 	for _, f := range p.frags {
-		if i := int(f.id - s.base); i < len(s.queue) {
-			s.queue[i].frags[f.index].acked = true
-		}
+		f.msg.frags[f.index].acked = true
 	}
 }
 
@@ -154,6 +153,7 @@ type datagram struct {
 	size, cap  int
 	unreliable *Unreliable
 	entries    []entry
+	refs       []fragRef
 }
 
 // Flush builds this tick's datagrams at now: due reliable fragments first,
@@ -197,6 +197,7 @@ func (s *Sender) Flush(now uint64, u Unreliable) Flushed {
 		}
 		cur.size += add + sectionCost(cur.entries)
 		cur.entries = append(cur.entries, entry{id: id, index: uint8(index), count: uint8(len(m.frags)), data: data})
+		cur.refs = append(cur.refs, fragRef{msg: m, index: uint8(index)})
 		m.frags[index].sent = true
 		m.frags[index].lastSent = now
 		return true
@@ -236,9 +237,6 @@ func (s *Sender) Flush(now uint64, u Unreliable) Flushed {
 	return out
 }
 
-// eachDue calls f for every due fragment inside the send window, oldest
-// message first, until f returns false. A fragment is due if it was never
-// sent, or is unacked and ResendAfter has passed since it was last sent.
 func (s *Sender) eachDue(now uint64, f func(id uint16, m *outMsg, index int) bool) {
 	total := 0
 	for i, m := range s.queue {
@@ -247,7 +245,7 @@ func (s *Sender) eachDue(now uint64, f func(id uint16, m *outMsg, index int) boo
 			return
 		}
 		for j, fr := range m.frags {
-			if fr.acked || (fr.sent && now-fr.lastSent < s.cfg.ResendAfter) {
+			if !fr.due(now, s.cfg.ResendAfter) {
 				continue
 			}
 			if !f(s.base+uint16(i), m, j) {
@@ -257,8 +255,6 @@ func (s *Sender) eachDue(now uint64, f func(id uint16, m *outMsg, index int) boo
 	}
 }
 
-// sectionCost is what a datagram pays for its reliable section header: once,
-// with its first entry.
 func sectionCost(entries []entry) int {
 	if len(entries) == 0 {
 		return reliableSectionHeader
@@ -266,8 +262,6 @@ func sectionCost(entries []entry) int {
 	return 0
 }
 
-// fitItems is how many leading items fit, with their section header, in
-// room bytes.
 func fitItems(items [][]byte, room int) int {
 	used := unreliableSectionHeader
 	for i, it := range items {
@@ -282,11 +276,7 @@ func fitItems(items [][]byte, room int) int {
 func (s *Sender) seal(d *datagram) []byte {
 	seq := s.nextSeq
 	s.nextSeq++
-	refs := make([]fragRef, len(d.entries))
-	for i, e := range d.entries {
-		refs[i] = fragRef{id: e.id, index: e.index}
-	}
-	s.sent[seq%uint16(len(s.sent))] = sentPacket{live: true, seq: seq, frags: refs}
+	s.sent[seq%uint16(len(s.sent))] = sentPacket{live: true, seq: seq, frags: d.refs}
 
 	hdr := putHeader(make([]byte, 0, MaxDatagram), header{protocol: ProtocolID, hash: s.cfg.SchemaHash, seq: seq, ack: s.own})
 	body := encodeBody(nil, s.role, d.unreliable, d.entries)

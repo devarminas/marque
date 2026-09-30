@@ -23,8 +23,6 @@ func TestSpecExample(t *testing.T) {
 	}
 }
 
-// TestIDsAndSequencesWrap runs 70000 ticks, one event each, over a lossless
-// link, so packet sequences and reliable message ids both pass 65535.
 func TestIDsAndSequencesWrap(t *testing.T) {
 	srv := mustEndpoint(Server, testConfig(), 0)
 	cli := mustEndpoint(Client, testConfig(), 0)

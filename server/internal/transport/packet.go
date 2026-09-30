@@ -16,10 +16,8 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-// Protocol constants. Both peers must agree on every one of these, so they
-// are part of the wire format rather than Config.
 const (
-	ProtocolID     uint32 = 0x3151524d // bytes "MRQ1"
+	ProtocolID     uint32 = 'M' | 'R'<<8 | 'Q'<<16 | '1'<<24
 	MaxDatagram           = 1200
 	HeaderSize            = 20
 	FragmentSize          = 1024
@@ -61,7 +59,6 @@ func (r Role) String() string {
 	return "client"
 }
 
-// channels returns the unreliable and reliable channel this role sends.
 func (r Role) channels() (unreliable, reliable codec.Channel) {
 	if r == Server {
 		return codec.ChannelState, codec.ChannelEvents
@@ -123,7 +120,6 @@ type entry struct {
 	data  []byte
 }
 
-// body is a parsed datagram body. Slices alias the datagram.
 type body struct {
 	unreliable *Unreliable
 	entries    []entry
@@ -171,8 +167,6 @@ func encodeBody(dst []byte, role Role, u *Unreliable, entries []entry) []byte {
 	return dst
 }
 
-// parser reads a body. Every failure is ErrMalformed with a reason, and a
-// failed parse leaves no trace: the caller commits nothing.
 type parser struct {
 	b   []byte
 	err error
@@ -219,7 +213,6 @@ func (p *parser) u32() uint32 {
 	return 0
 }
 
-// sized reads a length prefix and that many bytes. The length is at least 1.
 func (p *parser) sized() []byte {
 	first := p.u8()
 	n := int(first)
@@ -238,7 +231,6 @@ func (p *parser) sized() []byte {
 	return p.take(n)
 }
 
-// parseBody parses the sections a peer of role `from` may send.
 func parseBody(b []byte, from Role) (body, error) {
 	p := parser{b: b}
 	unrelCh, relCh := from.channels()

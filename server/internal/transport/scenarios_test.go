@@ -5,8 +5,6 @@ import (
 	"encoding/binary"
 )
 
-// raw builds a datagram as a peer of role `from` would, for vectors that need
-// sequences or contents a live Sender would not produce.
 func raw(from Role, seq uint16, ack AckWindow, u *Unreliable, entries ...entry) []byte {
 	d := putHeader(nil, header{protocol: ProtocolID, hash: testHash, seq: seq, ack: ack})
 	return encodeBody(d, from, u, entries)
@@ -30,7 +28,6 @@ func mustEndpoint(role Role, cfg Config, now uint64) *Endpoint {
 	return e
 }
 
-// vectorScenarios returns every vector file's text by name.
 func vectorScenarios() map[string]string {
 	out := map[string]string{}
 	for name, f := range map[string]func() *script{

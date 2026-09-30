@@ -34,7 +34,6 @@ func newScript(desc string, role Role, cfg Config, now uint64) *script {
 	return s
 }
 
-// exec runs one op line against the endpoint and records it with its output.
 func (s *script) exec(line string) []string {
 	out, err := runOp(&s.ep, line)
 	if err != nil {
@@ -49,7 +48,6 @@ func (s *script) exec(line string) []string {
 
 func (s *script) send(msg []byte) { s.exec("send " + hex.EncodeToString(msg)) }
 
-// flush returns the datagrams it emitted.
 func (s *script) flush(now uint64, u Unreliable) [][]byte {
 	line := fmt.Sprintf("flush %d", now)
 	if len(u.Items) > 0 {
@@ -178,7 +176,6 @@ func runOp(ep **Endpoint, line string) ([]string, error) {
 	return out, nil
 }
 
-// replay runs a vector file and returns the first mismatch.
 func replay(text string) error {
 	var ep *Endpoint
 	var want []string

@@ -35,8 +35,6 @@ type Reader struct {
 	peers map[netip.AddrPort]*Receiver
 }
 
-// NewReader serves the given peers. Until ARM-354 adds the handshake, which
-// will allocate Receivers here, the peer set is fixed at construction.
 func NewReader(conn *net.UDPConn, cfg Config, clock func() uint64, peers ...netip.AddrPort) (*Reader, error) {
 	rd := &Reader{conn: conn, cfg: cfg, clock: clock, peers: map[netip.AddrPort]*Receiver{}}
 	for _, p := range peers {

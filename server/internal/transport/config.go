@@ -2,7 +2,6 @@ package transport
 
 import "fmt"
 
-// Defaults for the local, unmeasured knobs. ARM-362 measures them.
 const (
 	DefaultTickBudget          = 4800
 	DefaultBacklogLimit        = 1024

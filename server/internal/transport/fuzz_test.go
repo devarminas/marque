@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// FuzzReceive feeds arbitrary bytes to both roles' Receiver. Nothing may
-// panic, and an accepted datagram must be refused as a duplicate the second
-// time, which shows acceptance committed and refusal did not.
 func FuzzReceive(f *testing.F) {
 	f.Add(raw(Server, 0, NoAcks, &Unreliable{Stamp: 1, Items: [][]byte{{0x02, 0x01}}}, entry{id: 0, index: 0, count: 1, data: []byte{0x04}}))
 	f.Add(raw(Client, 7, AckWindow{Latest: 3, Bits: 5}, &Unreliable{Stamp: 9, Items: [][]byte{{0x01}}}, entry{id: 0, index: 1, count: 2, data: []byte{0x05}}))

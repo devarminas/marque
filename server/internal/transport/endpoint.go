@@ -20,7 +20,6 @@ func NewEndpoint(role Role, cfg Config, now uint64) (*Endpoint, error) {
 	return &Endpoint{rx: rx, tx: tx}, nil
 }
 
-// Receive applies one datagram that arrived at now.
 func (e *Endpoint) Receive(d []byte, now uint64) (Received, error) {
 	if e.tx.State() != Open {
 		return Received{}, ErrClosed

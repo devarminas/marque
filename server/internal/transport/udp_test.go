@@ -37,8 +37,6 @@ func next(t *testing.T, ch <-chan Inbound) Inbound {
 	return Inbound{}
 }
 
-// TestReaderHandsDecodedInputOverChannel runs the reader goroutine on a real
-// loopback socket, fed by a client Endpoint the way the C++ core will be.
 func TestReaderHandsDecodedInputOverChannel(t *testing.T) {
 	srv, cli := listen(t), listen(t)
 	defer cli.Close()
@@ -75,8 +73,6 @@ func TestReaderHandsDecodedInputOverChannel(t *testing.T) {
 		t.Fatalf("got %+v, want %+v", in, want)
 	}
 
-	// The schema has no intents yet, so any intent is another channel's id: a
-	// protocol fault that makes the reader forget the peer.
 	if err := ep.Send(input); err != nil {
 		t.Fatal(err)
 	}
@@ -95,10 +91,6 @@ func TestReaderHandsDecodedInputOverChannel(t *testing.T) {
 	}
 }
 
-// TestReaderCannotReachGameState proves the boundary structurally. The
-// transport package cannot import game or the old hub, the reader's only
-// output is chan<- Inbound, and Inbound holds values with no pointer, map,
-// channel, or func through which the tick loop's state could be shared.
 func TestReaderCannotReachGameState(t *testing.T) {
 	const module = "github.com/devarminas/marque/server/"
 	seen := map[string]bool{}
@@ -153,7 +145,6 @@ func TestReaderCannotReachGameState(t *testing.T) {
 	}
 	check(reflect.TypeFor[Inbound](), "Inbound")
 
-	// The decoded messages behind the two interfaces are plain values.
 	if m, err := wire.DecodeInput([]byte{0x01, 0x96, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00}); err != nil || reflect.TypeOf(m).Kind() != reflect.Struct {
 		t.Fatalf("DecodeInput gave %T, %v; want a struct value", m, err)
 	}

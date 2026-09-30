@@ -20,7 +20,6 @@ type Received struct {
 	Reliable [][]byte
 }
 
-// Stats counts datagrams by outcome.
 type Stats struct {
 	Accepted, Duplicate, TooOld, Malformed, Foreign, Stale uint64
 }
@@ -50,7 +49,6 @@ type inMsg struct {
 	got   int
 }
 
-// NewReceiver makes the receive half for a side playing role.
 func NewReceiver(role Role, cfg Config) (*Receiver, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -127,10 +125,6 @@ func (r *Receiver) Receive(d []byte) (Received, error) {
 	return out, nil
 }
 
-// store buffers one fragment. A fragment a well-behaved sender could not
-// have produced (outside the window, a fragment count that disagrees with an
-// earlier one, or past WindowBytes) is ignored rather than failing the
-// datagram, since only a hostile peer sends one and it only starves itself.
 func (r *Receiver) store(e entry) {
 	if e.id-r.next >= WindowMessages {
 		return
@@ -156,7 +150,6 @@ type recvWindow struct {
 	AckWindow
 }
 
-// accept returns the window after receiving seq, or why seq is refused.
 func (w recvWindow) accept(seq uint16) (recvWindow, error) {
 	if !w.have {
 		return recvWindow{have: true, AckWindow: AckWindow{Latest: seq}}, nil

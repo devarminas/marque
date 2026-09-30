@@ -15,18 +15,15 @@ const (
 	tick     uint64 = 40_000
 )
 
-// side is one peer in a simulated session plus everything it observed.
 type side struct {
 	ep        *Endpoint
-	dir       netsim.Direction // direction of packets this side sends
+	dir       netsim.Direction
 	reliable  [][]byte
 	stamps    []uint32
 	datagrams int
 	reading   bool
 }
 
-// session runs a server and a client through one netsim.Simulator on a
-// shared 40 ms tick clock.
 type session struct {
 	t        *testing.T
 	sim      *netsim.Simulator
@@ -61,7 +58,6 @@ func (s *session) peer(x *side) *side {
 	return s.srv
 }
 
-// step advances one tick: each side drains what arrived, then flushes u.
 func (s *session) step(srvU, cliU Unreliable) {
 	s.now += tick
 	for _, x := range []*side{s.srv, s.cli} {
@@ -91,8 +87,6 @@ func (s *session) step(srvU, cliU Unreliable) {
 	}
 }
 
-// message builds reliable message i: its index then seeded filler, sized so
-// roughly one in ten needs fragmentation.
 func message(r *rand.Rand, i int) []byte {
 	n := 4 + r.IntN(200)
 	if r.IntN(10) == 0 {
@@ -170,7 +164,6 @@ func assertMessages(t *testing.T, name string, got, want [][]byte) {
 	}
 }
 
-// stateItems is a two-item unreliable payload stamped n.
 func stateItems(n uint32) Unreliable {
 	return Unreliable{Stamp: n, Items: [][]byte{{byte(n), 1}, {byte(n), 2, 3}}}
 }
@@ -215,8 +208,6 @@ func TestStoppedReaderTriggersSlowClient(t *testing.T) {
 	} {
 		t.Run(tc.profile, func(t *testing.T) {
 			s := newSession(t, tc.profile, 352, DefaultConfig(testHash))
-			// 12 small events per tick keep the backlog near zero while the
-			// client reads, and outrun the client's own 5 s timeout once it stops.
 			sent := 0
 			for n := 1; n <= 2000; n++ {
 				if n == 100 {
@@ -261,7 +252,6 @@ func TestSilenceKeepalivesThenTimeout(t *testing.T) {
 				t.Fatalf("keepalives in 1 s (server, client): got %s, want %s", got, want)
 			}
 
-			// The client goes silent. The server keeps flushing until it times out.
 			for s.now < 10_000_000 {
 				s.now += tick
 				for _, d := range s.sim.Poll(s.cli.dir, s.now) {
