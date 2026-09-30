@@ -9,21 +9,11 @@ namespace marque::netsim {
 
 namespace {
 
-// Direction salts mix the shared seed into two unrelated RNG states. XOR
-// with the seed rather than a separate derive step: cheap, and any nonzero
-// salt distinct per direction is enough to decorrelate the two streams
-// since splitmix64's avalanche mixes the whole state on the first draw.
-// Must match server/internal/netsim/simulator.go's dirSaltAToB/dirSaltBToA.
 constexpr std::uint64_t kDirSaltAToB = 0xA5A5A5A5A5A5A5A5ULL;
 constexpr std::uint64_t kDirSaltBToA = 0x5A5A5A5A5A5A5A5AULL;
 
-}  // namespace
+}
 
-// A delivery still waiting in a direction's queue. seq and copy_index exist
-// only to break ties when two deliveries land at the same microsecond
-// (common with zero jitter, or a duplicate whose extra draw is 0): seq
-// orders by send order, copy_index puts a duplicate's first copy before
-// its second.
 struct Scheduled {
     std::uint64_t seq = 0;
     std::uint8_t copy_index = 0;
@@ -31,10 +21,6 @@ struct Scheduled {
     std::vector<std::uint8_t> packet;
 };
 
-// DirectionSim is one direction's independent fate stream: its own RNG
-// draws, its own send sequence, its own queue of not-yet-delivered
-// packets. Two of these (a to b, b to a) make up a Simulator; neither
-// direction's draws affect the other's.
 class DirectionSim {
 public:
     explicit DirectionSim(std::uint64_t seed) : rng_(seed) {}
@@ -109,4 +95,4 @@ DirectionSim& Simulator::stream(Direction dir) {
     return dir == Direction::kAToB ? *ab_ : *ba_;
 }
 
-}  // namespace marque::netsim
+}

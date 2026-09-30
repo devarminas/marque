@@ -53,6 +53,7 @@ godot --headless --path client --script res://tests/run_tests.gd
 - Behavioural client/server claims: `.cursor/skills/verify-marque/SKILL.md`.
 - Server: from `server/`, with a C toolchain on PATH, `CGO_ENABLED=1 go test -race ./...`.
 - Native C++: `scripts/native_test.sh` configures, builds, and runs the `native/` ctest suite; its exit code is the verdict.
+- Network simulator (`server/internal/netsim`, `native/core/{include,src}/netsim`): tests are seeded and a failure prints `seed=<n> profile=<name>`. `NETSIM_SEED=<n>` reproduces a specific seed's fate sequence; the golden-vector tests only match the committed files at the pinned seed, so a `NETSIM_SEED` run is for reproducing a bug report, not for comparing against golden output.
 
 ## Pull requests
 

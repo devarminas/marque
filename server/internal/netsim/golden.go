@@ -6,22 +6,8 @@ import (
 	"sort"
 )
 
-// goldenSendGapMicros is the fixed spacing between sends when generating a
-// golden vector: one send every 1ms of simulated time.
 const goldenSendGapMicros = 1000
 
-// GoldenLines runs count packets through a fresh Simulator on the AToB
-// direction, seeded and profiled as given, and returns one formatted line
-// per packet in send-index order:
-//
-//	"<index> DROP"
-//	"<index> DELIVER <at>"
-//	"<index> DUPLICATE <at1> <at2>"
-//
-// This is the single generator behind the committed golden files under
-// shared/wire/vectors/netsim: the Go test compares this output to the
-// committed file, and the C++ implementation of the same algorithm is
-// expected to reproduce the identical lines byte for byte.
 func GoldenLines(profile Profile, seed uint64, count int) []string {
 	sim := New(profile, seed)
 
@@ -29,14 +15,10 @@ func GoldenLines(profile Profile, seed uint64, count int) []string {
 		sim.Send(AToB, packetPayload(uint32(i)), uint64(i)*goldenSendGapMicros)
 	}
 
-	// Every fate's arrival time is bounded by the last send time plus the
-	// slowest possible path through computeFate: base delay, jitter,
-	// reorder push, and (for a duplicate) one more jitter draw. Polling
-	// once past that bound drains every surviving packet in one call.
 	lastSend := uint64(count-1) * goldenSendGapMicros
-	maxExtra := profile.DelayBaseMicros + profile.JitterRangeMicros +
+	slowestPossiblePathThroughComputeFate := profile.DelayBaseMicros + profile.JitterRangeMicros +
 		profile.ReorderWindowMicros + profile.JitterRangeMicros
-	deliveries := sim.Poll(AToB, lastSend+maxExtra+1)
+	deliveries := sim.Poll(AToB, lastSend+slowestPossiblePathThroughComputeFate+1)
 
 	type arrival struct {
 		at uint64
