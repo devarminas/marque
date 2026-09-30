@@ -147,7 +147,6 @@ func mustHex(t *testing.T, s string) []byte {
 	return b
 }
 
-// must unwraps a Build result that the test expects to succeed.
 func must[T any](m T, err error) T {
 	if err != nil {
 		panic(fmt.Sprintf("build: %v", err))

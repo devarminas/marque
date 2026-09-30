@@ -689,9 +689,7 @@ std::expected<Pair, codec::Error> Pair::build(PairFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Pair v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Pair>(std::move(f));
 }
 
 std::string to_text(const Pair& v) {
@@ -704,9 +702,7 @@ std::expected<BagSlot, codec::Error> BagSlot::build(BagSlotFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    BagSlot v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<BagSlot>(std::move(f));
 }
 
 std::string to_text(const BagSlot& v) {
@@ -719,9 +715,7 @@ std::expected<Offer, codec::Error> Offer::build(OfferFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Offer v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Offer>(std::move(f));
 }
 
 std::string to_text(const Offer& v) {
@@ -734,9 +728,7 @@ std::expected<Probe, codec::Error> Probe::build(ProbeFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Probe v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Probe>(std::move(f));
 }
 
 std::string to_text(const Probe& v) {
@@ -749,9 +741,7 @@ std::expected<Ping, codec::Error> Ping::build(PingFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Ping v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Ping>(std::move(f));
 }
 
 std::string to_text(const Ping& v) {
@@ -764,9 +754,7 @@ std::expected<Crowd, codec::Error> Crowd::build(CrowdFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Crowd v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Crowd>(std::move(f));
 }
 
 std::string to_text(const Crowd& v) {
@@ -779,9 +767,7 @@ std::expected<Party, codec::Error> Party::build(PartyFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Party v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Party>(std::move(f));
 }
 
 std::string to_text(const Party& v) {
@@ -794,9 +780,7 @@ std::expected<Inventory, codec::Error> Inventory::build(InventoryFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Inventory v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Inventory>(std::move(f));
 }
 
 std::string to_text(const Inventory& v) {
@@ -809,9 +793,7 @@ std::expected<Dialog, codec::Error> Dialog::build(DialogFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Dialog v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Dialog>(std::move(f));
 }
 
 std::string to_text(const Dialog& v) {
@@ -824,9 +806,7 @@ std::expected<Pick, codec::Error> Pick::build(PickFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Pick v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Pick>(std::move(f));
 }
 
 std::string to_text(const Pick& v) {
@@ -839,9 +819,7 @@ std::expected<Give, codec::Error> Give::build(GiveFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Give v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Give>(std::move(f));
 }
 
 std::string to_text(const Give& v) {
@@ -854,9 +832,7 @@ std::expected<Trade, codec::Error> Trade::build(TradeFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Trade v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Trade>(std::move(f));
 }
 
 std::string to_text(const Trade& v) {
@@ -869,9 +845,7 @@ std::expected<Duel, codec::Error> Duel::build(DuelFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Duel v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Duel>(std::move(f));
 }
 
 std::string to_text(const Duel& v) {
@@ -884,9 +858,7 @@ std::expected<Zone, codec::Error> Zone::build(ZoneFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Zone v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Zone>(std::move(f));
 }
 
 std::string to_text(const Zone& v) {

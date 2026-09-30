@@ -221,7 +221,7 @@ func decodeOption(r *codec.Reader) Option {
 	return v
 }
 
-// PairFields holds the fields of a Pair. Build validates them.
+// PairFields is what a caller fills. Build validates it into a Pair.
 type PairFields struct {
 	Who    NpcId
 	Weight float32
@@ -269,7 +269,7 @@ func (f PairFields) appendText(b []byte) []byte {
 
 func (v Pair) String() string { return string(v.f.appendText(nil)) }
 
-// BagSlotFields holds the fields of a BagSlot. Build validates them.
+// BagSlotFields is what a caller fills. Build validates it into a BagSlot.
 type BagSlotFields struct {
 	Slot uint8
 	Item ItemId
@@ -323,7 +323,7 @@ func (f BagSlotFields) appendText(b []byte) []byte {
 
 func (v BagSlot) String() string { return string(v.f.appendText(nil)) }
 
-// OfferFields holds the fields of a Offer. Build validates them.
+// OfferFields is what a caller fills. Build validates it into a Offer.
 type OfferFields struct {
 	Owner PlayerId
 	Item  ItemId
@@ -371,7 +371,7 @@ func (f OfferFields) appendText(b []byte) []byte {
 
 func (v Offer) String() string { return string(v.f.appendText(nil)) }
 
-// ProbeFields holds the fields of a Probe. Build validates them.
+// ProbeFields is what a caller fills. Build validates it into a Probe.
 type ProbeFields struct {
 	Label  string
 	Ratio  float32
@@ -562,7 +562,7 @@ func (v Probe) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// PingFields holds the fields of a Ping. Build validates them.
+// PingFields is what a caller fills. Build validates it into a Ping.
 type PingFields struct {
 	Nonce uint8
 }
@@ -616,7 +616,7 @@ func (v Ping) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// CrowdFields holds the fields of a Crowd. Build validates them.
+// CrowdFields is what a caller fills. Build validates it into a Crowd.
 type CrowdFields struct {
 	Pairs []Pair
 }
@@ -686,7 +686,7 @@ func (v Crowd) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// PartyFields holds the fields of a Party. Build validates them.
+// PartyFields is what a caller fills. Build validates it into a Party.
 type PartyFields struct {
 	Leader  PlayerId
 	Members []PlayerId
@@ -775,7 +775,7 @@ func (v Party) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// InventoryFields holds the fields of a Inventory. Build validates them.
+// InventoryFields is what a caller fills. Build validates it into a Inventory.
 type InventoryFields struct {
 	Size  uint8
 	Slots []BagSlot
@@ -870,7 +870,7 @@ func (v Inventory) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// DialogFields holds the fields of a Dialog. Build validates them.
+// DialogFields is what a caller fills. Build validates it into a Dialog.
 type DialogFields struct {
 	Npc     NpcId
 	Options []Option
@@ -982,7 +982,7 @@ func (v Dialog) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// PickFields holds the fields of a Pick. Build validates them.
+// PickFields is what a caller fills. Build validates it into a Pick.
 type PickFields struct {
 	Npc    NpcId
 	Option Option
@@ -1049,7 +1049,7 @@ func (v Pick) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// GiveFields holds the fields of a Give. Build validates them.
+// GiveFields is what a caller fills. Build validates it into a Give.
 type GiveFields struct {
 	Npc  NpcId
 	Slot uint8
@@ -1116,7 +1116,7 @@ func (v Give) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// TradeFields holds the fields of a Trade. Build validates them.
+// TradeFields is what a caller fills. Build validates it into a Trade.
 type TradeFields struct {
 	From   PlayerId
 	Offers []Offer
@@ -1205,7 +1205,7 @@ func (v Trade) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// DuelFields holds the fields of a Duel. Build validates them.
+// DuelFields is what a caller fills. Build validates it into a Duel.
 type DuelFields struct {
 	Challenger PlayerId
 	Target     PlayerId
@@ -1272,7 +1272,7 @@ func (v Duel) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// ZoneFields holds the fields of a Zone. Build validates them.
+// ZoneFields is what a caller fills. Build validates it into a Zone.
 type ZoneFields struct {
 	Lo   float64
 	Hi   float64

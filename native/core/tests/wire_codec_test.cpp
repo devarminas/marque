@@ -40,8 +40,6 @@ std::string to_hex(const std::vector<std::uint8_t>& bytes) {
     return out;
 }
 
-// What one channel decoder made of a vector: an error, or the decoded text
-// and the bytes the decoded message re-encodes to.
 struct Outcome {
     std::optional<Error> error;
     std::string text;
@@ -69,7 +67,6 @@ const std::map<std::string, std::function<Outcome(std::span<const std::uint8_t>)
     {"probe/intents", run<probe::decode_intents, probe::text_intents, probe::encode_intents>},
 };
 
-// The vector files name errors by their codec::Error enumerator.
 const std::map<std::string, Error> error_names{
     {"truncated", Error::truncated},       {"trailing", Error::trailing},
     {"unknown_message", Error::unknown_message}, {"over_bound", Error::over_bound},

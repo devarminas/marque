@@ -289,9 +289,7 @@ std::expected<Input, codec::Error> Input::build(InputFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Input v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Input>(std::move(f));
 }
 
 std::string to_text(const Input& v) {
@@ -304,9 +302,7 @@ std::expected<Pose, codec::Error> Pose::build(PoseFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Pose v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Pose>(std::move(f));
 }
 
 std::string to_text(const Pose& v) {
@@ -319,9 +315,7 @@ std::expected<Hp, codec::Error> Hp::build(HpFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Hp v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Hp>(std::move(f));
 }
 
 std::string to_text(const Hp& v) {
@@ -334,9 +328,7 @@ std::expected<Refused, codec::Error> Refused::build(RefusedFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    Refused v;
-    v.f_ = std::move(f);
-    return v;
+    return detail::Access::make<Refused>(std::move(f));
 }
 
 std::string to_text(const Refused& v) {

@@ -92,8 +92,7 @@ type Term struct {
 	Lo, Hi           string
 	CheckLo, CheckHi bool
 	LoStep, HiStep   uint64
-	// TermSet: the allowed members.
-	Members []EnumMember
+	Members          []EnumMember
 	// TermUnique: nil compares whole elements, otherwise this field of each
 	// struct element.
 	By *Field
@@ -135,7 +134,6 @@ type Operand struct {
 
 func (o Operand) Each() bool { return o.Field.Type.Kind == KindList }
 
-// Leaf is the type the relation compares.
 func (o Operand) Leaf() Type {
 	switch {
 	case o.Sub != nil:
@@ -218,11 +216,11 @@ func (t Type) Canonical() string {
 	}
 }
 
-func (t Type) isInt() bool { return t.Kind == KindPrim && t.Prim != "bool" && t.Prim != "f32" }
-
 // ordered types take < and <=; the generated code compares quants by their
 // wire integer.
-func (t Type) ordered() bool { return t.isInt() || t.Kind == KindQuant }
+func (t Type) ordered() bool {
+	return t.Kind == KindQuant || t.Kind == KindPrim && t.Prim != "bool" && t.Prim != "f32"
+}
 
 // comparable types take ==, !=, in, and unique. f32 never takes part in a rule,
 // because float equality is a trap.
@@ -662,7 +660,6 @@ func (p *parser) fields() ([]Field, []Relation, error) {
 	return out, rels, nil
 }
 
-// where parses `<term> [and <term>]...` for a field of type t.
 func (p *parser) where(t Type, toks []string) ([]Term, error) {
 	var terms []Term
 	seen := map[TermKind]bool{}
@@ -796,7 +793,6 @@ func findField(fs []Field, name string) *Field {
 	return nil
 }
 
-// intLimits are each integer type's own range.
 var intLimits = map[string][2]*big.Int{
 	"u8": {big.NewInt(0), big.NewInt(math.MaxUint8)}, "u16": {big.NewInt(0), big.NewInt(math.MaxUint16)},
 	"u32": {big.NewInt(0), big.NewInt(math.MaxUint32)}, "u64": {big.NewInt(0), new(big.Int).SetUint64(math.MaxUint64)},

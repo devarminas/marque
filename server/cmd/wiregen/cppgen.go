@@ -435,7 +435,7 @@ namespace {
 	}
 	b.WriteString("}\n\n")
 	for _, r := range records {
-		fmt.Fprintf(&b, "std::expected<%[1]s, codec::Error> %[1]s::build(%[1]sFields f) {\n    codec::Writer w;\n    write(w, f);\n    if (auto err = w.error()) return std::unexpected(*err);\n    %[1]s v;\n    v.f_ = std::move(f);\n    return v;\n}\n\n", r.name)
+		fmt.Fprintf(&b, "std::expected<%[1]s, codec::Error> %[1]s::build(%[1]sFields f) {\n    codec::Writer w;\n    write(w, f);\n    if (auto err = w.error()) return std::unexpected(*err);\n    return detail::Access::make<%[1]s>(std::move(f));\n}\n\n", r.name)
 		fmt.Fprintf(&b, "std::string to_text(const %s& v) {\n    std::string out;\n    text(out, v);\n    return out;\n}\n\n", r.name)
 	}
 	for _, m := range s.Messages {

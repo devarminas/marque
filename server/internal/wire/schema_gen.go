@@ -215,7 +215,7 @@ func decodeRefuseReason(r *codec.Reader) RefuseReason {
 	return v
 }
 
-// InputFields holds the fields of a Input. Build validates them.
+// InputFields is what a caller fills. Build validates it into a Input.
 type InputFields struct {
 	Dx   float64
 	Dz   float64
@@ -290,7 +290,7 @@ func (v Input) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// PoseFields holds the fields of a Pose. Build validates them.
+// PoseFields is what a caller fills. Build validates it into a Pose.
 type PoseFields struct {
 	Id PlayerId
 	X  float64
@@ -365,7 +365,7 @@ func (v Pose) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// HpFields holds the fields of a Hp. Build validates them.
+// HpFields is what a caller fills. Build validates it into a Hp.
 type HpFields struct {
 	Id    PlayerId
 	Hp    uint32
@@ -433,7 +433,7 @@ func (v Hp) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-// RefusedFields holds the fields of a Refused. Build validates them.
+// RefusedFields is what a caller fills. Build validates it into a Refused.
 type RefusedFields struct {
 	Tick   uint32
 	Seq    uint32

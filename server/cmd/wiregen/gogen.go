@@ -90,7 +90,6 @@ func goDecodeField(f Field) string {
 		f.Type.Bound, f.Type.Elem.MinSize(), dst, goType(f.Type), dst, dst, goDecode(*f.Type.Elem))
 }
 
-// goText returns statements that append the text form of expr to b.
 func goText(t Type, expr string) string {
 	switch t.Kind {
 	case KindPrim:
@@ -217,7 +216,7 @@ func goRelation(x string, r Relation) string {
 // Decoding and <Name>Fields.Build are the only ways to fill a <Name>, so a
 // non-zero <Name> is valid and nothing can change it afterwards.
 func goRecord(b *strings.Builder, name, textName string, fields []Field, rules []Relation) {
-	fmt.Fprintf(b, "// %[1]sFields holds the fields of a %[1]s. Build validates them.\ntype %[1]sFields struct {\n", name)
+	fmt.Fprintf(b, "// %[1]sFields is what a caller fills. Build validates it into a %[1]s.\ntype %[1]sFields struct {\n", name)
 	for _, f := range fields {
 		fmt.Fprintf(b, "%s %s\n", goName(f.Name), goType(f.Type))
 	}
