@@ -1,6 +1,6 @@
 # A server and a live client exchange state, events, input and intents for
 # three ticks. The client's datagrams are recorded as the recv lines.
-endpoint server 0123456789abcdef 4800 1024 200000 0
+endpoint server 0123456789abcdef 4800 1024 262144 200000 plain 0 0 0 0
 send 010203
 flush 40000 1 10111213
 > datagram 4d525131efcdab89674523010000ffff000000000101000000010004101112130201000000000103010203

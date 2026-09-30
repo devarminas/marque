@@ -38,17 +38,25 @@ func mustEndpoint(role Role, cfg Config, now uint64) *Endpoint {
 func vectorScenarios() map[string]string {
 	out := map[string]string{}
 	for name, f := range map[string]func() *script{
-		"client_basic":     clientBasic,
-		"server_basic":     serverBasic,
-		"fragmentation":    fragmentation,
-		"resend":           resend,
-		"budget":           budget,
-		"stale":            stale,
-		"sequence_wrap":    sequenceWrap,
-		"malformed":        malformed,
-		"hostile_reliable": hostileReliable,
-		"slow_client":      slowClient,
-		"timeout":          timeout,
+		"client_basic":       clientBasic,
+		"server_basic":       serverBasic,
+		"fragmentation":      fragmentation,
+		"resend":             resend,
+		"budget":             budget,
+		"stale":              stale,
+		"sequence_wrap":      sequenceWrap,
+		"malformed":          malformed,
+		"hostile_reliable":   hostileReliable,
+		"slow_client":        slowClient,
+		"timeout":            timeout,
+		"backlog_bytes":      backlogBytes,
+		"id_wrap_send":       idWrapSend,
+		"id_wrap_recv":       idWrapRecv,
+		"window_messages":    windowMessages,
+		"window_bytes_send":  windowBytesSend,
+		"window_bytes_recv":  windowBytesRecv,
+		"sequence_wrap_send": sequenceWrapSend,
+		"sealed":             sealedScenario,
 	} {
 		out[name] = f().text()
 	}
@@ -232,5 +240,105 @@ func timeout() *script {
 	s.flush(5_999_999, Unreliable{})
 	s.flush(6_000_000, Unreliable{})
 	s.send([]byte{0x05})
+	return s
+}
+
+func backlogBytes() *script {
+	cfg := testConfig()
+	cfg.BacklogBytes = 4
+	s := newScript("With BacklogBytes 4, two 2-byte events fill the backlog exactly and a third\nbyte closes the connection as slow_client.", Server, cfg, 0)
+	s.send([]byte{0x04, 0x01})
+	s.send([]byte{0x04, 0x02})
+	s.flush(40_000, Unreliable{})
+	s.send([]byte{0x04})
+	s.flush(80_000, Unreliable{})
+	s.send([]byte{0x04, 0x03})
+	return s
+}
+
+func idWrapSend() *script {
+	s := newScriptAt("A server whose next message id is 65534 numbers three events 65534, 65535\nand 0. One ack removes all three, the next event is id 1, and none of the\nacked events is sent again.", Server, testConfig(), start{sendID: 65534}, 0)
+	s.send([]byte{0x04, 0x01})
+	s.send([]byte{0x04, 0x02})
+	s.send([]byte{0x04, 0x03})
+	s.flush(40_000, Unreliable{})
+	s.recv(60_000, raw(Client, 0, AckWindow{Latest: 0}, nil))
+	s.send([]byte{0x04, 0x04})
+	s.flush(80_000, Unreliable{})
+	s.flush(240_000, Unreliable{})
+	return s
+}
+
+func idWrapRecv() *script {
+	s := newScriptAt("A client whose next expected message id is 65534 buffers ids 0 and 65535,\ndelivers 65534, 65535 and 0 in order once 65534 arrives, then ignores\nrepeats of 65535 and 0, which are behind next (reassembly rule 1).", Client, testConfig(), start{recvID: 65534}, 0)
+	one := func(id uint16, b byte) entry { return entry{id: id, index: 0, count: 1, data: []byte{0x04, b}} }
+	s.recv(10_000, raw(Server, 0, NoAcks, nil, one(0, 0x00), one(65535, 0xff)))
+	s.recv(20_000, raw(Server, 1, NoAcks, nil, one(65534, 0xfe)))
+	s.recv(30_000, raw(Server, 2, NoAcks, nil, one(65535, 0xee), one(0, 0xee), one(1, 0x01)))
+	return s
+}
+
+func windowMessages() *script {
+	s := newScript("A server with 257 unacked events sends ids 0 to 255 and holds id 256\noutside the 256-message window until the first event is acked.", Server, testConfig(), 0)
+	for i := 0; i <= WindowMessages; i++ {
+		s.send([]byte{byte(i)})
+	}
+	s.flush(40_000, Unreliable{})
+	s.recv(60_000, raw(Client, 0, AckWindow{Latest: 1, Bits: 1}, nil))
+	s.flush(80_000, Unreliable{})
+	return s
+}
+
+func windowBytesSend() *script {
+	cfg := testConfig()
+	cfg.TickBudget = 80_000
+	s := newScript("A server queues a 65536-byte event and a 1-byte event under an 80000-byte\nbudget. The first fills the 65536-byte window, so the second waits until the\nfirst is acked.", Server, cfg, 0)
+	s.send(fill(MaxMessage, 0))
+	s.send([]byte{0x04, 0x02})
+	s.flush(40_000, Unreliable{})
+	s.recv(60_000, raw(Client, 0, AckWindow{Latest: 31, Bits: 0xffffffff}, nil))
+	s.recv(60_001, raw(Client, 1, AckWindow{Latest: 63, Bits: 0xffffffff}, nil))
+	s.flush(80_000, Unreliable{})
+	return s
+}
+
+func windowBytesRecv() *script {
+	s := newScript("A client buffers 63 fragments of message 2 (64512 bytes) while message 0 is\nmissing. A datagram then carries all 1024 bytes of message 0, which fills\nthe 65536-byte buffer exactly and is kept, and a 1-byte message 1, which\nwould pass it and is ignored (reassembly rule 4). Message 0 is delivered;\nmessage 1 is delivered when it comes again.", Client, testConfig(), 0)
+	for i := uint16(0); i < MaxFragments-1; i++ {
+		s.recv(uint64(1000+i), raw(Server, i, NoAcks, nil, entry{id: 2, index: uint8(i), count: MaxFragments, data: fill(FragmentSize, byte(i))}))
+	}
+	s.recv(100_000, raw(Server, 63, NoAcks, nil,
+		entry{id: 0, index: 0, count: 1, data: fill(FragmentSize, 0x80)},
+		entry{id: 1, index: 0, count: 1, data: []byte{0x01}}))
+	s.recv(110_000, raw(Server, 64, NoAcks, nil, entry{id: 1, index: 0, count: 1, data: []byte{0x01}}))
+	return s
+}
+
+func sequenceWrapSend() *script {
+	s := newScriptAt("A server whose next sequence is 65534 sends 65534, 65535, 0 and 1. An ack of\n0xffff with bits 0 means nothing received, so the event in 65535 is resent\nin 0; the ack of 0 with bit 0 set acks both across the wrap, and the event\nis not sent again.", Server, testConfig(), start{seq: 65534}, 0)
+	s.flush(100_000, Unreliable{})
+	s.send([]byte{0x04, 0x01})
+	s.flush(140_000, Unreliable{})
+	s.recv(160_000, raw(Client, 0, NoAcks, nil))
+	s.flush(340_000, Unreliable{})
+	s.recv(360_000, raw(Client, 1, AckWindow{Latest: 0, Bits: 1}, nil))
+	s.flush(540_000, Unreliable{})
+	return s
+}
+
+func sealedScenario() *script {
+	cfg := testConfig()
+	cfg.Seal = testSeal{}
+	s := newScript("A server with the test seal (overhead 4). Its keepalive is 24 bytes. A\nsealed client datagram delivers; the same datagram with one tag byte changed,\nand a 20-byte unsealed keepalive, are malformed.", Server, cfg, 0)
+	s.flush(100_000, Unreliable{})
+	s.send([]byte{0x04, 0x01})
+	s.flush(140_000, Unreliable{Stamp: 1, Items: [][]byte{{0x02, 0x01}}})
+	good := sealed(raw(Client, 0, AckWindow{Latest: 1, Bits: 1}, &Unreliable{Stamp: 1, Items: [][]byte{{0x01}}}, entry{id: 0, index: 0, count: 1, data: []byte{0x05, 0x01}}))
+	bad := bytes.Clone(good)
+	bad[len(bad)-1] ^= 0x01
+	s.recv(150_000, bad)
+	s.recv(150_001, raw(Client, 0, NoAcks, nil))
+	s.recv(150_002, good)
+	s.flush(240_000, Unreliable{})
 	return s
 }

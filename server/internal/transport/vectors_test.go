@@ -25,12 +25,22 @@ type script struct {
 	lines []string
 }
 
+type start struct{ seq, sendID, recvID uint16 }
+
 func newScript(desc string, role Role, cfg Config, now uint64) *script {
+	return newScriptAt(desc, role, cfg, start{}, now)
+}
+
+func newScriptAt(desc string, role Role, cfg Config, st start, now uint64) *script {
 	s := &script{}
 	for _, l := range strings.Split(desc, "\n") {
 		s.lines = append(s.lines, "# "+l)
 	}
-	s.exec(fmt.Sprintf("endpoint %s %016x %d %d %d %d", role, cfg.SchemaHash, cfg.TickBudget, cfg.BacklogLimit, cfg.ResendAfter, now))
+	seal := "plain"
+	if _, ok := cfg.Seal.(testSeal); ok {
+		seal = "test"
+	}
+	s.exec(fmt.Sprintf("endpoint %s %016x %d %d %d %d %s %d %d %d %d", role, cfg.SchemaHash, cfg.TickBudget, cfg.BacklogLimit, cfg.BacklogBytes, cfg.ResendAfter, seal, st.seq, st.sendID, st.recvID, now))
 	return s
 }
 
@@ -124,11 +134,19 @@ func runOp(ep **Endpoint, line string) ([]string, error) {
 			return nil, err
 		}
 		cfg := DefaultConfig(hash)
-		cfg.TickBudget, cfg.BacklogLimit, cfg.ResendAfter = int(num(3)), int(num(4)), num(5)
-		e, err := NewEndpoint(role, cfg, num(6))
+		cfg.TickBudget, cfg.BacklogLimit, cfg.BacklogBytes, cfg.ResendAfter = int(num(3)), int(num(4)), int(num(5)), num(6)
+		switch f[7] {
+		case "plain":
+		case "test":
+			cfg.Seal = testSeal{}
+		default:
+			return nil, fmt.Errorf("unknown seal %q", f[7])
+		}
+		e, err := NewEndpoint(role, cfg, num(11))
 		if err != nil {
 			return nil, err
 		}
+		e.tx.nextSeq, e.tx.front, e.rx.next = uint16(num(8)), num(9), uint16(num(10))
 		*ep = e
 	case "send":
 		if err := (*ep).Send(unhex(f[1])); err != nil {

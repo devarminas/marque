@@ -2,7 +2,7 @@
 # sequence more than 32 behind the newest is too old; exactly 32 behind is
 # accepted. The flush shows the ack window: latest 1, bits 0x80000007 for 0,
 # 65535, 65534, and 65505.
-endpoint client 0123456789abcdef 4800 1024 200000 0
+endpoint client 0123456789abcdef 4800 1024 262144 200000 plain 0 0 0 0
 recv 10000 4d525131efcdab8967452301feffffff00000000010100000001000102
 > unreliable 1 02
 recv 20000 4d525131efcdab8967452301ffffffff00000000010200000001000102

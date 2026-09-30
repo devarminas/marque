@@ -255,12 +255,16 @@ A runner runs each op, collects its outputs in order, and compares them with the
 
 | Op | Action | Outputs, in order |
 |---|---|---|
-| `endpoint <role> <hash> <budget> <backlog> <resend> <now>` | Create the connection. `role` is `server` or `client`. `hash` is 16 hex digits. The seal is the identity. | none |
+| `endpoint <role> <hash> <budget> <backlog> <backlog_bytes> <resend> <seal> <seq> <send_id> <recv_id> <now>` | Create the connection at `now`. `role` is `server` or `client`. `hash` is 16 hex digits. `budget`, `backlog`, `backlog_bytes` and `resend` are `TickBudget`, `BacklogLimit`, `BacklogBytes` and `ResendAfter`. `seal` is `plain` (the identity) or `test` (below). `seq` is the sequence of the first datagram sent, `send_id` the id of the first message sent, and `recv_id` the receiver's starting `next`. | none |
 | `send <hex>` | `send` one reliable message. | `error <name>` if refused |
 | `flush <now>` or `flush <now> <stamp> <hex>...` | `flush`, with the unreliable items if given. | `error item` if refused, and nothing else; otherwise `datagram <hex>` per datagram, `unreliable_sent <n>` if items were given (0 when closed), and `state <timed_out\|slow_client>` if closed |
 | `recv <now> <hex>` | Receive one datagram. | `error <name>` if refused, and nothing else; otherwise `stale` if the section was stale, `unreliable <stamp> <hex>...` if one was delivered, then `reliable <hex>` per delivered message |
 
 The error names are `malformed`, `foreign`, `duplicate`, `too_old`, `closed`, `message`, and `item`.
+
+A real connection starts with `seq`, `send_id` and `recv_id` all 0. The vectors start them elsewhere to reach the 65535 to 0 wraps in a few lines. An implementation needs a way to set them for its vector runner only.
+
+The `test` seal exists only for the vectors. Its overhead is 4. `seal(header, body)` is every body byte XORed with `0xa5`, then a `u32` tag: the sum of every header byte and every body byte, mod 2^32. `open(header, sealed)` fails when `sealed` is shorter than 4 bytes or the tag differs from that sum over the header and the un-XORed body.
 
 The files are:
 
@@ -277,6 +281,14 @@ The files are:
 | `hostile_reliable.vec` | The ignore rules of reassembly. |
 | `slow_client.vec` | The backlog limit and the closed state. |
 | `timeout.vec` | Keepalive timing and the timeout edge. |
+| `backlog_bytes.vec` | The `BacklogBytes` limit: exactly full is open, one byte more is `slow_client`. |
+| `id_wrap_send.vec` | A sender numbering messages 65534, 65535, 0, 1, and acks across the wrap. |
+| `id_wrap_recv.vec` | Reassembly across ids 65535 to 0, and rule 1 for ids just behind `next`. |
+| `window_messages.vec` | The sender holding message 256 outside the 256-message window. |
+| `window_bytes_send.vec` | The sender holding a message outside the 65536-byte window. |
+| `window_bytes_recv.vec` | Reassembly rule 4: a fragment that fills the buffer exactly is kept, one past it is ignored. |
+| `sequence_wrap_send.vec` | A sender's sequence wrapping 65535 to 0, the ring across the wrap, and ack `0xffff` with bits 0 taken as no ack. |
+| `sealed.vec` | The `test` seal: a 24-byte keepalive, a sealed datagram both ways, a changed tag and an unsealed datagram refused. |
 
 ## Local parameters
 

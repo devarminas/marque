@@ -1,6 +1,6 @@
 # A client delivers a state section only when its stamp is newer than every
 # stamp delivered before. Events in a stale datagram are still delivered.
-endpoint client 0123456789abcdef 4800 1024 200000 0
+endpoint client 0123456789abcdef 4800 1024 262144 200000 plain 0 0 0 0
 recv 10000 4d525131efcdab89674523010000ffff0000000001050000000100020205
 > unreliable 5 0205
 recv 20000 4d525131efcdab89674523010100ffff0000000001030000000100020203020100000000010104

@@ -1,0 +1,12 @@
+# With BacklogBytes 4, two 2-byte events fill the backlog exactly and a third
+# byte closes the connection as slow_client.
+endpoint server 0123456789abcdef 4800 1024 4 200000 plain 0 0 0 0
+send 0401
+send 0402
+flush 40000
+> datagram 4d525131efcdab89674523010000ffff000000000202000000000102040101000001020402
+send 04
+flush 80000
+> state slow_client
+send 0403
+> error closed

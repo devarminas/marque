@@ -1,0 +1,16 @@
+# A server whose next sequence is 65534 sends 65534, 65535, 0 and 1. An ack of
+# 0xffff with bits 0 means nothing received, so the event in 65535 is resent
+# in 0; the ack of 0 with bit 0 set acks both across the wrap, and the event
+# is not sent again.
+endpoint server 0123456789abcdef 4800 1024 262144 200000 plain 65534 0 0 0
+flush 100000
+> datagram 4d525131efcdab8967452301feffffff00000000
+send 0401
+flush 140000
+> datagram 4d525131efcdab8967452301ffffffff0000000002010000000001020401
+recv 160000 4d525131efcdab89674523010000ffff00000000
+flush 340000
+> datagram 4d525131efcdab8967452301000000000000000002010000000001020401
+recv 360000 4d525131efcdab89674523010100000001000000
+flush 540000
+> datagram 4d525131efcdab89674523010100010001000000

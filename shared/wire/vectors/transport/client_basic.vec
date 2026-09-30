@@ -1,6 +1,6 @@
 # A client receives state and one event, answers with input and an intent,
 # then goes idle until a keepalive is due.
-endpoint client 0123456789abcdef 4800 1024 200000 0
+endpoint client 0123456789abcdef 4800 1024 262144 200000 plain 0 0 0 0
 recv 30000 4d525131efcdab89674523010000ffff000000000101000000020002020103030102020100000000010404070906
 > unreliable 1 0201 030102
 > reliable 04070906

@@ -1,0 +1,19 @@
+# A server with the test seal (overhead 4). Its keepalive is 24 bytes. A
+# sealed client datagram delivers; the same datagram with one tag byte changed,
+# and a 20-byte unsealed keepalive, are malformed.
+endpoint server 0123456789abcdef 4800 1024 262144 200000 test 0 0 0 0
+flush 100000
+> datagram 4d525131efcdab89674523010000ffff00000000df060000
+send 0401
+flush 140000 1 0201
+> datagram 4d525131efcdab89674523010100ffff00000000a4a4a5a5a5a4a5a7a7a4a7a4a5a5a5a5a4a7a1a4f3060000
+> unreliable_sent 1
+recv 150000 4d525131efcdab89674523010000010001000000a6a4a5a5a5a4a5a4a4a1a4a5a5a5a5a4a7a0a4f8040001
+> error malformed
+recv 150001 4d525131efcdab89674523010000ffff00000000
+> error malformed
+recv 150002 4d525131efcdab89674523010000010001000000a6a4a5a5a5a4a5a4a4a1a4a5a5a5a5a4a7a0a4f8040000
+> unreliable 1 01
+> reliable 0501
+flush 240000
+> datagram 4d525131efcdab89674523010200000000000000e3040000

@@ -1,7 +1,7 @@
 # A server's event is lost. It is due again ResendAfter after it was sent,
 # goes out in a new packet, and once that packet is acked it is never sent
 # again.
-endpoint server 0123456789abcdef 4800 1024 200000 0
+endpoint server 0123456789abcdef 4800 1024 262144 200000 plain 0 0 0 0
 send 04010203
 flush 40000
 > datagram 4d525131efcdab89674523010000ffff00000000020100000000010404010203
