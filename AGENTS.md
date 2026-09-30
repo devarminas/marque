@@ -43,14 +43,14 @@ running the game. Script-built trees are none of those.
 ## Testing
 
 ```bash
-scripts/native_test.sh                             # builds the marque GDExtension into client/bin
-godot --headless --path client --import            # once per fresh checkout
+scripts/native_test.sh
+godot --headless --path client --import
 godot --headless --path client --script res://tests/run_tests.gd
 ```
 
-- The client loads the C++ core as a GDExtension. Build it before running Godot; the `gdext` suite fails without it.
+- The client loads the C++ core as a GDExtension. `scripts/native_test.sh` builds it into `client/bin`. Build it before running Godot; the `gdext` suite fails without it.
+- The `--import` step is needed once per fresh checkout, so imported assets exist before the tests load them.
 - The native build also lists the extension in `client/.godot/extension_list.cfg`, so Godot loads it at startup. Without that entry, Godot 4.7 can segfault when a headless import exits (godotengine/godot#111645). After deleting `client/.godot`, rerun `scripts/native_test.sh` before opening Godot.
-
 - No rendering server. Logic, physics, signals, resources all run.
 - `print()` → stdout. `quit(1)` → exit code. `--quit-after N` bounds runaway loops.
 - Anything visual (shaders, viewport textures) does not work headless.
