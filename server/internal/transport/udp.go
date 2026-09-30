@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/devarminas/marque/server/internal/wire"
@@ -33,6 +34,25 @@ type Reader struct {
 	cfg   Config
 	clock func() uint64
 	peers map[netip.AddrPort]*Receiver
+
+	mu     sync.Mutex
+	forget []netip.AddrPort
+}
+
+func (rd *Reader) Forget(peer netip.AddrPort) {
+	rd.mu.Lock()
+	rd.forget = append(rd.forget, peer)
+	rd.mu.Unlock()
+}
+
+func (rd *Reader) drainForget() {
+	rd.mu.Lock()
+	gone := rd.forget
+	rd.forget = nil
+	rd.mu.Unlock()
+	for _, p := range gone {
+		delete(rd.peers, p)
+	}
 }
 
 func NewReader(conn *net.UDPConn, cfg Config, clock func() uint64, peers ...netip.AddrPort) (*Reader, error) {
@@ -60,6 +80,7 @@ func (rd *Reader) Run(out chan<- Inbound) error {
 		if err != nil {
 			return err
 		}
+		rd.drainForget()
 		rx := rd.peers[from]
 		if rx == nil {
 			continue

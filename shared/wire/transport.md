@@ -241,6 +241,7 @@ The server splits each connection into two halves that share no memory (ADR 0018
 
 - The socket reader goroutine owns the receive half, `Receiver`: the sequence window, the staleness rule, and reassembly. It decodes each delivered `input` item and `intents` message with the channel's schema decoder and sends one `Inbound` value per accepted datagram over a channel. A decode failure is a fault. The reader forgets the peer and the tick loop drops it.
 - The tick loop owns the send half, `Sender`. It calls `Observe(peer_ack, own_ack, at)` with each `Inbound`, `Send` for events, and `Flush` once per tick.
+- When the tick loop drops a connection (`timed_out`, `slow_client`, or a fault), it calls `Reader.Forget(peer)`. That appends the peer to a list the reader drains before it handles its next datagram, so the reader goroutine stays the only one that touches its peer map, and the tick loop never blocks on it. Datagrams the reader accepted before the drain may still arrive as `Inbound` for a peer the tick loop no longer has; the tick loop discards them.
 
 The client core may keep both halves in one object (`Endpoint`).
 

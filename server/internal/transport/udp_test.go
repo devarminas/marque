@@ -149,3 +149,44 @@ func TestReaderCannotReachGameState(t *testing.T) {
 		t.Fatalf("DecodeInput gave %T, %v; want a struct value", m, err)
 	}
 }
+
+func TestReaderForgetsPeerTheTickLoopDropped(t *testing.T) {
+	srv, cli := listen(t), listen(t)
+	defer cli.Close()
+	srvAddr := srv.LocalAddr().(*net.UDPAddr).AddrPort()
+	cliAddr := cli.LocalAddr().(*net.UDPAddr).AddrPort()
+	cfg := DefaultConfig(wire.SchemaHash)
+	rd, err := NewReader(srv, cfg, MonotonicClock(), cliAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inbound := make(chan Inbound, 4)
+	done := make(chan error)
+	go func() { done <- rd.Run(inbound) }()
+
+	ep, err := NewEndpoint(Client, cfg, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flushTo := func(now uint64) {
+		for _, d := range must(ep.Flush(now, Unreliable{})).Datagrams {
+			if _, err := cli.WriteToUDPAddrPort(d, srvAddr); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	flushTo(KeepaliveAfter)
+	if in := next(t, inbound); in.From != cliAddr || in.PeerAck != NoAcks {
+		t.Fatalf("got %+v, want a keepalive from %v", in, cliAddr)
+	}
+	rd.Forget(cliAddr)
+	flushTo(2 * KeepaliveAfter)
+	time.Sleep(50 * time.Millisecond)
+	srv.Close()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if in, ok := <-inbound; ok {
+		t.Fatalf("forgotten peer still delivered %+v", in)
+	}
+}
