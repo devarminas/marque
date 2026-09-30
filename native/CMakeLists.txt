@@ -30,9 +30,6 @@ foreach(test_source ${MARQUE_CORE_TEST_SOURCES})
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
 
-# marque_gdext: the GDExtension binding Godot loads from client/bin. godot-cpp
-# is pinned by commit hash; it bundles the 4.7 extension API, matching
-# compatibility_minimum in client/bin/marque.gdextension.
 include(FetchContent)
 set(GODOTCPP_API_VERSION "4.7" CACHE STRING "")
 FetchContent_Declare(godot-cpp

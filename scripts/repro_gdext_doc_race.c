@@ -1,14 +1,3 @@
-// LD_PRELOAD shim for scripts/repro_gdext_first_import.sh.
-//
-// The editor loads its doc cache on a worker thread at startup, and again when
-// an extension missing from .godot/extension_list.cfg is loaded mid-scan. The
-// worker then defers EditorHelp::_gen_extensions_docs to the main thread. If
-// the worker finishes after the main loop's last flush, Main::cleanup runs
-// that call after ~EditorNode freed the docs (godotengine/godot#111645).
-//
-// Whether the worker loses that race depends on how long the rest of the
-// import takes. This shim makes it lose every time: it holds the second doc
-// cache load until the main thread joins the worker during editor teardown.
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <pthread.h>

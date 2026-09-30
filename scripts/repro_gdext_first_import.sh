@@ -1,22 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# ARM-348 repro: clone the repo fresh, build the native tree (which builds the
-# marque GDExtension into client/bin), then run Godot's first import of the
-# client. Exit code is the import's exit code; 134 is the SIGABRT Godot raises
-# after the crash handler.
-#
-# The import runs under scripts/repro_gdext_doc_race.c, which makes the
-# editor's doc-generation race lose every time instead of only when the rest
-# of the import is short. The shim holds the second doc cache load, so the
-# script first warms the editor doc cache when this machine has none. Set
-# REPRO_NO_RACE_SHIM=1 to import without the shim.
-#
-#   scripts/repro_gdext_first_import.sh [rev] [repo]
-#
-# rev defaults to HEAD, repo to this checkout. Pass a URL and branch to test a
-# pushed branch.
-
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 rev="${1:-HEAD}"
 repo="${2:-$repo_root}"
