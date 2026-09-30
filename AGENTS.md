@@ -53,6 +53,7 @@ godot --headless --path client --script res://tests/run_tests.gd
 - Behavioural client/server claims: `.cursor/skills/verify-marque/SKILL.md`.
 - Server: from `server/`, with a C toolchain on PATH, `CGO_ENABLED=1 go test -race ./...`.
 - Native C++: `scripts/native_test.sh` configures, builds, and runs the `native/` ctest suite; its exit code is the verdict.
+- Wire schema (`shared/wire/`): regenerate with `scripts/wiregen.sh`; `scripts/wiregen_check.sh` fails when committed generated code is stale.
 
 ## Pull requests
 
