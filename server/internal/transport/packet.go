@@ -41,6 +41,7 @@ var (
 	ErrTooOld    = errors.New("transport: packet older than the ack window")
 	ErrClosed    = errors.New("transport: connection closed")
 	ErrMessage   = errors.New("transport: reliable message empty or over MaxMessage")
+	ErrItem      = errors.New("transport: unreliable item empty or too large for one datagram")
 )
 
 // Role fixes which channels a side sends and receives. A server sends state

@@ -82,6 +82,7 @@ var errNames = []struct {
 	{ErrTooOld, "too_old"},
 	{ErrClosed, "closed"},
 	{ErrMessage, "message"},
+	{ErrItem, "item"},
 }
 
 func errName(err error) string {
@@ -141,7 +142,11 @@ func runOp(ep **Endpoint, line string) ([]string, error) {
 				u.Items = append(u.Items, unhex(h))
 			}
 		}
-		r := (*ep).Flush(num(1), u)
+		r, err := (*ep).Flush(num(1), u)
+		if err != nil {
+			out = append(out, "error "+errName(err))
+			break
+		}
 		for _, d := range r.Datagrams {
 			out = append(out, "datagram "+hex.EncodeToString(d))
 		}

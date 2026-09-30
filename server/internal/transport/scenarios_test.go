@@ -18,6 +18,13 @@ func fill(n int, seed byte) []byte {
 	return b
 }
 
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
 func testConfig() Config { return DefaultConfig(testHash) }
 
 func mustEndpoint(role Role, cfg Config, now uint64) *Endpoint {
@@ -72,7 +79,7 @@ func serverBasic() *script {
 			cli.Receive(d, now+10_000)
 		}
 		cli.Send(fill(2, byte(n*32)))
-		for _, d := range cli.Flush(now+10_000, Unreliable{Stamp: uint32(n), Items: [][]byte{fill(5, byte(n*8))}}).Datagrams {
+		for _, d := range must(cli.Flush(now+10_000, Unreliable{Stamp: uint32(n), Items: [][]byte{fill(5, byte(n*8))}})).Datagrams {
 			s.recv(now+20_000, d)
 		}
 	}
@@ -85,7 +92,7 @@ func fragmentation() *script {
 	srv.Send(fill(2500, 1))
 	srv.Send(fill(1025, 2))
 	srv.Send([]byte{0x04, 0x01, 0x02, 0x03})
-	ds := srv.Flush(tick, Unreliable{}).Datagrams
+	ds := must(srv.Flush(tick, Unreliable{})).Datagrams
 	for _, i := range []int{3, 0, 2, 0, 1} {
 		s.recv(50_000+uint64(i), ds[i])
 	}
@@ -102,7 +109,7 @@ func resend() *script {
 	s.flush(200_000, Unreliable{})
 	ds := s.flush(240_000, Unreliable{})
 	cli.Receive(ds[0], 260_000)
-	s.recv(280_000, cli.Flush(270_000, Unreliable{}).Datagrams[0])
+	s.recv(280_000, must(cli.Flush(270_000, Unreliable{})).Datagrams[0])
 	s.flush(440_000, Unreliable{})
 	s.flush(480_000, Unreliable{})
 	return s

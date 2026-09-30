@@ -65,7 +65,7 @@ func TestReaderHandsDecodedInputOverChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	write(ep.Flush(tick, Unreliable{Stamp: 7, Items: [][]byte{input}}))
+	write(must(ep.Flush(tick, Unreliable{Stamp: 7, Items: [][]byte{input}})))
 
 	in := next(t, inbound)
 	want := Inbound{From: cliAddr, At: in.At, PeerAck: NoAcks, InputStamp: 7, Input: []wire.InputMsg{wire.Input{Dx: 0.5, Dz: -1, Jump: true, Seq: 7}}}
@@ -76,11 +76,11 @@ func TestReaderHandsDecodedInputOverChannel(t *testing.T) {
 	if err := ep.Send(input); err != nil {
 		t.Fatal(err)
 	}
-	write(ep.Flush(2*tick, Unreliable{}))
+	write(must(ep.Flush(2*tick, Unreliable{})))
 	if in := next(t, inbound); !errors.Is(in.Fault, codec.ErrUnknownMessage) {
 		t.Fatalf("got fault %v, want ErrUnknownMessage", in.Fault)
 	}
-	write(ep.Flush(3*tick, Unreliable{Stamp: 8, Items: [][]byte{input}}))
+	write(must(ep.Flush(3*tick, Unreliable{Stamp: 8, Items: [][]byte{input}})))
 	time.Sleep(50 * time.Millisecond)
 	srv.Close()
 	if err := <-done; err != nil {

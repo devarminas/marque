@@ -80,7 +80,7 @@ func (s *session) step(srvU, cliU Unreliable) {
 		u Unreliable
 	}{{s.srv, srvU}, {s.cli, cliU}} {
 		x := f.x
-		for _, d := range x.ep.Flush(s.now, f.u).Datagrams {
+		for _, d := range must(x.ep.Flush(s.now, f.u)).Datagrams {
 			x.datagrams++
 			s.sim.Send(x.dir, d, s.now)
 		}
@@ -257,7 +257,7 @@ func TestSilenceKeepalivesThenTimeout(t *testing.T) {
 				for _, d := range s.sim.Poll(s.cli.dir, s.now) {
 					s.srv.ep.Receive(d.Packet, s.now)
 				}
-				if f := s.srv.ep.Flush(s.now, Unreliable{}); f.State == TimedOut {
+				if f := must(s.srv.ep.Flush(s.now, Unreliable{})); f.State == TimedOut {
 					if s.now != tc.timeoutAt {
 						t.Fatalf("timed out at %d, want %d", s.now, tc.timeoutAt)
 					}

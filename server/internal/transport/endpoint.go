@@ -33,7 +33,7 @@ func (e *Endpoint) Receive(d []byte, now uint64) (Received, error) {
 
 func (e *Endpoint) Send(msg []byte) error { return e.tx.Send(msg) }
 
-func (e *Endpoint) Flush(now uint64, u Unreliable) Flushed { return e.tx.Flush(now, u) }
+func (e *Endpoint) Flush(now uint64, u Unreliable) (Flushed, error) { return e.tx.Flush(now, u) }
 
 func (e *Endpoint) State() State { return e.tx.State() }
 

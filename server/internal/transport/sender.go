@@ -166,15 +166,20 @@ type datagram struct {
 // Flush builds this tick's datagrams at now: due reliable fragments first,
 // then as many leading items of u as the remaining budget allows, then a
 // keepalive if nothing went out and KeepaliveAfter has passed.
-func (s *Sender) Flush(now uint64, u Unreliable) Flushed {
+func (s *Sender) Flush(now uint64, u Unreliable) (Flushed, error) {
 	if s.state == Open && elapsed(now, s.lastRecv) >= TimeoutAfter {
 		s.state = TimedOut
 	}
 	if s.state != Open {
-		return Flushed{State: s.state}
+		return Flushed{State: s.state}, nil
+	}
+	empty := HeaderSize + s.cfg.Seal.Overhead()
+	for _, it := range u.Items {
+		if len(it) == 0 || empty+unreliableSectionHeader+itemSize(it) > MaxDatagram {
+			return Flushed{State: s.state}, ErrItem
+		}
 	}
 
-	empty := HeaderSize + s.cfg.Seal.Overhead()
 	left := s.cfg.TickBudget
 	var done []*datagram
 	var cur *datagram
@@ -241,7 +246,7 @@ func (s *Sender) Flush(now uint64, u Unreliable) Flushed {
 	if len(done) > 0 {
 		s.lastSend = now
 	}
-	return out
+	return out, nil
 }
 
 func (s *Sender) eachDue(now uint64, f func(id uint16, m *outMsg, index int) bool) {

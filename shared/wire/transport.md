@@ -187,13 +187,16 @@ The sender also takes the receiver's current window to put in the headers it wri
 
 ### Flush
 
-`flush(now, unreliable)` builds the datagrams for one tick. `unreliable` is a stamp and a list of items in priority order, and may be empty. The caller calls `flush` once per tick. The steps are:
+`flush(now, unreliable)` builds the datagrams for one tick. `unreliable` is a stamp and a list of items in priority order, and may be empty. The caller calls `flush` once per tick.
+
+An item is 1 to `MaxDatagram - HeaderSize - seal overhead - 7 - 2` bytes: the most that fits alone in one datagram behind the unreliable section header and a two-byte length. With the identity seal that is 1171 bytes. The steps are:
 
 1. If `now - last_receive >= TimeoutAfter`, the connection closes as `timed_out`.
-2. If the connection is closed, emit nothing and report the state.
-3. Pack due fragments, then unreliable items, under the budget (next section).
-4. If nothing was packed and `now - last_send >= KeepaliveAfter`, emit one keepalive.
-5. Give each datagram the next sequence, in packing order, and the current ack window. Record its fragments in the ring. Mark each packed fragment sent at `now`. If any datagram went out, set `last_send = now`.
+2. If the connection is closed, emit nothing, send no items, and report the state.
+3. If any item is empty or longer than the item limit, refuse the whole flush with `item`. Nothing is emitted and nothing changes, so due fragments wait for the next flush.
+4. Pack due fragments, then unreliable items, under the budget (next section).
+5. If nothing was packed and `now - last_send >= KeepaliveAfter`, emit one keepalive.
+6. Give each datagram the next sequence, in packing order, and the current ack window. Record its fragments in the ring. Mark each packed fragment sent at `now`. If any datagram went out, set `last_send = now`.
 
 A new connection starts with `last_send` and `last_receive` equal to the time it was created.
 
@@ -249,10 +252,10 @@ A runner runs each op, collects its outputs in order, and compares them with the
 |---|---|---|
 | `endpoint <role> <hash> <budget> <backlog> <resend> <now>` | Create the connection. `role` is `server` or `client`. `hash` is 16 hex digits. The seal is the identity. | none |
 | `send <hex>` | `send` one reliable message. | `error <name>` if refused |
-| `flush <now>` or `flush <now> <stamp> <hex>...` | `flush`, with the unreliable items if given. | `datagram <hex>` per datagram; `unreliable_sent <n>` if items were given; `state <timed_out\|slow_client>` if closed |
+| `flush <now>` or `flush <now> <stamp> <hex>...` | `flush`, with the unreliable items if given. | `error item` if refused, and nothing else; otherwise `datagram <hex>` per datagram, `unreliable_sent <n>` if items were given (0 when closed), and `state <timed_out\|slow_client>` if closed |
 | `recv <now> <hex>` | Receive one datagram. | `error <name>` if refused, and nothing else; otherwise `stale` if the section was stale, `unreliable <stamp> <hex>...` if one was delivered, then `reliable <hex>` per delivered message |
 
-The error names are `malformed`, `foreign`, `duplicate`, `too_old`, `closed`, and `message`.
+The error names are `malformed`, `foreign`, `duplicate`, `too_old`, `closed`, `message`, and `item`.
 
 The files are:
 
