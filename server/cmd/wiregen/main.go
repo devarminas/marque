@@ -147,9 +147,9 @@ func copyVectors(src, root string) error {
 		if err != nil {
 			return err
 		}
-		name := filepath.Base(p)
-		header := fmt.Sprintf("# Copied by wiregen from %s/%s. DO NOT EDIT.\n", vectorSrc, name)
-		files[filepath.Join(vectorCopy, name)] = append([]byte(header), body...)
+		// Byte-identical, so a test failure's line number is also the line in
+		// shared/wire/vectors.
+		files[filepath.Join(vectorCopy, filepath.Base(p))] = body
 	}
 	return writeAll(root, files)
 }
