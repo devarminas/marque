@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
-	"sync"
 	"testing"
 )
 
@@ -275,7 +274,8 @@ func TestRespondRefusesAMalformedChallenge(t *testing.T) {
 }
 
 func TestSessionSealRefusesReplaysAndOldNonces(t *testing.T) {
-	cli, srv := NewSessionSeal(Client, vectorSessionKeys()), NewSessionSeal(Server, vectorSessionKeys())
+	_, cli := NewSessionSeal(Client, vectorSessionKeys())
+	srv, _ := NewSessionSeal(Server, vectorSessionKeys())
 	hdr := seq(HeaderSize, 0x80)
 	var sealed [][]byte
 	for i := range 70 {
@@ -299,30 +299,31 @@ func TestSessionSealRefusesReplaysAndOldNonces(t *testing.T) {
 }
 
 func TestSessionSealIsDirectional(t *testing.T) {
-	cli := NewSessionSeal(Client, vectorSessionKeys())
+	cliOpen, cli := NewSessionSeal(Client, vectorSessionKeys())
+	srvOpen, _ := NewSessionSeal(Server, vectorSessionKeys())
 	hdr := seq(HeaderSize, 0x80)
 	d := cli.Seal(nil, hdr, []byte{1, 2, 3})
 	if len(d) != 3+SessionOverhead {
 		t.Fatalf("sealed body is %d bytes, want %d", len(d), 3+SessionOverhead)
 	}
-	if _, err := NewSessionSeal(Client, vectorSessionKeys()).Open(nil, hdr, d); err == nil {
+	if _, err := cliOpen.Open(nil, hdr, d); err == nil {
 		t.Fatal("a client opened its own direction")
 	}
-	if b, err := NewSessionSeal(Server, vectorSessionKeys()).Open(nil, hdr, d); err != nil || !bytes.Equal(b, []byte{1, 2, 3}) {
+	if b, err := srvOpen.Open(nil, hdr, d); err != nil || !bytes.Equal(b, []byte{1, 2, 3}) {
 		t.Fatalf("server opened %x, %v", b, err)
 	}
 }
 
 func TestTamperedSealedDatagramIsRefused(t *testing.T) {
 	cfg := testConfig()
-	cli := mustSealedEndpoint(Client, cfg, NewSessionSeal(Client, vectorSessionKeys()))
+	cli := mustSealedEndpoint(Client, cfg)
 	if err := cli.Send([]byte{0x05, 0x01}); err != nil {
 		t.Fatal(err)
 	}
 	good := must(cli.Flush(tick, Unreliable{Stamp: 1, Items: [][]byte{{0x01}}})).Datagrams[0]
 	got := map[string]int{}
 	for i := range good {
-		srv := mustSealedEndpoint(Server, cfg, NewSessionSeal(Server, vectorSessionKeys()))
+		srv := mustSealedEndpoint(Server, cfg)
 		bad := bytes.Clone(good)
 		bad[i] ^= 0x01
 		_, err := srv.Receive(bad, tick)
@@ -336,7 +337,7 @@ func TestTamperedSealedDatagramIsRefused(t *testing.T) {
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("over %d tampered bytes got %v, want %v", len(good), got, want)
 	}
-	srv := mustSealedEndpoint(Server, cfg, NewSessionSeal(Server, vectorSessionKeys()))
+	srv := mustSealedEndpoint(Server, cfg)
 	r, err := srv.Receive(good, tick)
 	if err != nil || fmt.Sprintf("%x", r.Reliable) != "[0501]" {
 		t.Fatalf("untouched datagram gave %+v, %v", r, err)
@@ -346,37 +347,9 @@ func TestTamperedSealedDatagramIsRefused(t *testing.T) {
 	}
 }
 
-func TestSessionSealSealsAndOpensConcurrently(t *testing.T) {
-	cli, srv := NewSessionSeal(Client, vectorSessionKeys()), NewSessionSeal(Server, vectorSessionKeys())
-	hdr := seq(HeaderSize, 0x80)
-	const n = 2000
-	in := make(chan []byte, n)
-	for i := range n {
-		in <- cli.Seal(nil, hdr, []byte{byte(i)})
-	}
-	close(in)
-	var wg sync.WaitGroup
-	opened := 0
-	wg.Go(func() {
-		for d := range in {
-			if _, err := srv.Open(nil, hdr, d); err == nil {
-				opened++
-			}
-		}
-	})
-	wg.Go(func() {
-		for range n {
-			srv.Seal(nil, hdr, []byte{1})
-		}
-	})
-	wg.Wait()
-	if opened != n || srv.sendNonce != n {
-		t.Fatalf("opened %d and sealed %d, want %d each", opened, srv.sendNonce, n)
-	}
-}
-
-func mustSealedEndpoint(role Role, cfg Config, seal Seal) *Endpoint {
-	e, err := NewEndpoint(role, cfg, seal, 0)
+func mustSealedEndpoint(role Role, cfg Config) *Endpoint {
+	open, seal := NewSessionSeal(role, vectorSessionKeys())
+	e, err := NewEndpoint(role, cfg, open, seal, 0)
 	if err != nil {
 		panic(err)
 	}

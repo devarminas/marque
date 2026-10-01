@@ -18,8 +18,8 @@ struct StartAt;
 
 class Endpoint {
 public:
-    static std::expected<Endpoint, ConfigError> create(Role role, const Config& cfg, std::shared_ptr<Seal> seal,
-                                                       std::uint64_t now);
+    static std::expected<Endpoint, ConfigError> create(Role role, const Config& cfg, std::shared_ptr<Opener> opener,
+                                                       std::shared_ptr<Sealer> sealer, std::uint64_t now);
 
     std::expected<Received, Error> receive(std::span<const std::uint8_t> datagram, std::uint64_t now);
 

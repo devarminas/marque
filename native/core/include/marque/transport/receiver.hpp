@@ -38,7 +38,7 @@ struct Stats {
 
 class Receiver {
 public:
-    static std::expected<Receiver, ConfigError> create(Role role, const Config& cfg, std::shared_ptr<Seal> seal);
+    static std::expected<Receiver, ConfigError> create(Role role, const Config& cfg, std::shared_ptr<Opener> opener);
 
     std::expected<Received, Error> receive(std::span<const std::uint8_t> datagram);
 
@@ -55,7 +55,7 @@ private:
         std::vector<Fragment> fragments;
     };
 
-    Receiver(Role role, const Config& cfg, std::shared_ptr<Seal> seal);
+    Receiver(Role role, const Config& cfg, std::shared_ptr<Opener> opener);
 
     void store(std::uint16_t id, std::uint8_t index, std::uint8_t count, std::span<const std::uint8_t> data);
 
@@ -63,7 +63,7 @@ private:
 
     Role from_;
     std::uint64_t hash_;
-    std::shared_ptr<Seal> seal_;
+    std::shared_ptr<Opener> opener_;
     std::optional<AckWindow> window_;
     std::optional<std::uint32_t> newest_stamp_;
     std::uint16_t next_ = 0;

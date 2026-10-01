@@ -135,18 +135,21 @@ func runOp(ep **Endpoint, line string) ([]string, error) {
 		}
 		cfg := DefaultConfig(hash)
 		cfg.TickBudget, cfg.BacklogLimit, cfg.BacklogBytes, cfg.ResendAfter = int(num(3)), int(num(4)), int(num(5)), num(6)
-		var seal Seal
+		var (
+			open Opener
+			seal Sealer
+		)
 		switch f[7] {
 		case "plain":
-			seal = Plain{}
+			open, seal = Plain{}, Plain{}
 		case "test":
-			seal = testSeal{}
+			open, seal = testSeal{}, testSeal{}
 		case "session":
-			seal = NewSessionSeal(role, vectorSessionKeys())
+			open, seal = NewSessionSeal(role, vectorSessionKeys())
 		default:
 			return nil, fmt.Errorf("unknown seal %q", f[7])
 		}
-		e, err := NewEndpoint(role, cfg, seal, num(11))
+		e, err := NewEndpoint(role, cfg, open, seal, num(11))
 		if err != nil {
 			return nil, err
 		}

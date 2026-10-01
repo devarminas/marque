@@ -76,8 +76,17 @@ func TestSendRefusesEmptyAndOversized(t *testing.T) {
 func TestConfigRefusesBudgetBelowOneDatagram(t *testing.T) {
 	cfg := testConfig()
 	cfg.TickBudget = MaxDatagram - 1
-	if _, err := NewEndpoint(Server, cfg, Plain{}, 0); err == nil {
+	if _, err := NewEndpoint(Server, cfg, Plain{}, Plain{}, 0); err == nil {
 		t.Fatal("TickBudget 1199 accepted")
+	}
+}
+
+func TestEndpointRefusesAMissingSealHalf(t *testing.T) {
+	_, noOpen := NewEndpoint(Server, testConfig(), nil, Plain{}, 0)
+	_, noSeal := NewEndpoint(Server, testConfig(), Plain{}, nil, 0)
+	got := fmt.Sprintf("%v | %v", noOpen, noSeal)
+	if want := "transport: Opener is nil | transport: Sealer is nil"; got != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
 	}
 }
 

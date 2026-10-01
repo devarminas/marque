@@ -18,12 +18,14 @@ var (
 	errOpen     = errors.New("transport: seal failed to open")
 )
 
-type SessionSeal struct {
-	send      cipher.AEAD
-	sendNonce uint64
-
-	recv   cipher.AEAD
+type SessionOpener struct {
+	aead   cipher.AEAD
 	replay replayWindow
+}
+
+type SessionSealer struct {
+	aead  cipher.AEAD
+	nonce uint64
 }
 
 type replayWindow struct {
@@ -32,24 +34,26 @@ type replayWindow struct {
 	bits   uint64
 }
 
-func NewSessionSeal(role Role, keys SessionKeys) *SessionSeal {
+func NewSessionSeal(role Role, keys SessionKeys) (*SessionOpener, *SessionSealer) {
 	send, recv := keys.ServerToClient, keys.ClientToServer
 	if role == Client {
 		send, recv = recv, send
 	}
-	return &SessionSeal{send: ietfAEAD(send), recv: ietfAEAD(recv)}
+	return &SessionOpener{aead: ietfAEAD(recv)}, &SessionSealer{aead: ietfAEAD(send)}
 }
 
-func (*SessionSeal) Overhead() int { return SessionOverhead }
+func (*SessionSealer) Overhead() int { return SessionOverhead }
 
-func (s *SessionSeal) Seal(dst, header, body []byte) []byte {
-	n := s.sendNonce
-	s.sendNonce++
+func (s *SessionSealer) Seal(dst, header, body []byte) []byte {
+	n := s.nonce
+	s.nonce++
 	dst = binary.LittleEndian.AppendUint64(dst, n)
-	return s.send.Seal(dst, sessionNonce(n), body, header)
+	return s.aead.Seal(dst, sessionNonce(n), body, header)
 }
 
-func (s *SessionSeal) Open(dst, header, sealed []byte) ([]byte, error) {
+func (*SessionOpener) Overhead() int { return SessionOverhead }
+
+func (s *SessionOpener) Open(dst, header, sealed []byte) ([]byte, error) {
 	if len(sealed) < SessionOverhead {
 		return nil, errOpen
 	}
@@ -57,7 +61,7 @@ func (s *SessionSeal) Open(dst, header, sealed []byte) ([]byte, error) {
 	if !s.replay.fresh(n) {
 		return nil, errReplayed
 	}
-	out, err := s.recv.Open(dst, sessionNonce(n), sealed[8:], header)
+	out, err := s.aead.Open(dst, sessionNonce(n), sealed[8:], header)
 	if err != nil {
 		return nil, errOpen
 	}

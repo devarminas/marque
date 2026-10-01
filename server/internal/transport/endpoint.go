@@ -5,8 +5,8 @@ type Endpoint struct {
 	tx *Sender
 }
 
-func NewEndpoint(role Role, cfg Config, seal Seal, now uint64) (*Endpoint, error) {
-	rx, err := NewReceiver(role, cfg, seal)
+func NewEndpoint(role Role, cfg Config, open Opener, seal Sealer, now uint64) (*Endpoint, error) {
+	rx, err := NewReceiver(role, cfg, open)
 	if err != nil {
 		return nil, err
 	}

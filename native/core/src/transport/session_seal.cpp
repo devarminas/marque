@@ -5,31 +5,34 @@
 
 namespace marque::transport {
 
-SessionSeal::SessionSeal(Role role, const SessionKeys& keys)
-    : send_key_(role == Role::server ? keys.server_to_client : keys.client_to_server),
-      recv_key_(role == Role::server ? keys.client_to_server : keys.server_to_client) {}
-
-void SessionSeal::seal(std::span<const std::uint8_t> header, std::span<const std::uint8_t> body,
-                       std::vector<std::uint8_t>& out) {
-    auto n = send_nonce_++;
-    format::put_u64(out, n);
-    crypto::ietf_seal(send_key_, n, body, header, out);
+SessionSeal session_seal(Role role, const SessionKeys& keys) {
+    const auto& send = role == Role::server ? keys.server_to_client : keys.client_to_server;
+    const auto& recv = role == Role::server ? keys.client_to_server : keys.server_to_client;
+    return {.opener = std::unique_ptr<SessionOpener>(new SessionOpener(recv)),
+            .sealer = std::unique_ptr<SessionSealer>(new SessionSealer(send))};
 }
 
-bool SessionSeal::open(std::span<const std::uint8_t> header, std::span<const std::uint8_t> sealed,
-                       std::vector<std::uint8_t>& out) {
+void SessionSealer::seal(std::span<const std::uint8_t> header, std::span<const std::uint8_t> body,
+                         std::vector<std::uint8_t>& out) {
+    auto n = nonce_++;
+    format::put_u64(out, n);
+    crypto::ietf_seal(key_, n, body, header, out);
+}
+
+bool SessionOpener::open(std::span<const std::uint8_t> header, std::span<const std::uint8_t> sealed,
+                         std::vector<std::uint8_t>& out) {
     if (sealed.size() < kSessionOverhead) {
         return false;
     }
     auto n = format::load_le(sealed.first(8));
-    if (!fresh(n) || !crypto::ietf_open(recv_key_, n, sealed.subspan(8), header, out)) {
+    if (!fresh(n) || !crypto::ietf_open(key_, n, sealed.subspan(8), header, out)) {
         return false;
     }
     accept(n);
     return true;
 }
 
-bool SessionSeal::fresh(std::uint64_t n) const {
+bool SessionOpener::fresh(std::uint64_t n) const {
     if (!have_ || n > newest_) {
         return true;
     }
@@ -37,7 +40,7 @@ bool SessionSeal::fresh(std::uint64_t n) const {
     return behind < kReplayWindow && (bits_ & std::uint64_t{1} << behind) == 0;
 }
 
-void SessionSeal::accept(std::uint64_t n) {
+void SessionOpener::accept(std::uint64_t n) {
     if (!have_) {
         have_ = true;
         newest_ = n;

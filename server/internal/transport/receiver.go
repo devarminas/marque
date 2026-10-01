@@ -2,6 +2,7 @@ package transport
 
 import (
 	"bytes"
+	"errors"
 	"slices"
 )
 
@@ -20,7 +21,7 @@ type Stats struct {
 type Receiver struct {
 	from   Role
 	hash   uint64
-	seal   Seal
+	open   Opener
 	window recvWindow
 
 	haveStamp bool
@@ -44,14 +45,17 @@ type inFrag struct {
 	data  []byte
 }
 
-func NewReceiver(role Role, cfg Config, seal Seal) (*Receiver, error) {
-	if err := cfg.validateWith(seal); err != nil {
+func NewReceiver(role Role, cfg Config, open Opener) (*Receiver, error) {
+	if err := cfg.validate(); err != nil {
 		return nil, err
+	}
+	if open == nil {
+		return nil, errors.New("transport: Opener is nil")
 	}
 	return &Receiver{
 		from:    role.peer(),
 		hash:    cfg.SchemaHash,
-		seal:    seal,
+		open:    open,
 		window:  recvWindow{AckWindow: NoAcks},
 		partial: map[uint16]*inMsg{},
 	}, nil
@@ -60,7 +64,7 @@ func NewReceiver(role Role, cfg Config, seal Seal) (*Receiver, error) {
 func (r *Receiver) Stats() Stats { return r.stats }
 
 func (r *Receiver) Receive(d []byte) (Received, error) {
-	if len(d) < HeaderSize+r.seal.Overhead() || len(d) > MaxDatagram {
+	if len(d) < HeaderSize+r.open.Overhead() || len(d) > MaxDatagram {
 		r.stats.Malformed++
 		return Received{}, ErrMalformed
 	}
@@ -69,7 +73,7 @@ func (r *Receiver) Receive(d []byte) (Received, error) {
 		r.stats.Foreign++
 		return Received{}, ErrForeign
 	}
-	plain, err := r.seal.Open(r.scratch[:0], d[:HeaderSize], d[HeaderSize:])
+	plain, err := r.open.Open(r.scratch[:0], d[:HeaderSize], d[HeaderSize:])
 	if err != nil {
 		r.stats.Malformed++
 		return Received{}, ErrMalformed

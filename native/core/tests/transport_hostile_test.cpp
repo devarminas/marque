@@ -40,8 +40,8 @@ std::string header(std::uint16_t seq) {
 }
 
 tr::Endpoint server() {
-    auto e = tr::Endpoint::create(tr::Role::server, tr::default_config(0x0123456789abcdef),
-                                  std::make_shared<tr::Plain>(), 0);
+    auto plain = std::make_shared<tr::Plain>();
+    auto e = tr::Endpoint::create(tr::Role::server, tr::default_config(0x0123456789abcdef), plain, plain, 0);
     if (!e) {
         std::abort();
     }
@@ -132,10 +132,12 @@ void ack_window_at_exactly_32_ahead() {
 }
 
 void config_validation() {
-    auto refuse = [](tr::Config c, std::shared_ptr<tr::Seal> seal = std::make_shared<tr::Plain>()) {
-        auto e = tr::Endpoint::create(tr::Role::client, c, std::move(seal), 0);
+    auto plain = std::make_shared<tr::Plain>();
+    auto create = [](tr::Config c, std::shared_ptr<tr::Opener> opener, std::shared_ptr<tr::Sealer> sealer) {
+        auto e = tr::Endpoint::create(tr::Role::client, c, std::move(opener), std::move(sealer), 0);
         return e ? std::string("accepted") : std::string(tr::to_string(e.error()));
     };
+    auto refuse = [&](tr::Config c) { return create(c, plain, plain); };
     auto base = tr::default_config(1);
     auto c = base;
     check(refuse(c) == "accepted", "default config is valid");
@@ -154,7 +156,8 @@ void config_validation() {
     c = base;
     c.resend_after = 0;
     check(refuse(c) == "resend_after_zero", "resend after 0 refused");
-    check(refuse(base, nullptr) == "seal_missing", "null seal refused");
+    check(create(base, nullptr, plain) == "opener_missing", "null opener refused");
+    check(create(base, plain, nullptr) == "sealer_missing", "null sealer refused");
 }
 
 }

@@ -48,15 +48,18 @@ struct Sender::Datagram {
     std::vector<FragmentRef> refs;
 };
 
-Sender::Sender(Role role, const Config& cfg, std::shared_ptr<Seal> seal, std::uint64_t now)
-    : role_(role), cfg_(cfg), seal_(std::move(seal)), last_send_(now), last_receive_(now) {}
+Sender::Sender(Role role, const Config& cfg, std::shared_ptr<Sealer> sealer, std::uint64_t now)
+    : role_(role), cfg_(cfg), sealer_(std::move(sealer)), last_send_(now), last_receive_(now) {}
 
-std::expected<Sender, ConfigError> Sender::create(Role role, const Config& cfg, std::shared_ptr<Seal> seal,
+std::expected<Sender, ConfigError> Sender::create(Role role, const Config& cfg, std::shared_ptr<Sealer> sealer,
                                                   std::uint64_t now) {
-    if (auto ok = cfg.validate(seal.get()); !ok) {
+    if (auto ok = cfg.validate(); !ok) {
         return std::unexpected(ok.error());
     }
-    return Sender(role, cfg, std::move(seal), now);
+    if (sealer == nullptr) {
+        return std::unexpected(ConfigError::sealer_missing);
+    }
+    return Sender(role, cfg, std::move(sealer), now);
 }
 
 std::expected<void, Error> Sender::send(std::span<const std::uint8_t> msg) {
@@ -125,7 +128,7 @@ std::expected<Flushed, Error> Sender::flush(std::uint64_t now, const Unreliable&
     if (state_ != State::open) {
         return Flushed{.datagrams = {}, .unreliable_sent = 0, .state = state_};
     }
-    const auto empty = static_cast<std::int64_t>(kHeaderSize + seal_->overhead());
+    const auto empty = static_cast<std::int64_t>(kHeaderSize + sealer_->overhead());
     for (const auto& item : unreliable.items) {
         if (item.empty() ||
             static_cast<std::size_t>(empty) + format::kUnreliableSectionHeader + format::item_size(item.size()) >
@@ -219,7 +222,7 @@ std::expected<Flushed, Error> Sender::flush(std::uint64_t now, const Unreliable&
         std::vector<std::uint8_t> datagram;
         datagram.reserve(kMaxDatagram);
         datagram.insert(datagram.end(), header.begin(), header.end());
-        seal_->seal(header, body, datagram);
+        sealer_->seal(header, body, datagram);
         out.datagrams.push_back(std::move(datagram));
     }
     if (!done.empty()) {

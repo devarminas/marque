@@ -89,17 +89,19 @@ void every_handshake_reply_fits_its_request() {
     check(gate.admissions() == 1, "the gate holds 1 admission after one completed handshake");
 }
 
+std::expected<tr::Endpoint, tr::ConfigError> sealed_endpoint(tr::Role role) {
+    auto [opener, sealer] = tr::session_seal(role, kKeys);
+    return tr::Endpoint::create(role, tr::default_config(kHash), std::move(opener), std::move(sealer), 0);
+}
+
 void tampered_sealed_datagram_is_refused() {
-    auto cfg = tr::default_config(kHash);
-    auto cli =
-        tr::Endpoint::create(tr::Role::client, cfg, std::make_shared<tr::SessionSeal>(tr::Role::client, kKeys), 0);
+    auto cli = sealed_endpoint(tr::Role::client);
     check(cli && cli->send(std::vector<std::uint8_t>{0x05, 0x01}).has_value(), "client queues one intent");
     auto flushed = cli->flush(100000, {.stamp = 1, .items = {{0x01}}});
     const auto good = flushed->datagrams.at(0);
     std::map<std::string, std::size_t> got;
     for (std::size_t i = 0; i < good.size(); ++i) {
-        auto srv =
-            tr::Endpoint::create(tr::Role::server, cfg, std::make_shared<tr::SessionSeal>(tr::Role::server, kKeys), 0);
+        auto srv = sealed_endpoint(tr::Role::server);
         auto bad = good;
         bad[i] ^= 0x01;
         auto r = srv->receive(bad, 100000);
@@ -112,8 +114,7 @@ void tampered_sealed_datagram_is_refused() {
         {"malformed malformed=1 foreign=0 accepted=0", good.size() - 12},
     };
     check(got == want, "a flipped byte in the 12 id and hash bytes is foreign, anywhere else malformed");
-    auto srv =
-        tr::Endpoint::create(tr::Role::server, cfg, std::make_shared<tr::SessionSeal>(tr::Role::server, kKeys), 0);
+    auto srv = sealed_endpoint(tr::Role::server);
     auto r = srv->receive(good, 100000);
     check(r && r->reliable == std::vector<std::vector<std::uint8_t>>{{0x05, 0x01}}, "the untouched datagram delivers");
     auto again = srv->receive(good, 100000);

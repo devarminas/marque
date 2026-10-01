@@ -97,7 +97,7 @@ func (s *shard) replies(t *testing.T, wait time.Duration) [][]byte {
 	}
 }
 
-func (s *shard) connect(t *testing.T, tok ConnectToken) *Endpoint {
+func (s *shard) connect(t *testing.T, tok ConnectToken) (*Endpoint, Admission) {
 	t.Helper()
 	s.send(t, tok.Request(wire.SchemaHash))
 	c := s.replies(t, 200*time.Millisecond)
@@ -110,7 +110,8 @@ func (s *shard) connect(t *testing.T, tok ConnectToken) *Endpoint {
 	if !reflect.DeepEqual(in, want) {
 		t.Fatalf("got %+v, want %+v", in, want)
 	}
-	return must(NewEndpoint(Client, DefaultConfig(wire.SchemaHash), NewSessionSeal(Client, tok.Keys), 0))
+	open, seal := NewSessionSeal(Client, tok.Keys)
+	return must(NewEndpoint(Client, DefaultConfig(wire.SchemaHash), open, seal, 0)), in.Admission
 }
 
 func (s *shard) stop(t *testing.T) []Inbound {
@@ -136,7 +137,7 @@ func (s *shard) flush(t *testing.T, ep *Endpoint, now uint64, u Unreliable) {
 
 func TestReaderAdmitsAHandshakeThenDecodesSealedInput(t *testing.T) {
 	s := startShard(t)
-	ep := s.connect(t, s.token(7))
+	ep, _ := s.connect(t, s.token(7))
 	sample, err := wire.InputFields{Dx: 0.5, Dz: -1, Jump: true, Seq: 7}.Build()
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +173,7 @@ func TestReaderAdmitsAHandshakeThenDecodesSealedInput(t *testing.T) {
 func TestReaderDropsUnsealedDatagramsFromAnAdmittedPeer(t *testing.T) {
 	s := startShard(t)
 	s.connect(t, s.token(7))
-	plain := must(NewEndpoint(Client, DefaultConfig(wire.SchemaHash), Plain{}, 0))
+	plain := must(NewEndpoint(Client, DefaultConfig(wire.SchemaHash), Plain{}, Plain{}, 0))
 	s.flush(t, plain, KeepaliveAfter, Unreliable{})
 	if rest := s.stop(t); len(rest) != 0 {
 		t.Fatalf("unsealed datagram delivered %+v", rest)
@@ -180,6 +181,25 @@ func TestReaderDropsUnsealedDatagramsFromAnAdmittedPeer(t *testing.T) {
 	if st := s.rd.peers[s.cliAddr].Stats(); st.Malformed != 1 || st.Accepted != 0 {
 		t.Fatalf("receiver stats %+v, want one malformed and none accepted", st)
 	}
+}
+
+func TestTickLoopSealerFromTheAdmissionSealsWhatTheClientOpens(t *testing.T) {
+	s := startShard(t)
+	ep, a := s.connect(t, s.token(7))
+	_, seal := NewSessionSeal(Server, a.Keys)
+	tx := must(NewSender(Server, DefaultConfig(wire.SchemaHash), seal, 0))
+	if err := tx.Send([]byte{0x04, 0x01}); err != nil {
+		t.Fatal(err)
+	}
+	d := must(tx.Flush(tick, Unreliable{})).Datagrams
+	if len(d) != 1 {
+		t.Fatalf("flushed %d datagrams, want 1", len(d))
+	}
+	r, err := ep.Receive(d[0], tick)
+	if err != nil || fmt.Sprintf("%x", r.Reliable) != "[0401]" {
+		t.Fatalf("client received %+v, %v; want reliable [0401]", r, err)
+	}
+	s.stop(t)
 }
 
 func TestReaderHoldsNoStateForUnansweredRequests(t *testing.T) {
@@ -319,7 +339,7 @@ func TestReaderCannotReachGameState(t *testing.T) {
 
 func TestReaderForgetsPeerTheTickLoopDropped(t *testing.T) {
 	s := startShard(t)
-	ep := s.connect(t, s.token(7))
+	ep, _ := s.connect(t, s.token(7))
 	s.flush(t, ep, KeepaliveAfter, Unreliable{})
 	if in := next(t, s.inbound); in.From != s.cliAddr || in.PeerAck != NoAcks {
 		t.Fatalf("got %+v, want a keepalive from %v", in, s.cliAddr)

@@ -78,7 +78,8 @@ struct Side {
 };
 
 tr::Endpoint must_endpoint(tr::Role role) {
-    auto e = tr::Endpoint::create(role, tr::default_config(kTestHash), std::make_shared<tr::Plain>(), 0);
+    auto plain = std::make_shared<tr::Plain>();
+    auto e = tr::Endpoint::create(role, tr::default_config(kTestHash), plain, plain, 0);
     if (!e) {
         std::fprintf(stderr, "config refused: %s\n", tr::to_string(e.error()));
         std::abort();

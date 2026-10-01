@@ -97,7 +97,8 @@ func (rd *Reader) handshake(from netip.AddrPort, d []byte) (Admission, bool) {
 		rd.conn.WriteToUDPAddrPort(o.Challenge, from)
 		return Admission{}, false
 	}
-	rx, err := NewReceiver(Server, rd.cfg, NewSessionSeal(Server, o.Admission.Keys))
+	open, _ := NewSessionSeal(Server, o.Admission.Keys)
+	rx, err := NewReceiver(Server, rd.cfg, open)
 	if err != nil {
 		return Admission{}, false
 	}

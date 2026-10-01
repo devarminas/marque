@@ -13,9 +13,10 @@ import (
 const handshakeVectorDir = "../../../shared/wire/vectors/handshake"
 
 type handshakeRun struct {
-	gate   *Gate
-	random bytes.Buffer
-	seals  map[string]*SessionSeal
+	gate    *Gate
+	random  bytes.Buffer
+	openers map[string]*SessionOpener
+	sealers map[string]*SessionSealer
 }
 
 func runHandshakeOp(st *handshakeRun, line string) ([]string, error) {
@@ -90,11 +91,11 @@ func runHandshakeOp(st *handshakeRun, line string) ([]string, error) {
 		if f[1] == "client" {
 			role = Client
 		}
-		st.seals[f[1]] = NewSessionSeal(role, SessionKeys{key(2), key(3)})
+		st.openers[f[1]], st.sealers[f[1]] = NewSessionSeal(role, SessionKeys{key(2), key(3)})
 	case "seal_body":
-		out = append(out, "sealed "+hex.EncodeToString(st.seals[f[1]].Seal(nil, unhex(2), unhex(3))))
+		out = append(out, "sealed "+hex.EncodeToString(st.sealers[f[1]].Seal(nil, unhex(2), unhex(3))))
 	case "open_body":
-		b, err := st.seals[f[1]].Open(nil, unhex(2), unhex(3))
+		b, err := st.openers[f[1]].Open(nil, unhex(2), unhex(3))
 		if err != nil {
 			out = append(out, "error malformed")
 			break
@@ -112,7 +113,7 @@ type handshakeScript struct {
 }
 
 func newHandshakeScript(desc string) *handshakeScript {
-	s := &handshakeScript{run: handshakeRun{seals: map[string]*SessionSeal{}}}
+	s := &handshakeScript{run: handshakeRun{openers: map[string]*SessionOpener{}, sealers: map[string]*SessionSealer{}}}
 	for _, l := range strings.Split(desc, "\n") {
 		s.lines = append(s.lines, "# "+l)
 	}
@@ -305,7 +306,7 @@ func sessionSealScenario() *handshakeScript {
 
 func TestHandshakeVectors(t *testing.T) {
 	checkVectors(t, handshakeVectorDir, handshakeScenarios(), func() opRunner {
-		st := handshakeRun{seals: map[string]*SessionSeal{}}
+		st := handshakeRun{openers: map[string]*SessionOpener{}, sealers: map[string]*SessionSealer{}}
 		return func(line string) ([]string, error) { return runHandshakeOp(&st, line) }
 	})
 }

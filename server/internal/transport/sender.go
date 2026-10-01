@@ -1,6 +1,9 @@
 package transport
 
-import "bytes"
+import (
+	"bytes"
+	"errors"
+)
 
 type State uint8
 
@@ -31,7 +34,7 @@ type Flushed struct {
 type Sender struct {
 	role Role
 	cfg  Config
-	seal Seal
+	seal Sealer
 
 	nextSeq uint16
 	sent    [256]sentPacket
@@ -77,9 +80,12 @@ type fragRef struct {
 	index  uint8
 }
 
-func NewSender(role Role, cfg Config, seal Seal, now uint64) (*Sender, error) {
-	if err := cfg.validateWith(seal); err != nil {
+func NewSender(role Role, cfg Config, seal Sealer, now uint64) (*Sender, error) {
+	if err := cfg.validate(); err != nil {
 		return nil, err
+	}
+	if seal == nil {
+		return nil, errors.New("transport: Sealer is nil")
 	}
 	return &Sender{role: role, cfg: cfg, seal: seal, own: NoAcks, lastSend: now, lastRecv: now}, nil
 }

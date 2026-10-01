@@ -231,24 +231,24 @@ A connection has one of three states: `open`, `timed_out`, or `slow_client`. It 
 
 ## Seal seam
 
-A seal has an overhead and two operations. `seal(header, body)` returns the sealed body. `open(header, sealed)` returns the body or fails. The 20-byte header is sent in the clear and is the associated data. Packing reserves the overhead inside `MaxDatagram`. A connection the handshake admitted uses the session seal below. The identity seal (`plain`, overhead 0) remains for tests and vectors.
+A seal comes in two halves with the same overhead. An opener has one operation, `open(header, sealed)`, which returns the body or fails. A sealer has one operation, `seal(header, body)`, which returns the sealed body. The receive path takes an opener and the send path takes a sealer, so a receive half cannot seal. The 20-byte header is sent in the clear and is the associated data. Packing reserves the overhead inside `MaxDatagram`. A connection the handshake admitted uses the session seal below. The identity seal (`plain`, overhead 0) is both an opener and a sealer, and remains for tests and vectors.
 
 The seal owns the nonce and replay protection. The transport does not.
 
 - Each direction of a connection has its own 64-bit nonce. The sealing side counts its datagrams from 0 and never reuses a value under one key. The nonce travels inside the overhead. The header's 16-bit sequence cannot be the nonce, because it repeats every 65536 datagrams.
 - `open` rejects a nonce it has already accepted, or one too old for its replay window, before the transport's sequence window sees the datagram. The receiver then refuses the datagram as `malformed`, like any datagram that fails to open. Without this, one replayed authentic datagram whose sequence is about 32767 ahead of `latest` moves `latest` forward, and every genuine datagram after it is `too_old`.
-- There is one seal per connection. The server's reader goroutine calls `open` and the tick loop calls `seal` on the same connection's seal at the same time, so a seal must be safe for concurrent `seal` and `open`. Keeping the send nonce and the receive window apart is enough for that.
+- Each connection has one opener and one sealer. The server's reader goroutine holds only the opener and the tick loop holds only the sealer. The halves share no state, so `open` and `seal` run at the same time without a lock, and the reader has no way to spend a send nonce.
 
-A connection starts established. The handshake creates it after the handshake completes, with a new seal from that connection's session keys. No two connections share a seal.
+A connection starts established. The handshake creates it after the handshake completes, with new seal halves from that connection's session keys. No two connections share a seal half.
 
 ### Session seal
 
-The session seal is ChaCha20-Poly1305 in its IETF form (12-byte nonce, 16-byte tag). Its overhead is 24.
+The session seal is ChaCha20-Poly1305 in its IETF form (12-byte nonce, 16-byte tag). Its overhead is 24. Its constructor takes a role and the session keys and returns the opener and the sealer for one connection.
 
-- The server seals with `server_to_client` and opens with `client_to_server`. The client does the reverse.
-- `seal(header, body)` takes the next send nonce `n`, then returns `n` as a `u64`, then the ciphertext of `body` with its tag. The AEAD nonce is 4 zero bytes then `n` as a `u64`. The associated data is the 20-byte header.
-- `open(header, sealed)` fails when `sealed` is shorter than 24 bytes. It reads `n` from the first 8 bytes and fails when `n` is not fresh, before it decrypts. It fails when the tag does not verify. Only a datagram that opens marks `n` as accepted.
-- The replay window is 64 nonces. Before any nonce is accepted, every nonce is fresh. After that, with `newest` the highest accepted nonce, `n` is fresh when `n > newest`, or when `newest - n < 64` and `n` was not accepted.
+- The server's sealer uses `server_to_client` and its opener uses `client_to_server`. The client does the reverse.
+- The sealer's `seal(header, body)` takes its next nonce `n`, then returns `n` as a `u64`, then the ciphertext of `body` with its tag. The AEAD nonce is 4 zero bytes then `n` as a `u64`. The associated data is the 20-byte header.
+- The opener's `open(header, sealed)` fails when `sealed` is shorter than 24 bytes. It reads `n` from the first 8 bytes and fails when `n` is not fresh, before it decrypts. It fails when the tag does not verify. Only a datagram that opens marks `n` as accepted.
+- The opener's replay window is 64 nonces. Before any nonce is accepted, every nonce is fresh. After that, with `newest` the highest accepted nonce, `n` is fresh when `n > newest`, or when `newest - n < 64` and `n` was not accepted.
 
 A changed byte anywhere after the first 12 header bytes fails `open`, and the receiver refuses the datagram as `malformed`. A changed byte in the protocol id or the schema hash is refused as `foreign` first, because the receiver checks those before it opens.
 
@@ -372,13 +372,13 @@ The admitted set is the only state the handshake keeps. It gains an entry only f
 
 ### Development issuer
 
-The login service does not exist yet. A development issuer stands in for it. Its issuer key is the 32 ASCII bytes `marque-dev-issuer-key-not-secret`, and it draws the token nonce and session keys from the system random source. It is a development tool only, and release builds leave it out: Go builds `server/internal/devtoken` only under the `devtoken` build tag, and CMake builds `native/core/src/transport/dev/` only with `MARQUE_DEV_ISSUER`, which is off for `Release`, `MinSizeRel` and `RelWithDebInfo` builds.
+The login service does not exist yet. A development issuer stands in for it. Its issuer key is the 32 ASCII bytes `marque-dev-issuer-key-not-secret`, and it draws the token nonce and session keys from the system random source. It is a development tool only, and release builds leave it out: Go builds `server/internal/devtoken` only under the `devtoken` build tag, and CMake builds `native/core/src/transport/dev/` only when configured with `-DMARQUE_DEV_ISSUER=ON`. The option is off by default for every build type, and `scripts/native_test.sh` turns it on.
 
 ## Server threading
 
 The server splits each connection into two halves that share no memory (ADR 0018 section 1.9).
 
-- The socket reader goroutine owns the handshake gate and the receive half, `Receiver`: the sequence window, the staleness rule, and reassembly. A datagram from an address with no connection goes to the gate. A challenge goes straight back to the sender. An admission creates the address's `Receiver` with a session seal and reaches the tick loop as one `Inbound` carrying the admission, so the tick loop creates the `Sender` with its own session seal from the same keys. It decodes each delivered `input` item and `intents` message with the channel's schema decoder and sends one `Inbound` value per accepted datagram over a channel. A decode failure is a fault. The reader forgets the peer and the tick loop drops it.
+- The socket reader goroutine owns the handshake gate and the receive half, `Receiver`: the sequence window, the staleness rule, and reassembly. A datagram from an address with no connection goes to the gate. A challenge goes straight back to the sender. An admission creates the address's `Receiver` with the opener of a session seal from the admission's keys, and reaches the tick loop as one `Inbound` carrying the admission. The tick loop creates the `Sender` with the sealer of a session seal from the same keys. It decodes each delivered `input` item and `intents` message with the channel's schema decoder and sends one `Inbound` value per accepted datagram over a channel. A decode failure is a fault. The reader forgets the peer and the tick loop drops it.
 - The tick loop owns the send half, `Sender`. It calls `Observe(peer_ack, own_ack, at)` with each `Inbound`, `Send` for events, and `Flush` once per tick.
 - When the tick loop drops a connection (`timed_out`, `slow_client`, or a fault), it calls `Reader.Forget(peer)`. That appends the peer to a list the reader drains before it handles its next datagram, so the reader goroutine stays the only one that touches its peer map, and the tick loop never blocks on it. Datagrams the reader accepted before the drain may still arrive as `Inbound` for a peer the tick loop no longer has; the tick loop discards them.
 

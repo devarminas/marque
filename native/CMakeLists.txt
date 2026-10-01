@@ -20,12 +20,7 @@ endif()
 file(GLOB_RECURSE MARQUE_CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/core/src/*.cpp")
 
-if(CMAKE_BUILD_TYPE MATCHES "^(Release|MinSizeRel|RelWithDebInfo)$")
-    set(MARQUE_DEV_ISSUER_DEFAULT OFF)
-else()
-    set(MARQUE_DEV_ISSUER_DEFAULT ON)
-endif()
-option(MARQUE_DEV_ISSUER "Build the development connect-token issuer and its fixed key" ${MARQUE_DEV_ISSUER_DEFAULT})
+option(MARQUE_DEV_ISSUER "Build the development connect-token issuer and its fixed key" OFF)
 if(NOT MARQUE_DEV_ISSUER)
     list(FILTER MARQUE_CORE_SOURCES EXCLUDE REGEX "/core/src/transport/dev/")
 endif()

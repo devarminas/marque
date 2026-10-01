@@ -28,7 +28,7 @@ func must[T any](v T, err error) T {
 func testConfig() Config { return DefaultConfig(testHash) }
 
 func mustEndpoint(role Role, cfg Config, now uint64) *Endpoint {
-	e, err := NewEndpoint(role, cfg, Plain{}, now)
+	e, err := NewEndpoint(role, cfg, Plain{}, Plain{}, now)
 	if err != nil {
 		panic(err)
 	}
@@ -348,7 +348,8 @@ func sessionSealedScenario() *script {
 	s.send([]byte{0x04, 0x01})
 	s.flush(140_000, Unreliable{Stamp: 1, Items: [][]byte{{0x02, 0x01}}})
 	d := raw(Client, 0, AckWindow{Latest: 1, Bits: 1}, &Unreliable{Stamp: 1, Items: [][]byte{{0x01}}}, entry{id: 0, index: 0, count: 1, data: []byte{0x05, 0x01}})
-	good := NewSessionSeal(Client, vectorSessionKeys()).Seal(d[:HeaderSize:HeaderSize], d[:HeaderSize], d[HeaderSize:])
+	_, cli := NewSessionSeal(Client, vectorSessionKeys())
+	good := cli.Seal(d[:HeaderSize:HeaderSize], d[:HeaderSize], d[HeaderSize:])
 	bad := bytes.Clone(good)
 	bad[14] ^= 0x01
 	s.recv(150_000, bad)

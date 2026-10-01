@@ -12,13 +12,15 @@ const char* to_string(ConfigError e) {
         return "backlog_bytes_zero";
     case ConfigError::resend_after_zero:
         return "resend_after_zero";
-    case ConfigError::seal_missing:
-        return "seal_missing";
+    case ConfigError::opener_missing:
+        return "opener_missing";
+    case ConfigError::sealer_missing:
+        return "sealer_missing";
     }
     return "config_error?";
 }
 
-std::expected<void, ConfigError> Config::validate(const Seal* seal) const {
+std::expected<void, ConfigError> Config::validate() const {
     if (tick_budget < kMaxDatagram) {
         return std::unexpected(ConfigError::tick_budget_below_max_datagram);
     }
@@ -30,9 +32,6 @@ std::expected<void, ConfigError> Config::validate(const Seal* seal) const {
     }
     if (resend_after == 0) {
         return std::unexpected(ConfigError::resend_after_zero);
-    }
-    if (seal == nullptr) {
-        return std::unexpected(ConfigError::seal_missing);
     }
     return {};
 }

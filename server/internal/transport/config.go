@@ -28,13 +28,6 @@ func DefaultConfig(schemaHash uint64) Config {
 	}
 }
 
-func (c Config) validateWith(seal Seal) error {
-	if seal == nil {
-		return fmt.Errorf("transport: Seal is nil")
-	}
-	return c.validate()
-}
-
 func (c Config) validate() error {
 	switch {
 	case c.TickBudget < MaxDatagram:

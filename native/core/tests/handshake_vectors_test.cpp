@@ -118,14 +118,14 @@ struct Run {
         } else if (f[0] == "session") {
             auto role = f[1] == "client" ? tr::Role::client : tr::Role::server;
             seals.insert_or_assign(std::string(f[1]),
-                                   tr::SessionSeal(role, {fixed<tr::kKeySize>(f[2]), fixed<tr::kKeySize>(f[3])}));
+                                   tr::session_seal(role, {fixed<tr::kKeySize>(f[2]), fixed<tr::kKeySize>(f[3])}));
         } else if (f[0] == "seal_body") {
             std::vector<std::uint8_t> sealed;
-            seals.find(f[1])->second.seal(unhex(f[2]), unhex(f[3]), sealed);
+            seals.find(f[1])->second.sealer->seal(unhex(f[2]), unhex(f[3]), sealed);
             out.push_back("sealed " + hex(sealed));
         } else if (f[0] == "open_body") {
             std::vector<std::uint8_t> body;
-            bool ok = seals.find(f[1])->second.open(unhex(f[2]), unhex(f[3]), body);
+            bool ok = seals.find(f[1])->second.opener->open(unhex(f[2]), unhex(f[3]), body);
             out.push_back(ok ? "opened " + hex(body) : std::string("error malformed"));
         } else {
             throw std::runtime_error("unknown op " + std::string(f[0]));

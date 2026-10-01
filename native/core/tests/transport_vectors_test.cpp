@@ -42,7 +42,7 @@ tr::SessionKeys vector_session_keys() {
     return k;
 }
 
-class TestSeal final : public tr::Seal {
+class TestSeal final : public tr::Opener, public tr::Sealer {
 public:
     std::size_t overhead() const override { return 4; }
 
@@ -98,17 +98,24 @@ std::vector<std::string> run_op(std::optional<Endpoint>& ep, std::string_view li
         cfg.backlog_limit = number(f[4]);
         cfg.backlog_bytes = number(f[5]);
         cfg.resend_after = number(f[6]);
-        std::shared_ptr<tr::Seal> seal;
+        std::shared_ptr<tr::Opener> opener;
+        std::shared_ptr<tr::Sealer> sealer;
         if (f[7] == "plain") {
-            seal = std::make_shared<tr::Plain>();
+            auto plain = std::make_shared<tr::Plain>();
+            opener = plain;
+            sealer = plain;
         } else if (f[7] == "test") {
-            seal = std::make_shared<TestSeal>();
+            auto test = std::make_shared<TestSeal>();
+            opener = test;
+            sealer = test;
         } else if (f[7] == "session") {
-            seal = std::make_shared<tr::SessionSeal>(role, vector_session_keys());
+            auto session = tr::session_seal(role, vector_session_keys());
+            opener = std::move(session.opener);
+            sealer = std::move(session.sealer);
         } else {
             throw std::runtime_error("unknown seal " + std::string(f[7]));
         }
-        auto e = Endpoint::create(role, cfg, std::move(seal), number(f[11]));
+        auto e = Endpoint::create(role, cfg, std::move(opener), std::move(sealer), number(f[11]));
         if (!e) {
             throw std::runtime_error(std::string("config refused: ") + tr::to_string(e.error()));
         }

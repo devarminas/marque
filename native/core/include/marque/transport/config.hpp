@@ -8,8 +8,6 @@
 
 namespace marque::transport {
 
-class Seal;
-
 inline constexpr std::size_t kDefaultTickBudget = 4800;
 inline constexpr std::size_t kDefaultBacklogLimit = 1024;
 inline constexpr std::size_t kDefaultBacklogBytes = 4 * kMaxMessage;
@@ -21,7 +19,8 @@ enum class ConfigError : std::uint8_t {
     backlog_limit_out_of_range,
     backlog_bytes_zero,
     resend_after_zero,
-    seal_missing,
+    opener_missing,
+    sealer_missing,
 };
 
 const char* to_string(ConfigError e);
@@ -33,7 +32,7 @@ struct Config {
     std::size_t backlog_bytes = kDefaultBacklogBytes;
     std::uint64_t resend_after = kDefaultResendAfter;
 
-    std::expected<void, ConfigError> validate(const Seal* seal) const;
+    std::expected<void, ConfigError> validate() const;
 };
 
 inline Config default_config(std::uint64_t schema_hash) {
