@@ -203,10 +203,10 @@ func runOp(ep **Endpoint, line string) ([]string, error) {
 	return out, nil
 }
 
-func replay(text string) error {
-	var ep *Endpoint
-	var want []string
-	var got []string
+type opRunner func(line string) ([]string, error)
+
+func replay(text string, run opRunner) error {
+	var want, got []string
 	check := func(at int) error {
 		if strings.Join(got, "\n") != strings.Join(want, "\n") {
 			return fmt.Errorf("before line %d:\ngot:\n%s\nwant:\n%s", at, strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -227,7 +227,7 @@ func replay(text string) error {
 			if err := check(n); err != nil {
 				return err
 			}
-			out, err := runOp(&ep, line)
+			out, err := run(line)
 			if err != nil {
 				return fmt.Errorf("line %d: %v", n, err)
 			}
@@ -237,28 +237,27 @@ func replay(text string) error {
 	return check(n + 1)
 }
 
-func TestVectors(t *testing.T) {
-	scenarios := vectorScenarios()
+func checkVectors(t *testing.T, dir string, scenarios map[string]string, runner func() opRunner) {
 	if *update {
-		if err := os.MkdirAll(vectorDir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		old, _ := filepath.Glob(filepath.Join(vectorDir, "*.vec"))
+		old, _ := filepath.Glob(filepath.Join(dir, "*.vec"))
 		for _, p := range old {
 			os.Remove(p)
 		}
 		for name, text := range scenarios {
-			if err := os.WriteFile(filepath.Join(vectorDir, name+".vec"), []byte(text), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, name+".vec"), []byte(text), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	files, err := filepath.Glob(filepath.Join(vectorDir, "*.vec"))
+	files, err := filepath.Glob(filepath.Join(dir, "*.vec"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(files) != len(scenarios) {
-		t.Fatalf("%d vector files, %d scenarios; run go test ./internal/transport -run TestVectors -update", len(files), len(scenarios))
+		t.Fatalf("%d vector files in %s, %d scenarios; run go test ./internal/transport -run Vectors -update", len(files), dir, len(scenarios))
 	}
 	for _, p := range files {
 		name := strings.TrimSuffix(filepath.Base(p), ".vec")
@@ -268,11 +267,18 @@ func TestVectors(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !bytes.Equal(b, []byte(scenarios[name])) {
-				t.Fatalf("%s is stale; run go test ./internal/transport -run TestVectors -update", p)
+				t.Fatalf("%s is stale; run go test ./internal/transport -run Vectors -update", p)
 			}
-			if err := replay(string(b)); err != nil {
+			if err := replay(string(b), runner()); err != nil {
 				t.Fatal(err)
 			}
 		})
 	}
+}
+
+func TestVectors(t *testing.T) {
+	checkVectors(t, vectorDir, vectorScenarios(), func() opRunner {
+		var ep *Endpoint
+		return func(line string) ([]string, error) { return runOp(&ep, line) }
+	})
 }

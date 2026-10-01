@@ -57,3 +57,43 @@ func FuzzReceive(f *testing.F) {
 		}
 	})
 }
+
+func fuzzGate(t testing.TB) *Gate {
+	g := testGate(t)
+	g.challenge = Key(seq(KeySize, 0x60))
+	g.random = zeroReader{}
+	return g
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(b []byte) (int, error) {
+	clear(b)
+	return len(b), nil
+}
+
+func FuzzGateHandle(f *testing.F) {
+	tok := tokenFor(7)
+	o, err := fuzzGate(f).Handle(testClient, tok.Request(testHash), testNow)
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(tok.Request(testHash))
+	f.Add(o.Challenge)
+	f.Add(must(tok.Respond(o.Challenge)))
+	f.Add(raw(Client, 0, NoAcks, nil))
+	f.Fuzz(func(t *testing.T, d []byte) {
+		g := fuzzGate(t)
+		o, err := g.Handle(testClient, d, testNow)
+		if len(o.Challenge) > len(d) {
+			t.Fatalf("%d-byte challenge for a %d-byte packet", len(o.Challenge), len(d))
+		}
+		admitted := 0
+		if o.Admission != nil {
+			admitted = 1
+		}
+		if (err != nil) == (o.Challenge != nil || o.Admission != nil) || g.Admissions() != admitted {
+			t.Fatalf("err %v, challenge %d bytes, admission %v, %d admissions", err, len(o.Challenge), o.Admission, g.Admissions())
+		}
+	})
+}

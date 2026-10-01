@@ -57,6 +57,7 @@ func vectorScenarios() map[string]string {
 		"window_bytes_recv":  windowBytesRecv,
 		"sequence_wrap_send": sequenceWrapSend,
 		"sealed":             sealedScenario,
+		"session_sealed":     sessionSealedScenario,
 	} {
 		out[name] = f().text()
 	}
@@ -336,6 +337,22 @@ func sealedScenario() *script {
 	bad[len(bad)-1] ^= 0x01
 	s.recv(150_000, bad)
 	s.recv(150_001, raw(Client, 0, NoAcks, nil))
+	s.recv(150_002, good)
+	s.flush(240_000, Unreliable{})
+	return s
+}
+
+func sessionSealedScenario() *script {
+	s := newScriptAt("A server with the session seal (overhead 24) and the keys in transport.md.\nIts keepalive is 44 bytes. A client datagram sealed with nonce 0 delivers;\nthe same datagram again, and a copy with one ack byte changed, are malformed.", Server, testConfig(), "session", start{}, 0)
+	s.flush(100_000, Unreliable{})
+	s.send([]byte{0x04, 0x01})
+	s.flush(140_000, Unreliable{Stamp: 1, Items: [][]byte{{0x02, 0x01}}})
+	d := raw(Client, 0, AckWindow{Latest: 1, Bits: 1}, &Unreliable{Stamp: 1, Items: [][]byte{{0x01}}}, entry{id: 0, index: 0, count: 1, data: []byte{0x05, 0x01}})
+	good := NewSessionSeal(Client, vectorSessionKeys()).Seal(d[:HeaderSize:HeaderSize], d[:HeaderSize], d[HeaderSize:])
+	bad := bytes.Clone(good)
+	bad[14] ^= 0x01
+	s.recv(150_000, bad)
+	s.recv(150_001, good)
 	s.recv(150_002, good)
 	s.flush(240_000, Unreliable{})
 	return s
