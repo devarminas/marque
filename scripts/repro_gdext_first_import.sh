@@ -32,7 +32,7 @@ if [[ -z "${REPRO_NO_RACE_SHIM:-}" ]]; then
         godot --headless --path "$work/empty" --editor --quit > /dev/null 2>&1
         echo "doc cache warmed: $doc_cache"
     fi
-    cc -shared -fPIC -O2 -o "$work/doc_race.so" "$clone/scripts/repro_gdext_doc_race.c"
+    cc -shared -fPIC -O2 -o "$work/doc_race.so" "$repo_root/scripts/repro_gdext_doc_race.c"
     preload="$work/doc_race.so"
 fi
 status=0
