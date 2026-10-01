@@ -5,6 +5,15 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+option(MARQUE_FUZZ "Build libFuzzer targets for the wire decoders (clang only)" OFF)
+if(MARQUE_FUZZ)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "MARQUE_FUZZ needs clang; configure with CXX=clang++")
+    endif()
+    add_compile_options(-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=undefined -g -O1)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
 # marque_core: engine-independent library. Sources are globbed so adding a
 # .cpp under core/src needs no edit here; CONFIGURE_DEPENDS reruns the glob
 # when the build system reconfigures.
@@ -29,3 +38,7 @@ foreach(test_source ${MARQUE_CORE_TEST_SOURCES})
     target_compile_options(${test_name} PRIVATE -Wall -Wextra -Werror)
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
+
+if(MARQUE_FUZZ)
+    add_subdirectory(fuzz)
+endif()
