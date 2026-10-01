@@ -2,12 +2,13 @@
 
 namespace marque::transport {
 
-std::expected<Endpoint, ConfigError> Endpoint::create(Role role, const Config& cfg, std::uint64_t now) {
-    auto rx = Receiver::create(role, cfg);
+std::expected<Endpoint, ConfigError> Endpoint::create(Role role, const Config& cfg, std::shared_ptr<Seal> seal,
+                                                     std::uint64_t now) {
+    auto rx = Receiver::create(role, cfg, seal);
     if (!rx) {
         return std::unexpected(rx.error());
     }
-    auto tx = Sender::create(role, cfg, now);
+    auto tx = Sender::create(role, cfg, std::move(seal), now);
     if (!tx) {
         return std::unexpected(tx.error());
     }

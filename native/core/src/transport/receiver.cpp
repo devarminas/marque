@@ -40,13 +40,14 @@ std::expected<AckWindow, Error> accept(std::optional<AckWindow> window, std::uin
 
 }
 
-Receiver::Receiver(Role role, const Config& cfg) : from_(peer(role)), hash_(cfg.schema_hash), seal_(cfg.seal) {}
+Receiver::Receiver(Role role, const Config& cfg, std::shared_ptr<Seal> seal)
+    : from_(peer(role)), hash_(cfg.schema_hash), seal_(std::move(seal)) {}
 
-std::expected<Receiver, ConfigError> Receiver::create(Role role, const Config& cfg) {
-    if (auto ok = cfg.validate(); !ok) {
+std::expected<Receiver, ConfigError> Receiver::create(Role role, const Config& cfg, std::shared_ptr<Seal> seal) {
+    if (auto ok = cfg.validate(seal.get()); !ok) {
         return std::unexpected(ok.error());
     }
-    return Receiver(role, cfg);
+    return Receiver(role, cfg, std::move(seal));
 }
 
 std::expected<Received, Error> Receiver::receive(std::span<const std::uint8_t> d) {

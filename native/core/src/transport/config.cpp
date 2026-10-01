@@ -18,7 +18,7 @@ const char* to_string(ConfigError e) {
     return "config_error?";
 }
 
-std::expected<void, ConfigError> Config::validate() const {
+std::expected<void, ConfigError> Config::validate(const Seal* seal) const {
     if (tick_budget < kMaxDatagram) {
         return std::unexpected(ConfigError::tick_budget_below_max_datagram);
     }
@@ -31,7 +31,7 @@ std::expected<void, ConfigError> Config::validate() const {
     if (resend_after == 0) {
         return std::unexpected(ConfigError::resend_after_zero);
     }
-    if (!seal) {
+    if (seal == nullptr) {
         return std::unexpected(ConfigError::seal_missing);
     }
     return {};

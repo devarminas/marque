@@ -3,12 +3,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <memory>
 
 #include "marque/transport/packet.hpp"
-#include "marque/transport/seal.hpp"
 
 namespace marque::transport {
+
+class Seal;
 
 inline constexpr std::size_t kDefaultTickBudget = 4800;
 inline constexpr std::size_t kDefaultBacklogLimit = 1024;
@@ -32,9 +32,8 @@ struct Config {
     std::size_t backlog_limit = kDefaultBacklogLimit;
     std::size_t backlog_bytes = kDefaultBacklogBytes;
     std::uint64_t resend_after = kDefaultResendAfter;
-    std::shared_ptr<Seal> seal = std::make_shared<Plain>();
 
-    std::expected<void, ConfigError> validate() const;
+    std::expected<void, ConfigError> validate(const Seal* seal) const;
 };
 
 inline Config default_config(std::uint64_t schema_hash) {

@@ -1,12 +1,7 @@
-#include <algorithm>
-#include <charconv>
 #include <cstdint>
 #include <cstdio>
-#include <filesystem>
-#include <fstream>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -14,6 +9,8 @@
 
 #include "check.hpp"
 #include "marque/transport/endpoint.hpp"
+#include "marque/transport/session_seal.hpp"
+#include "vector_script.hpp"
 
 namespace marque::transport {
 
@@ -32,6 +29,18 @@ namespace {
 using marque::transport::Endpoint;
 using marque::transport::Unreliable;
 namespace tr = marque::transport;
+using marque::test::hex;
+using marque::test::number;
+using marque::test::unhex;
+
+tr::SessionKeys vector_session_keys() {
+    tr::SessionKeys k;
+    for (std::size_t i = 0; i < tr::kKeySize; ++i) {
+        k.client_to_server[i] = static_cast<std::uint8_t>(i);
+        k.server_to_client[i] = static_cast<std::uint8_t>(0x20 + i);
+    }
+    return k;
+}
 
 class TestSeal final : public tr::Seal {
 public:
@@ -76,51 +85,8 @@ private:
     }
 };
 
-std::vector<std::string_view> fields(std::string_view line) {
-    std::vector<std::string_view> out;
-    while (!line.empty()) {
-        auto sp = line.find(' ');
-        out.push_back(line.substr(0, sp));
-        if (sp == std::string_view::npos) {
-            break;
-        }
-        line.remove_prefix(sp + 1);
-    }
-    return out;
-}
-
-std::uint64_t number(std::string_view s, int base = 10) {
-    std::uint64_t v = 0;
-    auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), v, base);
-    if (ec != std::errc{} || ptr != s.data() + s.size()) {
-        throw std::runtime_error("bad number " + std::string(s));
-    }
-    return v;
-}
-
-std::vector<std::uint8_t> unhex(std::string_view s) {
-    if (s.size() % 2 != 0) {
-        throw std::runtime_error("odd hex " + std::string(s));
-    }
-    std::vector<std::uint8_t> out;
-    for (std::size_t i = 0; i < s.size(); i += 2) {
-        out.push_back(static_cast<std::uint8_t>(number(s.substr(i, 2), 16)));
-    }
-    return out;
-}
-
-std::string hex(std::span<const std::uint8_t> b) {
-    static constexpr char digits[] = "0123456789abcdef";
-    std::string out;
-    for (auto x : b) {
-        out += digits[x >> 4];
-        out += digits[x & 0xf];
-    }
-    return out;
-}
-
 std::vector<std::string> run_op(std::optional<Endpoint>& ep, std::string_view line) {
-    auto f = fields(line);
+    auto f = marque::test::fields(line);
     std::vector<std::string> out;
     if (f[0] == "endpoint") {
         if (f.size() != 12) {
@@ -132,12 +98,17 @@ std::vector<std::string> run_op(std::optional<Endpoint>& ep, std::string_view li
         cfg.backlog_limit = number(f[4]);
         cfg.backlog_bytes = number(f[5]);
         cfg.resend_after = number(f[6]);
-        if (f[7] == "test") {
-            cfg.seal = std::make_shared<TestSeal>();
-        } else if (f[7] != "plain") {
+        std::shared_ptr<tr::Seal> seal;
+        if (f[7] == "plain") {
+            seal = std::make_shared<tr::Plain>();
+        } else if (f[7] == "test") {
+            seal = std::make_shared<TestSeal>();
+        } else if (f[7] == "session") {
+            seal = std::make_shared<tr::SessionSeal>(role, vector_session_keys());
+        } else {
             throw std::runtime_error("unknown seal " + std::string(f[7]));
         }
-        auto e = Endpoint::create(role, cfg, number(f[11]));
+        auto e = Endpoint::create(role, cfg, std::move(seal), number(f[11]));
         if (!e) {
             throw std::runtime_error(std::string("config refused: ") + tr::to_string(e.error()));
         }
@@ -197,85 +168,15 @@ std::vector<std::string> run_op(std::optional<Endpoint>& ep, std::string_view li
     return out;
 }
 
-struct Replay {
-    int ops = 0;
-    int expected = 0;
-    std::string failure;
-};
-
-Replay replay(const std::filesystem::path& path) {
-    std::ifstream in(path, std::ios::binary);
-    Replay result;
-    if (!in) {
-        result.failure = "cannot open";
-        return result;
-    }
-    std::optional<Endpoint> ep;
-    std::vector<std::string> got;
-    std::vector<std::string> want;
-    int line_no = 0;
-    auto compare = [&](int at) {
-        if (got == want) {
-            return true;
-        }
-        std::ostringstream msg;
-        msg << "before line " << at << "\ngot:\n";
-        for (const auto& g : got) {
-            msg << g << "\n";
-        }
-        msg << "want:\n";
-        for (const auto& w : want) {
-            msg << w << "\n";
-        }
-        result.failure = msg.str();
-        return false;
-    };
-    std::string line;
-    try {
-        while (std::getline(in, line)) {
-            ++line_no;
-            if (line.empty() || line.starts_with("#")) {
-                continue;
-            }
-            if (line.starts_with("> ")) {
-                want.push_back(line.substr(2));
-                ++result.expected;
-                continue;
-            }
-            if (!compare(line_no)) {
-                return result;
-            }
-            got = run_op(ep, line);
-            want.clear();
-            ++result.ops;
-        }
-    } catch (const std::exception& e) {
-        result.failure = "line " + std::to_string(line_no) + ": " + e.what();
-        return result;
-    }
-    compare(line_no + 1);
-    return result;
-}
-
-std::filesystem::path vector_dir() {
-    return std::filesystem::path(__FILE__).parent_path() / ".." / ".." / ".." / "shared" / "wire" / "vectors" /
-           "transport";
-}
-
 }
 
 int main() {
     using marque::test::check;
-    std::vector<std::filesystem::path> files;
-    for (const auto& entry : std::filesystem::directory_iterator(vector_dir())) {
-        if (entry.path().extension() == ".vec") {
-            files.push_back(entry.path());
-        }
-    }
-    std::ranges::sort(files);
-    check(files.size() == 19, "shared/wire/vectors/transport holds the 19 vector files transport.md lists");
+    auto files = marque::test::vector_files("transport");
+    check(files.size() == 20, "shared/wire/vectors/transport holds the 20 vector files transport.md lists");
     for (const auto& p : files) {
-        auto r = replay(p);
+        std::optional<Endpoint> ep;
+        auto r = marque::test::replay(p, [&](std::string_view line) { return run_op(ep, line); });
         std::string what = p.filename().string() + ": " + std::to_string(r.ops) + " ops, " +
                            std::to_string(r.expected) + " expected lines match";
         if (!r.failure.empty()) {
