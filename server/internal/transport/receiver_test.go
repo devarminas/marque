@@ -6,7 +6,7 @@ import (
 )
 
 func TestPartialLastFragmentsCostBoundedMemory(t *testing.T) {
-	rx, err := NewReceiver(Client, testConfig())
+	rx, err := NewReceiver(Client, testConfig(), Plain{})
 	if err != nil {
 		t.Fatal(err)
 	}

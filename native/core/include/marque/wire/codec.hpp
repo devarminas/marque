@@ -1,11 +1,5 @@
 #pragma once
 
-// Hand-written runtime under the wiregen-generated message code. The byte
-// rules match server/internal/wire/codec exactly: little-endian, byte-aligned,
-// canonical 32-bit LEB128 varints for ids, handle parts, enums, and lengths.
-// Writer and Reader keep the first error and turn every later call into a
-// no-op, so generated code needs no per-field checks.
-
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -30,24 +24,28 @@ enum class Error : std::uint8_t {
     bad_enum,
     bad_varint,
     bad_utf8,
+    rule,
 };
 
 const char* to_string(Error e);
 
-// Maps a double onto 0..steps: q = round(v * per_unit) - min * per_unit.
 struct Quant {
     double min;
     double max;
     double per_unit;
     std::uint64_t steps;
     int width;
+
+    std::uint64_t step(double v) const;
 };
 
 class Writer {
 public:
-    explicit Writer(std::vector<std::uint8_t>& out) : out_(out), start_(out.size()) {}
+    Writer() = default;
+    explicit Writer(std::vector<std::uint8_t>& out) : out_(&out), start_(out.size()) {}
 
     void fail(Error e);
+    std::optional<Error> error() const { return err_; }
     void u8(std::uint8_t v);
     void u16(std::uint16_t v);
     void u32(std::uint32_t v);
@@ -59,14 +57,14 @@ public:
     void string(std::string_view s, std::size_t bound);
     void quant(double v, const Quant& q);
 
-    // Returns the first error and truncates out back to its starting size.
     std::expected<void, Error> finish();
 
 private:
+    bool writing() const { return !err_ && out_ != nullptr; }
     void fixed(std::uint64_t v, int width);
 
-    std::vector<std::uint8_t>& out_;
-    std::size_t start_;
+    std::vector<std::uint8_t>* out_ = nullptr;
+    std::size_t start_ = 0;
     std::optional<Error> err_;
 };
 
@@ -84,14 +82,10 @@ public:
     bool boolean();
     float f32();
     std::uint32_t varint();
-    // Fails with Error::truncated when n elements of at least min_elem bytes
-    // each cannot fit in what remains, so a hostile count never sizes an
-    // allocation.
     std::size_t count(std::size_t bound, std::size_t min_elem);
     std::string string(std::size_t bound);
     double quant(const Quant& q);
 
-    // The first error, or Error::trailing when bytes remain.
     std::optional<Error> finish();
 
 private:
@@ -103,5 +97,19 @@ private:
 };
 
 bool valid_utf8(std::string_view s);
+
+template <typename Equal>
+bool unique(std::size_t n, Equal equal) {
+    for (std::size_t i = 1; i < n; ++i) {
+        for (std::size_t j = 0; j < i; ++j) {
+            if (equal(i, j)) return false;
+        }
+    }
+    return true;
+}
+
+void text_f64(std::string& out, double v);
+void text_f32(std::string& out, float v);
+void text_quoted(std::string& out, std::string_view s);
 
 }

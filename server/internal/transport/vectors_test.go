@@ -26,17 +26,13 @@ type script struct {
 type start struct{ seq, sendID, recvID uint16 }
 
 func newScript(desc string, role Role, cfg Config, now uint64) *script {
-	return newScriptAt(desc, role, cfg, start{}, now)
+	return newScriptAt(desc, role, cfg, "plain", start{}, now)
 }
 
-func newScriptAt(desc string, role Role, cfg Config, st start, now uint64) *script {
+func newScriptAt(desc string, role Role, cfg Config, seal string, st start, now uint64) *script {
 	s := &script{}
 	for _, l := range strings.Split(desc, "\n") {
 		s.lines = append(s.lines, "# "+l)
-	}
-	seal := "plain"
-	if _, ok := cfg.Seal.(testSeal); ok {
-		seal = "test"
 	}
 	s.exec(fmt.Sprintf("endpoint %s %016x %d %d %d %d %s %d %d %d %d", role, cfg.SchemaHash, cfg.TickBudget, cfg.BacklogLimit, cfg.BacklogBytes, cfg.ResendAfter, seal, st.seq, st.sendID, st.recvID, now))
 	return s
@@ -91,9 +87,17 @@ var errNames = []struct {
 	{ErrClosed, "closed"},
 	{ErrMessage, "message"},
 	{ErrItem, "item"},
+	{ErrExpired, "expired"},
+	{ErrForged, "forged"},
+	{ErrWrongShard, "wrong_shard"},
+	{ErrReplayed, "replayed"},
+	{ErrAddress, "address"},
 }
 
 func errName(err error) string {
+	if err == nil {
+		return "ok"
+	}
 	for _, e := range errNames {
 		if errors.Is(err, e.err) {
 			return e.name
@@ -131,14 +135,21 @@ func runOp(ep **Endpoint, line string) ([]string, error) {
 		}
 		cfg := DefaultConfig(hash)
 		cfg.TickBudget, cfg.BacklogLimit, cfg.BacklogBytes, cfg.ResendAfter = int(num(3)), int(num(4)), int(num(5)), num(6)
+		var (
+			open Opener
+			seal Sealer
+		)
 		switch f[7] {
 		case "plain":
+			open, seal = Plain{}, Plain{}
 		case "test":
-			cfg.Seal = testSeal{}
+			open, seal = testSeal{}, testSeal{}
+		case "session":
+			open, seal = NewSessionSeal(role, vectorSessionKeys())
 		default:
 			return nil, fmt.Errorf("unknown seal %q", f[7])
 		}
-		e, err := NewEndpoint(role, cfg, num(11))
+		e, err := NewEndpoint(role, cfg, open, seal, num(11))
 		if err != nil {
 			return nil, err
 		}
@@ -195,10 +206,10 @@ func runOp(ep **Endpoint, line string) ([]string, error) {
 	return out, nil
 }
 
-func replay(text string) error {
-	var ep *Endpoint
-	var want []string
-	var got []string
+type opRunner func(line string) ([]string, error)
+
+func replay(text string, run opRunner) error {
+	var want, got []string
 	check := func(at int) error {
 		if strings.Join(got, "\n") != strings.Join(want, "\n") {
 			return fmt.Errorf("before line %d:\ngot:\n%s\nwant:\n%s", at, strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -219,7 +230,7 @@ func replay(text string) error {
 			if err := check(n); err != nil {
 				return err
 			}
-			out, err := runOp(&ep, line)
+			out, err := run(line)
 			if err != nil {
 				return fmt.Errorf("line %d: %v", n, err)
 			}
@@ -229,28 +240,27 @@ func replay(text string) error {
 	return check(n + 1)
 }
 
-func TestVectors(t *testing.T) {
-	scenarios := vectorScenarios()
+func checkVectors(t *testing.T, dir string, scenarios map[string]string, runner func() opRunner) {
 	if *update {
-		if err := os.MkdirAll(vectorDir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		old, _ := filepath.Glob(filepath.Join(vectorDir, "*.vec"))
+		old, _ := filepath.Glob(filepath.Join(dir, "*.vec"))
 		for _, p := range old {
 			os.Remove(p)
 		}
 		for name, text := range scenarios {
-			if err := os.WriteFile(filepath.Join(vectorDir, name+".vec"), []byte(text), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, name+".vec"), []byte(text), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	files, err := filepath.Glob(filepath.Join(vectorDir, "*.vec"))
+	files, err := filepath.Glob(filepath.Join(dir, "*.vec"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(files) != len(scenarios) {
-		t.Fatalf("%d vector files, %d scenarios; run go test ./internal/transport -run TestVectors -update", len(files), len(scenarios))
+		t.Fatalf("%d vector files in %s, %d scenarios; run go test ./internal/transport -run Vectors -update", len(files), dir, len(scenarios))
 	}
 	for _, p := range files {
 		name := strings.TrimSuffix(filepath.Base(p), ".vec")
@@ -260,11 +270,18 @@ func TestVectors(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !bytes.Equal(b, []byte(scenarios[name])) {
-				t.Fatalf("%s is stale; run go test ./internal/transport -run TestVectors -update", p)
+				t.Fatalf("%s is stale; run go test ./internal/transport -run Vectors -update", p)
 			}
-			if err := replay(string(b)); err != nil {
+			if err := replay(string(b), runner()); err != nil {
 				t.Fatal(err)
 			}
 		})
 	}
+}
+
+func TestVectors(t *testing.T) {
+	checkVectors(t, vectorDir, vectorScenarios(), func() opRunner {
+		var ep *Endpoint
+		return func(line string) ([]string, error) { return runOp(&ep, line) }
+	})
 }
