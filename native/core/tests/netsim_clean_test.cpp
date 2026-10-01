@@ -6,8 +6,6 @@
 
 #include "check.hpp"
 
-// Seed the committed golden files were generated with. Kept in sync with
-// server/internal/netsim/netsim_test.go's goldenSeed.
 constexpr std::uint64_t kGoldenSeed = 424242;
 
 int main() {

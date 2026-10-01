@@ -10,8 +10,6 @@ namespace marque::netsim {
 
 namespace {
 
-// One send every 1ms of simulated time. Must match
-// server/internal/netsim/golden.go's goldenSendGapMicros.
 constexpr std::uint64_t kSendGapMicros = 1000;
 
 std::vector<std::uint8_t> packet_payload(std::uint32_t index) {
@@ -53,7 +51,7 @@ std::string format_line(std::uint32_t index, std::vector<std::uint64_t>& arrival
     return std::string(buf);
 }
 
-}  // namespace
+}
 
 std::vector<std::string> golden_lines(const Profile& profile, std::uint64_t seed, int count) {
     Simulator sim(profile, seed);
@@ -63,10 +61,6 @@ std::vector<std::string> golden_lines(const Profile& profile, std::uint64_t seed
                   static_cast<std::uint64_t>(i) * kSendGapMicros);
     }
 
-    // Every fate's arrival time is bounded by the last send time plus the
-    // slowest possible path through compute_fate: base delay, jitter,
-    // reorder push, and (for a duplicate) one more jitter draw. Polling
-    // once past that bound drains every surviving packet in one call.
     std::uint64_t last_send = static_cast<std::uint64_t>(count - 1) * kSendGapMicros;
     std::uint64_t max_extra = profile.delay_base_micros + profile.jitter_range_micros +
                                profile.reorder_window_micros + profile.jitter_range_micros;
@@ -87,4 +81,4 @@ std::vector<std::string> golden_lines(const Profile& profile, std::uint64_t seed
     return lines;
 }
 
-}  // namespace marque::netsim
+}
