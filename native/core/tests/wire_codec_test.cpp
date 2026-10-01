@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -135,7 +136,8 @@ void vectors() {
 template <typename T>
 T must(std::expected<T, Error> v) {
     check(v.has_value(), "build succeeds");
-    return v.has_value() ? *v : T{};
+    if (!v.has_value()) std::exit(marque::test::check_finish());
+    return std::move(*v);
 }
 
 void built_messages_encode_to_vector_bytes() {
@@ -216,15 +218,30 @@ void build_refuses_what_decoders_refuse() {
           "infinite ratio");
 }
 
-void encode_refuses_invalid_default_value() {
-    const auto refuses_default = [](const auto& m, Error want) {
-        std::vector<std::uint8_t> out{0xaa};
-        auto got = encode(m, out);
-        return !got.has_value() && got.error() == want && out == std::vector<std::uint8_t>{0xaa};
-    };
-    check(refuses_default(probe::Party{}, Error::rule), "default party refused");
-    check(refuses_default(probe::Inventory{}, Error::rule), "default inventory refused");
-    check(refuses_default(wire::Refused{}, Error::bad_enum), "default refused message refused");
+void unions_and_opts_build_encode_and_print() {
+    const probe::Who p1 = probe::PlayerId{1, 0};
+    const probe::Who n2 = probe::NpcId{2, 0};
+    const auto tag = must(probe::Tag::build({.who = p1,
+                                             .other = n2,
+                                             .crowd = {p1, n2},
+                                             .by = n2,
+                                             .note = "hi",
+                                             .weight = std::uint8_t{3},
+                                             .pair = std::nullopt,
+                                             .slots = {std::nullopt, std::uint8_t{5}}}));
+    std::vector<std::uint8_t> out;
+    check(encode(tag, out).has_value() && to_hex(out) == "0c01010007020002010100070200010702000102686901030002000105",
+          "built tag encodes to its vector");
+    check(to_text(tag) == R"(tag{who:PlayerId(1/0) other:NpcId(2/0) crowd:[PlayerId(1/0) NpcId(2/0)] by:NpcId(2/0) note:"hi" weight:3 pair:_ slots:[_ 5]})",
+          "built tag prints the absent opts as _");
+    check(std::holds_alternative<probe::NpcId>(*tag.by()) && std::get<probe::NpcId>(*tag.by()).index == 2,
+          "the opt union reads back as an NpcId");
+    check(refuses(probe::Tag::build({.who = p1, .other = p1, .crowd = {p1}}), Error::rule), "other equal to who");
+    check(refuses(probe::Tag::build({.who = p1, .other = n2, .crowd = {n2}}), Error::rule), "who outside crowd");
+    check(refuses(probe::Tag::build({.who = p1, .other = n2, .crowd = {p1, p1}}), Error::rule), "repeated crowd member");
+    check(refuses(probe::Tag::build({.who = p1, .other = n2, .crowd = {p1}, .weight = std::uint8_t{10}}), Error::rule),
+          "present weight 10 outside 1..9");
+    check(probe::Tag::build({.who = p1, .other = n2, .crowd = {p1}}).has_value(), "absent weight skips its range");
 }
 
 void decode_next_reads_packed_messages_in_order() {
@@ -300,7 +317,7 @@ int main() {
     built_messages_encode_to_vector_bytes();
     quantization_snaps_to_grid();
     build_refuses_what_decoders_refuse();
-    encode_refuses_invalid_default_value();
+    unions_and_opts_build_encode_and_print();
     decode_next_reads_packed_messages_in_order();
     text_matches_go();
     return marque::test::check_finish();

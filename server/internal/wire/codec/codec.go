@@ -354,3 +354,19 @@ func (l List[T]) At(i int) T { return l.s[i] }
 func (l List[T]) All() iter.Seq2[int, T] {
 	return slices.All(l.s)
 }
+
+type Opt[T any] struct {
+	v  T
+	ok bool
+}
+
+func Some[T any](v T) Opt[T] { return Opt[T]{v: v, ok: true} }
+
+func (o Opt[T]) Get() (T, bool) { return o.v, o.ok }
+
+func ReadOpt[T any](r *Reader, read func(*Reader) T) Opt[T] {
+	if !r.Bool() || r.err != nil {
+		return Opt[T]{}
+	}
+	return Some(read(r))
+}

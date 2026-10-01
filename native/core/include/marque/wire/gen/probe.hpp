@@ -4,8 +4,10 @@
 
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -13,7 +15,7 @@
 
 namespace marque::wire::probe {
 
-inline constexpr std::uint64_t schema_hash = 0x807af558ef3a158cULL;
+inline constexpr std::uint64_t schema_hash = 0xf06ba111555b7fc8ULL;
 
 namespace detail {
 struct Access;
@@ -53,6 +55,8 @@ enum class Option : std::uint32_t {
     trade = 4,
 };
 
+using Who = std::variant<PlayerId, NpcId>;
+
 struct PairFields {
     NpcId who{};
     float weight = 0;
@@ -64,6 +68,8 @@ class Pair {
 public:
     static std::expected<Pair, codec::Error> build(PairFields f);
 
+    Pair() = delete;
+
     const NpcId& who() const { return f_.who; }
     const float& weight() const { return f_.weight; }
 
@@ -71,6 +77,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Pair(PairFields f) : f_(std::move(f)) {}
+
     PairFields f_;
 };
 
@@ -85,6 +93,8 @@ class BagSlot {
 public:
     static std::expected<BagSlot, codec::Error> build(BagSlotFields f);
 
+    BagSlot() = delete;
+
     const std::uint8_t& slot() const { return f_.slot; }
     const ItemId& item() const { return f_.item; }
 
@@ -92,6 +102,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit BagSlot(BagSlotFields f) : f_(std::move(f)) {}
+
     BagSlotFields f_;
 };
 
@@ -106,6 +118,8 @@ class Offer {
 public:
     static std::expected<Offer, codec::Error> build(OfferFields f);
 
+    Offer() = delete;
+
     const PlayerId& owner() const { return f_.owner; }
     const ItemId& item() const { return f_.item; }
 
@@ -113,6 +127,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Offer(OfferFields f) : f_(std::move(f)) {}
+
     OfferFields f_;
 };
 
@@ -144,6 +160,8 @@ public:
 
     static std::expected<Probe, codec::Error> build(ProbeFields f);
 
+    Probe() = delete;
+
     const std::string& label() const { return f_.label; }
     const float& ratio() const { return f_.ratio; }
     const std::vector<Pair>& pairs() const { return f_.pairs; }
@@ -165,6 +183,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Probe(ProbeFields f) : f_(std::move(f)) {}
+
     ProbeFields f_;
 };
 
@@ -181,12 +201,16 @@ public:
 
     static std::expected<Ping, codec::Error> build(PingFields f);
 
+    Ping() = delete;
+
     const std::uint8_t& nonce() const { return f_.nonce; }
 
     bool operator==(const Ping&) const = default;
 
 private:
     friend struct detail::Access;
+    explicit Ping(PingFields f) : f_(std::move(f)) {}
+
     PingFields f_;
 };
 
@@ -203,12 +227,16 @@ public:
 
     static std::expected<Crowd, codec::Error> build(CrowdFields f);
 
+    Crowd() = delete;
+
     const std::vector<Pair>& pairs() const { return f_.pairs; }
 
     bool operator==(const Crowd&) const = default;
 
 private:
     friend struct detail::Access;
+    explicit Crowd(CrowdFields f) : f_(std::move(f)) {}
+
     CrowdFields f_;
 };
 
@@ -226,6 +254,8 @@ public:
 
     static std::expected<Party, codec::Error> build(PartyFields f);
 
+    Party() = delete;
+
     const PlayerId& leader() const { return f_.leader; }
     const std::vector<PlayerId>& members() const { return f_.members; }
 
@@ -233,6 +263,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Party(PartyFields f) : f_(std::move(f)) {}
+
     PartyFields f_;
 };
 
@@ -250,6 +282,8 @@ public:
 
     static std::expected<Inventory, codec::Error> build(InventoryFields f);
 
+    Inventory() = delete;
+
     const std::uint8_t& size() const { return f_.size; }
     const std::vector<BagSlot>& slots() const { return f_.slots; }
 
@@ -257,6 +291,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Inventory(InventoryFields f) : f_(std::move(f)) {}
+
     InventoryFields f_;
 };
 
@@ -275,6 +311,8 @@ public:
 
     static std::expected<Dialog, codec::Error> build(DialogFields f);
 
+    Dialog() = delete;
+
     const NpcId& npc() const { return f_.npc; }
     const std::vector<Option>& options() const { return f_.options; }
     const std::vector<std::uint16_t>& lines() const { return f_.lines; }
@@ -283,6 +321,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Dialog(DialogFields f) : f_(std::move(f)) {}
+
     DialogFields f_;
 };
 
@@ -300,6 +340,8 @@ public:
 
     static std::expected<Pick, codec::Error> build(PickFields f);
 
+    Pick() = delete;
+
     const NpcId& npc() const { return f_.npc; }
     const Option& option() const { return f_.option; }
 
@@ -307,6 +349,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Pick(PickFields f) : f_(std::move(f)) {}
+
     PickFields f_;
 };
 
@@ -324,6 +368,8 @@ public:
 
     static std::expected<Give, codec::Error> build(GiveFields f);
 
+    Give() = delete;
+
     const NpcId& npc() const { return f_.npc; }
     const std::uint8_t& slot() const { return f_.slot; }
 
@@ -331,6 +377,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Give(GiveFields f) : f_(std::move(f)) {}
+
     GiveFields f_;
 };
 
@@ -348,6 +396,8 @@ public:
 
     static std::expected<Trade, codec::Error> build(TradeFields f);
 
+    Trade() = delete;
+
     const PlayerId& from() const { return f_.from; }
     const std::vector<Offer>& offers() const { return f_.offers; }
 
@@ -355,6 +405,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Trade(TradeFields f) : f_(std::move(f)) {}
+
     TradeFields f_;
 };
 
@@ -372,6 +424,8 @@ public:
 
     static std::expected<Duel, codec::Error> build(DuelFields f);
 
+    Duel() = delete;
+
     const PlayerId& challenger() const { return f_.challenger; }
     const PlayerId& target() const { return f_.target; }
 
@@ -379,6 +433,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Duel(DuelFields f) : f_(std::move(f)) {}
+
     DuelFields f_;
 };
 
@@ -397,6 +453,8 @@ public:
 
     static std::expected<Zone, codec::Error> build(ZoneFields f);
 
+    Zone() = delete;
+
     const double& lo() const { return f_.lo; }
     const double& hi() const { return f_.hi; }
     const std::int8_t& tilt() const { return f_.tilt; }
@@ -405,10 +463,52 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Zone(ZoneFields f) : f_(std::move(f)) {}
+
     ZoneFields f_;
 };
 
-using StateMsg = std::variant<Zone>;
+struct TagFields {
+    Who who{};
+    Who other{};
+    std::vector<Who> crowd{};
+    std::optional<Who> by{};
+    std::optional<std::string> note{};
+    std::optional<std::uint8_t> weight{};
+    std::optional<Pair> pair{};
+    std::vector<std::optional<std::uint8_t>> slots{};
+
+    bool operator==(const TagFields&) const = default;
+};
+
+class Tag {
+public:
+    static constexpr std::uint32_t message_id = 12;
+    static constexpr codec::Channel channel = codec::Channel::state;
+
+    static std::expected<Tag, codec::Error> build(TagFields f);
+
+    Tag() = delete;
+
+    const Who& who() const { return f_.who; }
+    const Who& other() const { return f_.other; }
+    const std::vector<Who>& crowd() const { return f_.crowd; }
+    const std::optional<Who>& by() const { return f_.by; }
+    const std::optional<std::string>& note() const { return f_.note; }
+    const std::optional<std::uint8_t>& weight() const { return f_.weight; }
+    const std::optional<Pair>& pair() const { return f_.pair; }
+    const std::vector<std::optional<std::uint8_t>>& slots() const { return f_.slots; }
+
+    bool operator==(const Tag&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit Tag(TagFields f) : f_(std::move(f)) {}
+
+    TagFields f_;
+};
+
+using StateMsg = std::variant<Zone, Tag>;
 using EventsMsg = std::variant<Probe, Crowd, Party, Inventory, Dialog, Trade, Duel>;
 using InputMsg = std::variant<std::monostate>;
 using IntentsMsg = std::variant<Ping, Pick, Give>;
@@ -424,6 +524,7 @@ std::expected<void, codec::Error> encode(const Give& m, std::vector<std::uint8_t
 std::expected<void, codec::Error> encode(const Trade& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Duel& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Zone& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Tag& m, std::vector<std::uint8_t>& out);
 
 std::string to_text(const Pair& v);
 std::string to_text(const BagSlot& v);
@@ -439,6 +540,7 @@ std::string to_text(const Give& v);
 std::string to_text(const Trade& v);
 std::string to_text(const Duel& v);
 std::string to_text(const Zone& v);
+std::string to_text(const Tag& v);
 
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r);
 std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes);
