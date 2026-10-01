@@ -10,6 +10,11 @@ static atomic_int doc_cache_loads;
 static _Atomic pthread_t held_thread;
 static atomic_bool released;
 
+__attribute__((constructor))
+static void announce_loaded(void) {
+    fprintf(stderr, "repro_gdext_doc_race: shim loaded\n");
+}
+
 static int is_doc_cache(const char* path) {
     static const char suffix[] = "/editor_doc_cache-4.7.res";
     size_t len = strlen(path);

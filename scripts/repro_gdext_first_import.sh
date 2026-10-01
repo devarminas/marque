@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 rev="${1:-HEAD}"
@@ -35,9 +35,16 @@ if [[ -z "${REPRO_NO_RACE_SHIM:-}" ]]; then
     cc -shared -fPIC -O2 -o "$work/doc_race.so" "$clone/scripts/repro_gdext_doc_race.c"
     preload="$work/doc_race.so"
 fi
-LD_PRELOAD="$preload" godot --headless --path "$clone/client" --import > "$work/import.log" 2>&1
-status=$?
-grep -a "repro_gdext_doc_race" "$work/import.log"
+status=0
+LD_PRELOAD="$preload" godot --headless --path "$clone/client" --import > "$work/import.log" 2>&1 || status=$?
+
+grep -a "repro_gdext_doc_race" "$work/import.log" || true
 tail -3 "$work/import.log"
 echo "first import exit status: $status"
+
+if [[ -n "$preload" ]] && ! grep -aq "repro_gdext_doc_race: shim loaded" "$work/import.log"; then
+    echo "shim marker missing: cannot tell race fixed from shim never loaded"
+    exit 3
+fi
+
 exit "$status"
