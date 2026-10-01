@@ -56,7 +56,13 @@ func (q Quant) Step(v float64) uint64 { return uint64(math.Round(v*q.PerUnit) - 
 
 func (q Quant) Value(n uint64) float64 { return (float64(n) + q.Min*q.PerUnit) / q.PerUnit }
 
-func (q Quant) Snap(v float64) float64 { return q.Value(q.Step(v)) }
+func (q Quant) Snap(v float64) float64 {
+	r := math.Round(v * q.PerUnit)
+	if !(r >= q.Min*q.PerUnit && r <= q.Max*q.PerUnit) {
+		return v
+	}
+	return q.Value(q.Step(v))
+}
 
 type Writer struct {
 	buf   []byte

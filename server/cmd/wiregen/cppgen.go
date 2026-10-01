@@ -476,12 +476,13 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
 	}
 	b.WriteString("}\n\n")
 	for _, r := range records {
-		fmt.Fprintf(&b, "std::expected<%[1]s, codec::Error> %[1]s::build(%[1]sFields f) {\n    codec::Writer w;\n    write(w, f);\n    if (auto err = w.error()) return std::unexpected(*err);\n", r.name)
+		fmt.Fprintf(&b, "std::expected<%[1]s, codec::Error> %[1]s::build(%[1]sFields f) {\n", r.name)
 		for _, f := range r.fields {
 			if snap := cppSnap(f.Type, "f."+f.Name); snap != "" {
 				fmt.Fprintf(&b, "    %s\n", snap)
 			}
 		}
+		b.WriteString("    codec::Writer w;\n    write(w, f);\n    if (auto err = w.error()) return std::unexpected(*err);\n")
 		fmt.Fprintf(&b, "    return detail::Access::make<%[1]s>(std::move(f));\n}\n\n", r.name)
 		fmt.Fprintf(&b, "std::string to_text(const %s& v) {\n    std::string out;\n    text(out, v);\n    return out;\n}\n\n", r.name)
 	}

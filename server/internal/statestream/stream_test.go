@@ -2,6 +2,7 @@ package statestream
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -226,6 +227,33 @@ func TestPendingFactDropsWhenANamedEntityLeavesInterest(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("unacked swing naming a wolf that left interest at tick 3:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestBoundaryTransformSnapsBeforeValidationAndRebuildsInsideEntity(t *testing.T) {
+	l := newLink(t, DefaultConfig())
+	edge := must(wire.TransformFields{X: 4096, Y: -4096.004, Z: -4095.996}.Build())
+	got := l.step(Frame{Tick: 1, Entities: []Entity{
+		Player(me, edge, vitals(100), must(wire.GearFields{}.Build()), idle()),
+	}}, Focus{}, true)
+	want := []string{`entity{id:PlayerId(1/0) transform:Transform{x:4096 y:-4096 z:-4096} vitals:Vitals{hp:100 max_hp:100 mana:10 max_mana:10} gear:Gear{helmet:_ chest:_ trousers:_ feet:_ left_hand:_ right_hand:_} cast:CastBar{casting:_} look:_}`}
+	if !slices.Equal(got, want) {
+		t.Fatalf("entity at the pos grid edges:\ngot  %v\nwant %v", got, want)
+	}
+	for _, c := range []struct {
+		x    float64
+		want string
+	}{
+		{4096.006, "wire: quantized value out of range"},
+		{-4096.006, "wire: quantized value out of range"},
+		{math.NaN(), "wire: non-finite number"},
+		{math.Inf(-1), "wire: non-finite number"},
+		{1e30, "wire: quantized value out of range"},
+	} {
+		_, err := wire.TransformFields{X: c.x}.Build()
+		if fmt.Sprint(err) != c.want {
+			t.Errorf("x %v: got %v, want %s", c.x, err, c.want)
+		}
 	}
 }
 

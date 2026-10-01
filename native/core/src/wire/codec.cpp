@@ -129,7 +129,11 @@ std::uint64_t Quant::step(double v) const {
 
 double Quant::value(std::uint64_t n) const { return (static_cast<double>(n) + min * per_unit) / per_unit; }
 
-double Quant::snap(double v) const { return value(step(v)); }
+double Quant::snap(double v) const {
+    const double r = std::round(v * per_unit);
+    if (!(r >= min * per_unit && r <= max * per_unit)) return v;
+    return value(step(v));
+}
 
 std::expected<void, Error> Writer::finish() {
     if (err_) {

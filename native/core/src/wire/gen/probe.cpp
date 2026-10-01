@@ -943,10 +943,10 @@ std::string to_text(const Offer& v) {
 }
 
 std::expected<Probe, codec::Error> Probe::build(ProbeFields f) {
+    f.at = quant_coord.snap(f.at);
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    f.at = quant_coord.snap(f.at);
     return detail::Access::make<Probe>(std::move(f));
 }
 
@@ -1074,11 +1074,11 @@ std::string to_text(const Duel& v) {
 }
 
 std::expected<Zone, codec::Error> Zone::build(ZoneFields f) {
+    f.lo = quant_coord.snap(f.lo);
+    f.hi = quant_coord.snap(f.hi);
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    f.lo = quant_coord.snap(f.lo);
-    f.hi = quant_coord.snap(f.hi);
     return detail::Access::make<Zone>(std::move(f));
 }
 
@@ -1102,11 +1102,11 @@ std::string to_text(const Tag& v) {
 }
 
 std::expected<Mark, codec::Error> Mark::build(MarkFields f) {
+    if (f.spot) *f.spot = quant_coord.snap(*f.spot);
+    for (auto& e : f.path) if (e) *e = quant_coord.snap(*e);
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
-    if (f.spot) *f.spot = quant_coord.snap(*f.spot);
-    for (auto& e : f.path) if (e) *e = quant_coord.snap(*e);
     return detail::Access::make<Mark>(std::move(f));
 }
 

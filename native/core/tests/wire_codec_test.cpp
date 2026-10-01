@@ -249,6 +249,16 @@ void unions_and_opts_build_encode_and_print() {
     check(encode(mark, mark_bytes).has_value() && to_hex(mark_bytes) == "0d012d0200011e", "snapped mark encodes to its vector");
     const auto pose = must(wire::Pose::build({.id = {7, 2}, .x = 87.49238566911093, .y = 0.005, .z = -36.739013361827794}));
     check(pose.x() == 87.49 && pose.y() == 0.01 && pose.z() == -36.74, "build snaps a pose to what the peer decodes");
+    const auto edge = must(wire::Transform::build({.x = 4096, .y = -4096.004, .z = -4095.996}));
+    check(edge.x() == 4096 && edge.y() == -4096 && edge.z() == -4096, "build snaps a hair below min onto min and keeps max");
+    const auto entity = must(wire::Entity::build({.id = wire::PlayerId{1, 0}, .transform = edge}));
+    std::vector<std::uint8_t> entity_bytes;
+    check(encode(entity, entity_bytes).has_value() && to_hex(entity_bytes) == "100101000100800c00000000000000000000000000",
+          "an entity rebuilds around the edge transform");
+    check(refuses(wire::Transform::build({.x = 4096.006}), Error::out_of_range), "x a step past max");
+    check(refuses(wire::Transform::build({.x = -4096.006}), Error::out_of_range), "x a step below min");
+    check(refuses(wire::Transform::build({.x = 1e30}), Error::out_of_range), "x far past max");
+    check(refuses(wire::Transform::build({.x = std::nan("")}), Error::non_finite), "x not a number");
 }
 
 void decode_next_reads_packed_messages_in_order() {

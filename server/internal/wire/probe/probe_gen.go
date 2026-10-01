@@ -416,12 +416,12 @@ type Probe struct {
 func (f ProbeFields) Build() (Probe, error) {
 	f.Pairs = codec.Clone(f.Pairs)
 	f.Shorts = codec.Clone(f.Shorts)
+	f.At = quantCoord.Snap(f.At)
 	w := codec.NewChecker()
 	f.encode(&w)
 	if err := w.Err(); err != nil {
 		return Probe{}, err
 	}
-	f.At = quantCoord.Snap(f.At)
 	return Probe{f}, nil
 }
 
@@ -1263,13 +1263,13 @@ type Zone struct {
 }
 
 func (f ZoneFields) Build() (Zone, error) {
+	f.Lo = quantCoord.Snap(f.Lo)
+	f.Hi = quantCoord.Snap(f.Hi)
 	w := codec.NewChecker()
 	f.encode(&w)
 	if err := w.Err(); err != nil {
 		return Zone{}, err
 	}
-	f.Lo = quantCoord.Snap(f.Lo)
-	f.Hi = quantCoord.Snap(f.Hi)
 	return Zone{f}, nil
 }
 
@@ -1557,11 +1557,6 @@ type Mark struct {
 
 func (f MarkFields) Build() (Mark, error) {
 	f.Path = codec.Clone(f.Path)
-	w := codec.NewChecker()
-	f.encode(&w)
-	if err := w.Err(); err != nil {
-		return Mark{}, err
-	}
 	if v, ok := f.Spot.Get(); ok {
 		v = quantCoord.Snap(v)
 		f.Spot = codec.Some(v)
@@ -1571,6 +1566,11 @@ func (f MarkFields) Build() (Mark, error) {
 			v = quantCoord.Snap(v)
 			f.Path[i] = codec.Some(v)
 		}
+	}
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Mark{}, err
 	}
 	return Mark{f}, nil
 }
