@@ -22,6 +22,7 @@ export_presets.cfg
 *.out
 
 /native/build/
+/client/bin/*.so
 
 # Local
 .env

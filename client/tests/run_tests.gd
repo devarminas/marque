@@ -2,6 +2,7 @@ extends SceneTree
 
 
 const TREE_FREE_SUITES: Array = [
+	{"name": "gdext", "script": preload("res://tests/test_gdext.gd")},
 	{"name": "tick clock", "script": preload("res://tests/test_tick_clock.gd")},
 	{"name": "polyline walker", "script": preload("res://tests/test_polyline_walker.gd")},
 	{"name": "steer integrate", "script": preload("res://tests/test_steer_integrate.gd")},
