@@ -61,14 +61,18 @@ func TestReaderHandsDecodedInputOverChannel(t *testing.T) {
 			}
 		}
 	}
-	input, err := wire.Input{Dx: 0.5, Dz: -1, Jump: true, Seq: 7}.Append(nil)
+	sample, err := wire.InputFields{Dx: 0.5, Dz: -1, Jump: true, Seq: 7}.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := sample.Append(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	write(must(ep.Flush(tick, Unreliable{Stamp: 7, Items: [][]byte{input}})))
 
 	in := next(t, inbound)
-	want := Inbound{From: cliAddr, At: in.At, PeerAck: NoAcks, InputStamp: 7, Input: []wire.InputMsg{wire.Input{Dx: 0.5, Dz: -1, Jump: true, Seq: 7}}}
+	want := Inbound{From: cliAddr, At: in.At, PeerAck: NoAcks, InputStamp: 7, Input: []wire.InputMsg{sample}}
 	if !reflect.DeepEqual(in, want) {
 		t.Fatalf("got %+v, want %+v", in, want)
 	}

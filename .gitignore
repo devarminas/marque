@@ -21,7 +21,6 @@ export_presets.cfg
 *.test
 *.out
 
-# Native C++
 /native/build/
 
 # Local
