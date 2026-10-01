@@ -1,8 +1,3 @@
-// Package codec is the hand-written runtime under the wiregen-generated
-// message code. Values are little-endian and byte-aligned. Message ids, entity
-// handle parts, enum values, and string and list lengths are unsigned LEB128
-// varints capped at 32 bits. Writer and Reader keep the first error and turn
-// every later call into a no-op, so generated code needs no per-field checks.
 package codec
 
 import (
@@ -51,8 +46,6 @@ var (
 	ErrRule           = errors.New("wire: value breaks a schema rule")
 )
 
-// Quant maps a float onto the integers 0..Steps: q = round(v*PerUnit) - Min*PerUnit.
-// Width is the byte count of the smallest unsigned integer holding Steps.
 type Quant struct {
 	Min, Max, PerUnit float64
 	Steps             uint64
@@ -82,7 +75,6 @@ func (w *Writer) Err() error { return w.err }
 
 func (w *Writer) writing() bool { return w.err == nil && !w.check }
 
-// Result returns the grown buffer, or the caller's buffer unchanged on error.
 func (w *Writer) Result() ([]byte, error) {
 	if w.err != nil {
 		return w.buf[:w.start], w.err
@@ -185,7 +177,6 @@ type Reader struct {
 
 func NewReader(b []byte) *Reader { return &Reader{buf: b} }
 
-// Len is the number of unread bytes.
 func (r *Reader) Len() int { return len(r.buf) }
 
 func (r *Reader) Err() error { return r.err }
@@ -196,7 +187,6 @@ func (r *Reader) Fail(err error) {
 	}
 }
 
-// Finish reports the first error, or ErrTrailing when bytes remain.
 func (r *Reader) Finish() error {
 	if r.err == nil && len(r.buf) > 0 {
 		r.err = ErrTrailing
@@ -265,7 +255,6 @@ func (r *Reader) F32() float32 {
 	return v
 }
 
-// Varint rejects overlong forms so every value has exactly one encoding.
 func (r *Reader) Varint() uint32 {
 	var v uint32
 	for i := 0; i < 5; i++ {
@@ -291,9 +280,6 @@ func (r *Reader) Varint() uint32 {
 	return 0
 }
 
-// Count reads a length and fails with ErrTruncated when n elements of at
-// least minElem bytes each cannot fit in what remains, so a hostile count
-// never sizes an allocation.
 func (r *Reader) Count(bound, minElem int) int {
 	n := r.Varint()
 	if r.err == nil && uint64(n) > uint64(bound) {

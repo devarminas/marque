@@ -2,6 +2,8 @@
 
 `schema.wire` describes every message on the wire (ADR 0018 section 2). `server/cmd/wiregen` reads it and writes the Go and C++ codecs. Regenerate with `scripts/wiregen.sh`. `scripts/wiregen_check.sh` fails when the committed output is stale.
 
+`wiregen gen [-root <dir>] [-src <dir>]` (from `server/`) writes every target's generated files under `-root` (default `..`), reading the schemas from `-src` (default `..`). `wiregen canon [schema]` prints the canonical form `SchemaHash` hashes; with no argument it reads `shared/wire/schema.wire`. Paths are relative to the repository root, which is the parent of the `server` module.
+
 ## Grammar
 
 One declaration or field per line. `#` starts a comment. Names are declared before use.
@@ -171,8 +173,21 @@ Every channel decoder of both schemas runs under a fuzzer: Go's native fuzzer (`
 
 `scripts/wire_fuzz.sh <seconds>` builds the libFuzzer targets in `native/build/wire-fuzz` and runs all 16 fuzzers at once for that many seconds each. It prints each run's final stats line and exits 1 if any run found a crash. Logs and any crashing input land in `native/build/wire-fuzz/logs`. Go writes a crashing input to `server/internal/wire/testdata/fuzz`.
 
+## Runtime codec
+
+`server/internal/wire/codec` (Go) and `native/core/{include,src}/wire/codec` (C++) are the
+hand-written runtime the generated message code builds on; they are not generated. Both keep only
+the first error a `Writer` or `Reader` hits and turn every later call into a no-op, so generated
+code needs no per-field checks. A varint that is overlong, or whose fifth byte carries bits above
+`0x0f`, is refused so every value has exactly one encoding. `Reader.Count`/`count` fails with
+truncated before the decoder can size an allocation from a count whose claimed elements cannot fit
+in the remaining bytes — proved by `TestHostileCountFailsBeforeAllocating` (Go) and
+`wire_hostile_count_test.cpp` (C++), which counts heap allocations around the decode. C++
+`valid_utf8` accepts exactly what Go's `utf8.Valid` accepts: no overlong forms, no surrogates,
+nothing above U+10FFFF.
+
 ## Files
 
 - `testdata/probe.wire` is a fixture that uses every field type and every rule kind. It generates `server/internal/wire/probe` and `marque/wire/gen/probe.hpp`, and exists only for tests. Its `crowd` message carries the hostile-count tests.
 - `vectors/starter.vec`, `vectors/probe.vec`, and `vectors/rules.vec` are the conformance vectors.
-- `go run ./cmd/wiregen/dump <hex>...` (from `server/`) prints encoded messages as text.
+- `go run ./cmd/wiregen/dump <hex>...` (from `server/`) prints encoded messages as text. It lives in its own package apart from `wiregen` so the generator never imports the package it generates: a broken generated package must not stop regeneration.

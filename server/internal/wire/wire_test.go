@@ -264,12 +264,10 @@ func TestListViewReadsDecodedElements(t *testing.T) {
 	}
 }
 
-// Crowd's list bound is 65535 and each Pair is at least 6 bytes, so the 3-byte
-// payload 03 ff7f claims 16383 pairs (98298 bytes) with none behind it.
 func TestHostileCountFailsBeforeAllocating(t *testing.T) {
-	b := mustHex(t, "03ff7f")
+	claims16383PairsWithNoneBehindIt := mustHex(t, "03ff7f")
 	var err error
-	allocs := testing.AllocsPerRun(100, func() { _, err = probe.DecodeEvents(b) })
+	allocs := testing.AllocsPerRun(100, func() { _, err = probe.DecodeEvents(claims16383PairsWithNoneBehindIt) })
 	if !errors.Is(err, codec.ErrTruncated) {
 		t.Fatalf("got %v, want %v", err, codec.ErrTruncated)
 	}

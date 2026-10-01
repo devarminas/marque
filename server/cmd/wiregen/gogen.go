@@ -14,8 +14,6 @@ var goPrim = map[string]string{
 	"bool": "bool", "f32": "float32",
 }
 
-// goWire maps each primitive to the Writer/Reader method that carries it and
-// the unsigned type a signed value converts through.
 var goWire = map[string][2]string{
 	"u8": {"U8", ""}, "u16": {"U16", ""}, "u32": {"U32", ""}, "u64": {"U64", ""},
 	"i8": {"U8", "uint8"}, "i16": {"U16", "uint16"}, "i32": {"U32", "uint32"}, "i64": {"U64", "uint64"},

@@ -11,8 +11,6 @@ var cppPrim = map[string]string{
 	"bool": "bool", "f32": "float",
 }
 
-// cppWire maps each primitive to the Writer/Reader method that carries it and
-// the unsigned type a signed value converts through.
 var cppWire = map[string][2]string{
 	"u8": {"u8", ""}, "u16": {"u16", ""}, "u32": {"u32", ""}, "u64": {"u64", ""},
 	"i8": {"u8", "std::uint8_t"}, "i16": {"u16", "std::uint16_t"}, "i32": {"u32", "std::uint32_t"}, "i64": {"u64", "std::uint64_t"},

@@ -26,7 +26,6 @@ type Quant struct {
 	Min, Max, PerUnit int64
 }
 
-// Steps is the largest encoded value; the wire value runs 0..Steps.
 func (q *Quant) Steps() uint64 { return uint64((q.Max - q.Min) * q.PerUnit) }
 
 func (q *Quant) Width() int {
@@ -154,8 +153,6 @@ const (
 	KindStruct
 )
 
-// Type is a field type. Prim is set for KindPrim, Bound for strings and lists,
-// Elem for lists, and exactly one of the declaration pointers for named types.
 type Type struct {
 	Kind   Kind
 	Prim   string
@@ -167,8 +164,6 @@ type Type struct {
 	Struct *Struct
 }
 
-// MinSize is the fewest bytes any value of t encodes to. List decoders use it
-// to refuse a count the remaining bytes cannot hold before allocating.
 func (t Type) MinSize() int {
 	switch t.Kind {
 	case KindPrim:
@@ -475,7 +470,6 @@ func (p *parser) openBlock(toks []string, want int) error {
 	return nil
 }
 
-// block calls line for each body line until the closing brace.
 func (p *parser) block(line func([]string) error) error {
 	p.pos++
 	for ; p.pos < len(p.lines); p.pos++ {
@@ -892,7 +886,6 @@ func (p *parser) operand(fields []Field, tok string, line int) (Operand, error) 
 	return o, nil
 }
 
-// typ parses one type from the front of toks and returns the unread tail.
 func (p *parser) typ(toks []string) (Type, []string, error) {
 	if len(toks) == 0 {
 		return Type{}, nil, p.errf("missing type")
@@ -983,8 +976,6 @@ func (s *Schema) Canonical() string {
 	return b.String()
 }
 
-// Hash is the first 8 bytes of SHA-256(Canonical()), read big-endian, so its
-// hex spelling equals the first 16 hex digits of `wiregen canon | sha256sum`.
 func (s *Schema) Hash() uint64 {
 	sum := sha256.Sum256([]byte(s.Canonical()))
 	return binary.BigEndian.Uint64(sum[:8])
@@ -1000,7 +991,6 @@ func (s *Schema) MessagesOn(channel string) []*Message {
 	return out
 }
 
-// goName turns snake_case into PascalCase: max_hp -> MaxHp.
 func goName(snake string) string {
 	var b strings.Builder
 	for _, part := range strings.Split(snake, "_") {
