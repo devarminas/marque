@@ -10,7 +10,7 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-const SchemaHash uint64 = 0xf06ba111555b7fc8
+const SchemaHash uint64 = 0xc7d7320f02b60ee7
 
 type Message interface {
 	MessageID() uint32
@@ -421,6 +421,7 @@ func (f ProbeFields) Build() (Probe, error) {
 	if err := w.Err(); err != nil {
 		return Probe{}, err
 	}
+	f.At = quantCoord.Snap(f.At)
 	return Probe{f}, nil
 }
 
@@ -1267,6 +1268,8 @@ func (f ZoneFields) Build() (Zone, error) {
 	if err := w.Err(); err != nil {
 		return Zone{}, err
 	}
+	f.Lo = quantCoord.Snap(f.Lo)
+	f.Hi = quantCoord.Snap(f.Hi)
 	return Zone{f}, nil
 }
 
@@ -1543,6 +1546,107 @@ func (v Tag) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
+type MarkFields struct {
+	Spot codec.Opt[float64]
+	Path []codec.Opt[float64]
+}
+
+type Mark struct {
+	f MarkFields
+}
+
+func (f MarkFields) Build() (Mark, error) {
+	f.Path = codec.Clone(f.Path)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Mark{}, err
+	}
+	if v, ok := f.Spot.Get(); ok {
+		v = quantCoord.Snap(v)
+		f.Spot = codec.Some(v)
+	}
+	for i := range f.Path {
+		if v, ok := f.Path[i].Get(); ok {
+			v = quantCoord.Snap(v)
+			f.Path[i] = codec.Some(v)
+		}
+	}
+	return Mark{f}, nil
+}
+
+func (v Mark) Spot() codec.Opt[float64] { return v.f.Spot }
+
+func (v Mark) Path() codec.List[codec.Opt[float64]] { return codec.ListOf(v.f.Path) }
+
+func (f MarkFields) encode(w *codec.Writer) {
+	if v, ok := f.Spot.Get(); ok {
+		w.Bool(true)
+		w.Quant(v, quantCoord)
+	} else {
+		w.Bool(false)
+	}
+	w.Count(len(f.Path), 2)
+	for _, e := range f.Path {
+		if v, ok := e.Get(); ok {
+			w.Bool(true)
+			w.Quant(v, quantCoord)
+		} else {
+			w.Bool(false)
+		}
+	}
+}
+
+func decodeMark(r *codec.Reader) Mark {
+	var f MarkFields
+	f.Spot = codec.ReadOpt(r, func(r *codec.Reader) float64 { return r.Quant(quantCoord) })
+	if n := r.Count(2, 1); n > 0 {
+		f.Path = make([]codec.Opt[float64], n)
+		for i := range f.Path {
+			f.Path[i] = codec.ReadOpt(r, func(r *codec.Reader) float64 { return r.Quant(quantCoord) })
+		}
+	}
+	return Mark{f}
+}
+
+func (f MarkFields) appendText(b []byte) []byte {
+	b = append(b, "mark{spot:"...)
+	if v, ok := f.Spot.Get(); ok {
+		b = strconv.AppendFloat(b, v, 'g', -1, 64)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " path:"...)
+	b = append(b, '[')
+	for i, e := range f.Path {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		if v, ok := e.Get(); ok {
+			b = strconv.AppendFloat(b, v, 'g', -1, 64)
+		} else {
+			b = append(b, '_')
+		}
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v Mark) String() string { return string(v.f.appendText(nil)) }
+
+func (Mark) MessageID() uint32 { return 13 }
+
+func (Mark) Channel() codec.Channel { return codec.ChannelState }
+
+func (Mark) stateMsg() {}
+
+func (v Mark) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(13)
+	v.f.encode(&w)
+	return w.Result()
+}
+
 func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	var m StateMsg
 	switch r.Varint() {
@@ -1550,6 +1654,8 @@ func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 		m = decodeZone(r)
 	case 12:
 		m = decodeTag(r)
+	case 13:
+		m = decodeMark(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
 	}

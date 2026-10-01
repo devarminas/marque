@@ -833,6 +833,9 @@ std::expected<Transform, codec::Error> Transform::build(TransformFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
+    f.x = quant_pos.snap(f.x);
+    f.y = quant_pos.snap(f.y);
+    f.z = quant_pos.snap(f.z);
     return detail::Access::make<Transform>(std::move(f));
 }
 
@@ -911,6 +914,8 @@ std::expected<Input, codec::Error> Input::build(InputFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
+    f.dx = quant_wish.snap(f.dx);
+    f.dz = quant_wish.snap(f.dz);
     return detail::Access::make<Input>(std::move(f));
 }
 
@@ -924,6 +929,9 @@ std::expected<Pose, codec::Error> Pose::build(PoseFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
+    f.x = quant_pos.snap(f.x);
+    f.y = quant_pos.snap(f.y);
+    f.z = quant_pos.snap(f.z);
     return detail::Access::make<Pose>(std::move(f));
 }
 

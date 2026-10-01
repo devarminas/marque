@@ -15,7 +15,7 @@
 
 namespace marque::wire::probe {
 
-inline constexpr std::uint64_t schema_hash = 0xf06ba111555b7fc8ULL;
+inline constexpr std::uint64_t schema_hash = 0xc7d7320f02b60ee7ULL;
 
 namespace detail {
 struct Access;
@@ -508,7 +508,35 @@ private:
     TagFields f_;
 };
 
-using StateMsg = std::variant<Zone, Tag>;
+struct MarkFields {
+    std::optional<double> spot{};
+    std::vector<std::optional<double>> path{};
+
+    bool operator==(const MarkFields&) const = default;
+};
+
+class Mark {
+public:
+    static constexpr std::uint32_t message_id = 13;
+    static constexpr codec::Channel channel = codec::Channel::state;
+
+    static std::expected<Mark, codec::Error> build(MarkFields f);
+
+    Mark() = delete;
+
+    const std::optional<double>& spot() const { return f_.spot; }
+    const std::vector<std::optional<double>>& path() const { return f_.path; }
+
+    bool operator==(const Mark&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit Mark(MarkFields f) : f_(std::move(f)) {}
+
+    MarkFields f_;
+};
+
+using StateMsg = std::variant<Zone, Tag, Mark>;
 using EventsMsg = std::variant<Probe, Crowd, Party, Inventory, Dialog, Trade, Duel>;
 using InputMsg = std::variant<std::monostate>;
 using IntentsMsg = std::variant<Ping, Pick, Give>;
@@ -525,6 +553,7 @@ std::expected<void, codec::Error> encode(const Trade& m, std::vector<std::uint8_
 std::expected<void, codec::Error> encode(const Duel& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Zone& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Tag& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Mark& m, std::vector<std::uint8_t>& out);
 
 std::string to_text(const Pair& v);
 std::string to_text(const BagSlot& v);
@@ -541,6 +570,7 @@ std::string to_text(const Trade& v);
 std::string to_text(const Duel& v);
 std::string to_text(const Zone& v);
 std::string to_text(const Tag& v);
+std::string to_text(const Mark& v);
 
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r);
 std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes);

@@ -242,6 +242,13 @@ void unions_and_opts_build_encode_and_print() {
     check(refuses(probe::Tag::build({.who = p1, .other = n2, .crowd = {p1}, .weight = std::uint8_t{10}}), Error::rule),
           "present weight 10 outside 1..9");
     check(probe::Tag::build({.who = p1, .other = n2, .crowd = {p1}}).has_value(), "absent weight skips its range");
+
+    const auto mark = must(probe::Mark::build({.spot = 1.13, .path = {std::nullopt, -2.6}}));
+    check(mark.spot() == 1.25 && mark.path()[1] == -2.5, "build snaps opt and list quants to the grid");
+    std::vector<std::uint8_t> mark_bytes;
+    check(encode(mark, mark_bytes).has_value() && to_hex(mark_bytes) == "0d012d0200011e", "snapped mark encodes to its vector");
+    const auto pose = must(wire::Pose::build({.id = {7, 2}, .x = 87.49238566911093, .y = 0.005, .z = -36.739013361827794}));
+    check(pose.x() == 87.49 && pose.y() == 0.01 && pose.z() == -36.74, "build snaps a pose to what the peer decodes");
 }
 
 void decode_next_reads_packed_messages_in_order() {

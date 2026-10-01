@@ -364,6 +364,9 @@ func (f TransformFields) Build() (Transform, error) {
 	if err := w.Err(); err != nil {
 		return Transform{}, err
 	}
+	f.X = quantPos.Snap(f.X)
+	f.Y = quantPos.Snap(f.Y)
+	f.Z = quantPos.Snap(f.Z)
 	return Transform{f}, nil
 }
 
@@ -752,6 +755,8 @@ func (f InputFields) Build() (Input, error) {
 	if err := w.Err(); err != nil {
 		return Input{}, err
 	}
+	f.Dx = quantWish.Snap(f.Dx)
+	f.Dz = quantWish.Snap(f.Dz)
 	return Input{f}, nil
 }
 
@@ -823,6 +828,9 @@ func (f PoseFields) Build() (Pose, error) {
 	if err := w.Err(); err != nil {
 		return Pose{}, err
 	}
+	f.X = quantPos.Snap(f.X)
+	f.Y = quantPos.Snap(f.Y)
+	f.Z = quantPos.Snap(f.Z)
 	return Pose{f}, nil
 }
 

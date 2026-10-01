@@ -54,6 +54,10 @@ type Quant struct {
 
 func (q Quant) Step(v float64) uint64 { return uint64(math.Round(v*q.PerUnit) - q.Min*q.PerUnit) }
 
+func (q Quant) Value(n uint64) float64 { return (float64(n) + q.Min*q.PerUnit) / q.PerUnit }
+
+func (q Quant) Snap(v float64) float64 { return q.Value(q.Step(v)) }
+
 type Writer struct {
 	buf   []byte
 	start int
@@ -322,7 +326,7 @@ func (r *Reader) Quant(q Quant) float64 {
 	if r.err != nil {
 		return 0
 	}
-	return (float64(n) + q.Min*q.PerUnit) / q.PerUnit
+	return q.Value(n)
 }
 
 func Unique(n int, equal func(i, j int) bool) bool {

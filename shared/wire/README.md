@@ -14,8 +14,8 @@ quant pos min -4096 max 4096 per_unit 100    # fixed-point number
 enum RefuseReason {                          # enum, explicit values
   cooldown = 6
 }
-union EntityId {                             # tagged union over handle kinds
-  player PlayerId = 1                        # <member> <Handle> = <tag>
+union EntityId {
+  player PlayerId = 1
   npc NpcId = 2
 }
 struct Pair {                                # reusable record
@@ -25,7 +25,7 @@ struct Pair {                                # reusable record
 message pose = 2 on state s2c {              # message <name> = <id> on <channel> <direction>
   id PlayerId                                # <field> <type>
   x pos
-  focus opt(EntityId)                        # optional field
+  focus opt(EntityId)
 }
 ```
 
@@ -112,7 +112,7 @@ A message is its varint id followed by its fields.
 
 Every struct and message `X` generates two types in each language.
 
-- `XFields` is a plain record with public fields. You fill it and call Go `XFields{...}.Build()` or C++ `X::build(XFields{...})`. Build runs every check the encoder runs and returns the same error a decoder gives for the same value's bytes.
+- `XFields` is a plain record with public fields. You fill it and call Go `XFields{...}.Build()` or C++ `X::build(XFields{...})`. Build runs every check the encoder runs and returns the same error a decoder gives for the same value's bytes. Build then snaps every quant, including those inside an `opt` or a `list`, to its grid, so the record reads exactly the value the peer decodes and two records compare equal when their bytes do.
 - `X` holds a validated copy behind getters. Go stores it in an unexported field and exposes `v.Leader()`, with lists returned as `codec.List[T]` (`Len`, `At`, `All`), a view with no setter. C++ keeps it private and exposes `const T& leader() const`. Decoding and Build are the only ways to fill an `X`, so code after the decoder never checks it again.
 - Go Build copies each list, so changing the caller's slice afterwards cannot change the message. C++ build takes `XFields` by value, which owns its vectors.
 - C++ deletes `X`'s default constructor, so an unbuilt `X` does not compile. An `XFields` that holds a struct field has no default for it either, so the caller must pass a built record. Go cannot forbid the zero value `X{}`, so code hands Go records to callers only from Decode or Build, and Append still runs every check: it refuses a zero value that breaks a rule and leaves the output buffer as it was.
@@ -188,6 +188,6 @@ nothing above U+10FFFF.
 
 ## Files
 
-- `testdata/probe.wire` is a fixture that uses every field type and every rule kind. It generates `server/internal/wire/probe` and `marque/wire/gen/probe.hpp`, and exists only for tests. Its `crowd` message carries the hostile-count tests.
+- `testdata/probe.wire` is a fixture that uses every field type and every rule kind. It generates `server/internal/wire/probe` and `marque/wire/gen/probe.hpp`, and exists only for tests. Its `crowd` message carries the hostile-count tests, and its `mark` message the quant snapping inside `opt` and `list`.
 - `vectors/starter.vec`, `vectors/probe.vec`, `vectors/rules.vec`, `vectors/unions.vec`, and `vectors/state.vec` are the conformance vectors. `state.vec` covers the state stream messages (ARM-356).
 - `go run ./cmd/wiregen/dump <hex>...` (from `server/`) prints encoded messages as text. It lives in its own package apart from `wiregen` so the generator never imports the package it generates: a broken generated package must not stop regeneration.

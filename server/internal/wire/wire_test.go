@@ -286,6 +286,27 @@ func TestUnionsAndOptsBuildEncodeAndRead(t *testing.T) {
 	}
 }
 
+func TestBuildSnapsQuantsToWhatThePeerDecodes(t *testing.T) {
+	tr := must(wire.TransformFields{X: 87.49238566911093, Y: 0.005, Z: -36.739013361827794}.Build())
+	if tr.X() != 87.49 || tr.Y() != 0.01 || tr.Z() != -36.74 {
+		t.Fatalf("built transform reads %v, want x 87.49 y 0.01 z -36.74", tr)
+	}
+	mark := must(probe.MarkFields{Spot: codec.Some(1.13), Path: []codec.Opt[float64]{{}, codec.Some(-2.6)}}.Build())
+	b, err := mark.Append(nil)
+	if err != nil || hex.EncodeToString(b) != "0d012d0200011e" {
+		t.Fatalf("mark encoded %x, %v", b, err)
+	}
+	spot, _ := mark.Spot().Get()
+	step, _ := mark.Path().At(1).Get()
+	if spot != 1.25 || step != -2.5 {
+		t.Fatalf("built mark reads spot %v path[1] %v, want 1.25 and -2.5", spot, step)
+	}
+	got, err := probe.DecodeState(b)
+	if err != nil || got.String() != mark.String() {
+		t.Fatalf("decoded %v, %v; built %v", got, err, mark)
+	}
+}
+
 func TestListViewReadsDecodedElements(t *testing.T) {
 	m, err := probe.DecodeEvents(mustHex(t, "0401000201000200"))
 	if err != nil {

@@ -123,3 +123,8 @@ message tag = 12 on state s2c {
   rule other != who
   rule who in crowd
 }
+
+message mark = 13 on state s2c {
+  spot opt(coord)
+  path list(opt(coord), 2)
+}

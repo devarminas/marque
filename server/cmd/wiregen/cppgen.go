@@ -476,7 +476,13 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
 	}
 	b.WriteString("}\n\n")
 	for _, r := range records {
-		fmt.Fprintf(&b, "std::expected<%[1]s, codec::Error> %[1]s::build(%[1]sFields f) {\n    codec::Writer w;\n    write(w, f);\n    if (auto err = w.error()) return std::unexpected(*err);\n    return detail::Access::make<%[1]s>(std::move(f));\n}\n\n", r.name)
+		fmt.Fprintf(&b, "std::expected<%[1]s, codec::Error> %[1]s::build(%[1]sFields f) {\n    codec::Writer w;\n    write(w, f);\n    if (auto err = w.error()) return std::unexpected(*err);\n", r.name)
+		for _, f := range r.fields {
+			if snap := cppSnap(f.Type, "f."+f.Name); snap != "" {
+				fmt.Fprintf(&b, "    %s\n", snap)
+			}
+		}
+		fmt.Fprintf(&b, "    return detail::Access::make<%[1]s>(std::move(f));\n}\n\n", r.name)
 		fmt.Fprintf(&b, "std::string to_text(const %s& v) {\n    std::string out;\n    text(out, v);\n    return out;\n}\n\n", r.name)
 	}
 	for _, m := range s.Messages {
@@ -498,4 +504,20 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
 	}
 	b.WriteString("}\n")
 	return []byte(b.String())
+}
+
+func cppSnap(t Type, expr string) string {
+	switch t.Kind {
+	case KindQuant:
+		return fmt.Sprintf("%s = %s.snap(%[1]s);", expr, cppQuantVar(t.Quant))
+	case KindOpt:
+		if inner := cppSnap(*t.Elem, "*"+expr); inner != "" {
+			return fmt.Sprintf("if (%s) %s", expr, inner)
+		}
+	case KindList:
+		if inner := cppSnap(*t.Elem, "e"); inner != "" {
+			return fmt.Sprintf("for (auto& e : %s) %s", expr, inner)
+		}
+	}
+	return ""
 }

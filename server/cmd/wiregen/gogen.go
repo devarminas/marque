@@ -70,6 +70,22 @@ func goEncode(t Type, expr string) string {
 	}
 }
 
+func goSnap(t Type, expr string) string {
+	switch t.Kind {
+	case KindQuant:
+		return fmt.Sprintf("%s = %s.Snap(%[1]s)", expr, goQuantVar(t.Quant))
+	case KindOpt:
+		if inner := goSnap(*t.Elem, "v"); inner != "" {
+			return fmt.Sprintf("if v, ok := %s.Get(); ok {\n%s\n%[1]s = codec.Some(v)\n}", expr, inner)
+		}
+	case KindList:
+		if inner := goSnap(*t.Elem, expr+"[i]"); inner != "" {
+			return fmt.Sprintf("for i := range %s {\n%s\n}", expr, inner)
+		}
+	}
+	return ""
+}
+
 func goDecode(t Type) string {
 	switch t.Kind {
 	case KindPrim:
@@ -242,7 +258,13 @@ func goRecord(b *strings.Builder, name, textName string, fields []Field, rules [
 			fmt.Fprintf(b, "f.%[1]s = codec.Clone(f.%[1]s)\n", goName(f.Name))
 		}
 	}
-	fmt.Fprintf(b, "w := codec.NewChecker()\nf.encode(&w)\nif err := w.Err(); err != nil {\nreturn %[1]s{}, err\n}\nreturn %[1]s{f}, nil\n}\n\n", name)
+	fmt.Fprintf(b, "w := codec.NewChecker()\nf.encode(&w)\nif err := w.Err(); err != nil {\nreturn %[1]s{}, err\n}\n", name)
+	for _, f := range fields {
+		if snap := goSnap(f.Type, "f."+goName(f.Name)); snap != "" {
+			b.WriteString(snap + "\n")
+		}
+	}
+	fmt.Fprintf(b, "return %[1]s{f}, nil\n}\n\n", name)
 
 	for _, f := range fields {
 		if f.Type.Kind == KindList {

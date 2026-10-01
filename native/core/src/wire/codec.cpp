@@ -127,6 +127,10 @@ std::uint64_t Quant::step(double v) const {
     return static_cast<std::uint64_t>(std::round(v * per_unit) - min * per_unit);
 }
 
+double Quant::value(std::uint64_t n) const { return (static_cast<double>(n) + min * per_unit) / per_unit; }
+
+double Quant::snap(double v) const { return value(step(v)); }
+
 std::expected<void, Error> Writer::finish() {
     if (err_) {
         if (out_ != nullptr) out_->resize(start_);
@@ -224,7 +228,7 @@ double Reader::quant(const Quant& q) {
     const auto n = fixed(q.width);
     if (!err_ && n > q.steps) fail(Error::out_of_range);
     if (err_) return 0;
-    return (static_cast<double>(n) + q.min * q.per_unit) / q.per_unit;
+    return q.value(n);
 }
 
 std::optional<Error> Reader::finish() {

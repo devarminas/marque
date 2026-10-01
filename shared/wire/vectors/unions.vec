@@ -14,3 +14,4 @@ reject tag_who_outside_crowd state 0c010100070200010702000000000000 rule
 reject tag_crowd_repeated state 0c010100070200020101000101000000000000 rule
 reject tag_note_over_bound state 0c01010007020001010100000105 over_bound
 reject tag_opt_truncated state 0c0101000702000101010001 truncated
+accept mark state 0d012d0200011e mark{spot:1.25 path:[_ -2.5]}

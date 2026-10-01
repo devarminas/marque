@@ -850,6 +850,57 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
 
 [[maybe_unused]] void text(std::string& out, const Tag& v) { text(out, detail::Access::fields(v)); }
 
+[[maybe_unused]] void write(codec::Writer& w, const MarkFields& f) {
+    w.boolean(f.spot.has_value());
+    if (f.spot) {
+        w.quant((*f.spot), quant_coord);
+    }
+    w.count(f.path.size(), 2);
+    for (const auto& e : f.path) {
+        w.boolean(e.has_value());
+    if (e) {
+        w.quant((*e), quant_coord);
+    }
+    }
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Mark& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Mark read_Mark(codec::Reader& r) {
+    auto v_spot = read_opt(r, [](codec::Reader& r) { return r.quant(quant_coord); });
+    std::vector<std::optional<double>> v_path;
+    const std::size_t n_v_path = r.count(2, 1);
+    v_path.reserve(n_v_path);
+    for (std::size_t i = 0; i < n_v_path; ++i) {
+        v_path.push_back(read_opt(r, [](codec::Reader& r) { return r.quant(quant_coord); }));
+    }
+    MarkFields f{std::move(v_spot), std::move(v_path)};
+    return detail::Access::make<Mark>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const MarkFields& f) {
+    out += "mark{spot:";
+    if (f.spot) {
+        codec::text_f64(out, (*f.spot));
+    } else {
+        out += '_';
+    }
+    out += " path:";
+    out += '[';
+    for (std::size_t i = 0; i < f.path.size(); ++i) {
+        if (i > 0) out += ' ';
+        if (f.path[i]) {
+        codec::text_f64(out, (*f.path[i]));
+    } else {
+        out += '_';
+    }
+    }
+    out += ']';
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Mark& v) { text(out, detail::Access::fields(v)); }
+
 }
 
 std::expected<Pair, codec::Error> Pair::build(PairFields f) {
@@ -895,6 +946,7 @@ std::expected<Probe, codec::Error> Probe::build(ProbeFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
+    f.at = quant_coord.snap(f.at);
     return detail::Access::make<Probe>(std::move(f));
 }
 
@@ -1025,6 +1077,8 @@ std::expected<Zone, codec::Error> Zone::build(ZoneFields f) {
     codec::Writer w;
     write(w, f);
     if (auto err = w.error()) return std::unexpected(*err);
+    f.lo = quant_coord.snap(f.lo);
+    f.hi = quant_coord.snap(f.hi);
     return detail::Access::make<Zone>(std::move(f));
 }
 
@@ -1042,6 +1096,21 @@ std::expected<Tag, codec::Error> Tag::build(TagFields f) {
 }
 
 std::string to_text(const Tag& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Mark, codec::Error> Mark::build(MarkFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    if (f.spot) *f.spot = quant_coord.snap(*f.spot);
+    for (auto& e : f.path) if (e) *e = quant_coord.snap(*e);
+    return detail::Access::make<Mark>(std::move(f));
+}
+
+std::string to_text(const Mark& v) {
     std::string out;
     text(out, v);
     return out;
@@ -1131,6 +1200,13 @@ std::expected<void, codec::Error> encode(const Tag& m, std::vector<std::uint8_t>
     return w.finish();
 }
 
+std::expected<void, codec::Error> encode(const Mark& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Mark::message_id);
+    write(w, m);
+    return w.finish();
+}
+
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r) {
     std::optional<StateMsg> m;
     switch (r.varint()) {
@@ -1139,6 +1215,9 @@ std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r) {
         break;
     case Tag::message_id:
         m.emplace(read_Tag(r));
+        break;
+    case Mark::message_id:
+        m.emplace(read_Mark(r));
         break;
     default:
         r.fail(codec::Error::unknown_message);
