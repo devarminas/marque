@@ -199,6 +199,36 @@ func TestFactsRepeatUntilAckedForAtMostEightTicks(t *testing.T) {
 	}
 }
 
+func TestPendingFactDropsWhenANamedEntityLeavesInterest(t *testing.T) {
+	l := newLink(t, DefaultConfig())
+	wolf := wire.NpcId{Index: 9}
+	frame := func(tick uint32, wolfX float64, facts ...Fact) Frame {
+		return Frame{Tick: tick, Facts: facts, Entities: []Entity{player(me, 0, 0), npc(9, wolfX, 0, 100)}}
+	}
+	l.step(frame(1, 2), Focus{}, true)
+	l.ack()
+
+	swing := must(wire.SwingFields{Tick: 2, Attacker: me, Target: wolf, Amount: 7}.Build())
+	got := []string{"2:" + strings.Join(l.step(frame(2, 2, SwingFact(swing)), Focus{}, false), ",")}
+	for tick := uint32(3); tick <= 10; tick++ {
+		got = append(got, fmt.Sprintf("%d:%s", tick, strings.Join(l.step(frame(tick, 500), Focus{}, false), ",")))
+	}
+	want := []string{
+		"2:swing{tick:2 attacker:PlayerId(1/0) target:NpcId(9/0) amount:7 crit:false miss:false}",
+		"3:gone{id:NpcId(9/0)}",
+		"4:gone{id:NpcId(9/0)}",
+		"5:gone{id:NpcId(9/0)}",
+		"6:gone{id:NpcId(9/0)}",
+		"7:gone{id:NpcId(9/0)}",
+		"8:gone{id:NpcId(9/0)}",
+		"9:gone{id:NpcId(9/0)}",
+		"10:gone{id:NpcId(9/0)}",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("unacked swing naming a wolf that left interest at tick 3:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 func TestSkippedEntitiesGainPriorityUntilSent(t *testing.T) {
 	l := newLink(t, DefaultConfig())
 	mate := wire.PlayerId{Index: 2}

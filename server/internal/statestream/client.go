@@ -1,7 +1,6 @@
 package statestream
 
 import (
-	"encoding/binary"
 	"maps"
 	"math"
 	"slices"
@@ -52,8 +51,6 @@ type packet struct {
 
 const ringSize = 64
 
-const seqOffset = 12
-
 type Client struct {
 	cfg     Config
 	self    wire.PlayerId
@@ -96,9 +93,14 @@ func (c *Client) Build(w *World, focus Focus) transport.Unreliable {
 			delete(c.gone, id)
 		}
 	}
-	c.facts = slices.DeleteFunc(c.facts, func(f *pendingFact) bool { return f.acked || f.tick+FactTicks <= tick })
+	outside := func(f *sharedFact) bool {
+		return slices.ContainsFunc(f.names, func(id wire.EntityId) bool { return in[id] == nil })
+	}
+	c.facts = slices.DeleteFunc(c.facts, func(f *pendingFact) bool {
+		return f.acked || f.tick+FactTicks <= tick || outside(f.sharedFact)
+	})
 	for _, f := range w.facts {
-		if !slices.ContainsFunc(f.names, func(id wire.EntityId) bool { return in[id] == nil }) {
+		if !outside(f) {
 			c.facts = append(c.facts, &pendingFact{sharedFact: f})
 		}
 	}
@@ -187,7 +189,7 @@ func (c *Client) Sent(f transport.Flushed) {
 	if n == 0 {
 		return
 	}
-	p.live, p.seq, p.items = true, binary.LittleEndian.Uint16(f.Datagrams[len(f.Datagrams)-1][seqOffset:]), p.items[:n]
+	p.live, p.seq, p.items = true, f.UnreliableSeq, p.items[:n]
 	for _, it := range p.items {
 		if it.kind == itemEntity {
 			v := c.views[it.id]

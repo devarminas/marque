@@ -97,16 +97,35 @@ var maxEntityCost = func() int {
 
 var maxSideCost = func() int {
 	far := wire.PlayerId{Index: math.MaxUint32, Gen: math.MaxUint32}
-	gone := must(wire.GoneFields{Id: far}.Build())
-	phase := must(wire.CastPhaseFields{
-		Tick:    math.MaxUint32,
-		Caster:  far,
-		Ability: strings.Repeat("x", 32),
-		Step:    wire.CastStepResolve,
-		Target:  codec.Some[wire.CombatantId](far),
-		Amount:  math.MaxUint32,
-	}.Build())
-	return itemCost(max(len(must(gone.Append(nil))), len(must(phase.Append(nil)))))
+	sides := []wire.StateMsg{
+		must(wire.GoneFields{Id: far}.Build()),
+		must(wire.SwingFields{
+			Tick:     math.MaxUint32,
+			Attacker: far,
+			Target:   wire.NpcId{Index: math.MaxUint32, Gen: math.MaxUint32},
+			Amount:   math.MaxUint32,
+			Crit:     true,
+			Miss:     true,
+		}.Build()),
+		must(wire.CastPhaseFields{
+			Tick:    math.MaxUint32,
+			Caster:  far,
+			Ability: strings.Repeat("x", 32),
+			Step:    wire.CastStepResolve,
+			Target:  codec.Some[wire.CombatantId](far),
+			Amount:  math.MaxUint32,
+		}.Build()),
+		must(wire.GatherStartFields{
+			Tick:   math.MaxUint32,
+			Player: far,
+			Node:   wire.NodeId{Index: math.MaxUint32, Gen: math.MaxUint32},
+		}.Build()),
+	}
+	most := 0
+	for _, m := range sides {
+		most = max(most, len(must(m.Append(nil))))
+	}
+	return itemCost(most)
 }()
 
 func must[T any](v T, err error) T {

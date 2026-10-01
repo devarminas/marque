@@ -142,7 +142,7 @@ func TestClientRebuildsInterestSetThroughNetsim(t *testing.T) {
 		want    string
 	}{
 		{"lossy_5pct", "applied=559 acked=531 compared=531 trimmed=0 gones=124 facts=130/130"},
-		{"bad_wifi", "applied=451 acked=354 compared=354 trimmed=0 gones=275 facts=130/130"},
+		{"bad_wifi", "applied=451 acked=354 compared=354 trimmed=0 gones=275 facts=129/130"},
 	} {
 		t.Run(tc.profile, func(t *testing.T) {
 			seed := netsim.SeedFromEnv(356)
