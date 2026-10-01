@@ -10,7 +10,7 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-const SchemaHash uint64 = 0x807af558ef3a158c
+const SchemaHash uint64 = 0xc7d7320f02b60ee7
 
 type Message interface {
 	MessageID() uint32
@@ -210,6 +210,48 @@ func decodeOption(r *codec.Reader) Option {
 	return v
 }
 
+type Who interface {
+	isWho()
+}
+
+func (PlayerId) isWho() {}
+
+func (NpcId) isWho() {}
+
+func encodeWho(w *codec.Writer, v Who) {
+	switch v := v.(type) {
+	case PlayerId:
+		w.Varint(1)
+		v.encode(w)
+	case NpcId:
+		w.Varint(7)
+		v.encode(w)
+	default:
+		w.Fail(codec.ErrBadEnum)
+	}
+}
+
+func decodeWho(r *codec.Reader) Who {
+	switch r.Varint() {
+	case 1:
+		return decodePlayerId(r)
+	case 7:
+		return decodeNpcId(r)
+	}
+	r.Fail(codec.ErrBadEnum)
+	return nil
+}
+
+func appendWhoText(b []byte, v Who) []byte {
+	switch v := v.(type) {
+	case PlayerId:
+		return v.appendText(b)
+	case NpcId:
+		return v.appendText(b)
+	}
+	return append(b, "Who(nil)"...)
+}
+
 type PairFields struct {
 	Who    NpcId
 	Weight float32
@@ -374,6 +416,7 @@ type Probe struct {
 func (f ProbeFields) Build() (Probe, error) {
 	f.Pairs = codec.Clone(f.Pairs)
 	f.Shorts = codec.Clone(f.Shorts)
+	f.At = quantCoord.Snap(f.At)
 	w := codec.NewChecker()
 	f.encode(&w)
 	if err := w.Err(); err != nil {
@@ -1220,6 +1263,8 @@ type Zone struct {
 }
 
 func (f ZoneFields) Build() (Zone, error) {
+	f.Lo = quantCoord.Snap(f.Lo)
+	f.Hi = quantCoord.Snap(f.Hi)
 	w := codec.NewChecker()
 	f.encode(&w)
 	if err := w.Err(); err != nil {
@@ -1297,11 +1342,320 @@ func (v Zone) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
+type TagFields struct {
+	Who    Who
+	Other  Who
+	Crowd  []Who
+	By     codec.Opt[Who]
+	Note   codec.Opt[string]
+	Weight codec.Opt[uint8]
+	Pair   codec.Opt[Pair]
+	Slots  []codec.Opt[uint8]
+}
+
+type Tag struct {
+	f TagFields
+}
+
+func (f TagFields) Build() (Tag, error) {
+	f.Crowd = codec.Clone(f.Crowd)
+	f.Slots = codec.Clone(f.Slots)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Tag{}, err
+	}
+	return Tag{f}, nil
+}
+
+func (v Tag) Who() Who { return v.f.Who }
+
+func (v Tag) Other() Who { return v.f.Other }
+
+func (v Tag) Crowd() codec.List[Who] { return codec.ListOf(v.f.Crowd) }
+
+func (v Tag) By() codec.Opt[Who] { return v.f.By }
+
+func (v Tag) Note() codec.Opt[string] { return v.f.Note }
+
+func (v Tag) Weight() codec.Opt[uint8] { return v.f.Weight }
+
+func (v Tag) Pair() codec.Opt[Pair] { return v.f.Pair }
+
+func (v Tag) Slots() codec.List[codec.Opt[uint8]] { return codec.ListOf(v.f.Slots) }
+
+func (f TagFields) encode(w *codec.Writer) {
+	encodeWho(w, f.Who)
+	encodeWho(w, f.Other)
+	w.Count(len(f.Crowd), 3)
+	for _, e := range f.Crowd {
+		encodeWho(w, e)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.Crowd), func(i, j int) bool { return f.Crowd[i] == f.Crowd[j] }) {
+		w.Fail(codec.ErrRule)
+	}
+	if v, ok := f.By.Get(); ok {
+		w.Bool(true)
+		encodeWho(w, v)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Note.Get(); ok {
+		w.Bool(true)
+		w.String(v, 4)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Weight.Get(); ok {
+		w.Bool(true)
+		w.U8(v)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Weight.Get(); ok {
+		if w.Err() == nil && !(v >= 1 && v <= 9) {
+			w.Fail(codec.ErrRule)
+		}
+	}
+	if v, ok := f.Pair.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+	w.Count(len(f.Slots), 2)
+	for _, e := range f.Slots {
+		if v, ok := e.Get(); ok {
+			w.Bool(true)
+			w.U8(v)
+		} else {
+			w.Bool(false)
+		}
+	}
+	if w.Err() == nil && !(f.Other != f.Who) {
+		w.Fail(codec.ErrRule)
+	}
+	if w.Err() == nil && !slices.ContainsFunc(f.Crowd, func(e Who) bool { return e == f.Who }) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeTag(r *codec.Reader) Tag {
+	var f TagFields
+	f.Who = decodeWho(r)
+	f.Other = decodeWho(r)
+	if n := r.Count(3, 3); n > 0 {
+		f.Crowd = make([]Who, n)
+		for i := range f.Crowd {
+			f.Crowd[i] = decodeWho(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.Crowd), func(i, j int) bool { return f.Crowd[i] == f.Crowd[j] }) {
+		r.Fail(codec.ErrRule)
+	}
+	f.By = codec.ReadOpt(r, func(r *codec.Reader) Who { return decodeWho(r) })
+	f.Note = codec.ReadOpt(r, func(r *codec.Reader) string { return r.String(4) })
+	f.Weight = codec.ReadOpt(r, func(r *codec.Reader) uint8 { return r.U8() })
+	if v, ok := f.Weight.Get(); ok {
+		if r.Err() == nil && !(v >= 1 && v <= 9) {
+			r.Fail(codec.ErrRule)
+		}
+	}
+	f.Pair = codec.ReadOpt(r, func(r *codec.Reader) Pair { return decodePair(r) })
+	if n := r.Count(2, 1); n > 0 {
+		f.Slots = make([]codec.Opt[uint8], n)
+		for i := range f.Slots {
+			f.Slots[i] = codec.ReadOpt(r, func(r *codec.Reader) uint8 { return r.U8() })
+		}
+	}
+	if r.Err() == nil && !(f.Other != f.Who) {
+		r.Fail(codec.ErrRule)
+	}
+	if r.Err() == nil && !slices.ContainsFunc(f.Crowd, func(e Who) bool { return e == f.Who }) {
+		r.Fail(codec.ErrRule)
+	}
+	return Tag{f}
+}
+
+func (f TagFields) appendText(b []byte) []byte {
+	b = append(b, "tag{who:"...)
+	b = appendWhoText(b, f.Who)
+	b = append(b, " other:"...)
+	b = appendWhoText(b, f.Other)
+	b = append(b, " crowd:"...)
+	b = append(b, '[')
+	for i, e := range f.Crowd {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = appendWhoText(b, e)
+	}
+	b = append(b, ']')
+	b = append(b, " by:"...)
+	if v, ok := f.By.Get(); ok {
+		b = appendWhoText(b, v)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " note:"...)
+	if v, ok := f.Note.Get(); ok {
+		b = strconv.AppendQuoteToASCII(b, v)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " weight:"...)
+	if v, ok := f.Weight.Get(); ok {
+		b = strconv.AppendUint(b, uint64(v), 10)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " pair:"...)
+	if v, ok := f.Pair.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " slots:"...)
+	b = append(b, '[')
+	for i, e := range f.Slots {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		if v, ok := e.Get(); ok {
+			b = strconv.AppendUint(b, uint64(v), 10)
+		} else {
+			b = append(b, '_')
+		}
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v Tag) String() string { return string(v.f.appendText(nil)) }
+
+func (Tag) MessageID() uint32 { return 12 }
+
+func (Tag) Channel() codec.Channel { return codec.ChannelState }
+
+func (Tag) stateMsg() {}
+
+func (v Tag) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(12)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type MarkFields struct {
+	Spot codec.Opt[float64]
+	Path []codec.Opt[float64]
+}
+
+type Mark struct {
+	f MarkFields
+}
+
+func (f MarkFields) Build() (Mark, error) {
+	f.Path = codec.Clone(f.Path)
+	if v, ok := f.Spot.Get(); ok {
+		v = quantCoord.Snap(v)
+		f.Spot = codec.Some(v)
+	}
+	for i := range f.Path {
+		if v, ok := f.Path[i].Get(); ok {
+			v = quantCoord.Snap(v)
+			f.Path[i] = codec.Some(v)
+		}
+	}
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Mark{}, err
+	}
+	return Mark{f}, nil
+}
+
+func (v Mark) Spot() codec.Opt[float64] { return v.f.Spot }
+
+func (v Mark) Path() codec.List[codec.Opt[float64]] { return codec.ListOf(v.f.Path) }
+
+func (f MarkFields) encode(w *codec.Writer) {
+	if v, ok := f.Spot.Get(); ok {
+		w.Bool(true)
+		w.Quant(v, quantCoord)
+	} else {
+		w.Bool(false)
+	}
+	w.Count(len(f.Path), 2)
+	for _, e := range f.Path {
+		if v, ok := e.Get(); ok {
+			w.Bool(true)
+			w.Quant(v, quantCoord)
+		} else {
+			w.Bool(false)
+		}
+	}
+}
+
+func decodeMark(r *codec.Reader) Mark {
+	var f MarkFields
+	f.Spot = codec.ReadOpt(r, func(r *codec.Reader) float64 { return r.Quant(quantCoord) })
+	if n := r.Count(2, 1); n > 0 {
+		f.Path = make([]codec.Opt[float64], n)
+		for i := range f.Path {
+			f.Path[i] = codec.ReadOpt(r, func(r *codec.Reader) float64 { return r.Quant(quantCoord) })
+		}
+	}
+	return Mark{f}
+}
+
+func (f MarkFields) appendText(b []byte) []byte {
+	b = append(b, "mark{spot:"...)
+	if v, ok := f.Spot.Get(); ok {
+		b = strconv.AppendFloat(b, v, 'g', -1, 64)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " path:"...)
+	b = append(b, '[')
+	for i, e := range f.Path {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		if v, ok := e.Get(); ok {
+			b = strconv.AppendFloat(b, v, 'g', -1, 64)
+		} else {
+			b = append(b, '_')
+		}
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v Mark) String() string { return string(v.f.appendText(nil)) }
+
+func (Mark) MessageID() uint32 { return 13 }
+
+func (Mark) Channel() codec.Channel { return codec.ChannelState }
+
+func (Mark) stateMsg() {}
+
+func (v Mark) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(13)
+	v.f.encode(&w)
+	return w.Result()
+}
+
 func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	var m StateMsg
 	switch r.Varint() {
 	case 11:
 		m = decodeZone(r)
+	case 12:
+		m = decodeTag(r)
+	case 13:
+		m = decodeMark(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
 	}

@@ -54,6 +54,16 @@ type Quant struct {
 
 func (q Quant) Step(v float64) uint64 { return uint64(math.Round(v*q.PerUnit) - q.Min*q.PerUnit) }
 
+func (q Quant) Value(n uint64) float64 { return (float64(n) + q.Min*q.PerUnit) / q.PerUnit }
+
+func (q Quant) Snap(v float64) float64 {
+	r := math.Round(v * q.PerUnit)
+	if !(r >= q.Min*q.PerUnit && r <= q.Max*q.PerUnit) {
+		return v
+	}
+	return q.Value(q.Step(v))
+}
+
 type Writer struct {
 	buf   []byte
 	start int
@@ -322,7 +332,7 @@ func (r *Reader) Quant(q Quant) float64 {
 	if r.err != nil {
 		return 0
 	}
-	return (float64(n) + q.Min*q.PerUnit) / q.PerUnit
+	return q.Value(n)
 }
 
 func Unique(n int, equal func(i, j int) bool) bool {
@@ -353,4 +363,20 @@ func (l List[T]) At(i int) T { return l.s[i] }
 
 func (l List[T]) All() iter.Seq2[int, T] {
 	return slices.All(l.s)
+}
+
+type Opt[T any] struct {
+	v  T
+	ok bool
+}
+
+func Some[T any](v T) Opt[T] { return Opt[T]{v: v, ok: true} }
+
+func (o Opt[T]) Get() (T, bool) { return o.v, o.ok }
+
+func ReadOpt[T any](r *Reader, read func(*Reader) T) Opt[T] {
+	if !r.Bool() || r.err != nil {
+		return Opt[T]{}
+	}
+	return Some(read(r))
 }

@@ -31,6 +31,10 @@ func cppType(t Type) string {
 		return t.Enum.Name
 	case KindHandle:
 		return t.Handle.Name
+	case KindUnion:
+		return t.Union.Name
+	case KindOpt:
+		return "std::optional<" + cppType(*t.Elem) + ">"
 	default:
 		return t.Struct.Name
 	}
@@ -45,6 +49,8 @@ func cppInit(t Type) string {
 		return " = 0"
 	case KindQuant:
 		return " = 0"
+	case KindStruct:
+		return ""
 	default:
 		return "{}"
 	}
@@ -66,6 +72,8 @@ func cppEncode(t Type, expr string) string {
 		return fmt.Sprintf("w.string(%s, %d);", expr, t.Bound)
 	case KindList:
 		return fmt.Sprintf("w.count(%s.size(), %d);\n    for (const auto& e : %s) {\n        %s\n    }", expr, t.Bound, expr, cppEncode(*t.Elem, "e"))
+	case KindOpt:
+		return fmt.Sprintf("w.boolean(%s.has_value());\n    if (%[1]s) {\n        %s\n    }", expr, cppEncode(*t.Elem, "(*"+expr+")"))
 	default:
 		return fmt.Sprintf("write(w, %s);", expr)
 	}
@@ -83,18 +91,22 @@ func cppDecode(t Type) string {
 		return fmt.Sprintf("r.quant(%s)", cppQuantVar(t.Quant))
 	case KindString:
 		return fmt.Sprintf("r.string(%d)", t.Bound)
+	case KindOpt:
+		return fmt.Sprintf("read_opt(r, [](codec::Reader& r) { return %s; })", cppDecode(*t.Elem))
 	default:
 		return fmt.Sprintf("read_%s(r)", cppType(t))
 	}
 }
 
+func cppLocal(f Field) string { return "v_" + f.Name }
+
 func cppDecodeField(f Field) string {
-	dst := "f." + f.Name
+	dst := cppLocal(f)
 	if f.Type.Kind != KindList {
-		return fmt.Sprintf("    %s = %s;\n", dst, cppDecode(f.Type))
+		return fmt.Sprintf("    auto %s = %s;\n", dst, cppDecode(f.Type))
 	}
-	return fmt.Sprintf("    %s.resize(r.count(%d, %d));\n    for (std::size_t i = 0; i < %s.size(); ++i) {\n        %s[i] = %s;\n    }\n",
-		dst, f.Type.Bound, f.Type.Elem.MinSize(), dst, dst, cppDecode(*f.Type.Elem))
+	return fmt.Sprintf("    %[1]s %[2]s;\n    const std::size_t n_%[2]s = r.count(%[3]d, %[4]d);\n    %[2]s.reserve(n_%[2]s);\n    for (std::size_t i = 0; i < n_%[2]s; ++i) {\n        %[2]s.push_back(%[5]s);\n    }\n",
+		cppType(f.Type), dst, f.Type.Bound, f.Type.Elem.MinSize(), cppDecode(*f.Type.Elem))
 }
 
 func cppText(t Type, expr string) string {
@@ -116,6 +128,8 @@ func cppText(t Type, expr string) string {
 	case KindList:
 		return fmt.Sprintf("out += '[';\n    for (std::size_t i = 0; i < %s.size(); ++i) {\n        if (i > 0) out += ' ';\n        %s\n    }\n    out += ']';",
 			expr, cppText(*t.Elem, expr+"[i]"))
+	case KindOpt:
+		return fmt.Sprintf("if (%s) {\n        %s\n    } else {\n        out += '_';\n    }", expr, cppText(*t.Elem, "(*"+expr+")"))
 	}
 	return fmt.Sprintf("text(out, %s);", expr)
 }
@@ -162,13 +176,23 @@ func cppTermCond(term Term, t Type, v string) string {
 	return ""
 }
 
-func cppChecks(x string, f Field) string {
+func cppChecks(x, expr string, f Field) string {
+	if f.Type.Kind != KindOpt {
+		return cppChecksOn(x, expr, f.Type, f.Where)
+	}
+	inner := cppChecksOn(x, "(*"+expr+")", *f.Type.Elem, f.Where)
+	if inner == "" {
+		return ""
+	}
+	return fmt.Sprintf("    if (%s) {\n%s    }\n", expr, inner)
+}
+
+func cppChecksOn(x, list string, t Type, where []Term) string {
 	var b strings.Builder
 	fail := fmt.Sprintf(") %s.fail(codec::Error::rule);\n", x)
-	list := "f." + f.Name
-	for _, term := range f.Where {
+	for _, term := range where {
 		if term.Kind == TermUnique {
-			key, by := *f.Type.Elem, ""
+			key, by := *t.Elem, ""
 			if term.By != nil {
 				key, by = term.By.Type, "."+term.By.Name+"()"
 			}
@@ -176,13 +200,13 @@ func cppChecks(x string, f Field) string {
 				x, list, cppValue(key, list+"[i]"+by), cppValue(key, list+"[j]"+by), fail)
 			continue
 		}
-		if f.Type.Kind == KindList {
-			if cond := cppTermCond(term, *f.Type.Elem, "e"); cond != "" {
+		if t.Kind == KindList {
+			if cond := cppTermCond(term, *t.Elem, "e"); cond != "" {
 				fmt.Fprintf(&b, "    if (!%s.error() && std::ranges::any_of(%s, [&](const auto& e) { return !(%s); })%s", x, list, cond, fail)
 			}
 			continue
 		}
-		if cond := cppTermCond(term, f.Type, list); cond != "" {
+		if cond := cppTermCond(term, t, list); cond != "" {
 			fmt.Fprintf(&b, "    if (!%s.error() && !(%s)%s", x, cond, fail)
 		}
 	}
@@ -247,17 +271,17 @@ func cppClass(b *strings.Builder, r cppRecordDecl) {
 	if r.msg != nil {
 		fmt.Fprintf(b, "    static constexpr std::uint32_t message_id = %d;\n    static constexpr codec::Channel channel = codec::Channel::%s;\n\n", r.msg.ID, r.msg.Channel)
 	}
-	fmt.Fprintf(b, "    static std::expected<%[1]s, codec::Error> build(%[1]sFields f);\n\n", r.name)
+	fmt.Fprintf(b, "    static std::expected<%[1]s, codec::Error> build(%[1]sFields f);\n\n    %[1]s() = delete;\n\n", r.name)
 	for _, f := range r.fields {
 		fmt.Fprintf(b, "    const %s& %s() const { return f_.%[2]s; }\n", cppType(f.Type), f.Name)
 	}
-	fmt.Fprintf(b, "\n    bool operator==(const %s&) const = default;\n\nprivate:\n    friend struct detail::Access;\n    %[1]sFields f_;\n};\n\n", r.name)
+	fmt.Fprintf(b, "\n    bool operator==(const %s&) const = default;\n\nprivate:\n    friend struct detail::Access;\n    explicit %[1]s(%[1]sFields f) : f_(std::move(f)) {}\n\n    %[1]sFields f_;\n};\n\n", r.name)
 }
 
 func genCppHeader(s *Schema, schemaPath, ns string) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "// Code generated by wiregen from %s. DO NOT EDIT.\n\n#pragma once\n\n", schemaPath)
-	b.WriteString("#include <cstdint>\n#include <expected>\n#include <span>\n#include <string>\n#include <variant>\n#include <vector>\n\n#include \"marque/wire/codec.hpp\"\n\n")
+	b.WriteString("#include <cstdint>\n#include <expected>\n#include <optional>\n#include <span>\n#include <string>\n#include <utility>\n#include <variant>\n#include <vector>\n\n#include \"marque/wire/codec.hpp\"\n\n")
 	fmt.Fprintf(&b, "namespace %s {\n\n", ns)
 	fmt.Fprintf(&b, "inline constexpr std::uint64_t schema_hash = 0x%016xULL;\n\n", s.Hash())
 	b.WriteString("namespace detail {\nstruct Access;\n}\n\n")
@@ -271,6 +295,13 @@ func genCppHeader(s *Schema, schemaPath, ns string) []byte {
 			fmt.Fprintf(&b, "    %s = %d,\n", m.Name, m.Value)
 		}
 		b.WriteString("};\n\n")
+	}
+	for _, u := range s.Unions {
+		names := make([]string, len(u.Members))
+		for i, m := range u.Members {
+			names[i] = m.Handle.Name
+		}
+		fmt.Fprintf(&b, "using %s = std::variant<%s>;\n\n", u.Name, strings.Join(names, ", "))
 	}
 	records := cppRecords(s)
 	for _, r := range records {
@@ -322,7 +353,7 @@ func cppRecordCodec(b *strings.Builder, r cppRecordDecl) {
 	fmt.Fprintf(b, "[[maybe_unused]] void write(codec::Writer& w, const %sFields& f) {\n", r.name)
 	for _, f := range r.fields {
 		fmt.Fprintf(b, "    %s\n", cppEncode(f.Type, "f."+f.Name))
-		b.WriteString(cppChecks("w", f))
+		b.WriteString(cppChecks("w", "f."+f.Name, f))
 	}
 	for _, rel := range r.rules {
 		b.WriteString(cppRelation("w", rel))
@@ -330,11 +361,14 @@ func cppRecordCodec(b *strings.Builder, r cppRecordDecl) {
 	b.WriteString("}\n\n")
 	fmt.Fprintf(b, "[[maybe_unused]] void write(codec::Writer& w, const %s& v) { write(w, detail::Access::fields(v)); }\n\n", r.name)
 
-	fmt.Fprintf(b, "[[maybe_unused]] %[1]s read_%[1]s(codec::Reader& r) {\n    %[1]sFields f;\n", r.name)
-	for _, f := range r.fields {
+	fmt.Fprintf(b, "[[maybe_unused]] %[1]s read_%[1]s(codec::Reader& r) {\n", r.name)
+	locals := make([]string, len(r.fields))
+	for i, f := range r.fields {
 		b.WriteString(cppDecodeField(f))
-		b.WriteString(cppChecks("r", f))
+		b.WriteString(cppChecks("r", cppLocal(f), f))
+		locals[i] = "std::move(" + cppLocal(f) + ")"
 	}
+	fmt.Fprintf(b, "    %sFields f{%s};\n", r.name, strings.Join(locals, ", "))
 	for _, rel := range r.rules {
 		b.WriteString(cppRelation("r", rel))
 	}
@@ -352,6 +386,20 @@ func cppRecordCodec(b *strings.Builder, r cppRecordDecl) {
 	fmt.Fprintf(b, "[[maybe_unused]] void text(std::string& out, const %s& v) { text(out, detail::Access::fields(v)); }\n\n", r.name)
 }
 
+func cppUnionCodec(b *strings.Builder, u *Union) {
+	fmt.Fprintf(b, "[[maybe_unused]] void write(codec::Writer& w, const %s& v) {\n    switch (v.index()) {\n", u.Name)
+	for i, m := range u.Members {
+		fmt.Fprintf(b, "    case %d:\n        w.varint(%d);\n        write(w, std::get<%[1]d>(v));\n        break;\n", i, m.Tag)
+	}
+	b.WriteString("    }\n}\n\n")
+	fmt.Fprintf(b, "[[maybe_unused]] %[1]s read_%[1]s(codec::Reader& r) {\n    switch (r.varint()) {\n", u.Name)
+	for _, m := range u.Members {
+		fmt.Fprintf(b, "    case %d:\n        return read_%s(r);\n", m.Tag, m.Handle.Name)
+	}
+	fmt.Fprintf(b, "    }\n    r.fail(codec::Error::bad_enum);\n    return %s{};\n}\n\n", u.Name)
+	fmt.Fprintf(b, "[[maybe_unused]] void text(std::string& out, const %s& v) {\n    std::visit([&](const auto& m) { text(out, m); }, v);\n}\n\n", u.Name)
+}
+
 func genCppSource(s *Schema, schemaPath, ns, header string) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "// Code generated by wiregen from %s. DO NOT EDIT.\n\n#include \"%s\"\n\n#include <algorithm>\n#include <utility>\n\n", schemaPath, header)
@@ -364,13 +412,17 @@ func genCppSource(s *Schema, schemaPath, ns, header string) []byte {
 
     template <typename T, typename F>
     static T make(F&& f) {
-        T v;
-        v.f_ = std::forward<F>(f);
-        return v;
+        return T(std::forward<F>(f));
     }
 };
 
 namespace {
+
+template <typename Read>
+auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
+    if (!r.boolean() || r.error()) return std::nullopt;
+    return read(r);
+}
 
 `)
 	for _, q := range s.Quants {
@@ -415,13 +467,23 @@ namespace {
 		}
 		fmt.Fprintf(&b, "    }\n    out += \"%s(\" + std::to_string(static_cast<std::uint32_t>(v)) + \")\";\n}\n\n", e.Name)
 	}
+	for _, u := range s.Unions {
+		cppUnionCodec(&b, u)
+	}
 	records := cppRecords(s)
 	for _, r := range records {
 		cppRecordCodec(&b, r)
 	}
 	b.WriteString("}\n\n")
 	for _, r := range records {
-		fmt.Fprintf(&b, "std::expected<%[1]s, codec::Error> %[1]s::build(%[1]sFields f) {\n    codec::Writer w;\n    write(w, f);\n    if (auto err = w.error()) return std::unexpected(*err);\n    return detail::Access::make<%[1]s>(std::move(f));\n}\n\n", r.name)
+		fmt.Fprintf(&b, "std::expected<%[1]s, codec::Error> %[1]s::build(%[1]sFields f) {\n", r.name)
+		for _, f := range r.fields {
+			if snap := cppSnap(f.Type, "f."+f.Name); snap != "" {
+				fmt.Fprintf(&b, "    %s\n", snap)
+			}
+		}
+		b.WriteString("    codec::Writer w;\n    write(w, f);\n    if (auto err = w.error()) return std::unexpected(*err);\n")
+		fmt.Fprintf(&b, "    return detail::Access::make<%[1]s>(std::move(f));\n}\n\n", r.name)
 		fmt.Fprintf(&b, "std::string to_text(const %s& v) {\n    std::string out;\n    text(out, v);\n    return out;\n}\n\n", r.name)
 	}
 	for _, m := range s.Messages {
@@ -429,11 +491,11 @@ namespace {
 		fmt.Fprintf(&b, "std::expected<void, codec::Error> encode(const %[1]s& m, std::vector<std::uint8_t>& out) {\n    codec::Writer w{out};\n    w.varint(%[1]s::message_id);\n    write(w, m);\n    return w.finish();\n}\n\n", name)
 	}
 	for _, c := range cppChannels(s) {
-		fmt.Fprintf(&b, "std::expected<%s, codec::Error> decode_next_%s(codec::Reader& r) {\n    %s m;\n    switch (r.varint()) {\n", c.alias, c.name, c.alias)
+		fmt.Fprintf(&b, "std::expected<%s, codec::Error> decode_next_%s(codec::Reader& r) {\n    std::optional<%[1]s> m;\n    switch (r.varint()) {\n", c.alias, c.name)
 		for _, name := range c.names {
-			fmt.Fprintf(&b, "    case %[1]s::message_id:\n        m = read_%[1]s(r);\n        break;\n", name)
+			fmt.Fprintf(&b, "    case %[1]s::message_id:\n        m.emplace(read_%[1]s(r));\n        break;\n", name)
 		}
-		b.WriteString("    default:\n        r.fail(codec::Error::unknown_message);\n        break;\n    }\n    if (auto err = r.error()) return std::unexpected(*err);\n    return m;\n}\n\n")
+		b.WriteString("    default:\n        r.fail(codec::Error::unknown_message);\n        break;\n    }\n    if (auto err = r.error()) return std::unexpected(*err);\n    return std::move(*m);\n}\n\n")
 		fmt.Fprintf(&b, "std::expected<%[1]s, codec::Error> decode_%[2]s(std::span<const std::uint8_t> bytes) {\n    codec::Reader r{bytes};\n    auto m = decode_next_%[2]s(r);\n    if (!m) return m;\n    if (auto err = r.finish()) return std::unexpected(*err);\n    return m;\n}\n\n", c.alias, c.name)
 		if len(c.names) == 0 {
 			fmt.Fprintf(&b, "std::expected<void, codec::Error> encode_%[2]s(const %[1]s&, std::vector<std::uint8_t>&) {\n    return std::unexpected(codec::Error::unknown_message);\n}\n\nstd::string text_%[2]s(const %[1]s&) { return {}; }\n\n", c.alias, c.name)
@@ -443,4 +505,20 @@ namespace {
 	}
 	b.WriteString("}\n")
 	return []byte(b.String())
+}
+
+func cppSnap(t Type, expr string) string {
+	switch t.Kind {
+	case KindQuant:
+		return fmt.Sprintf("%s = %s.snap(%[1]s);", expr, cppQuantVar(t.Quant))
+	case KindOpt:
+		if inner := cppSnap(*t.Elem, "*"+expr); inner != "" {
+			return fmt.Sprintf("if (%s) %s", expr, inner)
+		}
+	case KindList:
+		if inner := cppSnap(*t.Elem, "e"); inner != "" {
+			return fmt.Sprintf("for (auto& e : %s) %s", expr, inner)
+		}
+	}
+	return ""
 }

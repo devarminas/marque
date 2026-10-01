@@ -1,0 +1,20 @@
+schema wire
+
+accept entity_entering_player state 1001070201d244060032400600d71806000155000000780000001e00000032000000010104636f776c00000000010573776f7264010000 entity{id:PlayerId(7/2) transform:Transform{x:12.34 y:0.5 z:-100.25} vitals:Vitals{hp:85 max_hp:120 mana:30 max_mana:50} gear:Gear{helmet:"cowl" chest:_ trousers:_ feet:_ left_hand:_ right_hand:"sword"} cast:CastBar{casting:_} look:_}
+accept entity_transform_delta state 1002030101d244060032400600d718060000000000 entity{id:NpcId(3/1) transform:Transform{x:12.34 y:0.5 z:-100.25} vitals:_ gear:_ cast:_ look:_}
+accept entity_casting state 10020301000000010104626f6c74e8030000320000 entity{id:NpcId(3/1) transform:_ vitals:_ gear:_ cast:CastBar{casting:Casting{ability:"bolt" start:1000 ticks:50}} look:_}
+accept entity_ground_item state 100309000000000001036f7265 entity{id:ItemId(9/0) transform:_ vitals:_ gear:_ cast:_ look:Look{kind:"ore"}}
+accept gone state 11040405 gone{id:NodeId(4/5)}
+accept swing state 12e80300000107020203010c0000000100 swing{tick:1000 attacker:PlayerId(7/2) target:NpcId(3/1) amount:12 crit:true miss:false}
+accept cast_phase state 13e803000002030104626f6c74020101070214000000 cast_phase{tick:1000 caster:NpcId(3/1) ability:"bolt" step:resolve target:PlayerId(7/2) amount:20}
+accept gather_start state 14e803000007020405 gather_start{tick:1000 player:PlayerId(7/2) node:NodeId(4/5)}
+
+reject entity_undeclared_tag state 10050702 bad_enum
+reject entity_presence_2 state 1001070202 bad_bool
+reject entity_hp_above_max state 10010702000179000000780000000000000000000000000000 rule
+reject entity_mana_above_max state 10010702000100000000000000000100000000000000000000 rule
+reject entity_casting_zero_ticks state 10020301000000010104626f6c74e8030000000000 rule
+reject entity_helmet_over_bound state 100107020000010121 over_bound
+reject swing_item_attacker state 12e8030000030900 bad_enum
+reject swing_self state 12e80300000107020107020c0000000100 rule
+reject cast_phase_undeclared_step state 13e803000002030104626f6c7404 bad_enum

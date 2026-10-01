@@ -105,3 +105,26 @@ message zone = 11 on state s2c {
   tilt i8 where -45..45
   rule lo <= hi
 }
+
+union Who {
+  player PlayerId = 1
+  npc NpcId = 7
+}
+
+message tag = 12 on state s2c {
+  who Who
+  other Who
+  crowd list(Who, 3) where unique
+  by opt(Who)
+  note opt(string(4))
+  weight opt(u8) where 1..9
+  pair opt(Pair)
+  slots list(opt(u8), 2)
+  rule other != who
+  rule who in crowd
+}
+
+message mark = 13 on state s2c {
+  spot opt(coord)
+  path list(opt(coord), 2)
+}

@@ -237,12 +237,73 @@ func TestAppendRefusesInvalidZeroValue(t *testing.T) {
 		{probe.Party{}, codec.ErrRule},
 		{probe.Inventory{}, codec.ErrRule},
 		{wire.Refused{}, codec.ErrBadEnum},
+		{wire.Gone{}, codec.ErrBadEnum},
 	}
 	for _, c := range cases {
 		got, err := c.msg.Append(prefix)
 		if !errors.Is(err, c.want) || string(got) != "\xaa" {
 			t.Errorf("%T zero value: got %x, %v; want aa, %v", c.msg, got, err, c.want)
 		}
+	}
+}
+
+func TestUnionsAndOptsBuildEncodeAndRead(t *testing.T) {
+	p1, n2 := probe.PlayerId{Index: 1}, probe.NpcId{Index: 2}
+	tag := must(probe.TagFields{
+		Who:    p1,
+		Other:  n2,
+		Crowd:  []probe.Who{p1, n2},
+		By:     codec.Some[probe.Who](n2),
+		Note:   codec.Some("hi"),
+		Weight: codec.Some[uint8](3),
+		Slots:  []codec.Opt[uint8]{{}, codec.Some[uint8](5)},
+	}.Build())
+	got, err := tag.Append(nil)
+	if err != nil || hex.EncodeToString(got) != "0c01010007020002010100070200010702000102686901030002000105" {
+		t.Fatalf("tag encoded %x, %v", got, err)
+	}
+	if by, ok := tag.By().Get(); !ok || by != probe.Who(n2) {
+		t.Fatalf("By() = %v, %v; want NpcId(2/0), true", by, ok)
+	}
+	if _, ok := tag.Pair().Get(); ok {
+		t.Fatal("Pair() is present; it was never set")
+	}
+	cases := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{"nil who", errOf(probe.TagFields{Other: n2, Crowd: []probe.Who{p1}}.Build()), codec.ErrBadEnum},
+		{"other equal to who", errOf(probe.TagFields{Who: p1, Other: p1, Crowd: []probe.Who{p1}}.Build()), codec.ErrRule},
+		{"present weight 10", errOf(probe.TagFields{Who: p1, Other: n2, Crowd: []probe.Who{p1}, Weight: codec.Some[uint8](10)}.Build()), codec.ErrRule},
+		{"absent weight", errOf(probe.TagFields{Who: p1, Other: n2, Crowd: []probe.Who{p1}}.Build()), nil},
+		{"note over bound", errOf(probe.TagFields{Who: p1, Other: n2, Crowd: []probe.Who{p1}, Note: codec.Some("hello")}.Build()), codec.ErrOverBound},
+	}
+	for _, c := range cases {
+		if !errors.Is(c.err, c.want) {
+			t.Errorf("%s: got %v, want %v", c.name, c.err, c.want)
+		}
+	}
+}
+
+func TestBuildSnapsQuantsToWhatThePeerDecodes(t *testing.T) {
+	tr := must(wire.TransformFields{X: 87.49238566911093, Y: 0.005, Z: -36.739013361827794}.Build())
+	if tr.X() != 87.49 || tr.Y() != 0.01 || tr.Z() != -36.74 {
+		t.Fatalf("built transform reads %v, want x 87.49 y 0.01 z -36.74", tr)
+	}
+	mark := must(probe.MarkFields{Spot: codec.Some(1.13), Path: []codec.Opt[float64]{{}, codec.Some(-2.6)}}.Build())
+	b, err := mark.Append(nil)
+	if err != nil || hex.EncodeToString(b) != "0d012d0200011e" {
+		t.Fatalf("mark encoded %x, %v", b, err)
+	}
+	spot, _ := mark.Spot().Get()
+	step, _ := mark.Path().At(1).Get()
+	if spot != 1.25 || step != -2.5 {
+		t.Fatalf("built mark reads spot %v path[1] %v, want 1.25 and -2.5", spot, step)
+	}
+	got, err := probe.DecodeState(b)
+	if err != nil || got.String() != mark.String() {
+		t.Fatalf("decoded %v, %v; built %v", got, err, mark)
 	}
 }
 

@@ -37,6 +37,8 @@ struct Quant {
     int width;
 
     std::uint64_t step(double v) const;
+    double value(std::uint64_t n) const;
+    double snap(double v) const;
 };
 
 class Writer {

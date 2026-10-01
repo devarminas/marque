@@ -34,6 +34,10 @@ func goType(t Type) string {
 		return t.Enum.Name
 	case KindHandle:
 		return t.Handle.Name
+	case KindUnion:
+		return t.Union.Name
+	case KindOpt:
+		return "codec.Opt[" + goType(*t.Elem) + "]"
 	default:
 		return t.Struct.Name
 	}
@@ -57,9 +61,29 @@ func goEncode(t Type, expr string) string {
 		return fmt.Sprintf("w.Count(len(%s), %d)\nfor _, e := range %s {\n%s\n}", expr, t.Bound, expr, goEncode(*t.Elem, "e"))
 	case KindStruct:
 		return fmt.Sprintf("%s.f.encode(w)", expr)
+	case KindUnion:
+		return fmt.Sprintf("encode%s(w, %s)", t.Union.Name, expr)
+	case KindOpt:
+		return fmt.Sprintf("if v, ok := %s.Get(); ok {\nw.Bool(true)\n%s\n} else {\nw.Bool(false)\n}", expr, goEncode(*t.Elem, "v"))
 	default:
 		return fmt.Sprintf("%s.encode(w)", expr)
 	}
+}
+
+func goSnap(t Type, expr string) string {
+	switch t.Kind {
+	case KindQuant:
+		return fmt.Sprintf("%s = %s.Snap(%[1]s)", expr, goQuantVar(t.Quant))
+	case KindOpt:
+		if inner := goSnap(*t.Elem, "v"); inner != "" {
+			return fmt.Sprintf("if v, ok := %s.Get(); ok {\n%s\n%[1]s = codec.Some(v)\n}", expr, inner)
+		}
+	case KindList:
+		if inner := goSnap(*t.Elem, expr+"[i]"); inner != "" {
+			return fmt.Sprintf("for i := range %s {\n%s\n}", expr, inner)
+		}
+	}
+	return ""
 }
 
 func goDecode(t Type) string {
@@ -74,6 +98,8 @@ func goDecode(t Type) string {
 		return fmt.Sprintf("r.Quant(%s)", goQuantVar(t.Quant))
 	case KindString:
 		return fmt.Sprintf("r.String(%d)", t.Bound)
+	case KindOpt:
+		return fmt.Sprintf("codec.ReadOpt(r, func(r *codec.Reader) %s { return %s })", goType(*t.Elem), goDecode(*t.Elem))
 	default:
 		return fmt.Sprintf("decode%s(r)", goType(t))
 	}
@@ -110,6 +136,10 @@ func goText(t Type, expr string) string {
 		return fmt.Sprintf("b = %s.appendText(b)", expr)
 	case KindStruct:
 		return fmt.Sprintf("b = %s.f.appendText(b)", expr)
+	case KindUnion:
+		return fmt.Sprintf("b = append%sText(b, %s)", t.Union.Name, expr)
+	case KindOpt:
+		return fmt.Sprintf("if v, ok := %s.Get(); ok {\n%s\n} else {\nb = append(b, '_')\n}", expr, goText(*t.Elem, "v"))
 	}
 	return fmt.Sprintf("b = append(b, '[')\nfor i, e := range %s {\nif i > 0 {\nb = append(b, ' ')\n}\n%s\n}\nb = append(b, ']')", expr, goText(*t.Elem, "e"))
 }
@@ -147,12 +177,23 @@ func goTermCond(term Term, t Type, v string) string {
 }
 
 func goChecks(x string, f Field) string {
+	expr := "f." + goName(f.Name)
+	if f.Type.Kind != KindOpt {
+		return goChecksOn(x, expr, f.Type, f.Where)
+	}
+	inner := goChecksOn(x, "v", *f.Type.Elem, f.Where)
+	if inner == "" {
+		return ""
+	}
+	return fmt.Sprintf("if v, ok := %s.Get(); ok {\n%s}\n", expr, inner)
+}
+
+func goChecksOn(x, list string, t Type, where []Term) string {
 	var b strings.Builder
 	fail := fmt.Sprintf("{\n%s.Fail(codec.ErrRule)\n}\n", x)
-	list := "f." + goName(f.Name)
-	for _, term := range f.Where {
+	for _, term := range where {
 		if term.Kind == TermUnique {
-			key, by := *f.Type.Elem, ""
+			key, by := *t.Elem, ""
 			if term.By != nil {
 				key, by = term.By.Type, ".f."+goName(term.By.Name)
 			}
@@ -160,14 +201,14 @@ func goChecks(x string, f Field) string {
 				x, list, goValue(key, list+"[i]"+by), goValue(key, list+"[j]"+by), fail)
 			continue
 		}
-		if f.Type.Kind == KindList {
-			if cond := goTermCond(term, *f.Type.Elem, "e"); cond != "" {
+		if t.Kind == KindList {
+			if cond := goTermCond(term, *t.Elem, "e"); cond != "" {
 				fmt.Fprintf(&b, "if %s.Err() == nil && slices.ContainsFunc(%s, func(e %s) bool { return !(%s) }) %s",
-					x, list, goType(*f.Type.Elem), cond, fail)
+					x, list, goType(*t.Elem), cond, fail)
 			}
 			continue
 		}
-		if cond := goTermCond(term, f.Type, list); cond != "" {
+		if cond := goTermCond(term, t, list); cond != "" {
 			fmt.Fprintf(&b, "if %s.Err() == nil && !(%s) %s", x, cond, fail)
 		}
 	}
@@ -217,7 +258,13 @@ func goRecord(b *strings.Builder, name, textName string, fields []Field, rules [
 			fmt.Fprintf(b, "f.%[1]s = codec.Clone(f.%[1]s)\n", goName(f.Name))
 		}
 	}
-	fmt.Fprintf(b, "w := codec.NewChecker()\nf.encode(&w)\nif err := w.Err(); err != nil {\nreturn %[1]s{}, err\n}\nreturn %[1]s{f}, nil\n}\n\n", name)
+	for _, f := range fields {
+		if snap := goSnap(f.Type, "f."+goName(f.Name)); snap != "" {
+			b.WriteString(snap + "\n")
+		}
+	}
+	fmt.Fprintf(b, "w := codec.NewChecker()\nf.encode(&w)\nif err := w.Err(); err != nil {\nreturn %[1]s{}, err\n}\n", name)
+	fmt.Fprintf(b, "return %[1]s{f}, nil\n}\n\n", name)
 
 	for _, f := range fields {
 		if f.Type.Kind == KindList {
@@ -257,6 +304,28 @@ func goRecord(b *strings.Builder, name, textName string, fields []Field, rules [
 	}
 	b.WriteString("return append(b, '}')\n}\n\n")
 	fmt.Fprintf(b, "func (v %s) String() string { return string(v.f.appendText(nil)) }\n\n", name)
+}
+
+func goUnion(b *strings.Builder, u *Union) {
+	fmt.Fprintf(b, "type %[1]s interface {\nis%[1]s()\n}\n\n", u.Name)
+	for _, m := range u.Members {
+		fmt.Fprintf(b, "func (%s) is%s() {}\n\n", m.Handle.Name, u.Name)
+	}
+	fmt.Fprintf(b, "func encode%s(w *codec.Writer, v %[1]s) {\nswitch v := v.(type) {\n", u.Name)
+	for _, m := range u.Members {
+		fmt.Fprintf(b, "case %s:\nw.Varint(%d)\nv.encode(w)\n", m.Handle.Name, m.Tag)
+	}
+	b.WriteString("default:\nw.Fail(codec.ErrBadEnum)\n}\n}\n\n")
+	fmt.Fprintf(b, "func decode%s(r *codec.Reader) %[1]s {\nswitch r.Varint() {\n", u.Name)
+	for _, m := range u.Members {
+		fmt.Fprintf(b, "case %d:\nreturn decode%s(r)\n", m.Tag, m.Handle.Name)
+	}
+	b.WriteString("}\nr.Fail(codec.ErrBadEnum)\nreturn nil\n}\n\n")
+	fmt.Fprintf(b, "func append%sText(b []byte, v %[1]s) []byte {\nswitch v := v.(type) {\n", u.Name)
+	for _, m := range u.Members {
+		fmt.Fprintf(b, "case %s:\nreturn v.appendText(b)\n", m.Handle.Name)
+	}
+	fmt.Fprintf(b, "}\nreturn append(b, \"%s(nil)\"...)\n}\n\n", u.Name)
 }
 
 func genGo(s *Schema, schemaPath, pkg string) ([]byte, error) {
@@ -346,6 +415,10 @@ func decode%[1]s(r *codec.Reader) %[1]s {
 }
 
 `, e.Name)
+	}
+
+	for _, u := range s.Unions {
+		goUnion(&b, u)
 	}
 
 	for _, st := range s.Structs {

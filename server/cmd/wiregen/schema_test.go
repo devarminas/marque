@@ -249,3 +249,81 @@ func TestParseRejectsRules(t *testing.T) {
 		}
 	}
 }
+
+const unioned = `handle PlayerId
+handle NpcId
+union Who {
+  player PlayerId = 1
+  npc NpcId = 7
+}
+struct Box {
+  n u8
+}
+message tag = 3 on state s2c {
+  who Who
+  other Who
+  by opt(Who)
+  weight opt(u8) where 1..9
+  box opt(Box)
+  slots list(opt(u8), 2)
+  rule other != who
+}
+`
+
+func TestCanonicalPrintsUnionsAndOpts(t *testing.T) {
+	want := "wire 1\n" +
+		"handle PlayerId\nhandle NpcId\n" +
+		"union Who {\nplayer PlayerId = 1\nnpc NpcId = 7\n}\n" +
+		"struct Box {\nn u8\n}\n" +
+		"message tag = 3 on state s2c {\nwho Who\nother Who\nby opt(Who)\nweight opt(u8) where 1..9\nbox opt(Box)\nslots list(opt(u8), 2)\n" +
+		"rule other != who\n}\n"
+	s := mustParse(t, unioned)
+	if got := s.Canonical(); got != want {
+		t.Fatalf("canonical form:\n%s\nwant:\n%s", got, want)
+	}
+	if got := s.Messages[0].Fields[0].Type.MinSize(); got != 3 {
+		t.Errorf("union min size %d, want 3 (tag plus the smallest handle)", got)
+	}
+	if got := s.Messages[0].Fields[2].Type.MinSize(); got != 1 {
+		t.Errorf("opt min size %d, want 1 (the presence byte)", got)
+	}
+	base := s.Hash()
+	for _, edit := range [][2]string{
+		{"npc NpcId = 7", "npc NpcId = 8"},
+		{"by opt(Who)", "by Who"},
+		{"where 1..9", "where 1..8"},
+	} {
+		if h := mustParse(t, strings.Replace(unioned, edit[0], edit[1], 1)).Hash(); h == base {
+			t.Errorf("%q -> %q kept hash %#x", edit[0], edit[1], h)
+		}
+	}
+}
+
+func TestParseRejectsUnionsAndOpts(t *testing.T) {
+	head := "handle PlayerId\nhandle NpcId\nstruct S {\n  n u8\n  o opt(u8)\n}\n"
+	msg := func(body string) string { return head + "message m = 1 on state s2c {\n  " + body + "\n}" }
+	cases := []struct{ src, want string }{
+		{head + "union U {\n}", "union U has no members"},
+		{head + "union U {\n  p PlayerId\n}", "want: <member> <Handle> = <tag>"},
+		{head + "union U {\n  p S = 1\n}", `"S" is not a handle`},
+		{head + "union U {\n  p PlayerId = 1\n  q PlayerId = 2\n}", "duplicate member, tag, or handle"},
+		{head + "union U {\n  p PlayerId = 1\n  q NpcId = 1\n}", "duplicate member, tag, or handle"},
+		{head + "union U {\n  class PlayerId = 1\n}", `union member "class" must be snake_case`},
+		{head + "union U {\n  p PlayerId = -1\n}", `union tag "-1" is not a u32`},
+		{head + "union U {\n  p PlayerId = 1\n}\nunion V {\n  q PlayerId = 2\n}", "same handles in the same order as union U"},
+		{head + "union SFields {\n  p PlayerId = 1\n}", `duplicate name "SFields"`},
+		{msg("x opt(opt(u8))"), "opt of opt is not supported"},
+		{msg("x opt(list(u8, 2))"), "opt of list is not supported"},
+		{msg("x opt(u8"), "want: opt(<type>)"},
+		{msg("x opt(u8)\n  rule x == x"), `rule names "x", an opt field`},
+		{msg("s S\n  rule s.o == s.n"), "o is an opt field"},
+		{msg("x opt(PlayerId) where 1..2"), "a range needs an integer or quant"},
+		{"quant opt min 0 max 1 per_unit 1", `duplicate name "opt"`},
+	}
+	for _, c := range cases {
+		_, err := Parse(c.src)
+		if err == nil || !strings.Contains(err.Error(), c.want) || !strings.HasPrefix(err.Error(), "schema line ") {
+			t.Errorf("Parse(%q) = %v, want error with a line number containing %q", c.src, err, c.want)
+		}
+	}
+}

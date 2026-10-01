@@ -111,3 +111,22 @@ func TestConfigCapsBacklogLimit(t *testing.T) {
 		t.Fatalf("got  %v\nwant %s", got, want)
 	}
 }
+
+func TestFlushedNamesTheDatagramCarryingTheUnreliableSection(t *testing.T) {
+	srv := mustEndpoint(Server, testConfig(), 0)
+	cli := mustEndpoint(Client, testConfig(), 0)
+	must(srv.Flush(0, Unreliable{Stamp: 1, Items: [][]byte{{1}}}))
+	if err := srv.Send(make([]byte, 3000)); err != nil {
+		t.Fatal(err)
+	}
+	f := must(srv.Flush(0, Unreliable{Stamp: 2, Items: [][]byte{make([]byte, 100)}}))
+	var got []string
+	for _, d := range f.Datagrams {
+		r := must(cli.Receive(d, 0))
+		got = append(got, fmt.Sprintf("seq=%d items=%d", readHeader(d).seq, len(r.Unreliable.Items)))
+	}
+	want := "[seq=1 items=0 seq=2 items=0 seq=3 items=1]"
+	if fmt.Sprint(got) != want || f.UnreliableSent != 1 || f.UnreliableSeq != 3 {
+		t.Fatalf("datagrams %v, unreliable sent %d in seq %d; want %s, sent 1 in seq 3", got, f.UnreliableSent, f.UnreliableSeq, want)
+	}
+}

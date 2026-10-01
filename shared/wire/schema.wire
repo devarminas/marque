@@ -41,3 +41,97 @@ message refused = 4 on events s2c {
   seq u32
   reason RefuseReason
 }
+
+union EntityId {
+  player PlayerId = 1
+  npc NpcId = 2
+  item ItemId = 3
+  node NodeId = 4
+}
+
+union CombatantId {
+  player PlayerId = 1
+  npc NpcId = 2
+}
+
+enum CastStep {
+  begin = 1
+  resolve = 2
+  cancel = 3
+}
+
+struct Transform {
+  x pos
+  y pos
+  z pos
+}
+
+struct Vitals {
+  hp u32
+  max_hp u32
+  mana u32
+  max_mana u32
+  rule hp <= max_hp
+  rule mana <= max_mana
+}
+
+struct Gear {
+  helmet opt(string(32))
+  chest opt(string(32))
+  trousers opt(string(32))
+  feet opt(string(32))
+  left_hand opt(string(32))
+  right_hand opt(string(32))
+}
+
+struct Casting {
+  ability string(32)
+  start u32
+  ticks u16 where 1..65535
+}
+
+struct CastBar {
+  casting opt(Casting)
+}
+
+struct Look {
+  kind string(32)
+}
+
+message entity = 16 on state s2c {
+  id EntityId
+  transform opt(Transform)
+  vitals opt(Vitals)
+  gear opt(Gear)
+  cast opt(CastBar)
+  look opt(Look)
+}
+
+message gone = 17 on state s2c {
+  id EntityId
+}
+
+message swing = 18 on state s2c {
+  tick u32
+  attacker CombatantId
+  target CombatantId
+  amount u32
+  crit bool
+  miss bool
+  rule target != attacker
+}
+
+message cast_phase = 19 on state s2c {
+  tick u32
+  caster CombatantId
+  ability string(32)
+  step CastStep
+  target opt(CombatantId)
+  amount u32
+}
+
+message gather_start = 20 on state s2c {
+  tick u32
+  player PlayerId
+  node NodeId
+}
