@@ -16,9 +16,9 @@ func GoldenLines(profile Profile, seed uint64, count int) []string {
 	}
 
 	lastSend := uint64(count-1) * goldenSendGapMicros
-	slowestPossiblePathThroughComputeFate := profile.DelayBaseMicros + profile.JitterRangeMicros +
+	maxExtra := profile.DelayBaseMicros + profile.JitterRangeMicros +
 		profile.ReorderWindowMicros + profile.JitterRangeMicros
-	deliveries := sim.Poll(AToB, lastSend+slowestPossiblePathThroughComputeFate+1)
+	deliveries := sim.Poll(AToB, lastSend+maxExtra+1)
 
 	type arrival struct {
 		at uint64
