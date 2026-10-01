@@ -13,6 +13,7 @@ import (
 type Inbound struct {
 	From            netip.AddrPort
 	At              uint64
+	Admission       Admission
 	PeerAck, OwnAck AckWindow
 	InputStamp uint32
 	Input      []wire.InputMsg
@@ -23,7 +24,9 @@ type Inbound struct {
 type Reader struct {
 	conn  *net.UDPConn
 	cfg   Config
+	gate  *Gate
 	clock func() uint64
+	wall  func() uint64
 	peers map[netip.AddrPort]*Receiver
 
 	mu     sync.Mutex
@@ -46,16 +49,11 @@ func (rd *Reader) drainForget() {
 	}
 }
 
-func NewReader(conn *net.UDPConn, cfg Config, clock func() uint64, peers ...netip.AddrPort) (*Reader, error) {
-	rd := &Reader{conn: conn, cfg: cfg, clock: clock, peers: map[netip.AddrPort]*Receiver{}}
-	for _, p := range peers {
-		rx, err := NewReceiver(Server, cfg)
-		if err != nil {
-			return nil, err
-		}
-		rd.peers[p] = rx
+func NewReader(conn *net.UDPConn, cfg Config, gate *Gate, clock, wall func() uint64) (*Reader, error) {
+	if err := cfg.validate(); err != nil {
+		return nil, err
 	}
-	return rd, nil
+	return &Reader{conn: conn, cfg: cfg, gate: gate, clock: clock, wall: wall, peers: map[netip.AddrPort]*Receiver{}}, nil
 }
 
 func (rd *Reader) Run(out chan<- Inbound) error {
@@ -72,6 +70,9 @@ func (rd *Reader) Run(out chan<- Inbound) error {
 		rd.drainForget()
 		rx := rd.peers[from]
 		if rx == nil {
+			if a, ok := rd.handshake(from, buf[:n]); ok {
+				out <- Inbound{From: from, At: rd.clock(), Admission: a}
+			}
 			continue
 		}
 		r, err := rx.Receive(buf[:n])
@@ -85,6 +86,23 @@ func (rd *Reader) Run(out chan<- Inbound) error {
 		}
 		out <- in
 	}
+}
+
+func (rd *Reader) handshake(from netip.AddrPort, d []byte) (Admission, bool) {
+	o, err := rd.gate.Handle(from, d, rd.wall())
+	switch {
+	case err != nil:
+		return Admission{}, false
+	case o.Challenge != nil:
+		rd.conn.WriteToUDPAddrPort(o.Challenge, from)
+		return Admission{}, false
+	}
+	rx, err := NewReceiver(Server, rd.cfg, NewSessionSeal(Server, o.Admission.Keys))
+	if err != nil {
+		return Admission{}, false
+	}
+	rd.peers[from] = rx
+	return *o.Admission, true
 }
 
 func decode(r Received) (Inbound, bool) {
@@ -109,6 +127,10 @@ func decode(r Received) (Inbound, bool) {
 		in.Intents = append(in.Intents, m)
 	}
 	return in, true
+}
+
+func WallClock() func() uint64 {
+	return func() uint64 { return uint64(time.Now().Unix()) }
 }
 
 func MonotonicClock() func() uint64 {

@@ -26,17 +26,13 @@ type script struct {
 type start struct{ seq, sendID, recvID uint16 }
 
 func newScript(desc string, role Role, cfg Config, now uint64) *script {
-	return newScriptAt(desc, role, cfg, start{}, now)
+	return newScriptAt(desc, role, cfg, "plain", start{}, now)
 }
 
-func newScriptAt(desc string, role Role, cfg Config, st start, now uint64) *script {
+func newScriptAt(desc string, role Role, cfg Config, seal string, st start, now uint64) *script {
 	s := &script{}
 	for _, l := range strings.Split(desc, "\n") {
 		s.lines = append(s.lines, "# "+l)
-	}
-	seal := "plain"
-	if _, ok := cfg.Seal.(testSeal); ok {
-		seal = "test"
 	}
 	s.exec(fmt.Sprintf("endpoint %s %016x %d %d %d %d %s %d %d %d %d", role, cfg.SchemaHash, cfg.TickBudget, cfg.BacklogLimit, cfg.BacklogBytes, cfg.ResendAfter, seal, st.seq, st.sendID, st.recvID, now))
 	return s
@@ -91,9 +87,17 @@ var errNames = []struct {
 	{ErrClosed, "closed"},
 	{ErrMessage, "message"},
 	{ErrItem, "item"},
+	{ErrExpired, "expired"},
+	{ErrForged, "forged"},
+	{ErrWrongShard, "wrong_shard"},
+	{ErrReplayed, "replayed"},
+	{ErrAddress, "address"},
 }
 
 func errName(err error) string {
+	if err == nil {
+		return "ok"
+	}
 	for _, e := range errNames {
 		if errors.Is(err, e.err) {
 			return e.name
@@ -131,14 +135,18 @@ func runOp(ep **Endpoint, line string) ([]string, error) {
 		}
 		cfg := DefaultConfig(hash)
 		cfg.TickBudget, cfg.BacklogLimit, cfg.BacklogBytes, cfg.ResendAfter = int(num(3)), int(num(4)), int(num(5)), num(6)
+		var seal Seal
 		switch f[7] {
 		case "plain":
+			seal = Plain{}
 		case "test":
-			cfg.Seal = testSeal{}
+			seal = testSeal{}
+		case "session":
+			seal = NewSessionSeal(role, vectorSessionKeys())
 		default:
 			return nil, fmt.Errorf("unknown seal %q", f[7])
 		}
-		e, err := NewEndpoint(role, cfg, num(11))
+		e, err := NewEndpoint(role, cfg, seal, num(11))
 		if err != nil {
 			return nil, err
 		}

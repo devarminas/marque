@@ -44,14 +44,14 @@ type inFrag struct {
 	data  []byte
 }
 
-func NewReceiver(role Role, cfg Config) (*Receiver, error) {
-	if err := cfg.validate(); err != nil {
+func NewReceiver(role Role, cfg Config, seal Seal) (*Receiver, error) {
+	if err := cfg.validateWith(seal); err != nil {
 		return nil, err
 	}
 	return &Receiver{
 		from:    role.peer(),
 		hash:    cfg.SchemaHash,
-		seal:    cfg.Seal,
+		seal:    seal,
 		window:  recvWindow{AckWindow: NoAcks},
 		partial: map[uint16]*inMsg{},
 	}, nil

@@ -76,7 +76,7 @@ func TestSendRefusesEmptyAndOversized(t *testing.T) {
 func TestConfigRefusesBudgetBelowOneDatagram(t *testing.T) {
 	cfg := testConfig()
 	cfg.TickBudget = MaxDatagram - 1
-	if _, err := NewEndpoint(Server, cfg, 0); err == nil {
+	if _, err := NewEndpoint(Server, cfg, Plain{}, 0); err == nil {
 		t.Fatal("TickBudget 1199 accepted")
 	}
 }

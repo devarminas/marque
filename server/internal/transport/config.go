@@ -16,7 +16,6 @@ type Config struct {
 	BacklogLimit int
 	BacklogBytes int
 	ResendAfter uint64
-	Seal        Seal
 }
 
 func DefaultConfig(schemaHash uint64) Config {
@@ -26,8 +25,14 @@ func DefaultConfig(schemaHash uint64) Config {
 		BacklogLimit: DefaultBacklogLimit,
 		BacklogBytes: DefaultBacklogBytes,
 		ResendAfter:  DefaultResendAfter,
-		Seal:         Plain{},
 	}
+}
+
+func (c Config) validateWith(seal Seal) error {
+	if seal == nil {
+		return fmt.Errorf("transport: Seal is nil")
+	}
+	return c.validate()
 }
 
 func (c Config) validate() error {
@@ -40,8 +45,6 @@ func (c Config) validate() error {
 		return fmt.Errorf("transport: BacklogBytes %d below 1", c.BacklogBytes)
 	case c.ResendAfter == 0:
 		return fmt.Errorf("transport: ResendAfter is zero")
-	case c.Seal == nil:
-		return fmt.Errorf("transport: Seal is nil")
 	}
 	return nil
 }

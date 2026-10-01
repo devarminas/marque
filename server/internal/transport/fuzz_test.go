@@ -39,7 +39,7 @@ func FuzzReceive(f *testing.F) {
 	f.Fuzz(func(t *testing.T, b []byte) {
 		ds := unframe(b)
 		for _, role := range []Role{Server, Client} {
-			rx, err := NewReceiver(role, testConfig())
+			rx, err := NewReceiver(role, testConfig(), Plain{})
 			if err != nil {
 				t.Fatal(err)
 			}

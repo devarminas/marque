@@ -28,7 +28,7 @@ func must[T any](v T, err error) T {
 func testConfig() Config { return DefaultConfig(testHash) }
 
 func mustEndpoint(role Role, cfg Config, now uint64) *Endpoint {
-	e, err := NewEndpoint(role, cfg, now)
+	e, err := NewEndpoint(role, cfg, Plain{}, now)
 	if err != nil {
 		panic(err)
 	}
@@ -257,7 +257,7 @@ func backlogBytes() *script {
 }
 
 func idWrapSend() *script {
-	s := newScriptAt("A server whose next message id is 65534 numbers three events 65534, 65535\nand 0. One ack removes all three, the next event is id 1, and none of the\nacked events is sent again.", Server, testConfig(), start{sendID: 65534}, 0)
+	s := newScriptAt("A server whose next message id is 65534 numbers three events 65534, 65535\nand 0. One ack removes all three, the next event is id 1, and none of the\nacked events is sent again.", Server, testConfig(), "plain", start{sendID: 65534}, 0)
 	s.send([]byte{0x04, 0x01})
 	s.send([]byte{0x04, 0x02})
 	s.send([]byte{0x04, 0x03})
@@ -270,7 +270,7 @@ func idWrapSend() *script {
 }
 
 func idWrapRecv() *script {
-	s := newScriptAt("A client whose next expected message id is 65534 buffers ids 0 and 65535,\ndelivers 65534, 65535 and 0 in order once 65534 arrives, then ignores\nrepeats of 65535 and 0, which are behind next (reassembly rule 1).", Client, testConfig(), start{recvID: 65534}, 0)
+	s := newScriptAt("A client whose next expected message id is 65534 buffers ids 0 and 65535,\ndelivers 65534, 65535 and 0 in order once 65534 arrives, then ignores\nrepeats of 65535 and 0, which are behind next (reassembly rule 1).", Client, testConfig(), "plain", start{recvID: 65534}, 0)
 	one := func(id uint16, b byte) entry { return entry{id: id, index: 0, count: 1, data: []byte{0x04, b}} }
 	s.recv(10_000, raw(Server, 0, NoAcks, nil, one(0, 0x00), one(65535, 0xff)))
 	s.recv(20_000, raw(Server, 1, NoAcks, nil, one(65534, 0xfe)))
@@ -315,7 +315,7 @@ func windowBytesRecv() *script {
 }
 
 func sequenceWrapSend() *script {
-	s := newScriptAt("A server whose next sequence is 65534 sends 65534, 65535, 0 and 1. An ack of\n0xffff with bits 0 means nothing received, so the event in 65535 is resent\nin 0; the ack of 0 with bit 0 set acks both across the wrap, and the event\nis not sent again.", Server, testConfig(), start{seq: 65534}, 0)
+	s := newScriptAt("A server whose next sequence is 65534 sends 65534, 65535, 0 and 1. An ack of\n0xffff with bits 0 means nothing received, so the event in 65535 is resent\nin 0; the ack of 0 with bit 0 set acks both across the wrap, and the event\nis not sent again.", Server, testConfig(), "plain", start{seq: 65534}, 0)
 	s.flush(100_000, Unreliable{})
 	s.send([]byte{0x04, 0x01})
 	s.flush(140_000, Unreliable{})
@@ -327,9 +327,7 @@ func sequenceWrapSend() *script {
 }
 
 func sealedScenario() *script {
-	cfg := testConfig()
-	cfg.Seal = testSeal{}
-	s := newScript("A server with the test seal (overhead 4). Its keepalive is 24 bytes. A\nsealed client datagram delivers; the same datagram with one tag byte changed,\nand a 20-byte unsealed keepalive, are malformed.", Server, cfg, 0)
+	s := newScriptAt("A server with the test seal (overhead 4). Its keepalive is 24 bytes. A\nsealed client datagram delivers; the same datagram with one tag byte changed,\nand a 20-byte unsealed keepalive, are malformed.", Server, testConfig(), "test", start{}, 0)
 	s.flush(100_000, Unreliable{})
 	s.send([]byte{0x04, 0x01})
 	s.flush(140_000, Unreliable{Stamp: 1, Items: [][]byte{{0x02, 0x01}}})

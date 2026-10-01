@@ -35,11 +35,11 @@ func newSession(t *testing.T, profile string, seed uint64, cfg Config) *session 
 	t.Helper()
 	seed = netsim.SeedFromEnv(seed)
 	t.Logf("seed=%d profile=%s", seed, profile)
-	srv, err := NewEndpoint(Server, cfg, 0)
+	srv, err := NewEndpoint(Server, cfg, Plain{}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cli, err := NewEndpoint(Client, cfg, 0)
+	cli, err := NewEndpoint(Client, cfg, Plain{}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
