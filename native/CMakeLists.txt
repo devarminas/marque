@@ -52,3 +52,7 @@ endforeach()
 if(MARQUE_FUZZ)
     add_subdirectory(fuzz)
 endif()
+
+add_executable(transport_interop_client EXCLUDE_FROM_ALL core/tests/interop/client.cpp)
+target_link_libraries(transport_interop_client PRIVATE marque_core)
+target_compile_options(transport_interop_client PRIVATE -Wall -Wextra -Werror)
