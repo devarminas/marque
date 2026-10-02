@@ -23,6 +23,7 @@ export_presets.cfg
 
 # Native C++
 /native/build/
+/client/bin/*.so
 
 # Local
 .env

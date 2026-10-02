@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"math"
+	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
@@ -51,6 +53,7 @@ type EnumMember struct {
 type Struct struct {
 	Name   string
 	Fields []Field
+	Rules  []Relation
 }
 
 type Message struct {
@@ -59,11 +62,84 @@ type Message struct {
 	Channel   string
 	Direction string
 	Fields    []Field
+	Rules     []Relation
 }
 
 type Field struct {
-	Name string
-	Type Type
+	Name  string
+	Type  Type
+	Where []Term
+}
+
+type TermKind int
+
+const (
+	TermRange TermKind = iota
+	TermSet
+	TermUnique
+)
+
+type Term struct {
+	Kind             TermKind
+	Lo, Hi           string
+	CheckLo, CheckHi bool
+	LoStep, HiStep   uint64
+	Members          []EnumMember
+	By               *Field
+}
+
+func (t Term) Canonical() string {
+	switch t.Kind {
+	case TermRange:
+		return t.Lo + ".." + t.Hi
+	case TermSet:
+		names := make([]string, len(t.Members))
+		for i, m := range t.Members {
+			names[i] = m.Name
+		}
+		return "{" + strings.Join(names, ", ") + "}"
+	}
+	if t.By != nil {
+		return "unique(" + t.By.Name + ")"
+	}
+	return "unique"
+}
+
+type Relation struct {
+	Left, Right Operand
+	Op          string
+}
+
+func (r Relation) Canonical() string {
+	return fmt.Sprintf("rule %s %s %s", r.Left, r.Op, r.Right)
+}
+
+type Operand struct {
+	Field *Field
+	Sub   *Field
+}
+
+func (o Operand) Each() bool { return o.Field.Type.Kind == KindList }
+
+func (o Operand) Leaf() Type {
+	if o.Sub != nil {
+		return o.Sub.Type
+	}
+	return o.Field.Type.each()
+}
+
+func (t Type) each() Type {
+	if t.Kind == KindList {
+		return *t.Elem
+	}
+	return t
+}
+
+func (o Operand) String() string {
+	if o.Sub != nil {
+		return o.Field.Name + "." + o.Sub.Name
+	}
+	return o.Field.Name
 }
 
 type Kind int
@@ -131,12 +207,36 @@ func (t Type) Canonical() string {
 	}
 }
 
+func (t Type) ordered() bool {
+	return t.Kind == KindQuant || t.Kind == KindPrim && t.Prim != "bool" && t.Prim != "f32"
+}
+
+func (t Type) comparable() bool {
+	switch t.Kind {
+	case KindPrim:
+		return t.Prim != "f32"
+	case KindList:
+		return false
+	case KindStruct:
+		for _, f := range t.Struct.Fields {
+			if !f.Type.comparable() {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (t Type) scalar() bool { return t.comparable() && t.Kind != KindStruct }
+
 // primSize is each primitive's encoded width in bytes.
 var primSize = map[string]int{
 	"u8": 1, "u16": 2, "u32": 4, "u64": 8,
 	"i8": 1, "i16": 2, "i32": 4, "i64": 8,
 	"bool": 1, "f32": 4,
 }
+
+const uniqueMaxBound = 256
 
 // codecVersion opens the canonical form, so a change to the byte rules changes
 // the hash even when the schema text does not. Bump it with any codec rule.
@@ -169,9 +269,7 @@ var cppKeywords = setOf(
 	"wchar_t", "while", "xor", "xor_eq",
 )
 
-// generatedMembers collide with generated message members (Go methods
-// MessageID, Channel, Append, String; C++ message_id, channel).
-var generatedMembers = setOf("message_id", "channel", "append", "string")
+var generatedMembers = setOf("message_id", "channel", "append", "string", "build")
 
 // reservedTypes are the package-level names the Go generator emits.
 var reservedTypes = func() map[string]bool {
@@ -194,6 +292,7 @@ func setOf(names ...string) map[string]bool {
 var (
 	snakeName  = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 	pascalName = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
+	decimal    = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
 )
 
 type parser struct {
@@ -230,11 +329,42 @@ func Parse(src string) (*Schema, error) {
 	return p.schema, nil
 }
 
-func tokenize(line string) []string {
-	for _, c := range "(){},=" {
-		line = strings.ReplaceAll(line, string(c), " "+string(c)+" ")
+var operators = []string{"..", "<=", "==", "!="}
+
+const punctuation = "(){},=<"
+
+func tokenAt(line string, i int) string {
+	for _, op := range operators {
+		if strings.HasPrefix(line[i:], op) {
+			return op
+		}
 	}
-	return strings.Fields(line)
+	if strings.IndexByte(punctuation, line[i]) >= 0 {
+		return line[i : i+1]
+	}
+	return ""
+}
+
+func tokenize(line string) []string {
+	var out []string
+	for i := 0; i < len(line); {
+		if c := line[i]; c == ' ' || c == '\t' || c == '\r' {
+			i++
+			continue
+		}
+		if tok := tokenAt(line, i); tok != "" {
+			out = append(out, tok)
+			i += len(tok)
+			continue
+		}
+		j := i
+		for j < len(line) && !strings.ContainsRune(" \t\r", rune(line[j])) && tokenAt(line, j) == "" {
+			j++
+		}
+		out = append(out, line[i:j])
+		i = j
+	}
+	return out
 }
 
 func (p *parser) errf(format string, args ...any) error {
@@ -245,17 +375,32 @@ func (p *parser) errAt(line int, format string, args ...any) error {
 	return fmt.Errorf("schema line %d: %s", line, fmt.Sprintf(format, args...))
 }
 
+func (p *parser) claim(name string, record bool, line int) error {
+	names := []string{name}
+	if record {
+		names = append(names, name+"Fields")
+	}
+	for _, n := range names {
+		if reservedTypes[n] {
+			return p.errAt(line, "name %q is reserved for generated code", n)
+		}
+		if p.names[n] {
+			return p.errAt(line, "duplicate name %q", n)
+		}
+	}
+	for _, n := range names {
+		p.names[n] = true
+	}
+	return nil
+}
+
 func (p *parser) declareType(name string, t Type, line int) error {
 	if !pascalName.MatchString(name) {
 		return p.errAt(line, "type name %q must be PascalCase", name)
 	}
-	if reservedTypes[name] {
-		return p.errAt(line, "type name %q is reserved for generated code", name)
+	if err := p.claim(name, t.Kind == KindStruct, line); err != nil {
+		return err
 	}
-	if p.names[name] {
-		return p.errAt(line, "duplicate name %q", name)
-	}
-	p.names[name] = true
 	p.types[name] = t
 	return nil
 }
@@ -283,7 +428,7 @@ func (p *parser) decl() error {
 	case "message":
 		return p.message(toks)
 	case "rule":
-		return p.errf("rule declarations are reserved for declared rules (ARM-350)")
+		return p.errf("a rule line belongs inside a struct or message")
 	}
 	return p.errf("unknown declaration %q", toks[0])
 }
@@ -388,14 +533,14 @@ func (p *parser) structDecl(toks []string) error {
 	}
 	s := &Struct{Name: toks[1]}
 	header := p.lineNo[p.pos]
-	fields, err := p.fields()
+	fields, rules, err := p.fields()
 	if err != nil {
 		return err
 	}
 	if len(fields) == 0 {
 		return p.errAt(header, "struct %s has no fields; a zero-byte list element would make any count free to send", s.Name)
 	}
-	s.Fields = fields
+	s.Fields, s.Rules = fields, rules
 	if err := p.declareType(s.Name, Type{Kind: KindStruct, Struct: s}, header); err != nil {
 		return err
 	}
@@ -426,28 +571,29 @@ func (p *parser) message(toks []string) error {
 	if m.Direction != dir {
 		return p.errf("channel %s is %s, message says %s", m.Channel, dir, m.Direction)
 	}
-	pascal := goName(m.Name)
-	if reservedTypes[pascal] {
-		return p.errf("message name %q becomes %s, which is reserved for generated code", m.Name, pascal)
+	if err := p.claim(goName(m.Name), true, p.lineNo[p.pos]); err != nil {
+		return err
 	}
-	if p.names[pascal] {
-		return p.errf("duplicate name %q", pascal)
-	}
-	p.names[pascal] = true
 	p.msgIDs[m.ID] = m.Name
-	if m.Fields, err = p.fields(); err != nil {
+	if m.Fields, m.Rules, err = p.fields(); err != nil {
 		return err
 	}
 	p.schema.Messages = append(p.schema.Messages, m)
 	return nil
 }
 
-func (p *parser) fields() ([]Field, error) {
+func (p *parser) fields() ([]Field, []Relation, error) {
 	var out []Field
+	type pending struct {
+		toks []string
+		line int
+	}
+	var rules []pending
 	seen := map[string]bool{}
 	err := p.block(func(t []string) error {
 		if t[0] == "rule" {
-			return p.errf("rule lines are reserved for declared rules (ARM-350)")
+			rules = append(rules, pending{t[1:], p.lineNo[p.pos]})
+			return nil
 		}
 		if len(t) < 2 {
 			return p.errf("want: <field> <type>")
@@ -464,16 +610,286 @@ func (p *parser) fields() ([]Field, error) {
 		if err != nil {
 			return err
 		}
+		f := Field{Name: name, Type: typ}
 		if len(rest) > 0 {
-			if rest[0] == "where" {
-				return p.errf("where clauses are reserved for declared rules (ARM-350)")
+			if rest[0] != "where" {
+				return p.errf("unexpected %q after field type", strings.Join(rest, " "))
 			}
-			return p.errf("unexpected %q after field type", strings.Join(rest, " "))
+			if f.Where, err = p.where(typ, rest[1:]); err != nil {
+				return err
+			}
 		}
-		out = append(out, Field{Name: name, Type: typ})
+		out = append(out, f)
 		return nil
 	})
-	return out, err
+	if err != nil {
+		return nil, nil, err
+	}
+	var rels []Relation
+	for _, r := range rules {
+		rel, err := p.relation(out, r.toks, r.line)
+		if err != nil {
+			return nil, nil, err
+		}
+		rels = append(rels, rel)
+	}
+	return out, rels, nil
+}
+
+func (p *parser) where(t Type, toks []string) ([]Term, error) {
+	var terms []Term
+	seen := map[TermKind]bool{}
+	for {
+		term, rest, err := p.term(t, toks)
+		if err != nil {
+			return nil, err
+		}
+		if seen[term.Kind] {
+			return nil, p.errf("where clause repeats %q; give each kind of term once", term.Canonical())
+		}
+		seen[term.Kind] = true
+		terms = append(terms, term)
+		if len(rest) == 0 {
+			return terms, nil
+		}
+		if rest[0] != "and" || len(rest) == 1 {
+			return nil, p.errf("want: where <term> [and <term>]..., got %q", strings.Join(rest, " "))
+		}
+		toks = rest[1:]
+	}
+}
+
+func (p *parser) term(t Type, toks []string) (Term, []string, error) {
+	elem := t.each()
+	switch {
+	case len(toks) == 0:
+		return Term{}, nil, p.errf("missing term after where")
+	case toks[0] == "unique":
+		return p.unique(t, toks)
+	case toks[0] == "{":
+		if elem.Kind != KindEnum {
+			return Term{}, nil, p.errf("a {member, ...} set needs an enum or a list of enums, not %s", t.Canonical())
+		}
+		return p.set(elem.Enum, toks)
+	case len(toks) >= 3 && toks[1] == "..":
+		if !elem.ordered() {
+			return Term{}, nil, p.errf("a range needs an integer or quant, or a list of them, not %s", t.Canonical())
+		}
+		term, err := p.rangeTerm(elem, toks[0], toks[2])
+		return term, toks[3:], err
+	}
+	return Term{}, nil, p.errf("unknown term %q (want <lo>..<hi>, {member, ...}, unique, or unique(<field>))", strings.Join(toks, " "))
+}
+
+func (p *parser) unique(t Type, toks []string) (Term, []string, error) {
+	if t.Kind != KindList {
+		return Term{}, nil, p.errf("unique needs a list, not %s", t.Canonical())
+	}
+	if t.Bound > uniqueMaxBound {
+		return Term{}, nil, p.errf("unique needs a list bound of at most %d, because the check compares every pair", uniqueMaxBound)
+	}
+	term := Term{Kind: TermUnique}
+	if len(toks) >= 4 && toks[1] == "(" && toks[3] == ")" {
+		if t.Elem.Kind != KindStruct {
+			return Term{}, nil, p.errf("unique(%s) needs a list of structs", toks[2])
+		}
+		by := findField(t.Elem.Struct.Fields, toks[2])
+		if by == nil {
+			return Term{}, nil, p.errf("struct %s has no field %q", t.Elem.Struct.Name, toks[2])
+		}
+		if !by.Type.scalar() {
+			return Term{}, nil, p.errf("unique(%s): %s cannot be compared", by.Name, by.Type.Canonical())
+		}
+		term.By = by
+		return term, toks[4:], nil
+	}
+	if !t.Elem.comparable() {
+		return Term{}, nil, p.errf("unique: %s cannot be compared (it holds a list or an f32); use unique(<field>)", t.Elem.Canonical())
+	}
+	if t.Elem.Kind == KindStruct && holdsQuant(t.Elem.Struct) {
+		return Term{}, nil, p.errf("unique: %s holds a quant, which compares by wire step only one field at a time; use unique(<field>)", t.Elem.Canonical())
+	}
+	return term, toks[1:], nil
+}
+
+func (p *parser) set(e *Enum, toks []string) (Term, []string, error) {
+	term := Term{Kind: TermSet}
+	seen := map[string]bool{}
+	i := 1
+	for ; i < len(toks) && toks[i] != "}"; i++ {
+		if len(term.Members) > 0 {
+			if toks[i] != "," || i+1 >= len(toks) {
+				return Term{}, nil, p.errf("want: {member, member, ...}")
+			}
+			i++
+		}
+		m, ok := findMember(e, toks[i])
+		if !ok {
+			return Term{}, nil, p.errf("enum %s has no member %q", e.Name, toks[i])
+		}
+		if seen[m.Name] {
+			return Term{}, nil, p.errf("set names %q twice", m.Name)
+		}
+		seen[m.Name] = true
+		term.Members = append(term.Members, m)
+	}
+	if i >= len(toks) || len(term.Members) == 0 {
+		return Term{}, nil, p.errf("want: {member, member, ...}")
+	}
+	return term, toks[i+1:], nil
+}
+
+func holdsQuant(s *Struct) bool {
+	for _, f := range s.Fields {
+		if f.Type.Kind == KindQuant || f.Type.Kind == KindStruct && holdsQuant(f.Type.Struct) {
+			return true
+		}
+	}
+	return false
+}
+
+func findMember(e *Enum, name string) (EnumMember, bool) {
+	for _, m := range e.Members {
+		if m.Name == name {
+			return m, true
+		}
+	}
+	return EnumMember{}, false
+}
+
+func findField(fs []Field, name string) *Field {
+	for i := range fs {
+		if fs[i].Name == name {
+			return &fs[i]
+		}
+	}
+	return nil
+}
+
+var intLimits = map[string][2]*big.Int{
+	"u8": {big.NewInt(0), big.NewInt(math.MaxUint8)}, "u16": {big.NewInt(0), big.NewInt(math.MaxUint16)},
+	"u32": {big.NewInt(0), big.NewInt(math.MaxUint32)}, "u64": {big.NewInt(0), new(big.Int).SetUint64(math.MaxUint64)},
+	"i8": {big.NewInt(math.MinInt8), big.NewInt(math.MaxInt8)}, "i16": {big.NewInt(math.MinInt16), big.NewInt(math.MaxInt16)},
+	"i32": {big.NewInt(math.MinInt32), big.NewInt(math.MaxInt32)}, "i64": {big.NewInt(math.MinInt64), big.NewInt(math.MaxInt64)},
+}
+
+func (p *parser) rangeTerm(t Type, loTok, hiTok string) (Term, error) {
+	lo, err := p.rangeBound(loTok)
+	if err != nil {
+		return Term{}, err
+	}
+	hi, err := p.rangeBound(hiTok)
+	if err != nil {
+		return Term{}, err
+	}
+	if lo.Cmp(hi) > 0 {
+		return Term{}, p.errf("range %s..%s: low bound above high bound", loTok, hiTok)
+	}
+	term := Term{Kind: TermRange, Lo: canonDecimal(lo), Hi: canonDecimal(hi)}
+	if t.Kind == KindQuant {
+		q := t.Quant
+		perUnit, min := big.NewRat(q.PerUnit, 1), big.NewRat(q.Min*q.PerUnit, 1)
+		steps := [2]uint64{}
+		for i, v := range []*big.Rat{lo, hi} {
+			s := new(big.Rat).Sub(new(big.Rat).Mul(v, perUnit), min)
+			if !s.IsInt() {
+				return Term{}, p.errf("range bound %s is not on quant %s's grid of 1/%d", canonDecimal(v), q.Name, q.PerUnit)
+			}
+			if s.Sign() < 0 || !s.Num().IsUint64() || s.Num().Uint64() > q.Steps() {
+				return Term{}, p.errf("range bound %s is outside quant %s (%d..%d)", canonDecimal(v), q.Name, q.Min, q.Max)
+			}
+			steps[i] = s.Num().Uint64()
+		}
+		term.LoStep, term.HiStep = steps[0], steps[1]
+		term.CheckLo, term.CheckHi = steps[0] > 0, steps[1] < q.Steps()
+		return term, nil
+	}
+	limits := intLimits[t.Prim]
+	for _, v := range []*big.Rat{lo, hi} {
+		if !v.IsInt() {
+			return Term{}, p.errf("range bound %s is not an integer, and %s is", canonDecimal(v), t.Prim)
+		}
+		if v.Num().Cmp(limits[0]) < 0 || v.Num().Cmp(limits[1]) > 0 {
+			return Term{}, p.errf("range bound %s is outside %s", canonDecimal(v), t.Prim)
+		}
+	}
+	term.CheckLo, term.CheckHi = lo.Num().Cmp(limits[0]) != 0, hi.Num().Cmp(limits[1]) != 0
+	return term, nil
+}
+
+func (p *parser) rangeBound(tok string) (*big.Rat, error) {
+	r, ok := new(big.Rat).SetString(tok)
+	if !decimal.MatchString(tok) || !ok {
+		return nil, p.errf("range bound %q is not a decimal number", tok)
+	}
+	return r, nil
+}
+
+func canonDecimal(r *big.Rat) string {
+	prec, _ := r.FloatPrec()
+	if s := r.FloatString(prec); s != "-0" {
+		return s
+	}
+	return "0"
+}
+
+func (p *parser) relation(fields []Field, toks []string, line int) (Relation, error) {
+	if len(toks) != 3 {
+		return Relation{}, p.errAt(line, "want: rule <field>[.<field>] <op> <field>[.<field>] with op <, <=, ==, !=, or in")
+	}
+	var rel Relation
+	var err error
+	if rel.Left, err = p.operand(fields, toks[0], line); err != nil {
+		return Relation{}, err
+	}
+	if rel.Right, err = p.operand(fields, toks[2], line); err != nil {
+		return Relation{}, err
+	}
+	rel.Op = toks[1]
+	l, r := rel.Left.Leaf(), rel.Right.Leaf()
+	if rel.Op == "in" {
+		if rel.Left.Each() || !rel.Right.Each() {
+			return Relation{}, p.errAt(line, "rule %s: in needs a single value on the left and a list on the right", strings.Join(toks, " "))
+		}
+	} else if rel.Left.Each() && rel.Right.Each() {
+		return Relation{}, p.errAt(line, "rule %s: at most one side may be a list", strings.Join(toks, " "))
+	}
+	if l.Canonical() != r.Canonical() {
+		return Relation{}, p.errAt(line, "rule %s compares %s with %s; both sides need the same type", strings.Join(toks, " "), l.Canonical(), r.Canonical())
+	}
+	switch rel.Op {
+	case "<", "<=":
+		if !l.ordered() {
+			return Relation{}, p.errAt(line, "rule %s: %s has no order; < and <= need integers or quants", strings.Join(toks, " "), l.Canonical())
+		}
+	case "==", "!=", "in":
+		if !l.scalar() {
+			return Relation{}, p.errAt(line, "rule %s: %s cannot be compared", strings.Join(toks, " "), l.Canonical())
+		}
+	default:
+		return Relation{}, p.errAt(line, "rule operator %q is not one of <, <=, ==, !=, in", rel.Op)
+	}
+	return rel, nil
+}
+
+func (p *parser) operand(fields []Field, tok string, line int) (Operand, error) {
+	head, sub, dotted := strings.Cut(tok, ".")
+	f := findField(fields, head)
+	if f == nil {
+		return Operand{}, p.errAt(line, "rule names %q, which is not a field of this block", head)
+	}
+	o := Operand{Field: f}
+	if !dotted {
+		return o, nil
+	}
+	st := f.Type.each()
+	if st.Kind != KindStruct {
+		return Operand{}, p.errAt(line, "rule operand %q: %s is not a struct or a list of structs", tok, head)
+	}
+	if o.Sub = findField(st.Struct.Fields, sub); o.Sub == nil {
+		return Operand{}, p.errAt(line, "rule operand %q: struct %s has no field %q", tok, st.Struct.Name, sub)
+	}
+	return o, nil
 }
 
 // typ parses one type from the front of toks and returns the unread tail.
@@ -522,10 +938,6 @@ func (p *parser) bound(tok string) (int, error) {
 	return int(n), nil
 }
 
-// Canonical is the hashed form of the schema: a "wire <codecVersion>" line,
-// then every declaration in a fixed category order (handles, quants, enums,
-// structs, messages), each category in source order, one line per declaration
-// header, member, or field, with single spaces and no comments.
 func (s *Schema) Canonical() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "wire %d\n", codecVersion)
@@ -542,19 +954,31 @@ func (s *Schema) Canonical() string {
 		}
 		b.WriteString("}\n")
 	}
-	writeFields := func(fs []Field) {
+	writeBody := func(fs []Field, rules []Relation) {
 		for _, f := range fs {
-			fmt.Fprintf(&b, "%s %s\n", f.Name, f.Type.Canonical())
+			fmt.Fprintf(&b, "%s %s", f.Name, f.Type.Canonical())
+			for i, t := range f.Where {
+				if i == 0 {
+					b.WriteString(" where ")
+				} else {
+					b.WriteString(" and ")
+				}
+				b.WriteString(t.Canonical())
+			}
+			b.WriteString("\n")
+		}
+		for _, r := range rules {
+			b.WriteString(r.Canonical() + "\n")
 		}
 		b.WriteString("}\n")
 	}
 	for _, st := range s.Structs {
 		fmt.Fprintf(&b, "struct %s {\n", st.Name)
-		writeFields(st.Fields)
+		writeBody(st.Fields, st.Rules)
 	}
 	for _, m := range s.Messages {
 		fmt.Fprintf(&b, "message %s = %d on %s %s {\n", m.Name, m.ID, m.Channel, m.Direction)
-		writeFields(m.Fields)
+		writeBody(m.Fields, m.Rules)
 	}
 	return b.String()
 }
