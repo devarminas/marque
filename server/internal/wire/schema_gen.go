@@ -9,7 +9,7 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-const SchemaHash uint64 = 0x60dfa19f4dc9df6f
+const SchemaHash uint64 = 0xa5d1e3b4df6b1f69
 
 type Message interface {
 	MessageID() uint32
@@ -202,6 +202,542 @@ func decodeRefuseReason(r *codec.Reader) RefuseReason {
 	return v
 }
 
+type CastStep uint32
+
+const (
+	CastStepBegin   CastStep = 1
+	CastStepResolve CastStep = 2
+	CastStepCancel  CastStep = 3
+)
+
+func (v CastStep) String() string {
+	switch v {
+	case CastStepBegin:
+		return "begin"
+	case CastStepResolve:
+		return "resolve"
+	case CastStepCancel:
+		return "cancel"
+	}
+	return fmt.Sprintf("CastStep(%d)", uint32(v))
+}
+
+func (v CastStep) valid() bool {
+	switch v {
+	case CastStepBegin, CastStepResolve, CastStepCancel:
+		return true
+	}
+	return false
+}
+
+func (v CastStep) encode(w *codec.Writer) {
+	if !v.valid() {
+		w.Fail(codec.ErrBadEnum)
+		return
+	}
+	w.Varint(uint32(v))
+}
+
+func decodeCastStep(r *codec.Reader) CastStep {
+	v := CastStep(r.Varint())
+	if r.Err() == nil && !v.valid() {
+		r.Fail(codec.ErrBadEnum)
+	}
+	return v
+}
+
+type EntityId interface {
+	isEntityId()
+}
+
+func (PlayerId) isEntityId() {}
+
+func (NpcId) isEntityId() {}
+
+func (ItemId) isEntityId() {}
+
+func (NodeId) isEntityId() {}
+
+func encodeEntityId(w *codec.Writer, v EntityId) {
+	switch v := v.(type) {
+	case PlayerId:
+		w.Varint(1)
+		v.encode(w)
+	case NpcId:
+		w.Varint(2)
+		v.encode(w)
+	case ItemId:
+		w.Varint(3)
+		v.encode(w)
+	case NodeId:
+		w.Varint(4)
+		v.encode(w)
+	default:
+		w.Fail(codec.ErrBadEnum)
+	}
+}
+
+func decodeEntityId(r *codec.Reader) EntityId {
+	switch r.Varint() {
+	case 1:
+		return decodePlayerId(r)
+	case 2:
+		return decodeNpcId(r)
+	case 3:
+		return decodeItemId(r)
+	case 4:
+		return decodeNodeId(r)
+	}
+	r.Fail(codec.ErrBadEnum)
+	return nil
+}
+
+func appendEntityIdText(b []byte, v EntityId) []byte {
+	switch v := v.(type) {
+	case PlayerId:
+		return v.appendText(b)
+	case NpcId:
+		return v.appendText(b)
+	case ItemId:
+		return v.appendText(b)
+	case NodeId:
+		return v.appendText(b)
+	}
+	return append(b, "EntityId(nil)"...)
+}
+
+type CombatantId interface {
+	isCombatantId()
+}
+
+func (PlayerId) isCombatantId() {}
+
+func (NpcId) isCombatantId() {}
+
+func encodeCombatantId(w *codec.Writer, v CombatantId) {
+	switch v := v.(type) {
+	case PlayerId:
+		w.Varint(1)
+		v.encode(w)
+	case NpcId:
+		w.Varint(2)
+		v.encode(w)
+	default:
+		w.Fail(codec.ErrBadEnum)
+	}
+}
+
+func decodeCombatantId(r *codec.Reader) CombatantId {
+	switch r.Varint() {
+	case 1:
+		return decodePlayerId(r)
+	case 2:
+		return decodeNpcId(r)
+	}
+	r.Fail(codec.ErrBadEnum)
+	return nil
+}
+
+func appendCombatantIdText(b []byte, v CombatantId) []byte {
+	switch v := v.(type) {
+	case PlayerId:
+		return v.appendText(b)
+	case NpcId:
+		return v.appendText(b)
+	}
+	return append(b, "CombatantId(nil)"...)
+}
+
+type TransformFields struct {
+	X float64
+	Y float64
+	Z float64
+}
+
+type Transform struct {
+	f TransformFields
+}
+
+func (f TransformFields) Build() (Transform, error) {
+	f.X = quantPos.Snap(f.X)
+	f.Y = quantPos.Snap(f.Y)
+	f.Z = quantPos.Snap(f.Z)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Transform{}, err
+	}
+	return Transform{f}, nil
+}
+
+func (v Transform) X() float64 { return v.f.X }
+
+func (v Transform) Y() float64 { return v.f.Y }
+
+func (v Transform) Z() float64 { return v.f.Z }
+
+func (f TransformFields) encode(w *codec.Writer) {
+	w.Quant(f.X, quantPos)
+	w.Quant(f.Y, quantPos)
+	w.Quant(f.Z, quantPos)
+}
+
+func decodeTransform(r *codec.Reader) Transform {
+	var f TransformFields
+	f.X = r.Quant(quantPos)
+	f.Y = r.Quant(quantPos)
+	f.Z = r.Quant(quantPos)
+	return Transform{f}
+}
+
+func (f TransformFields) appendText(b []byte) []byte {
+	b = append(b, "Transform{x:"...)
+	b = strconv.AppendFloat(b, f.X, 'g', -1, 64)
+	b = append(b, " y:"...)
+	b = strconv.AppendFloat(b, f.Y, 'g', -1, 64)
+	b = append(b, " z:"...)
+	b = strconv.AppendFloat(b, f.Z, 'g', -1, 64)
+	return append(b, '}')
+}
+
+func (v Transform) String() string { return string(v.f.appendText(nil)) }
+
+type VitalsFields struct {
+	Hp      uint32
+	MaxHp   uint32
+	Mana    uint32
+	MaxMana uint32
+}
+
+type Vitals struct {
+	f VitalsFields
+}
+
+func (f VitalsFields) Build() (Vitals, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Vitals{}, err
+	}
+	return Vitals{f}, nil
+}
+
+func (v Vitals) Hp() uint32 { return v.f.Hp }
+
+func (v Vitals) MaxHp() uint32 { return v.f.MaxHp }
+
+func (v Vitals) Mana() uint32 { return v.f.Mana }
+
+func (v Vitals) MaxMana() uint32 { return v.f.MaxMana }
+
+func (f VitalsFields) encode(w *codec.Writer) {
+	w.U32(f.Hp)
+	w.U32(f.MaxHp)
+	w.U32(f.Mana)
+	w.U32(f.MaxMana)
+	if w.Err() == nil && !(f.Hp <= f.MaxHp) {
+		w.Fail(codec.ErrRule)
+	}
+	if w.Err() == nil && !(f.Mana <= f.MaxMana) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeVitals(r *codec.Reader) Vitals {
+	var f VitalsFields
+	f.Hp = r.U32()
+	f.MaxHp = r.U32()
+	f.Mana = r.U32()
+	f.MaxMana = r.U32()
+	if r.Err() == nil && !(f.Hp <= f.MaxHp) {
+		r.Fail(codec.ErrRule)
+	}
+	if r.Err() == nil && !(f.Mana <= f.MaxMana) {
+		r.Fail(codec.ErrRule)
+	}
+	return Vitals{f}
+}
+
+func (f VitalsFields) appendText(b []byte) []byte {
+	b = append(b, "Vitals{hp:"...)
+	b = strconv.AppendUint(b, uint64(f.Hp), 10)
+	b = append(b, " max_hp:"...)
+	b = strconv.AppendUint(b, uint64(f.MaxHp), 10)
+	b = append(b, " mana:"...)
+	b = strconv.AppendUint(b, uint64(f.Mana), 10)
+	b = append(b, " max_mana:"...)
+	b = strconv.AppendUint(b, uint64(f.MaxMana), 10)
+	return append(b, '}')
+}
+
+func (v Vitals) String() string { return string(v.f.appendText(nil)) }
+
+type GearFields struct {
+	Helmet    codec.Opt[string]
+	Chest     codec.Opt[string]
+	Trousers  codec.Opt[string]
+	Feet      codec.Opt[string]
+	LeftHand  codec.Opt[string]
+	RightHand codec.Opt[string]
+}
+
+type Gear struct {
+	f GearFields
+}
+
+func (f GearFields) Build() (Gear, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Gear{}, err
+	}
+	return Gear{f}, nil
+}
+
+func (v Gear) Helmet() codec.Opt[string] { return v.f.Helmet }
+
+func (v Gear) Chest() codec.Opt[string] { return v.f.Chest }
+
+func (v Gear) Trousers() codec.Opt[string] { return v.f.Trousers }
+
+func (v Gear) Feet() codec.Opt[string] { return v.f.Feet }
+
+func (v Gear) LeftHand() codec.Opt[string] { return v.f.LeftHand }
+
+func (v Gear) RightHand() codec.Opt[string] { return v.f.RightHand }
+
+func (f GearFields) encode(w *codec.Writer) {
+	if v, ok := f.Helmet.Get(); ok {
+		w.Bool(true)
+		w.String(v, 32)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Chest.Get(); ok {
+		w.Bool(true)
+		w.String(v, 32)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Trousers.Get(); ok {
+		w.Bool(true)
+		w.String(v, 32)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Feet.Get(); ok {
+		w.Bool(true)
+		w.String(v, 32)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.LeftHand.Get(); ok {
+		w.Bool(true)
+		w.String(v, 32)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.RightHand.Get(); ok {
+		w.Bool(true)
+		w.String(v, 32)
+	} else {
+		w.Bool(false)
+	}
+}
+
+func decodeGear(r *codec.Reader) Gear {
+	var f GearFields
+	f.Helmet = codec.ReadOpt(r, func(r *codec.Reader) string { return r.String(32) })
+	f.Chest = codec.ReadOpt(r, func(r *codec.Reader) string { return r.String(32) })
+	f.Trousers = codec.ReadOpt(r, func(r *codec.Reader) string { return r.String(32) })
+	f.Feet = codec.ReadOpt(r, func(r *codec.Reader) string { return r.String(32) })
+	f.LeftHand = codec.ReadOpt(r, func(r *codec.Reader) string { return r.String(32) })
+	f.RightHand = codec.ReadOpt(r, func(r *codec.Reader) string { return r.String(32) })
+	return Gear{f}
+}
+
+func (f GearFields) appendText(b []byte) []byte {
+	b = append(b, "Gear{helmet:"...)
+	if v, ok := f.Helmet.Get(); ok {
+		b = strconv.AppendQuoteToASCII(b, v)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " chest:"...)
+	if v, ok := f.Chest.Get(); ok {
+		b = strconv.AppendQuoteToASCII(b, v)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " trousers:"...)
+	if v, ok := f.Trousers.Get(); ok {
+		b = strconv.AppendQuoteToASCII(b, v)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " feet:"...)
+	if v, ok := f.Feet.Get(); ok {
+		b = strconv.AppendQuoteToASCII(b, v)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " left_hand:"...)
+	if v, ok := f.LeftHand.Get(); ok {
+		b = strconv.AppendQuoteToASCII(b, v)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " right_hand:"...)
+	if v, ok := f.RightHand.Get(); ok {
+		b = strconv.AppendQuoteToASCII(b, v)
+	} else {
+		b = append(b, '_')
+	}
+	return append(b, '}')
+}
+
+func (v Gear) String() string { return string(v.f.appendText(nil)) }
+
+type CastingFields struct {
+	Ability string
+	Start   uint32
+	Ticks   uint16
+}
+
+type Casting struct {
+	f CastingFields
+}
+
+func (f CastingFields) Build() (Casting, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Casting{}, err
+	}
+	return Casting{f}, nil
+}
+
+func (v Casting) Ability() string { return v.f.Ability }
+
+func (v Casting) Start() uint32 { return v.f.Start }
+
+func (v Casting) Ticks() uint16 { return v.f.Ticks }
+
+func (f CastingFields) encode(w *codec.Writer) {
+	w.String(f.Ability, 32)
+	w.U32(f.Start)
+	w.U16(f.Ticks)
+	if w.Err() == nil && !(f.Ticks >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeCasting(r *codec.Reader) Casting {
+	var f CastingFields
+	f.Ability = r.String(32)
+	f.Start = r.U32()
+	f.Ticks = r.U16()
+	if r.Err() == nil && !(f.Ticks >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	return Casting{f}
+}
+
+func (f CastingFields) appendText(b []byte) []byte {
+	b = append(b, "Casting{ability:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Ability)
+	b = append(b, " start:"...)
+	b = strconv.AppendUint(b, uint64(f.Start), 10)
+	b = append(b, " ticks:"...)
+	b = strconv.AppendUint(b, uint64(f.Ticks), 10)
+	return append(b, '}')
+}
+
+func (v Casting) String() string { return string(v.f.appendText(nil)) }
+
+type CastBarFields struct {
+	Casting codec.Opt[Casting]
+}
+
+type CastBar struct {
+	f CastBarFields
+}
+
+func (f CastBarFields) Build() (CastBar, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return CastBar{}, err
+	}
+	return CastBar{f}, nil
+}
+
+func (v CastBar) Casting() codec.Opt[Casting] { return v.f.Casting }
+
+func (f CastBarFields) encode(w *codec.Writer) {
+	if v, ok := f.Casting.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+}
+
+func decodeCastBar(r *codec.Reader) CastBar {
+	var f CastBarFields
+	f.Casting = codec.ReadOpt(r, func(r *codec.Reader) Casting { return decodeCasting(r) })
+	return CastBar{f}
+}
+
+func (f CastBarFields) appendText(b []byte) []byte {
+	b = append(b, "CastBar{casting:"...)
+	if v, ok := f.Casting.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	return append(b, '}')
+}
+
+func (v CastBar) String() string { return string(v.f.appendText(nil)) }
+
+type LookFields struct {
+	Kind string
+}
+
+type Look struct {
+	f LookFields
+}
+
+func (f LookFields) Build() (Look, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Look{}, err
+	}
+	return Look{f}, nil
+}
+
+func (v Look) Kind() string { return v.f.Kind }
+
+func (f LookFields) encode(w *codec.Writer) {
+	w.String(f.Kind, 32)
+}
+
+func decodeLook(r *codec.Reader) Look {
+	var f LookFields
+	f.Kind = r.String(32)
+	return Look{f}
+}
+
+func (f LookFields) appendText(b []byte) []byte {
+	b = append(b, "Look{kind:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Kind)
+	return append(b, '}')
+}
+
+func (v Look) String() string { return string(v.f.appendText(nil)) }
+
 type InputFields struct {
 	Dx   float64
 	Dz   float64
@@ -214,6 +750,8 @@ type Input struct {
 }
 
 func (f InputFields) Build() (Input, error) {
+	f.Dx = quantWish.Snap(f.Dx)
+	f.Dz = quantWish.Snap(f.Dz)
 	w := codec.NewChecker()
 	f.encode(&w)
 	if err := w.Err(); err != nil {
@@ -285,6 +823,9 @@ type Pose struct {
 }
 
 func (f PoseFields) Build() (Pose, error) {
+	f.X = quantPos.Snap(f.X)
+	f.Y = quantPos.Snap(f.Y)
+	f.Z = quantPos.Snap(f.Z)
 	w := codec.NewChecker()
 	f.encode(&w)
 	if err := w.Err(); err != nil {
@@ -472,6 +1013,435 @@ func (v Refused) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
+type EntityFields struct {
+	Id        EntityId
+	Transform codec.Opt[Transform]
+	Vitals    codec.Opt[Vitals]
+	Gear      codec.Opt[Gear]
+	Cast      codec.Opt[CastBar]
+	Look      codec.Opt[Look]
+}
+
+type Entity struct {
+	f EntityFields
+}
+
+func (f EntityFields) Build() (Entity, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Entity{}, err
+	}
+	return Entity{f}, nil
+}
+
+func (v Entity) Id() EntityId { return v.f.Id }
+
+func (v Entity) Transform() codec.Opt[Transform] { return v.f.Transform }
+
+func (v Entity) Vitals() codec.Opt[Vitals] { return v.f.Vitals }
+
+func (v Entity) Gear() codec.Opt[Gear] { return v.f.Gear }
+
+func (v Entity) Cast() codec.Opt[CastBar] { return v.f.Cast }
+
+func (v Entity) Look() codec.Opt[Look] { return v.f.Look }
+
+func (f EntityFields) encode(w *codec.Writer) {
+	encodeEntityId(w, f.Id)
+	if v, ok := f.Transform.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Vitals.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Gear.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Cast.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Look.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+}
+
+func decodeEntity(r *codec.Reader) Entity {
+	var f EntityFields
+	f.Id = decodeEntityId(r)
+	f.Transform = codec.ReadOpt(r, func(r *codec.Reader) Transform { return decodeTransform(r) })
+	f.Vitals = codec.ReadOpt(r, func(r *codec.Reader) Vitals { return decodeVitals(r) })
+	f.Gear = codec.ReadOpt(r, func(r *codec.Reader) Gear { return decodeGear(r) })
+	f.Cast = codec.ReadOpt(r, func(r *codec.Reader) CastBar { return decodeCastBar(r) })
+	f.Look = codec.ReadOpt(r, func(r *codec.Reader) Look { return decodeLook(r) })
+	return Entity{f}
+}
+
+func (f EntityFields) appendText(b []byte) []byte {
+	b = append(b, "entity{id:"...)
+	b = appendEntityIdText(b, f.Id)
+	b = append(b, " transform:"...)
+	if v, ok := f.Transform.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " vitals:"...)
+	if v, ok := f.Vitals.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " gear:"...)
+	if v, ok := f.Gear.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " cast:"...)
+	if v, ok := f.Cast.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " look:"...)
+	if v, ok := f.Look.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	return append(b, '}')
+}
+
+func (v Entity) String() string { return string(v.f.appendText(nil)) }
+
+func (Entity) MessageID() uint32 { return 16 }
+
+func (Entity) Channel() codec.Channel { return codec.ChannelState }
+
+func (Entity) stateMsg() {}
+
+func (v Entity) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(16)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type GoneFields struct {
+	Id EntityId
+}
+
+type Gone struct {
+	f GoneFields
+}
+
+func (f GoneFields) Build() (Gone, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Gone{}, err
+	}
+	return Gone{f}, nil
+}
+
+func (v Gone) Id() EntityId { return v.f.Id }
+
+func (f GoneFields) encode(w *codec.Writer) {
+	encodeEntityId(w, f.Id)
+}
+
+func decodeGone(r *codec.Reader) Gone {
+	var f GoneFields
+	f.Id = decodeEntityId(r)
+	return Gone{f}
+}
+
+func (f GoneFields) appendText(b []byte) []byte {
+	b = append(b, "gone{id:"...)
+	b = appendEntityIdText(b, f.Id)
+	return append(b, '}')
+}
+
+func (v Gone) String() string { return string(v.f.appendText(nil)) }
+
+func (Gone) MessageID() uint32 { return 17 }
+
+func (Gone) Channel() codec.Channel { return codec.ChannelState }
+
+func (Gone) stateMsg() {}
+
+func (v Gone) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(17)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type SwingFields struct {
+	Tick     uint32
+	Attacker CombatantId
+	Target   CombatantId
+	Amount   uint32
+	Crit     bool
+	Miss     bool
+}
+
+type Swing struct {
+	f SwingFields
+}
+
+func (f SwingFields) Build() (Swing, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Swing{}, err
+	}
+	return Swing{f}, nil
+}
+
+func (v Swing) Tick() uint32 { return v.f.Tick }
+
+func (v Swing) Attacker() CombatantId { return v.f.Attacker }
+
+func (v Swing) Target() CombatantId { return v.f.Target }
+
+func (v Swing) Amount() uint32 { return v.f.Amount }
+
+func (v Swing) Crit() bool { return v.f.Crit }
+
+func (v Swing) Miss() bool { return v.f.Miss }
+
+func (f SwingFields) encode(w *codec.Writer) {
+	w.U32(f.Tick)
+	encodeCombatantId(w, f.Attacker)
+	encodeCombatantId(w, f.Target)
+	w.U32(f.Amount)
+	w.Bool(f.Crit)
+	w.Bool(f.Miss)
+	if w.Err() == nil && !(f.Target != f.Attacker) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeSwing(r *codec.Reader) Swing {
+	var f SwingFields
+	f.Tick = r.U32()
+	f.Attacker = decodeCombatantId(r)
+	f.Target = decodeCombatantId(r)
+	f.Amount = r.U32()
+	f.Crit = r.Bool()
+	f.Miss = r.Bool()
+	if r.Err() == nil && !(f.Target != f.Attacker) {
+		r.Fail(codec.ErrRule)
+	}
+	return Swing{f}
+}
+
+func (f SwingFields) appendText(b []byte) []byte {
+	b = append(b, "swing{tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " attacker:"...)
+	b = appendCombatantIdText(b, f.Attacker)
+	b = append(b, " target:"...)
+	b = appendCombatantIdText(b, f.Target)
+	b = append(b, " amount:"...)
+	b = strconv.AppendUint(b, uint64(f.Amount), 10)
+	b = append(b, " crit:"...)
+	b = strconv.AppendBool(b, f.Crit)
+	b = append(b, " miss:"...)
+	b = strconv.AppendBool(b, f.Miss)
+	return append(b, '}')
+}
+
+func (v Swing) String() string { return string(v.f.appendText(nil)) }
+
+func (Swing) MessageID() uint32 { return 18 }
+
+func (Swing) Channel() codec.Channel { return codec.ChannelState }
+
+func (Swing) stateMsg() {}
+
+func (v Swing) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(18)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type CastPhaseFields struct {
+	Tick    uint32
+	Caster  CombatantId
+	Ability string
+	Step    CastStep
+	Target  codec.Opt[CombatantId]
+	Amount  uint32
+}
+
+type CastPhase struct {
+	f CastPhaseFields
+}
+
+func (f CastPhaseFields) Build() (CastPhase, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return CastPhase{}, err
+	}
+	return CastPhase{f}, nil
+}
+
+func (v CastPhase) Tick() uint32 { return v.f.Tick }
+
+func (v CastPhase) Caster() CombatantId { return v.f.Caster }
+
+func (v CastPhase) Ability() string { return v.f.Ability }
+
+func (v CastPhase) Step() CastStep { return v.f.Step }
+
+func (v CastPhase) Target() codec.Opt[CombatantId] { return v.f.Target }
+
+func (v CastPhase) Amount() uint32 { return v.f.Amount }
+
+func (f CastPhaseFields) encode(w *codec.Writer) {
+	w.U32(f.Tick)
+	encodeCombatantId(w, f.Caster)
+	w.String(f.Ability, 32)
+	f.Step.encode(w)
+	if v, ok := f.Target.Get(); ok {
+		w.Bool(true)
+		encodeCombatantId(w, v)
+	} else {
+		w.Bool(false)
+	}
+	w.U32(f.Amount)
+}
+
+func decodeCastPhase(r *codec.Reader) CastPhase {
+	var f CastPhaseFields
+	f.Tick = r.U32()
+	f.Caster = decodeCombatantId(r)
+	f.Ability = r.String(32)
+	f.Step = decodeCastStep(r)
+	f.Target = codec.ReadOpt(r, func(r *codec.Reader) CombatantId { return decodeCombatantId(r) })
+	f.Amount = r.U32()
+	return CastPhase{f}
+}
+
+func (f CastPhaseFields) appendText(b []byte) []byte {
+	b = append(b, "cast_phase{tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " caster:"...)
+	b = appendCombatantIdText(b, f.Caster)
+	b = append(b, " ability:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Ability)
+	b = append(b, " step:"...)
+	b = append(b, f.Step.String()...)
+	b = append(b, " target:"...)
+	if v, ok := f.Target.Get(); ok {
+		b = appendCombatantIdText(b, v)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " amount:"...)
+	b = strconv.AppendUint(b, uint64(f.Amount), 10)
+	return append(b, '}')
+}
+
+func (v CastPhase) String() string { return string(v.f.appendText(nil)) }
+
+func (CastPhase) MessageID() uint32 { return 19 }
+
+func (CastPhase) Channel() codec.Channel { return codec.ChannelState }
+
+func (CastPhase) stateMsg() {}
+
+func (v CastPhase) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(19)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type GatherStartFields struct {
+	Tick   uint32
+	Player PlayerId
+	Node   NodeId
+}
+
+type GatherStart struct {
+	f GatherStartFields
+}
+
+func (f GatherStartFields) Build() (GatherStart, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return GatherStart{}, err
+	}
+	return GatherStart{f}, nil
+}
+
+func (v GatherStart) Tick() uint32 { return v.f.Tick }
+
+func (v GatherStart) Player() PlayerId { return v.f.Player }
+
+func (v GatherStart) Node() NodeId { return v.f.Node }
+
+func (f GatherStartFields) encode(w *codec.Writer) {
+	w.U32(f.Tick)
+	f.Player.encode(w)
+	f.Node.encode(w)
+}
+
+func decodeGatherStart(r *codec.Reader) GatherStart {
+	var f GatherStartFields
+	f.Tick = r.U32()
+	f.Player = decodePlayerId(r)
+	f.Node = decodeNodeId(r)
+	return GatherStart{f}
+}
+
+func (f GatherStartFields) appendText(b []byte) []byte {
+	b = append(b, "gather_start{tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " player:"...)
+	b = f.Player.appendText(b)
+	b = append(b, " node:"...)
+	b = f.Node.appendText(b)
+	return append(b, '}')
+}
+
+func (v GatherStart) String() string { return string(v.f.appendText(nil)) }
+
+func (GatherStart) MessageID() uint32 { return 20 }
+
+func (GatherStart) Channel() codec.Channel { return codec.ChannelState }
+
+func (GatherStart) stateMsg() {}
+
+func (v GatherStart) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(20)
+	v.f.encode(&w)
+	return w.Result()
+}
+
 func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	var m StateMsg
 	switch r.Varint() {
@@ -479,6 +1449,16 @@ func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 		m = decodePose(r)
 	case 3:
 		m = decodeHp(r)
+	case 16:
+		m = decodeEntity(r)
+	case 17:
+		m = decodeGone(r)
+	case 18:
+		m = decodeSwing(r)
+	case 19:
+		m = decodeCastPhase(r)
+	case 20:
+		m = decodeGatherStart(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
 	}

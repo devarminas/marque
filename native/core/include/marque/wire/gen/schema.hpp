@@ -4,8 +4,10 @@
 
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -13,7 +15,7 @@
 
 namespace marque::wire {
 
-inline constexpr std::uint64_t schema_hash = 0x60dfa19f4dc9df6fULL;
+inline constexpr std::uint64_t schema_hash = 0xa5d1e3b4df6b1f69ULL;
 
 namespace detail {
 struct Access;
@@ -57,6 +59,178 @@ enum class RefuseReason : std::uint32_t {
     dead = 7,
 };
 
+enum class CastStep : std::uint32_t {
+    begin = 1,
+    resolve = 2,
+    cancel = 3,
+};
+
+using EntityId = std::variant<PlayerId, NpcId, ItemId, NodeId>;
+
+using CombatantId = std::variant<PlayerId, NpcId>;
+
+struct TransformFields {
+    double x = 0;
+    double y = 0;
+    double z = 0;
+
+    bool operator==(const TransformFields&) const = default;
+};
+
+class Transform {
+public:
+    static std::expected<Transform, codec::Error> build(TransformFields f);
+
+    Transform() = delete;
+
+    const double& x() const { return f_.x; }
+    const double& y() const { return f_.y; }
+    const double& z() const { return f_.z; }
+
+    bool operator==(const Transform&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit Transform(TransformFields f) : f_(std::move(f)) {}
+
+    TransformFields f_;
+};
+
+struct VitalsFields {
+    std::uint32_t hp = 0;
+    std::uint32_t max_hp = 0;
+    std::uint32_t mana = 0;
+    std::uint32_t max_mana = 0;
+
+    bool operator==(const VitalsFields&) const = default;
+};
+
+class Vitals {
+public:
+    static std::expected<Vitals, codec::Error> build(VitalsFields f);
+
+    Vitals() = delete;
+
+    const std::uint32_t& hp() const { return f_.hp; }
+    const std::uint32_t& max_hp() const { return f_.max_hp; }
+    const std::uint32_t& mana() const { return f_.mana; }
+    const std::uint32_t& max_mana() const { return f_.max_mana; }
+
+    bool operator==(const Vitals&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit Vitals(VitalsFields f) : f_(std::move(f)) {}
+
+    VitalsFields f_;
+};
+
+struct GearFields {
+    std::optional<std::string> helmet{};
+    std::optional<std::string> chest{};
+    std::optional<std::string> trousers{};
+    std::optional<std::string> feet{};
+    std::optional<std::string> left_hand{};
+    std::optional<std::string> right_hand{};
+
+    bool operator==(const GearFields&) const = default;
+};
+
+class Gear {
+public:
+    static std::expected<Gear, codec::Error> build(GearFields f);
+
+    Gear() = delete;
+
+    const std::optional<std::string>& helmet() const { return f_.helmet; }
+    const std::optional<std::string>& chest() const { return f_.chest; }
+    const std::optional<std::string>& trousers() const { return f_.trousers; }
+    const std::optional<std::string>& feet() const { return f_.feet; }
+    const std::optional<std::string>& left_hand() const { return f_.left_hand; }
+    const std::optional<std::string>& right_hand() const { return f_.right_hand; }
+
+    bool operator==(const Gear&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit Gear(GearFields f) : f_(std::move(f)) {}
+
+    GearFields f_;
+};
+
+struct CastingFields {
+    std::string ability{};
+    std::uint32_t start = 0;
+    std::uint16_t ticks = 0;
+
+    bool operator==(const CastingFields&) const = default;
+};
+
+class Casting {
+public:
+    static std::expected<Casting, codec::Error> build(CastingFields f);
+
+    Casting() = delete;
+
+    const std::string& ability() const { return f_.ability; }
+    const std::uint32_t& start() const { return f_.start; }
+    const std::uint16_t& ticks() const { return f_.ticks; }
+
+    bool operator==(const Casting&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit Casting(CastingFields f) : f_(std::move(f)) {}
+
+    CastingFields f_;
+};
+
+struct CastBarFields {
+    std::optional<Casting> casting{};
+
+    bool operator==(const CastBarFields&) const = default;
+};
+
+class CastBar {
+public:
+    static std::expected<CastBar, codec::Error> build(CastBarFields f);
+
+    CastBar() = delete;
+
+    const std::optional<Casting>& casting() const { return f_.casting; }
+
+    bool operator==(const CastBar&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit CastBar(CastBarFields f) : f_(std::move(f)) {}
+
+    CastBarFields f_;
+};
+
+struct LookFields {
+    std::string kind{};
+
+    bool operator==(const LookFields&) const = default;
+};
+
+class Look {
+public:
+    static std::expected<Look, codec::Error> build(LookFields f);
+
+    Look() = delete;
+
+    const std::string& kind() const { return f_.kind; }
+
+    bool operator==(const Look&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit Look(LookFields f) : f_(std::move(f)) {}
+
+    LookFields f_;
+};
+
 struct InputFields {
     double dx = 0;
     double dz = 0;
@@ -73,6 +247,8 @@ public:
 
     static std::expected<Input, codec::Error> build(InputFields f);
 
+    Input() = delete;
+
     const double& dx() const { return f_.dx; }
     const double& dz() const { return f_.dz; }
     const bool& jump() const { return f_.jump; }
@@ -82,6 +258,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Input(InputFields f) : f_(std::move(f)) {}
+
     InputFields f_;
 };
 
@@ -101,6 +279,8 @@ public:
 
     static std::expected<Pose, codec::Error> build(PoseFields f);
 
+    Pose() = delete;
+
     const PlayerId& id() const { return f_.id; }
     const double& x() const { return f_.x; }
     const double& y() const { return f_.y; }
@@ -110,6 +290,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Pose(PoseFields f) : f_(std::move(f)) {}
+
     PoseFields f_;
 };
 
@@ -128,6 +310,8 @@ public:
 
     static std::expected<Hp, codec::Error> build(HpFields f);
 
+    Hp() = delete;
+
     const PlayerId& id() const { return f_.id; }
     const std::uint32_t& hp() const { return f_.hp; }
     const std::uint32_t& max_hp() const { return f_.max_hp; }
@@ -136,6 +320,8 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Hp(HpFields f) : f_(std::move(f)) {}
+
     HpFields f_;
 };
 
@@ -154,6 +340,8 @@ public:
 
     static std::expected<Refused, codec::Error> build(RefusedFields f);
 
+    Refused() = delete;
+
     const std::uint32_t& tick() const { return f_.tick; }
     const std::uint32_t& seq() const { return f_.seq; }
     const RefuseReason& reason() const { return f_.reason; }
@@ -162,10 +350,176 @@ public:
 
 private:
     friend struct detail::Access;
+    explicit Refused(RefusedFields f) : f_(std::move(f)) {}
+
     RefusedFields f_;
 };
 
-using StateMsg = std::variant<Pose, Hp>;
+struct EntityFields {
+    EntityId id{};
+    std::optional<Transform> transform{};
+    std::optional<Vitals> vitals{};
+    std::optional<Gear> gear{};
+    std::optional<CastBar> cast{};
+    std::optional<Look> look{};
+
+    bool operator==(const EntityFields&) const = default;
+};
+
+class Entity {
+public:
+    static constexpr std::uint32_t message_id = 16;
+    static constexpr codec::Channel channel = codec::Channel::state;
+
+    static std::expected<Entity, codec::Error> build(EntityFields f);
+
+    Entity() = delete;
+
+    const EntityId& id() const { return f_.id; }
+    const std::optional<Transform>& transform() const { return f_.transform; }
+    const std::optional<Vitals>& vitals() const { return f_.vitals; }
+    const std::optional<Gear>& gear() const { return f_.gear; }
+    const std::optional<CastBar>& cast() const { return f_.cast; }
+    const std::optional<Look>& look() const { return f_.look; }
+
+    bool operator==(const Entity&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit Entity(EntityFields f) : f_(std::move(f)) {}
+
+    EntityFields f_;
+};
+
+struct GoneFields {
+    EntityId id{};
+
+    bool operator==(const GoneFields&) const = default;
+};
+
+class Gone {
+public:
+    static constexpr std::uint32_t message_id = 17;
+    static constexpr codec::Channel channel = codec::Channel::state;
+
+    static std::expected<Gone, codec::Error> build(GoneFields f);
+
+    Gone() = delete;
+
+    const EntityId& id() const { return f_.id; }
+
+    bool operator==(const Gone&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit Gone(GoneFields f) : f_(std::move(f)) {}
+
+    GoneFields f_;
+};
+
+struct SwingFields {
+    std::uint32_t tick = 0;
+    CombatantId attacker{};
+    CombatantId target{};
+    std::uint32_t amount = 0;
+    bool crit = false;
+    bool miss = false;
+
+    bool operator==(const SwingFields&) const = default;
+};
+
+class Swing {
+public:
+    static constexpr std::uint32_t message_id = 18;
+    static constexpr codec::Channel channel = codec::Channel::state;
+
+    static std::expected<Swing, codec::Error> build(SwingFields f);
+
+    Swing() = delete;
+
+    const std::uint32_t& tick() const { return f_.tick; }
+    const CombatantId& attacker() const { return f_.attacker; }
+    const CombatantId& target() const { return f_.target; }
+    const std::uint32_t& amount() const { return f_.amount; }
+    const bool& crit() const { return f_.crit; }
+    const bool& miss() const { return f_.miss; }
+
+    bool operator==(const Swing&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit Swing(SwingFields f) : f_(std::move(f)) {}
+
+    SwingFields f_;
+};
+
+struct CastPhaseFields {
+    std::uint32_t tick = 0;
+    CombatantId caster{};
+    std::string ability{};
+    CastStep step{};
+    std::optional<CombatantId> target{};
+    std::uint32_t amount = 0;
+
+    bool operator==(const CastPhaseFields&) const = default;
+};
+
+class CastPhase {
+public:
+    static constexpr std::uint32_t message_id = 19;
+    static constexpr codec::Channel channel = codec::Channel::state;
+
+    static std::expected<CastPhase, codec::Error> build(CastPhaseFields f);
+
+    CastPhase() = delete;
+
+    const std::uint32_t& tick() const { return f_.tick; }
+    const CombatantId& caster() const { return f_.caster; }
+    const std::string& ability() const { return f_.ability; }
+    const CastStep& step() const { return f_.step; }
+    const std::optional<CombatantId>& target() const { return f_.target; }
+    const std::uint32_t& amount() const { return f_.amount; }
+
+    bool operator==(const CastPhase&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit CastPhase(CastPhaseFields f) : f_(std::move(f)) {}
+
+    CastPhaseFields f_;
+};
+
+struct GatherStartFields {
+    std::uint32_t tick = 0;
+    PlayerId player{};
+    NodeId node{};
+
+    bool operator==(const GatherStartFields&) const = default;
+};
+
+class GatherStart {
+public:
+    static constexpr std::uint32_t message_id = 20;
+    static constexpr codec::Channel channel = codec::Channel::state;
+
+    static std::expected<GatherStart, codec::Error> build(GatherStartFields f);
+
+    GatherStart() = delete;
+
+    const std::uint32_t& tick() const { return f_.tick; }
+    const PlayerId& player() const { return f_.player; }
+    const NodeId& node() const { return f_.node; }
+
+    bool operator==(const GatherStart&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit GatherStart(GatherStartFields f) : f_(std::move(f)) {}
+
+    GatherStartFields f_;
+};
+
+using StateMsg = std::variant<Pose, Hp, Entity, Gone, Swing, CastPhase, GatherStart>;
 using EventsMsg = std::variant<Refused>;
 using InputMsg = std::variant<Input>;
 using IntentsMsg = std::variant<std::monostate>;
@@ -174,11 +528,27 @@ std::expected<void, codec::Error> encode(const Input& m, std::vector<std::uint8_
 std::expected<void, codec::Error> encode(const Pose& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Hp& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Refused& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Entity& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Gone& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Swing& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const CastPhase& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const GatherStart& m, std::vector<std::uint8_t>& out);
 
+std::string to_text(const Transform& v);
+std::string to_text(const Vitals& v);
+std::string to_text(const Gear& v);
+std::string to_text(const Casting& v);
+std::string to_text(const CastBar& v);
+std::string to_text(const Look& v);
 std::string to_text(const Input& v);
 std::string to_text(const Pose& v);
 std::string to_text(const Hp& v);
 std::string to_text(const Refused& v);
+std::string to_text(const Entity& v);
+std::string to_text(const Gone& v);
+std::string to_text(const Swing& v);
+std::string to_text(const CastPhase& v);
+std::string to_text(const GatherStart& v);
 
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r);
 std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes);

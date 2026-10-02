@@ -26,8 +26,6 @@ target_compile_options(marque_core PRIVATE -Wall -Wextra -Werror)
 
 enable_testing()
 
-# Every core/tests/*.cpp becomes its own ctest executable named after its
-# file stem. Adding a test file needs no edit here either.
 file(GLOB MARQUE_CORE_TEST_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/*.cpp")
 

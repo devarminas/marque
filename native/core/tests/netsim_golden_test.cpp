@@ -10,19 +10,12 @@
 
 #include "check.hpp"
 
-// Seed the committed golden files were generated with. Kept in sync with
-// server/internal/netsim/netsim_test.go's goldenSeed.
 constexpr std::uint64_t kGoldenSeed = 424242;
 constexpr int kGoldenVectorCount = 1000;
 
 namespace {
 
-// shared/wire/vectors/netsim sits four levels above this file:
-// native/core/tests/netsim_golden_test.cpp -> native/core/tests -> native/core
-// -> native -> repo root -> shared/wire/vectors/netsim. __FILE__ is an
-// absolute path at compile time, so this resolves regardless of ctest's
-// working directory.
-std::filesystem::path golden_dir() {
+std::filesystem::path golden_dir_four_levels_above_this_source_file() {
     return std::filesystem::path(__FILE__).parent_path() / ".." / ".." / ".." / "shared" / "wire" /
            "vectors" / "netsim";
 }
@@ -35,7 +28,7 @@ bool check_profile(const char* name, const marque::netsim::Profile& profile, std
         got += '\n';
     }
 
-    std::filesystem::path path = golden_dir() / (std::string(name) + ".golden");
+    std::filesystem::path path = golden_dir_four_levels_above_this_source_file() / (std::string(name) + ".golden");
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         std::fprintf(stderr, "seed=%llu profile=%s: could not open golden file %s\n",
@@ -57,7 +50,7 @@ bool check_profile(const char* name, const marque::netsim::Profile& profile, std
     return matches;
 }
 
-}  // namespace
+}
 
 int main() {
     using marque::test::check;
