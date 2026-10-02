@@ -15,8 +15,10 @@ namespace marque::wire {
 
 inline constexpr std::uint64_t schema_hash = 0x60dfa19f4dc9df6fULL;
 
-// Pairs a slot index with the generation that slot had when the entity was
-// created, so a reused index never names the old entity.
+namespace detail {
+struct Access;
+}
+
 struct PlayerId {
     std::uint32_t index = 0;
     std::uint32_t gen = 0;
@@ -24,8 +26,6 @@ struct PlayerId {
     bool operator==(const PlayerId&) const = default;
 };
 
-// Pairs a slot index with the generation that slot had when the entity was
-// created, so a reused index never names the old entity.
 struct NpcId {
     std::uint32_t index = 0;
     std::uint32_t gen = 0;
@@ -33,8 +33,6 @@ struct NpcId {
     bool operator==(const NpcId&) const = default;
 };
 
-// Pairs a slot index with the generation that slot had when the entity was
-// created, so a reused index never names the old entity.
 struct ItemId {
     std::uint32_t index = 0;
     std::uint32_t gen = 0;
@@ -42,8 +40,6 @@ struct ItemId {
     bool operator==(const ItemId&) const = default;
 };
 
-// Pairs a slot index with the generation that slot had when the entity was
-// created, so a reused index never names the old entity.
 struct NodeId {
     std::uint32_t index = 0;
     std::uint32_t gen = 0;
@@ -61,57 +57,117 @@ enum class RefuseReason : std::uint32_t {
     dead = 7,
 };
 
-struct Input {
-    static constexpr std::uint32_t message_id = 1;
-    static constexpr codec::Channel channel = codec::Channel::input;
-
+struct InputFields {
     double dx = 0;
     double dz = 0;
     bool jump = false;
     std::uint32_t seq = 0;
 
-    bool operator==(const Input&) const = default;
+    bool operator==(const InputFields&) const = default;
 };
 
-struct Pose {
-    static constexpr std::uint32_t message_id = 2;
-    static constexpr codec::Channel channel = codec::Channel::state;
+class Input {
+public:
+    static constexpr std::uint32_t message_id = 1;
+    static constexpr codec::Channel channel = codec::Channel::input;
 
+    static std::expected<Input, codec::Error> build(InputFields f);
+
+    const double& dx() const { return f_.dx; }
+    const double& dz() const { return f_.dz; }
+    const bool& jump() const { return f_.jump; }
+    const std::uint32_t& seq() const { return f_.seq; }
+
+    bool operator==(const Input&) const = default;
+
+private:
+    friend struct detail::Access;
+    InputFields f_;
+};
+
+struct PoseFields {
     PlayerId id{};
     double x = 0;
     double y = 0;
     double z = 0;
 
-    bool operator==(const Pose&) const = default;
+    bool operator==(const PoseFields&) const = default;
 };
 
-struct Hp {
-    static constexpr std::uint32_t message_id = 3;
+class Pose {
+public:
+    static constexpr std::uint32_t message_id = 2;
     static constexpr codec::Channel channel = codec::Channel::state;
 
+    static std::expected<Pose, codec::Error> build(PoseFields f);
+
+    const PlayerId& id() const { return f_.id; }
+    const double& x() const { return f_.x; }
+    const double& y() const { return f_.y; }
+    const double& z() const { return f_.z; }
+
+    bool operator==(const Pose&) const = default;
+
+private:
+    friend struct detail::Access;
+    PoseFields f_;
+};
+
+struct HpFields {
     PlayerId id{};
     std::uint32_t hp = 0;
     std::uint32_t max_hp = 0;
 
-    bool operator==(const Hp&) const = default;
+    bool operator==(const HpFields&) const = default;
 };
 
-struct Refused {
-    static constexpr std::uint32_t message_id = 4;
-    static constexpr codec::Channel channel = codec::Channel::events;
+class Hp {
+public:
+    static constexpr std::uint32_t message_id = 3;
+    static constexpr codec::Channel channel = codec::Channel::state;
 
+    static std::expected<Hp, codec::Error> build(HpFields f);
+
+    const PlayerId& id() const { return f_.id; }
+    const std::uint32_t& hp() const { return f_.hp; }
+    const std::uint32_t& max_hp() const { return f_.max_hp; }
+
+    bool operator==(const Hp&) const = default;
+
+private:
+    friend struct detail::Access;
+    HpFields f_;
+};
+
+struct RefusedFields {
     std::uint32_t tick = 0;
     std::uint32_t seq = 0;
     RefuseReason reason{};
 
+    bool operator==(const RefusedFields&) const = default;
+};
+
+class Refused {
+public:
+    static constexpr std::uint32_t message_id = 4;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<Refused, codec::Error> build(RefusedFields f);
+
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::uint32_t& seq() const { return f_.seq; }
+    const RefuseReason& reason() const { return f_.reason; }
+
     bool operator==(const Refused&) const = default;
+
+private:
+    friend struct detail::Access;
+    RefusedFields f_;
 };
 
 using StateMsg = std::variant<Pose, Hp>;
 using EventsMsg = std::variant<Refused>;
 using InputMsg = std::variant<Input>;
-// No intents messages yet. std::variant<> is ill-formed, so the channel holds
-// std::monostate, which its decoder never returns.
 using IntentsMsg = std::variant<std::monostate>;
 
 std::expected<void, codec::Error> encode(const Input& m, std::vector<std::uint8_t>& out);
@@ -119,25 +175,29 @@ std::expected<void, codec::Error> encode(const Pose& m, std::vector<std::uint8_t
 std::expected<void, codec::Error> encode(const Hp& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Refused& m, std::vector<std::uint8_t>& out);
 
-// Reads one state message and leaves r after it. An id from another channel
-// fails with codec::Error::unknown_message.
+std::string to_text(const Input& v);
+std::string to_text(const Pose& v);
+std::string to_text(const Hp& v);
+std::string to_text(const Refused& v);
+
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r);
-// Decodes exactly one state message; any byte left over is an error.
 std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes);
-// Reads one events message and leaves r after it. An id from another channel
-// fails with codec::Error::unknown_message.
+std::expected<void, codec::Error> encode_state(const StateMsg& m, std::vector<std::uint8_t>& out);
+std::string text_state(const StateMsg& m);
+
 std::expected<EventsMsg, codec::Error> decode_next_events(codec::Reader& r);
-// Decodes exactly one events message; any byte left over is an error.
 std::expected<EventsMsg, codec::Error> decode_events(std::span<const std::uint8_t> bytes);
-// Reads one input message and leaves r after it. An id from another channel
-// fails with codec::Error::unknown_message.
+std::expected<void, codec::Error> encode_events(const EventsMsg& m, std::vector<std::uint8_t>& out);
+std::string text_events(const EventsMsg& m);
+
 std::expected<InputMsg, codec::Error> decode_next_input(codec::Reader& r);
-// Decodes exactly one input message; any byte left over is an error.
 std::expected<InputMsg, codec::Error> decode_input(std::span<const std::uint8_t> bytes);
-// Reads one intents message and leaves r after it. An id from another channel
-// fails with codec::Error::unknown_message.
+std::expected<void, codec::Error> encode_input(const InputMsg& m, std::vector<std::uint8_t>& out);
+std::string text_input(const InputMsg& m);
+
 std::expected<IntentsMsg, codec::Error> decode_next_intents(codec::Reader& r);
-// Decodes exactly one intents message; any byte left over is an error.
 std::expected<IntentsMsg, codec::Error> decode_intents(std::span<const std::uint8_t> bytes);
+std::expected<void, codec::Error> encode_intents(const IntentsMsg& m, std::vector<std::uint8_t>& out);
+std::string text_intents(const IntentsMsg& m);
 
 }

@@ -3,6 +3,7 @@
 
 handle PlayerId
 handle NpcId
+handle ItemId
 
 quant coord min -10 max 10 per_unit 4
 
@@ -12,9 +13,26 @@ enum Color {
   blue = 300
 }
 
+enum Option {
+  accept_quest = 1
+  turn_in_quest = 2
+  stop_talking = 3
+  trade = 4
+}
+
 struct Pair {
   who NpcId
   weight f32
+}
+
+struct BagSlot {
+  slot u8 where 0..39
+  item ItemId
+}
+
+struct Offer {
+  owner PlayerId
+  item ItemId
 }
 
 # Field order puts the bounded and checked types first so rejection tests can
@@ -46,4 +64,51 @@ message ping = 2 on intents c2s {
 # decoder allocates room for the elements.
 message crowd = 3 on events s2c {
   pairs list(Pair, 65535)
+}
+
+message party = 4 on events s2c {
+  leader PlayerId
+  members list(PlayerId, 5) where unique
+  rule leader in members
+}
+
+message inventory = 5 on events s2c {
+  size u8 where 1..40
+  slots list(BagSlot, 40) where unique(slot)
+  rule slots.slot < size
+}
+
+message dialog = 6 on events s2c {
+  npc NpcId
+  options list(Option, 4) where unique
+  lines list(u16, 8) where 1..500
+}
+
+message pick = 7 on intents c2s {
+  npc NpcId
+  option Option where {accept_quest, turn_in_quest, stop_talking}
+}
+
+message give = 8 on intents c2s {
+  npc NpcId
+  slot u8 where 0..39
+}
+
+message trade = 9 on events s2c {
+  from PlayerId
+  offers list(Offer, 8) where unique(item)
+  rule offers.owner == from
+}
+
+message duel = 10 on events s2c {
+  challenger PlayerId
+  target PlayerId
+  rule target != challenger
+}
+
+message zone = 11 on state s2c {
+  lo coord where -8..8
+  hi coord where -10..5.25
+  tilt i8 where -45..45
+  rule lo <= hi
 }

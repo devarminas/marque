@@ -1,0 +1,25 @@
+set(list_file "${CLIENT_DIR}/.godot/extension_list.cfg")
+set(entry "res://bin/marque.gdextension")
+
+if(EXISTS "${list_file}")
+    file(STRINGS "${list_file}" entries)
+    if(entry IN_LIST entries)
+        return()
+    endif()
+endif()
+
+file(MAKE_DIRECTORY "${CLIENT_DIR}/.godot")
+
+set(prefix "")
+if(EXISTS "${list_file}")
+    file(SIZE "${list_file}" list_file_size)
+    if(list_file_size GREATER 0)
+        math(EXPR last_byte_offset "${list_file_size} - 1")
+        file(READ "${list_file}" last_byte OFFSET ${last_byte_offset} LIMIT 1)
+        if(NOT last_byte STREQUAL "\n")
+            set(prefix "\n")
+        endif()
+    endif()
+endif()
+
+file(APPEND "${list_file}" "${prefix}${entry}\n")

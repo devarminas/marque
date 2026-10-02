@@ -4,5 +4,6 @@ import "github.com/devarminas/marque/server/internal/wire"
 
 func main() {
 	id := wire.PlayerId{Index: 1, Gen: 1}
-	_, _ = wire.Hp{Id: id, Hp: 1, MaxHp: 1}.Append(nil)
+	v, _ := wire.HpFields{Id: id, Hp: 1, MaxHp: 1}.Build()
+	_ = v.Hp()
 }

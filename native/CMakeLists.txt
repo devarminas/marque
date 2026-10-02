@@ -5,6 +5,15 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+option(MARQUE_FUZZ "Build libFuzzer targets for the wire decoders (clang only)" OFF)
+if(MARQUE_FUZZ)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "MARQUE_FUZZ needs clang; configure with CXX=clang++")
+    endif()
+    add_compile_options(-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=undefined -g -O1)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
 # marque_core: engine-independent library. Sources are globbed so adding a
 # .cpp under core/src needs no edit here; CONFIGURE_DEPENDS reruns the glob
 # when the build system reconfigures.
@@ -29,3 +38,34 @@ foreach(test_source ${MARQUE_CORE_TEST_SOURCES})
     target_compile_options(${test_name} PRIVATE -Wall -Wextra -Werror)
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
+
+if(MARQUE_FUZZ)
+    add_subdirectory(fuzz)
+endif()
+
+include(FetchContent)
+set(GODOTCPP_API_VERSION "4.7" CACHE STRING "")
+FetchContent_Declare(godot-cpp
+    GIT_REPOSITORY https://github.com/godotengine/godot-cpp.git
+    GIT_TAG 507ed9d840c01a3c5b2a39af8bb4000bfac30bf5
+    SYSTEM)
+FetchContent_MakeAvailable(godot-cpp)
+
+file(GLOB_RECURSE MARQUE_GDEXT_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/gdext/src/*.cpp")
+
+add_library(marque_gdext SHARED ${MARQUE_GDEXT_SOURCES})
+target_link_libraries(marque_gdext PRIVATE marque_core godot-cpp)
+target_compile_options(marque_gdext PRIVATE -Wall -Wextra -Werror)
+get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
+set_target_properties(marque_gdext PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    PREFIX "lib"
+    OUTPUT_NAME "marque${GODOTCPP_SUFFIX}"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../client/bin")
+
+add_custom_target(marque_gdext_register ALL
+    COMMAND ${CMAKE_COMMAND} -DCLIENT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/../client
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/gdext/register_extension.cmake
+    DEPENDS marque_gdext
+    VERBATIM)
