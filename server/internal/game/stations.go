@@ -41,11 +41,13 @@ func (w *World) clearPendingUse(p *player) {
 	p.pendingUseSlot = 0
 	p.pendingUseOn = 0
 	p.pendingUseSeq = 0
+ p.useOrigin=Origin{}
 }
 
 func (w *World) armPendingUse(p *player) {
 	w.clearPendingUse(p)
 	p.pending = 0
+ p.pickupOrigin=Origin{}
 	w.clearPendingTalk(p)
 	w.cancelGather(p)
 	w.cancelAttack(p, CauseUse)
@@ -66,6 +68,7 @@ func (w *World) useOnStation(p *player, msg mnet.Use, seq mnet.Seq) {
 		p.pendingUseSlot = msg.Slot
 		p.pendingUseOn = msg.On
 		p.pendingUseSeq = seq
+ p.useOrigin=p.origin
 		w.steerToward(p, dest)
 		return
 	}
@@ -74,6 +77,7 @@ func (w *World) useOnStation(p *player, msg mnet.Use, seq mnet.Seq) {
 }
 
 func (w *World) resolveUse(p *player) {
+ previous:=p.origin;p.origin=p.useOrigin;defer func(){p.origin=previous}()
 	if !p.hasPendingUse() {
 		return
 	}
