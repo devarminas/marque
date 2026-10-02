@@ -4,12 +4,13 @@ package wire
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-const SchemaHash uint64 = 0xa5d1e3b4df6b1f69
+const SchemaHash uint64 = 0x7596ff1d19029532
 
 type Message interface {
 	MessageID() uint32
@@ -156,6 +157,42 @@ const (
 	RefuseReasonOutOfRange       RefuseReason = 5
 	RefuseReasonCooldown         RefuseReason = 6
 	RefuseReasonDead             RefuseReason = 7
+	RefuseReasonProtocolError    RefuseReason = 8
+	RefuseReasonIllegalSample    RefuseReason = 9
+	RefuseReasonUnknownItem      RefuseReason = 10
+	RefuseReasonNoSuchSlot       RefuseReason = 11
+	RefuseReasonEmptySlot        RefuseReason = 12
+	RefuseReasonNotEquippable    RefuseReason = 13
+	RefuseReasonNoSuchWornSlot   RefuseReason = 14
+	RefuseReasonEmptyWornSlot    RefuseReason = 15
+	RefuseReasonInventoryFull    RefuseReason = 16
+	RefuseReasonUnknownNode      RefuseReason = 17
+	RefuseReasonNodeDepleted     RefuseReason = 18
+	RefuseReasonNeedsClass       RefuseReason = 19
+	RefuseReasonNoRecipe         RefuseReason = 20
+	RefuseReasonMissingMat       RefuseReason = 21
+	RefuseReasonUnknownPlayer    RefuseReason = 22
+	RefuseReasonSelf             RefuseReason = 23
+	RefuseReasonTargetDead       RefuseReason = 24
+	RefuseReasonNotDead          RefuseReason = 25
+	RefuseReasonNoDialog         RefuseReason = 26
+	RefuseReasonUnknownOption    RefuseReason = 27
+	RefuseReasonQuestActive      RefuseReason = 28
+	RefuseReasonQuestComplete    RefuseReason = 29
+	RefuseReasonQuestInactive    RefuseReason = 30
+	RefuseReasonQuestIncomplete  RefuseReason = 31
+	RefuseReasonWrongItem        RefuseReason = 32
+	RefuseReasonNotLeader        RefuseReason = 33
+	RefuseReasonPartyFull        RefuseReason = 34
+	RefuseReasonAlreadyInParty   RefuseReason = 35
+	RefuseReasonDuplicateInvite  RefuseReason = 36
+	RefuseReasonNoInvite         RefuseReason = 37
+	RefuseReasonNotInParty       RefuseReason = 38
+	RefuseReasonNotSameParty     RefuseReason = 39
+	RefuseReasonUnauthorized     RefuseReason = 40
+	RefuseReasonUsage            RefuseReason = 41
+	RefuseReasonNonFinite        RefuseReason = 42
+	RefuseReasonOutOfBounds      RefuseReason = 43
 )
 
 func (v RefuseReason) String() string {
@@ -174,13 +211,85 @@ func (v RefuseReason) String() string {
 		return "cooldown"
 	case RefuseReasonDead:
 		return "dead"
+	case RefuseReasonProtocolError:
+		return "protocol_error"
+	case RefuseReasonIllegalSample:
+		return "illegal_sample"
+	case RefuseReasonUnknownItem:
+		return "unknown_item"
+	case RefuseReasonNoSuchSlot:
+		return "no_such_slot"
+	case RefuseReasonEmptySlot:
+		return "empty_slot"
+	case RefuseReasonNotEquippable:
+		return "not_equippable"
+	case RefuseReasonNoSuchWornSlot:
+		return "no_such_worn_slot"
+	case RefuseReasonEmptyWornSlot:
+		return "empty_worn_slot"
+	case RefuseReasonInventoryFull:
+		return "inventory_full"
+	case RefuseReasonUnknownNode:
+		return "unknown_node"
+	case RefuseReasonNodeDepleted:
+		return "node_depleted"
+	case RefuseReasonNeedsClass:
+		return "needs_class"
+	case RefuseReasonNoRecipe:
+		return "no_recipe"
+	case RefuseReasonMissingMat:
+		return "missing_mat"
+	case RefuseReasonUnknownPlayer:
+		return "unknown_player"
+	case RefuseReasonSelf:
+		return "self"
+	case RefuseReasonTargetDead:
+		return "target_dead"
+	case RefuseReasonNotDead:
+		return "not_dead"
+	case RefuseReasonNoDialog:
+		return "no_dialog"
+	case RefuseReasonUnknownOption:
+		return "unknown_option"
+	case RefuseReasonQuestActive:
+		return "quest_active"
+	case RefuseReasonQuestComplete:
+		return "quest_complete"
+	case RefuseReasonQuestInactive:
+		return "quest_inactive"
+	case RefuseReasonQuestIncomplete:
+		return "quest_incomplete"
+	case RefuseReasonWrongItem:
+		return "wrong_item"
+	case RefuseReasonNotLeader:
+		return "not_leader"
+	case RefuseReasonPartyFull:
+		return "party_full"
+	case RefuseReasonAlreadyInParty:
+		return "already_in_party"
+	case RefuseReasonDuplicateInvite:
+		return "duplicate_invite"
+	case RefuseReasonNoInvite:
+		return "no_invite"
+	case RefuseReasonNotInParty:
+		return "not_in_party"
+	case RefuseReasonNotSameParty:
+		return "not_same_party"
+	case RefuseReasonUnauthorized:
+		return "unauthorized"
+	case RefuseReasonUsage:
+		return "usage"
+	case RefuseReasonNonFinite:
+		return "non_finite"
+	case RefuseReasonOutOfBounds:
+		return "out_of_bounds"
 	}
 	return fmt.Sprintf("RefuseReason(%d)", uint32(v))
 }
 
 func (v RefuseReason) valid() bool {
 	switch v {
-	case RefuseReasonUnknownAbility, RefuseReasonNoTarget, RefuseReasonWrongTarget, RefuseReasonInsufficientMana, RefuseReasonOutOfRange, RefuseReasonCooldown, RefuseReasonDead:
+	case RefuseReasonUnknownAbility, RefuseReasonNoTarget, RefuseReasonWrongTarget, RefuseReasonInsufficientMana, RefuseReasonOutOfRange, RefuseReasonCooldown, RefuseReasonDead, RefuseReasonProtocolError, RefuseReasonIllegalSample, RefuseReasonUnknownItem, RefuseReasonNoSuchSlot, RefuseReasonEmptySlot, RefuseReasonNotEquippable, RefuseReasonNoSuchWornSlot, RefuseReasonEmptyWornSlot, RefuseReasonInventoryFull, RefuseReasonUnknownNode, RefuseReasonNodeDepleted, RefuseReasonNeedsClass, RefuseReasonNoRecipe, RefuseReasonMissingMat, RefuseReasonUnknownPlayer, RefuseReasonSelf, RefuseReasonTargetDead, RefuseReasonNotDead, RefuseReasonNoDialog, RefuseReasonUnknownOption, RefuseReasonQuestActive, RefuseReasonQuestComplete, RefuseReasonQuestInactive, RefuseReasonQuestIncomplete, RefuseReasonWrongItem, RefuseReasonNotLeader, RefuseReasonPartyFull, RefuseReasonAlreadyInParty, RefuseReasonDuplicateInvite, RefuseReasonNoInvite, RefuseReasonNotInParty, RefuseReasonNotSameParty, RefuseReasonUnauthorized, RefuseReasonUsage, RefuseReasonNonFinite, RefuseReasonOutOfBounds:
 		return true
 	}
 	return false
@@ -196,6 +305,47 @@ func (v RefuseReason) encode(w *codec.Writer) {
 
 func decodeRefuseReason(r *codec.Reader) RefuseReason {
 	v := RefuseReason(r.Varint())
+	if r.Err() == nil && !v.valid() {
+		r.Fail(codec.ErrBadEnum)
+	}
+	return v
+}
+
+type OriginSource uint32
+
+const (
+	OriginSourceInput  OriginSource = 1
+	OriginSourceIntent OriginSource = 2
+)
+
+func (v OriginSource) String() string {
+	switch v {
+	case OriginSourceInput:
+		return "input"
+	case OriginSourceIntent:
+		return "intent"
+	}
+	return fmt.Sprintf("OriginSource(%d)", uint32(v))
+}
+
+func (v OriginSource) valid() bool {
+	switch v {
+	case OriginSourceInput, OriginSourceIntent:
+		return true
+	}
+	return false
+}
+
+func (v OriginSource) encode(w *codec.Writer) {
+	if !v.valid() {
+		w.Fail(codec.ErrBadEnum)
+		return
+	}
+	w.Varint(uint32(v))
+}
+
+func decodeOriginSource(r *codec.Reader) OriginSource {
+	v := OriginSource(r.Varint())
 	if r.Err() == nil && !v.valid() {
 		r.Fail(codec.ErrBadEnum)
 	}
@@ -347,6 +497,363 @@ func appendCombatantIdText(b []byte, v CombatantId) []byte {
 	}
 	return append(b, "CombatantId(nil)"...)
 }
+
+type BagEntryFields struct {
+	Slot uint8
+	Kind string
+}
+
+type BagEntry struct {
+	f BagEntryFields
+}
+
+func (f BagEntryFields) Build() (BagEntry, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return BagEntry{}, err
+	}
+	return BagEntry{f}, nil
+}
+
+func (v BagEntry) Slot() uint8 { return v.f.Slot }
+
+func (v BagEntry) Kind() string { return v.f.Kind }
+
+func (f BagEntryFields) encode(w *codec.Writer) {
+	w.U8(f.Slot)
+	if w.Err() == nil && !(f.Slot <= 27) {
+		w.Fail(codec.ErrRule)
+	}
+	w.String(f.Kind, 64)
+}
+
+func decodeBagEntry(r *codec.Reader) BagEntry {
+	var f BagEntryFields
+	f.Slot = r.U8()
+	if r.Err() == nil && !(f.Slot <= 27) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Kind = r.String(64)
+	return BagEntry{f}
+}
+
+func (f BagEntryFields) appendText(b []byte) []byte {
+	b = append(b, "BagEntry{slot:"...)
+	b = strconv.AppendUint(b, uint64(f.Slot), 10)
+	b = append(b, " kind:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Kind)
+	return append(b, '}')
+}
+
+func (v BagEntry) String() string { return string(v.f.appendText(nil)) }
+
+type WornNameFields struct {
+	Name string
+}
+
+type WornName struct {
+	f WornNameFields
+}
+
+func (f WornNameFields) Build() (WornName, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return WornName{}, err
+	}
+	return WornName{f}, nil
+}
+
+func (v WornName) Name() string { return v.f.Name }
+
+func (f WornNameFields) encode(w *codec.Writer) {
+	w.String(f.Name, 32)
+}
+
+func decodeWornName(r *codec.Reader) WornName {
+	var f WornNameFields
+	f.Name = r.String(32)
+	return WornName{f}
+}
+
+func (f WornNameFields) appendText(b []byte) []byte {
+	b = append(b, "WornName{name:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Name)
+	return append(b, '}')
+}
+
+func (v WornName) String() string { return string(v.f.appendText(nil)) }
+
+type WornEntryFields struct {
+	Slot string
+	Kind string
+}
+
+type WornEntry struct {
+	f WornEntryFields
+}
+
+func (f WornEntryFields) Build() (WornEntry, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return WornEntry{}, err
+	}
+	return WornEntry{f}, nil
+}
+
+func (v WornEntry) Slot() string { return v.f.Slot }
+
+func (v WornEntry) Kind() string { return v.f.Kind }
+
+func (f WornEntryFields) encode(w *codec.Writer) {
+	w.String(f.Slot, 32)
+	w.String(f.Kind, 64)
+}
+
+func decodeWornEntry(r *codec.Reader) WornEntry {
+	var f WornEntryFields
+	f.Slot = r.String(32)
+	f.Kind = r.String(64)
+	return WornEntry{f}
+}
+
+func (f WornEntryFields) appendText(b []byte) []byte {
+	b = append(b, "WornEntry{slot:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Slot)
+	b = append(b, " kind:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Kind)
+	return append(b, '}')
+}
+
+func (v WornEntry) String() string { return string(v.f.appendText(nil)) }
+
+type SkillEntryFields struct {
+	Id    string
+	Xp    int64
+	Level uint32
+}
+
+type SkillEntry struct {
+	f SkillEntryFields
+}
+
+func (f SkillEntryFields) Build() (SkillEntry, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return SkillEntry{}, err
+	}
+	return SkillEntry{f}, nil
+}
+
+func (v SkillEntry) Id() string { return v.f.Id }
+
+func (v SkillEntry) Xp() int64 { return v.f.Xp }
+
+func (v SkillEntry) Level() uint32 { return v.f.Level }
+
+func (f SkillEntryFields) encode(w *codec.Writer) {
+	w.String(f.Id, 64)
+	w.U64(uint64(f.Xp))
+	if w.Err() == nil && !(f.Xp >= 0) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U32(f.Level)
+}
+
+func decodeSkillEntry(r *codec.Reader) SkillEntry {
+	var f SkillEntryFields
+	f.Id = r.String(64)
+	f.Xp = int64(r.U64())
+	if r.Err() == nil && !(f.Xp >= 0) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Level = r.U32()
+	return SkillEntry{f}
+}
+
+func (f SkillEntryFields) appendText(b []byte) []byte {
+	b = append(b, "SkillEntry{id:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Id)
+	b = append(b, " xp:"...)
+	b = strconv.AppendInt(b, int64(f.Xp), 10)
+	b = append(b, " level:"...)
+	b = strconv.AppendUint(b, uint64(f.Level), 10)
+	return append(b, '}')
+}
+
+func (v SkillEntry) String() string { return string(v.f.appendText(nil)) }
+
+type QuestEntryFields struct {
+	Id        string
+	Title     string
+	Objective string
+	Status    string
+}
+
+type QuestEntry struct {
+	f QuestEntryFields
+}
+
+func (f QuestEntryFields) Build() (QuestEntry, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return QuestEntry{}, err
+	}
+	return QuestEntry{f}, nil
+}
+
+func (v QuestEntry) Id() string { return v.f.Id }
+
+func (v QuestEntry) Title() string { return v.f.Title }
+
+func (v QuestEntry) Objective() string { return v.f.Objective }
+
+func (v QuestEntry) Status() string { return v.f.Status }
+
+func (f QuestEntryFields) encode(w *codec.Writer) {
+	w.String(f.Id, 64)
+	w.String(f.Title, 256)
+	w.String(f.Objective, 512)
+	w.String(f.Status, 32)
+}
+
+func decodeQuestEntry(r *codec.Reader) QuestEntry {
+	var f QuestEntryFields
+	f.Id = r.String(64)
+	f.Title = r.String(256)
+	f.Objective = r.String(512)
+	f.Status = r.String(32)
+	return QuestEntry{f}
+}
+
+func (f QuestEntryFields) appendText(b []byte) []byte {
+	b = append(b, "QuestEntry{id:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Id)
+	b = append(b, " title:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Title)
+	b = append(b, " objective:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Objective)
+	b = append(b, " status:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Status)
+	return append(b, '}')
+}
+
+func (v QuestEntry) String() string { return string(v.f.appendText(nil)) }
+
+type TextLineFields struct {
+	Text string
+}
+
+type TextLine struct {
+	f TextLineFields
+}
+
+func (f TextLineFields) Build() (TextLine, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return TextLine{}, err
+	}
+	return TextLine{f}, nil
+}
+
+func (v TextLine) Text() string { return v.f.Text }
+
+func (f TextLineFields) encode(w *codec.Writer) {
+	w.String(f.Text, 1024)
+}
+
+func decodeTextLine(r *codec.Reader) TextLine {
+	var f TextLineFields
+	f.Text = r.String(1024)
+	return TextLine{f}
+}
+
+func (f TextLineFields) appendText(b []byte) []byte {
+	b = append(b, "TextLine{text:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Text)
+	return append(b, '}')
+}
+
+func (v TextLine) String() string { return string(v.f.appendText(nil)) }
+
+type DialogChoiceFields struct {
+	Id string
+}
+
+type DialogChoice struct {
+	f DialogChoiceFields
+}
+
+func (f DialogChoiceFields) Build() (DialogChoice, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return DialogChoice{}, err
+	}
+	return DialogChoice{f}, nil
+}
+
+func (v DialogChoice) Id() string { return v.f.Id }
+
+func (f DialogChoiceFields) encode(w *codec.Writer) {
+	w.String(f.Id, 64)
+}
+
+func decodeDialogChoice(r *codec.Reader) DialogChoice {
+	var f DialogChoiceFields
+	f.Id = r.String(64)
+	return DialogChoice{f}
+}
+
+func (f DialogChoiceFields) appendText(b []byte) []byte {
+	b = append(b, "DialogChoice{id:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Id)
+	return append(b, '}')
+}
+
+func (v DialogChoice) String() string { return string(v.f.appendText(nil)) }
+
+type ToolEntryFields struct {
+	Kind string
+}
+
+type ToolEntry struct {
+	f ToolEntryFields
+}
+
+func (f ToolEntryFields) Build() (ToolEntry, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return ToolEntry{}, err
+	}
+	return ToolEntry{f}, nil
+}
+
+func (v ToolEntry) Kind() string { return v.f.Kind }
+
+func (f ToolEntryFields) encode(w *codec.Writer) {
+	w.String(f.Kind, 64)
+}
+
+func decodeToolEntry(r *codec.Reader) ToolEntry {
+	var f ToolEntryFields
+	f.Kind = r.String(64)
+	return ToolEntry{f}
+}
+
+func (f ToolEntryFields) appendText(b []byte) []byte {
+	b = append(b, "ToolEntry{kind:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Kind)
+	return append(b, '}')
+}
+
+func (v ToolEntry) String() string { return string(v.f.appendText(nil)) }
 
 type TransformFields struct {
 	X float64
@@ -949,10 +1456,1018 @@ func (v Hp) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
+type InventoryFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+	Size     uint8
+	Slots    []BagEntry
+}
+
+type Inventory struct {
+	f InventoryFields
+}
+
+func (f InventoryFields) Build() (Inventory, error) {
+	f.Slots = codec.Clone(f.Slots)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Inventory{}, err
+	}
+	return Inventory{f}, nil
+}
+
+func (v Inventory) Stream() uint64 { return v.f.Stream }
+
+func (v Inventory) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v Inventory) Tick() uint32 { return v.f.Tick }
+
+func (v Inventory) Size() uint8 { return v.f.Size }
+
+func (v Inventory) Slots() codec.List[BagEntry] { return codec.ListOf(v.f.Slots) }
+
+func (f InventoryFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	w.U8(f.Size)
+	if w.Err() == nil && !(f.Size >= 28 && f.Size <= 28) {
+		w.Fail(codec.ErrRule)
+	}
+	w.Count(len(f.Slots), 28)
+	for _, e := range f.Slots {
+		e.f.encode(w)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.Slots), func(i, j int) bool { return f.Slots[i].f.Slot == f.Slots[j].f.Slot }) {
+		w.Fail(codec.ErrRule)
+	}
+	if w.Err() == nil && slices.ContainsFunc(f.Slots, func(e BagEntry) bool { return !(e.f.Slot < f.Size) }) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeInventory(r *codec.Reader) Inventory {
+	var f InventoryFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	f.Size = r.U8()
+	if r.Err() == nil && !(f.Size >= 28 && f.Size <= 28) {
+		r.Fail(codec.ErrRule)
+	}
+	if n := r.Count(28, 2); n > 0 {
+		f.Slots = make([]BagEntry, n)
+		for i := range f.Slots {
+			f.Slots[i] = decodeBagEntry(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.Slots), func(i, j int) bool { return f.Slots[i].f.Slot == f.Slots[j].f.Slot }) {
+		r.Fail(codec.ErrRule)
+	}
+	if r.Err() == nil && slices.ContainsFunc(f.Slots, func(e BagEntry) bool { return !(e.f.Slot < f.Size) }) {
+		r.Fail(codec.ErrRule)
+	}
+	return Inventory{f}
+}
+
+func (f InventoryFields) appendText(b []byte) []byte {
+	b = append(b, "inventory{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " size:"...)
+	b = strconv.AppendUint(b, uint64(f.Size), 10)
+	b = append(b, " slots:"...)
+	b = append(b, '[')
+	for i, e := range f.Slots {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.f.appendText(b)
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v Inventory) String() string { return string(v.f.appendText(nil)) }
+
+func (Inventory) MessageID() uint32 { return 128 }
+
+func (Inventory) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (Inventory) eventsMsg() {}
+
+func (v Inventory) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(128)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type EquipmentFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+	Worn     []WornName
+	Slots    []WornEntry
+}
+
+type Equipment struct {
+	f EquipmentFields
+}
+
+func (f EquipmentFields) Build() (Equipment, error) {
+	f.Worn = codec.Clone(f.Worn)
+	f.Slots = codec.Clone(f.Slots)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Equipment{}, err
+	}
+	return Equipment{f}, nil
+}
+
+func (v Equipment) Stream() uint64 { return v.f.Stream }
+
+func (v Equipment) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v Equipment) Tick() uint32 { return v.f.Tick }
+
+func (v Equipment) Worn() codec.List[WornName] { return codec.ListOf(v.f.Worn) }
+
+func (v Equipment) Slots() codec.List[WornEntry] { return codec.ListOf(v.f.Slots) }
+
+func (f EquipmentFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	w.Count(len(f.Worn), 6)
+	for _, e := range f.Worn {
+		e.f.encode(w)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.Worn), func(i, j int) bool { return f.Worn[i].f.Name == f.Worn[j].f.Name }) {
+		w.Fail(codec.ErrRule)
+	}
+	w.Count(len(f.Slots), 6)
+	for _, e := range f.Slots {
+		e.f.encode(w)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.Slots), func(i, j int) bool { return f.Slots[i].f.Slot == f.Slots[j].f.Slot }) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeEquipment(r *codec.Reader) Equipment {
+	var f EquipmentFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	if n := r.Count(6, 1); n > 0 {
+		f.Worn = make([]WornName, n)
+		for i := range f.Worn {
+			f.Worn[i] = decodeWornName(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.Worn), func(i, j int) bool { return f.Worn[i].f.Name == f.Worn[j].f.Name }) {
+		r.Fail(codec.ErrRule)
+	}
+	if n := r.Count(6, 2); n > 0 {
+		f.Slots = make([]WornEntry, n)
+		for i := range f.Slots {
+			f.Slots[i] = decodeWornEntry(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.Slots), func(i, j int) bool { return f.Slots[i].f.Slot == f.Slots[j].f.Slot }) {
+		r.Fail(codec.ErrRule)
+	}
+	return Equipment{f}
+}
+
+func (f EquipmentFields) appendText(b []byte) []byte {
+	b = append(b, "equipment{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " worn:"...)
+	b = append(b, '[')
+	for i, e := range f.Worn {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.f.appendText(b)
+	}
+	b = append(b, ']')
+	b = append(b, " slots:"...)
+	b = append(b, '[')
+	for i, e := range f.Slots {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.f.appendText(b)
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v Equipment) String() string { return string(v.f.appendText(nil)) }
+
+func (Equipment) MessageID() uint32 { return 129 }
+
+func (Equipment) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (Equipment) eventsMsg() {}
+
+func (v Equipment) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(129)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type ClassFields struct {
+	Stream       uint64
+	EventSeq     uint64
+	Tick         uint32
+	ClassId      string
+	MissingSlots []WornEntry
+	MissingTools []ToolEntry
+}
+
+type Class struct {
+	f ClassFields
+}
+
+func (f ClassFields) Build() (Class, error) {
+	f.MissingSlots = codec.Clone(f.MissingSlots)
+	f.MissingTools = codec.Clone(f.MissingTools)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Class{}, err
+	}
+	return Class{f}, nil
+}
+
+func (v Class) Stream() uint64 { return v.f.Stream }
+
+func (v Class) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v Class) Tick() uint32 { return v.f.Tick }
+
+func (v Class) ClassId() string { return v.f.ClassId }
+
+func (v Class) MissingSlots() codec.List[WornEntry] { return codec.ListOf(v.f.MissingSlots) }
+
+func (v Class) MissingTools() codec.List[ToolEntry] { return codec.ListOf(v.f.MissingTools) }
+
+func (f ClassFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	w.String(f.ClassId, 64)
+	w.Count(len(f.MissingSlots), 6)
+	for _, e := range f.MissingSlots {
+		e.f.encode(w)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.MissingSlots), func(i, j int) bool { return f.MissingSlots[i].f.Slot == f.MissingSlots[j].f.Slot }) {
+		w.Fail(codec.ErrRule)
+	}
+	w.Count(len(f.MissingTools), 16)
+	for _, e := range f.MissingTools {
+		e.f.encode(w)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.MissingTools), func(i, j int) bool { return f.MissingTools[i].f.Kind == f.MissingTools[j].f.Kind }) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeClass(r *codec.Reader) Class {
+	var f ClassFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	f.ClassId = r.String(64)
+	if n := r.Count(6, 2); n > 0 {
+		f.MissingSlots = make([]WornEntry, n)
+		for i := range f.MissingSlots {
+			f.MissingSlots[i] = decodeWornEntry(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.MissingSlots), func(i, j int) bool { return f.MissingSlots[i].f.Slot == f.MissingSlots[j].f.Slot }) {
+		r.Fail(codec.ErrRule)
+	}
+	if n := r.Count(16, 1); n > 0 {
+		f.MissingTools = make([]ToolEntry, n)
+		for i := range f.MissingTools {
+			f.MissingTools[i] = decodeToolEntry(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.MissingTools), func(i, j int) bool { return f.MissingTools[i].f.Kind == f.MissingTools[j].f.Kind }) {
+		r.Fail(codec.ErrRule)
+	}
+	return Class{f}
+}
+
+func (f ClassFields) appendText(b []byte) []byte {
+	b = append(b, "class{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " class_id:"...)
+	b = strconv.AppendQuoteToASCII(b, f.ClassId)
+	b = append(b, " missing_slots:"...)
+	b = append(b, '[')
+	for i, e := range f.MissingSlots {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.f.appendText(b)
+	}
+	b = append(b, ']')
+	b = append(b, " missing_tools:"...)
+	b = append(b, '[')
+	for i, e := range f.MissingTools {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.f.appendText(b)
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v Class) String() string { return string(v.f.appendText(nil)) }
+
+func (Class) MessageID() uint32 { return 130 }
+
+func (Class) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (Class) eventsMsg() {}
+
+func (v Class) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(130)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type SkillsFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+	Skills   []SkillEntry
+}
+
+type Skills struct {
+	f SkillsFields
+}
+
+func (f SkillsFields) Build() (Skills, error) {
+	f.Skills = codec.Clone(f.Skills)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Skills{}, err
+	}
+	return Skills{f}, nil
+}
+
+func (v Skills) Stream() uint64 { return v.f.Stream }
+
+func (v Skills) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v Skills) Tick() uint32 { return v.f.Tick }
+
+func (v Skills) Skills() codec.List[SkillEntry] { return codec.ListOf(v.f.Skills) }
+
+func (f SkillsFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	w.Count(len(f.Skills), 64)
+	for _, e := range f.Skills {
+		e.f.encode(w)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.Skills), func(i, j int) bool { return f.Skills[i].f.Id == f.Skills[j].f.Id }) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeSkills(r *codec.Reader) Skills {
+	var f SkillsFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	if n := r.Count(64, 13); n > 0 {
+		f.Skills = make([]SkillEntry, n)
+		for i := range f.Skills {
+			f.Skills[i] = decodeSkillEntry(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.Skills), func(i, j int) bool { return f.Skills[i].f.Id == f.Skills[j].f.Id }) {
+		r.Fail(codec.ErrRule)
+	}
+	return Skills{f}
+}
+
+func (f SkillsFields) appendText(b []byte) []byte {
+	b = append(b, "skills{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " skills:"...)
+	b = append(b, '[')
+	for i, e := range f.Skills {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.f.appendText(b)
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v Skills) String() string { return string(v.f.appendText(nil)) }
+
+func (Skills) MessageID() uint32 { return 131 }
+
+func (Skills) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (Skills) eventsMsg() {}
+
+func (v Skills) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(131)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type QuestLogFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+	Quests   []QuestEntry
+}
+
+type QuestLog struct {
+	f QuestLogFields
+}
+
+func (f QuestLogFields) Build() (QuestLog, error) {
+	f.Quests = codec.Clone(f.Quests)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return QuestLog{}, err
+	}
+	return QuestLog{f}, nil
+}
+
+func (v QuestLog) Stream() uint64 { return v.f.Stream }
+
+func (v QuestLog) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v QuestLog) Tick() uint32 { return v.f.Tick }
+
+func (v QuestLog) Quests() codec.List[QuestEntry] { return codec.ListOf(v.f.Quests) }
+
+func (f QuestLogFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	w.Count(len(f.Quests), 64)
+	for _, e := range f.Quests {
+		e.f.encode(w)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.Quests), func(i, j int) bool { return f.Quests[i].f.Id == f.Quests[j].f.Id }) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeQuestLog(r *codec.Reader) QuestLog {
+	var f QuestLogFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	if n := r.Count(64, 4); n > 0 {
+		f.Quests = make([]QuestEntry, n)
+		for i := range f.Quests {
+			f.Quests[i] = decodeQuestEntry(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.Quests), func(i, j int) bool { return f.Quests[i].f.Id == f.Quests[j].f.Id }) {
+		r.Fail(codec.ErrRule)
+	}
+	return QuestLog{f}
+}
+
+func (f QuestLogFields) appendText(b []byte) []byte {
+	b = append(b, "quest_log{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " quests:"...)
+	b = append(b, '[')
+	for i, e := range f.Quests {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.f.appendText(b)
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v QuestLog) String() string { return string(v.f.appendText(nil)) }
+
+func (QuestLog) MessageID() uint32 { return 132 }
+
+func (QuestLog) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (QuestLog) eventsMsg() {}
+
+func (v QuestLog) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(132)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type DialogFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+	Npc      NpcId
+	Lines    []TextLine
+	Options  []DialogChoice
+}
+
+type Dialog struct {
+	f DialogFields
+}
+
+func (f DialogFields) Build() (Dialog, error) {
+	f.Lines = codec.Clone(f.Lines)
+	f.Options = codec.Clone(f.Options)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Dialog{}, err
+	}
+	return Dialog{f}, nil
+}
+
+func (v Dialog) Stream() uint64 { return v.f.Stream }
+
+func (v Dialog) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v Dialog) Tick() uint32 { return v.f.Tick }
+
+func (v Dialog) Npc() NpcId { return v.f.Npc }
+
+func (v Dialog) Lines() codec.List[TextLine] { return codec.ListOf(v.f.Lines) }
+
+func (v Dialog) Options() codec.List[DialogChoice] { return codec.ListOf(v.f.Options) }
+
+func (f DialogFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	f.Npc.encode(w)
+	w.Count(len(f.Lines), 16)
+	for _, e := range f.Lines {
+		e.f.encode(w)
+	}
+	w.Count(len(f.Options), 16)
+	for _, e := range f.Options {
+		e.f.encode(w)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.Options), func(i, j int) bool { return f.Options[i].f.Id == f.Options[j].f.Id }) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeDialog(r *codec.Reader) Dialog {
+	var f DialogFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	f.Npc = decodeNpcId(r)
+	if n := r.Count(16, 1); n > 0 {
+		f.Lines = make([]TextLine, n)
+		for i := range f.Lines {
+			f.Lines[i] = decodeTextLine(r)
+		}
+	}
+	if n := r.Count(16, 1); n > 0 {
+		f.Options = make([]DialogChoice, n)
+		for i := range f.Options {
+			f.Options[i] = decodeDialogChoice(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.Options), func(i, j int) bool { return f.Options[i].f.Id == f.Options[j].f.Id }) {
+		r.Fail(codec.ErrRule)
+	}
+	return Dialog{f}
+}
+
+func (f DialogFields) appendText(b []byte) []byte {
+	b = append(b, "dialog{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " npc:"...)
+	b = f.Npc.appendText(b)
+	b = append(b, " lines:"...)
+	b = append(b, '[')
+	for i, e := range f.Lines {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.f.appendText(b)
+	}
+	b = append(b, ']')
+	b = append(b, " options:"...)
+	b = append(b, '[')
+	for i, e := range f.Options {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.f.appendText(b)
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v Dialog) String() string { return string(v.f.appendText(nil)) }
+
+func (Dialog) MessageID() uint32 { return 133 }
+
+func (Dialog) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (Dialog) eventsMsg() {}
+
+func (v Dialog) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(133)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type PartyFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+	Id       uint64
+	Leader   PlayerId
+	Members  []PlayerId
+}
+
+type Party struct {
+	f PartyFields
+}
+
+func (f PartyFields) Build() (Party, error) {
+	f.Members = codec.Clone(f.Members)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Party{}, err
+	}
+	return Party{f}, nil
+}
+
+func (v Party) Stream() uint64 { return v.f.Stream }
+
+func (v Party) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v Party) Tick() uint32 { return v.f.Tick }
+
+func (v Party) Id() uint64 { return v.f.Id }
+
+func (v Party) Leader() PlayerId { return v.f.Leader }
+
+func (v Party) Members() codec.List[PlayerId] { return codec.ListOf(v.f.Members) }
+
+func (f PartyFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	w.U64(f.Id)
+	f.Leader.encode(w)
+	w.Count(len(f.Members), 4)
+	for _, e := range f.Members {
+		e.encode(w)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.Members), func(i, j int) bool { return f.Members[i] == f.Members[j] }) {
+		w.Fail(codec.ErrRule)
+	}
+	if w.Err() == nil && !slices.ContainsFunc(f.Members, func(e PlayerId) bool { return e == f.Leader }) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeParty(r *codec.Reader) Party {
+	var f PartyFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	f.Id = r.U64()
+	f.Leader = decodePlayerId(r)
+	if n := r.Count(4, 2); n > 0 {
+		f.Members = make([]PlayerId, n)
+		for i := range f.Members {
+			f.Members[i] = decodePlayerId(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.Members), func(i, j int) bool { return f.Members[i] == f.Members[j] }) {
+		r.Fail(codec.ErrRule)
+	}
+	if r.Err() == nil && !slices.ContainsFunc(f.Members, func(e PlayerId) bool { return e == f.Leader }) {
+		r.Fail(codec.ErrRule)
+	}
+	return Party{f}
+}
+
+func (f PartyFields) appendText(b []byte) []byte {
+	b = append(b, "party{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " id:"...)
+	b = strconv.AppendUint(b, uint64(f.Id), 10)
+	b = append(b, " leader:"...)
+	b = f.Leader.appendText(b)
+	b = append(b, " members:"...)
+	b = append(b, '[')
+	for i, e := range f.Members {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.appendText(b)
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v Party) String() string { return string(v.f.appendText(nil)) }
+
+func (Party) MessageID() uint32 { return 134 }
+
+func (Party) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (Party) eventsMsg() {}
+
+func (v Party) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(134)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type InviteFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+	From     PlayerId
+}
+
+type Invite struct {
+	f InviteFields
+}
+
+func (f InviteFields) Build() (Invite, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Invite{}, err
+	}
+	return Invite{f}, nil
+}
+
+func (v Invite) Stream() uint64 { return v.f.Stream }
+
+func (v Invite) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v Invite) Tick() uint32 { return v.f.Tick }
+
+func (v Invite) From() PlayerId { return v.f.From }
+
+func (f InviteFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	f.From.encode(w)
+}
+
+func decodeInvite(r *codec.Reader) Invite {
+	var f InviteFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	f.From = decodePlayerId(r)
+	return Invite{f}
+}
+
+func (f InviteFields) appendText(b []byte) []byte {
+	b = append(b, "invite{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " from:"...)
+	b = f.From.appendText(b)
+	return append(b, '}')
+}
+
+func (v Invite) String() string { return string(v.f.appendText(nil)) }
+
+func (Invite) MessageID() uint32 { return 135 }
+
+func (Invite) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (Invite) eventsMsg() {}
+
+func (v Invite) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(135)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type AdminReplyFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+	Text     string
+}
+
+type AdminReply struct {
+	f AdminReplyFields
+}
+
+func (f AdminReplyFields) Build() (AdminReply, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return AdminReply{}, err
+	}
+	return AdminReply{f}, nil
+}
+
+func (v AdminReply) Stream() uint64 { return v.f.Stream }
+
+func (v AdminReply) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v AdminReply) Tick() uint32 { return v.f.Tick }
+
+func (v AdminReply) Text() string { return v.f.Text }
+
+func (f AdminReplyFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	w.String(f.Text, 8192)
+}
+
+func decodeAdminReply(r *codec.Reader) AdminReply {
+	var f AdminReplyFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	f.Text = r.String(8192)
+	return AdminReply{f}
+}
+
+func (f AdminReplyFields) appendText(b []byte) []byte {
+	b = append(b, "admin_reply{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " text:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Text)
+	return append(b, '}')
+}
+
+func (v AdminReply) String() string { return string(v.f.appendText(nil)) }
+
+func (AdminReply) MessageID() uint32 { return 136 }
+
+func (AdminReply) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (AdminReply) eventsMsg() {}
+
+func (v AdminReply) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(136)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type CooldownFields struct {
+	Stream    uint64
+	EventSeq  uint64
+	Tick      uint32
+	Ability   string
+	ReadyTick uint32
+}
+
+type Cooldown struct {
+	f CooldownFields
+}
+
+func (f CooldownFields) Build() (Cooldown, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Cooldown{}, err
+	}
+	return Cooldown{f}, nil
+}
+
+func (v Cooldown) Stream() uint64 { return v.f.Stream }
+
+func (v Cooldown) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v Cooldown) Tick() uint32 { return v.f.Tick }
+
+func (v Cooldown) Ability() string { return v.f.Ability }
+
+func (v Cooldown) ReadyTick() uint32 { return v.f.ReadyTick }
+
+func (f CooldownFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	w.String(f.Ability, 64)
+	w.U32(f.ReadyTick)
+}
+
+func decodeCooldown(r *codec.Reader) Cooldown {
+	var f CooldownFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	f.Ability = r.String(64)
+	f.ReadyTick = r.U32()
+	return Cooldown{f}
+}
+
+func (f CooldownFields) appendText(b []byte) []byte {
+	b = append(b, "cooldown{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " ability:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Ability)
+	b = append(b, " ready_tick:"...)
+	b = strconv.AppendUint(b, uint64(f.ReadyTick), 10)
+	return append(b, '}')
+}
+
+func (v Cooldown) String() string { return string(v.f.appendText(nil)) }
+
+func (Cooldown) MessageID() uint32 { return 137 }
+
+func (Cooldown) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (Cooldown) eventsMsg() {}
+
+func (v Cooldown) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(137)
+	v.f.encode(&w)
+	return w.Result()
+}
+
 type RefusedFields struct {
-	Tick   uint32
-	Seq    uint32
-	Reason RefuseReason
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+	Source   OriginSource
+	Seq      uint32
+	Reason   RefuseReason
 }
 
 type Refused struct {
@@ -968,29 +2483,47 @@ func (f RefusedFields) Build() (Refused, error) {
 	return Refused{f}, nil
 }
 
+func (v Refused) Stream() uint64 { return v.f.Stream }
+
+func (v Refused) EventSeq() uint64 { return v.f.EventSeq }
+
 func (v Refused) Tick() uint32 { return v.f.Tick }
+
+func (v Refused) Source() OriginSource { return v.f.Source }
 
 func (v Refused) Seq() uint32 { return v.f.Seq }
 
 func (v Refused) Reason() RefuseReason { return v.f.Reason }
 
 func (f RefusedFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
 	w.U32(f.Tick)
+	f.Source.encode(w)
 	w.U32(f.Seq)
 	f.Reason.encode(w)
 }
 
 func decodeRefused(r *codec.Reader) Refused {
 	var f RefusedFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
 	f.Tick = r.U32()
+	f.Source = decodeOriginSource(r)
 	f.Seq = r.U32()
 	f.Reason = decodeRefuseReason(r)
 	return Refused{f}
 }
 
 func (f RefusedFields) appendText(b []byte) []byte {
-	b = append(b, "refused{tick:"...)
+	b = append(b, "refused{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
 	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " source:"...)
+	b = append(b, f.Source.String()...)
 	b = append(b, " seq:"...)
 	b = strconv.AppendUint(b, uint64(f.Seq), 10)
 	b = append(b, " reason:"...)
@@ -1000,7 +2533,7 @@ func (f RefusedFields) appendText(b []byte) []byte {
 
 func (v Refused) String() string { return string(v.f.appendText(nil)) }
 
-func (Refused) MessageID() uint32 { return 4 }
+func (Refused) MessageID() uint32 { return 138 }
 
 func (Refused) Channel() codec.Channel { return codec.ChannelEvents }
 
@@ -1008,7 +2541,7 @@ func (Refused) eventsMsg() {}
 
 func (v Refused) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
-	w.Varint(4)
+	w.Varint(138)
 	v.f.encode(&w)
 	return w.Result()
 }
@@ -1442,6 +2975,1700 @@ func (v GatherStart) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
+type TickCloseFields struct {
+	Stream     uint64
+	Epoch      uint64
+	Tick       uint32
+	EventEnd   uint64
+	StateItems uint16
+}
+
+type TickClose struct {
+	f TickCloseFields
+}
+
+func (f TickCloseFields) Build() (TickClose, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return TickClose{}, err
+	}
+	return TickClose{f}, nil
+}
+
+func (v TickClose) Stream() uint64 { return v.f.Stream }
+
+func (v TickClose) Epoch() uint64 { return v.f.Epoch }
+
+func (v TickClose) Tick() uint32 { return v.f.Tick }
+
+func (v TickClose) EventEnd() uint64 { return v.f.EventEnd }
+
+func (v TickClose) StateItems() uint16 { return v.f.StateItems }
+
+func (f TickCloseFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.Epoch)
+	w.U32(f.Tick)
+	w.U64(f.EventEnd)
+	w.U16(f.StateItems)
+}
+
+func decodeTickClose(r *codec.Reader) TickClose {
+	var f TickCloseFields
+	f.Stream = r.U64()
+	f.Epoch = r.U64()
+	f.Tick = r.U32()
+	f.EventEnd = r.U64()
+	f.StateItems = r.U16()
+	return TickClose{f}
+}
+
+func (f TickCloseFields) appendText(b []byte) []byte {
+	b = append(b, "tick_close{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " epoch:"...)
+	b = strconv.AppendUint(b, uint64(f.Epoch), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " event_end:"...)
+	b = strconv.AppendUint(b, uint64(f.EventEnd), 10)
+	b = append(b, " state_items:"...)
+	b = strconv.AppendUint(b, uint64(f.StateItems), 10)
+	return append(b, '}')
+}
+
+func (v TickClose) String() string { return string(v.f.appendText(nil)) }
+
+func (TickClose) MessageID() uint32 { return 139 }
+
+func (TickClose) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (TickClose) eventsMsg() {}
+
+func (v TickClose) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(139)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type ResumeBoundaryFields struct {
+	Stream       uint64
+	Epoch        uint64
+	Tick         uint32
+	EventEnd     uint64
+	AppliedEvent uint64
+	NextIntent   uint32
+}
+
+type ResumeBoundary struct {
+	f ResumeBoundaryFields
+}
+
+func (f ResumeBoundaryFields) Build() (ResumeBoundary, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return ResumeBoundary{}, err
+	}
+	return ResumeBoundary{f}, nil
+}
+
+func (v ResumeBoundary) Stream() uint64 { return v.f.Stream }
+
+func (v ResumeBoundary) Epoch() uint64 { return v.f.Epoch }
+
+func (v ResumeBoundary) Tick() uint32 { return v.f.Tick }
+
+func (v ResumeBoundary) EventEnd() uint64 { return v.f.EventEnd }
+
+func (v ResumeBoundary) AppliedEvent() uint64 { return v.f.AppliedEvent }
+
+func (v ResumeBoundary) NextIntent() uint32 { return v.f.NextIntent }
+
+func (f ResumeBoundaryFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.Epoch)
+	w.U32(f.Tick)
+	w.U64(f.EventEnd)
+	w.U64(f.AppliedEvent)
+	w.U32(f.NextIntent)
+}
+
+func decodeResumeBoundary(r *codec.Reader) ResumeBoundary {
+	var f ResumeBoundaryFields
+	f.Stream = r.U64()
+	f.Epoch = r.U64()
+	f.Tick = r.U32()
+	f.EventEnd = r.U64()
+	f.AppliedEvent = r.U64()
+	f.NextIntent = r.U32()
+	return ResumeBoundary{f}
+}
+
+func (f ResumeBoundaryFields) appendText(b []byte) []byte {
+	b = append(b, "resume_boundary{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " epoch:"...)
+	b = strconv.AppendUint(b, uint64(f.Epoch), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " event_end:"...)
+	b = strconv.AppendUint(b, uint64(f.EventEnd), 10)
+	b = append(b, " applied_event:"...)
+	b = strconv.AppendUint(b, uint64(f.AppliedEvent), 10)
+	b = append(b, " next_intent:"...)
+	b = strconv.AppendUint(b, uint64(f.NextIntent), 10)
+	return append(b, '}')
+}
+
+func (v ResumeBoundary) String() string { return string(v.f.appendText(nil)) }
+
+func (ResumeBoundary) MessageID() uint32 { return 140 }
+
+func (ResumeBoundary) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (ResumeBoundary) eventsMsg() {}
+
+func (v ResumeBoundary) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(140)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type DialogClearFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+	Npc      NpcId
+}
+
+type DialogClear struct {
+	f DialogClearFields
+}
+
+func (f DialogClearFields) Build() (DialogClear, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return DialogClear{}, err
+	}
+	return DialogClear{f}, nil
+}
+
+func (v DialogClear) Stream() uint64 { return v.f.Stream }
+
+func (v DialogClear) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v DialogClear) Tick() uint32 { return v.f.Tick }
+
+func (v DialogClear) Npc() NpcId { return v.f.Npc }
+
+func (f DialogClearFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+	f.Npc.encode(w)
+}
+
+func decodeDialogClear(r *codec.Reader) DialogClear {
+	var f DialogClearFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	f.Npc = decodeNpcId(r)
+	return DialogClear{f}
+}
+
+func (f DialogClearFields) appendText(b []byte) []byte {
+	b = append(b, "dialog_clear{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " npc:"...)
+	b = f.Npc.appendText(b)
+	return append(b, '}')
+}
+
+func (v DialogClear) String() string { return string(v.f.appendText(nil)) }
+
+func (DialogClear) MessageID() uint32 { return 141 }
+
+func (DialogClear) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (DialogClear) eventsMsg() {}
+
+func (v DialogClear) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(141)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type PartyClearFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+}
+
+type PartyClear struct {
+	f PartyClearFields
+}
+
+func (f PartyClearFields) Build() (PartyClear, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return PartyClear{}, err
+	}
+	return PartyClear{f}, nil
+}
+
+func (v PartyClear) Stream() uint64 { return v.f.Stream }
+
+func (v PartyClear) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v PartyClear) Tick() uint32 { return v.f.Tick }
+
+func (f PartyClearFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+}
+
+func decodePartyClear(r *codec.Reader) PartyClear {
+	var f PartyClearFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	return PartyClear{f}
+}
+
+func (f PartyClearFields) appendText(b []byte) []byte {
+	b = append(b, "party_clear{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	return append(b, '}')
+}
+
+func (v PartyClear) String() string { return string(v.f.appendText(nil)) }
+
+func (PartyClear) MessageID() uint32 { return 142 }
+
+func (PartyClear) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (PartyClear) eventsMsg() {}
+
+func (v PartyClear) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(142)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type InviteClearFields struct {
+	Stream   uint64
+	EventSeq uint64
+	Tick     uint32
+}
+
+type InviteClear struct {
+	f InviteClearFields
+}
+
+func (f InviteClearFields) Build() (InviteClear, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return InviteClear{}, err
+	}
+	return InviteClear{f}, nil
+}
+
+func (v InviteClear) Stream() uint64 { return v.f.Stream }
+
+func (v InviteClear) EventSeq() uint64 { return v.f.EventSeq }
+
+func (v InviteClear) Tick() uint32 { return v.f.Tick }
+
+func (f InviteClearFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.EventSeq)
+	w.U32(f.Tick)
+}
+
+func decodeInviteClear(r *codec.Reader) InviteClear {
+	var f InviteClearFields
+	f.Stream = r.U64()
+	f.EventSeq = r.U64()
+	f.Tick = r.U32()
+	return InviteClear{f}
+}
+
+func (f InviteClearFields) appendText(b []byte) []byte {
+	b = append(b, "invite_clear{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " event_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.EventSeq), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	return append(b, '}')
+}
+
+func (v InviteClear) String() string { return string(v.f.appendText(nil)) }
+
+func (InviteClear) MessageID() uint32 { return 143 }
+
+func (InviteClear) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (InviteClear) eventsMsg() {}
+
+func (v InviteClear) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(143)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type PickupFields struct {
+	Seq  uint32
+	Item ItemId
+}
+
+type Pickup struct {
+	f PickupFields
+}
+
+func (f PickupFields) Build() (Pickup, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Pickup{}, err
+	}
+	return Pickup{f}, nil
+}
+
+func (v Pickup) Seq() uint32 { return v.f.Seq }
+
+func (v Pickup) Item() ItemId { return v.f.Item }
+
+func (f PickupFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	f.Item.encode(w)
+}
+
+func decodePickup(r *codec.Reader) Pickup {
+	var f PickupFields
+	f.Seq = r.U32()
+	f.Item = decodeItemId(r)
+	return Pickup{f}
+}
+
+func (f PickupFields) appendText(b []byte) []byte {
+	b = append(b, "pickup{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " item:"...)
+	b = f.Item.appendText(b)
+	return append(b, '}')
+}
+
+func (v Pickup) String() string { return string(v.f.appendText(nil)) }
+
+func (Pickup) MessageID() uint32 { return 256 }
+
+func (Pickup) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (Pickup) intentsMsg() {}
+
+func (v Pickup) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(256)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type DropFields struct {
+	Seq  uint32
+	Slot uint8
+}
+
+type Drop struct {
+	f DropFields
+}
+
+func (f DropFields) Build() (Drop, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Drop{}, err
+	}
+	return Drop{f}, nil
+}
+
+func (v Drop) Seq() uint32 { return v.f.Seq }
+
+func (v Drop) Slot() uint8 { return v.f.Slot }
+
+func (f DropFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	w.U8(f.Slot)
+}
+
+func decodeDrop(r *codec.Reader) Drop {
+	var f DropFields
+	f.Seq = r.U32()
+	f.Slot = r.U8()
+	return Drop{f}
+}
+
+func (f DropFields) appendText(b []byte) []byte {
+	b = append(b, "drop{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " slot:"...)
+	b = strconv.AppendUint(b, uint64(f.Slot), 10)
+	return append(b, '}')
+}
+
+func (v Drop) String() string { return string(v.f.appendText(nil)) }
+
+func (Drop) MessageID() uint32 { return 257 }
+
+func (Drop) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (Drop) intentsMsg() {}
+
+func (v Drop) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(257)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type EquipFields struct {
+	Seq  uint32
+	Slot uint8
+}
+
+type Equip struct {
+	f EquipFields
+}
+
+func (f EquipFields) Build() (Equip, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Equip{}, err
+	}
+	return Equip{f}, nil
+}
+
+func (v Equip) Seq() uint32 { return v.f.Seq }
+
+func (v Equip) Slot() uint8 { return v.f.Slot }
+
+func (f EquipFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	w.U8(f.Slot)
+}
+
+func decodeEquip(r *codec.Reader) Equip {
+	var f EquipFields
+	f.Seq = r.U32()
+	f.Slot = r.U8()
+	return Equip{f}
+}
+
+func (f EquipFields) appendText(b []byte) []byte {
+	b = append(b, "equip{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " slot:"...)
+	b = strconv.AppendUint(b, uint64(f.Slot), 10)
+	return append(b, '}')
+}
+
+func (v Equip) String() string { return string(v.f.appendText(nil)) }
+
+func (Equip) MessageID() uint32 { return 258 }
+
+func (Equip) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (Equip) intentsMsg() {}
+
+func (v Equip) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(258)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type UnequipFields struct {
+	Seq  uint32
+	Worn string
+}
+
+type Unequip struct {
+	f UnequipFields
+}
+
+func (f UnequipFields) Build() (Unequip, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Unequip{}, err
+	}
+	return Unequip{f}, nil
+}
+
+func (v Unequip) Seq() uint32 { return v.f.Seq }
+
+func (v Unequip) Worn() string { return v.f.Worn }
+
+func (f UnequipFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	w.String(f.Worn, 32)
+}
+
+func decodeUnequip(r *codec.Reader) Unequip {
+	var f UnequipFields
+	f.Seq = r.U32()
+	f.Worn = r.String(32)
+	return Unequip{f}
+}
+
+func (f UnequipFields) appendText(b []byte) []byte {
+	b = append(b, "unequip{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " worn:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Worn)
+	return append(b, '}')
+}
+
+func (v Unequip) String() string { return string(v.f.appendText(nil)) }
+
+func (Unequip) MessageID() uint32 { return 259 }
+
+func (Unequip) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (Unequip) intentsMsg() {}
+
+func (v Unequip) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(259)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type GatherFields struct {
+	Seq  uint32
+	Node NodeId
+}
+
+type Gather struct {
+	f GatherFields
+}
+
+func (f GatherFields) Build() (Gather, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Gather{}, err
+	}
+	return Gather{f}, nil
+}
+
+func (v Gather) Seq() uint32 { return v.f.Seq }
+
+func (v Gather) Node() NodeId { return v.f.Node }
+
+func (f GatherFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	f.Node.encode(w)
+}
+
+func decodeGather(r *codec.Reader) Gather {
+	var f GatherFields
+	f.Seq = r.U32()
+	f.Node = decodeNodeId(r)
+	return Gather{f}
+}
+
+func (f GatherFields) appendText(b []byte) []byte {
+	b = append(b, "gather{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " node:"...)
+	b = f.Node.appendText(b)
+	return append(b, '}')
+}
+
+func (v Gather) String() string { return string(v.f.appendText(nil)) }
+
+func (Gather) MessageID() uint32 { return 260 }
+
+func (Gather) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (Gather) intentsMsg() {}
+
+func (v Gather) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(260)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type UseSelfFields struct {
+	Seq  uint32
+	Slot uint8
+}
+
+type UseSelf struct {
+	f UseSelfFields
+}
+
+func (f UseSelfFields) Build() (UseSelf, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return UseSelf{}, err
+	}
+	return UseSelf{f}, nil
+}
+
+func (v UseSelf) Seq() uint32 { return v.f.Seq }
+
+func (v UseSelf) Slot() uint8 { return v.f.Slot }
+
+func (f UseSelfFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	w.U8(f.Slot)
+}
+
+func decodeUseSelf(r *codec.Reader) UseSelf {
+	var f UseSelfFields
+	f.Seq = r.U32()
+	f.Slot = r.U8()
+	return UseSelf{f}
+}
+
+func (f UseSelfFields) appendText(b []byte) []byte {
+	b = append(b, "use_self{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " slot:"...)
+	b = strconv.AppendUint(b, uint64(f.Slot), 10)
+	return append(b, '}')
+}
+
+func (v UseSelf) String() string { return string(v.f.appendText(nil)) }
+
+func (UseSelf) MessageID() uint32 { return 261 }
+
+func (UseSelf) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (UseSelf) intentsMsg() {}
+
+func (v UseSelf) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(261)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type AttackPlayerFields struct {
+	Seq    uint32
+	Target PlayerId
+}
+
+type AttackPlayer struct {
+	f AttackPlayerFields
+}
+
+func (f AttackPlayerFields) Build() (AttackPlayer, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return AttackPlayer{}, err
+	}
+	return AttackPlayer{f}, nil
+}
+
+func (v AttackPlayer) Seq() uint32 { return v.f.Seq }
+
+func (v AttackPlayer) Target() PlayerId { return v.f.Target }
+
+func (f AttackPlayerFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	f.Target.encode(w)
+}
+
+func decodeAttackPlayer(r *codec.Reader) AttackPlayer {
+	var f AttackPlayerFields
+	f.Seq = r.U32()
+	f.Target = decodePlayerId(r)
+	return AttackPlayer{f}
+}
+
+func (f AttackPlayerFields) appendText(b []byte) []byte {
+	b = append(b, "attack_player{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " target:"...)
+	b = f.Target.appendText(b)
+	return append(b, '}')
+}
+
+func (v AttackPlayer) String() string { return string(v.f.appendText(nil)) }
+
+func (AttackPlayer) MessageID() uint32 { return 262 }
+
+func (AttackPlayer) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (AttackPlayer) intentsMsg() {}
+
+func (v AttackPlayer) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(262)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type RespawnFields struct {
+	Seq uint32
+}
+
+type Respawn struct {
+	f RespawnFields
+}
+
+func (f RespawnFields) Build() (Respawn, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Respawn{}, err
+	}
+	return Respawn{f}, nil
+}
+
+func (v Respawn) Seq() uint32 { return v.f.Seq }
+
+func (f RespawnFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+}
+
+func decodeRespawn(r *codec.Reader) Respawn {
+	var f RespawnFields
+	f.Seq = r.U32()
+	return Respawn{f}
+}
+
+func (f RespawnFields) appendText(b []byte) []byte {
+	b = append(b, "respawn{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	return append(b, '}')
+}
+
+func (v Respawn) String() string { return string(v.f.appendText(nil)) }
+
+func (Respawn) MessageID() uint32 { return 263 }
+
+func (Respawn) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (Respawn) intentsMsg() {}
+
+func (v Respawn) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(263)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type CastSelfFields struct {
+	Seq     uint32
+	Ability string
+}
+
+type CastSelf struct {
+	f CastSelfFields
+}
+
+func (f CastSelfFields) Build() (CastSelf, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return CastSelf{}, err
+	}
+	return CastSelf{f}, nil
+}
+
+func (v CastSelf) Seq() uint32 { return v.f.Seq }
+
+func (v CastSelf) Ability() string { return v.f.Ability }
+
+func (f CastSelfFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	w.String(f.Ability, 64)
+}
+
+func decodeCastSelf(r *codec.Reader) CastSelf {
+	var f CastSelfFields
+	f.Seq = r.U32()
+	f.Ability = r.String(64)
+	return CastSelf{f}
+}
+
+func (f CastSelfFields) appendText(b []byte) []byte {
+	b = append(b, "cast_self{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " ability:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Ability)
+	return append(b, '}')
+}
+
+func (v CastSelf) String() string { return string(v.f.appendText(nil)) }
+
+func (CastSelf) MessageID() uint32 { return 264 }
+
+func (CastSelf) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (CastSelf) intentsMsg() {}
+
+func (v CastSelf) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(264)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type TalkFields struct {
+	Seq uint32
+	Npc NpcId
+}
+
+type Talk struct {
+	f TalkFields
+}
+
+func (f TalkFields) Build() (Talk, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Talk{}, err
+	}
+	return Talk{f}, nil
+}
+
+func (v Talk) Seq() uint32 { return v.f.Seq }
+
+func (v Talk) Npc() NpcId { return v.f.Npc }
+
+func (f TalkFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	f.Npc.encode(w)
+}
+
+func decodeTalk(r *codec.Reader) Talk {
+	var f TalkFields
+	f.Seq = r.U32()
+	f.Npc = decodeNpcId(r)
+	return Talk{f}
+}
+
+func (f TalkFields) appendText(b []byte) []byte {
+	b = append(b, "talk{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " npc:"...)
+	b = f.Npc.appendText(b)
+	return append(b, '}')
+}
+
+func (v Talk) String() string { return string(v.f.appendText(nil)) }
+
+func (Talk) MessageID() uint32 { return 265 }
+
+func (Talk) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (Talk) intentsMsg() {}
+
+func (v Talk) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(265)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type DialogOptionFields struct {
+	Seq    uint32
+	Npc    NpcId
+	Option string
+}
+
+type DialogOption struct {
+	f DialogOptionFields
+}
+
+func (f DialogOptionFields) Build() (DialogOption, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return DialogOption{}, err
+	}
+	return DialogOption{f}, nil
+}
+
+func (v DialogOption) Seq() uint32 { return v.f.Seq }
+
+func (v DialogOption) Npc() NpcId { return v.f.Npc }
+
+func (v DialogOption) Option() string { return v.f.Option }
+
+func (f DialogOptionFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	f.Npc.encode(w)
+	w.String(f.Option, 64)
+}
+
+func decodeDialogOption(r *codec.Reader) DialogOption {
+	var f DialogOptionFields
+	f.Seq = r.U32()
+	f.Npc = decodeNpcId(r)
+	f.Option = r.String(64)
+	return DialogOption{f}
+}
+
+func (f DialogOptionFields) appendText(b []byte) []byte {
+	b = append(b, "dialog_option{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " npc:"...)
+	b = f.Npc.appendText(b)
+	b = append(b, " option:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Option)
+	return append(b, '}')
+}
+
+func (v DialogOption) String() string { return string(v.f.appendText(nil)) }
+
+func (DialogOption) MessageID() uint32 { return 266 }
+
+func (DialogOption) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (DialogOption) intentsMsg() {}
+
+func (v DialogOption) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(266)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type GiveFields struct {
+	Seq  uint32
+	Npc  NpcId
+	Slot uint8
+}
+
+type Give struct {
+	f GiveFields
+}
+
+func (f GiveFields) Build() (Give, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Give{}, err
+	}
+	return Give{f}, nil
+}
+
+func (v Give) Seq() uint32 { return v.f.Seq }
+
+func (v Give) Npc() NpcId { return v.f.Npc }
+
+func (v Give) Slot() uint8 { return v.f.Slot }
+
+func (f GiveFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	f.Npc.encode(w)
+	w.U8(f.Slot)
+}
+
+func decodeGive(r *codec.Reader) Give {
+	var f GiveFields
+	f.Seq = r.U32()
+	f.Npc = decodeNpcId(r)
+	f.Slot = r.U8()
+	return Give{f}
+}
+
+func (f GiveFields) appendText(b []byte) []byte {
+	b = append(b, "give{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " npc:"...)
+	b = f.Npc.appendText(b)
+	b = append(b, " slot:"...)
+	b = strconv.AppendUint(b, uint64(f.Slot), 10)
+	return append(b, '}')
+}
+
+func (v Give) String() string { return string(v.f.appendText(nil)) }
+
+func (Give) MessageID() uint32 { return 267 }
+
+func (Give) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (Give) intentsMsg() {}
+
+func (v Give) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(267)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type PartyInviteFields struct {
+	Seq    uint32
+	Player PlayerId
+}
+
+type PartyInvite struct {
+	f PartyInviteFields
+}
+
+func (f PartyInviteFields) Build() (PartyInvite, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return PartyInvite{}, err
+	}
+	return PartyInvite{f}, nil
+}
+
+func (v PartyInvite) Seq() uint32 { return v.f.Seq }
+
+func (v PartyInvite) Player() PlayerId { return v.f.Player }
+
+func (f PartyInviteFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	f.Player.encode(w)
+}
+
+func decodePartyInvite(r *codec.Reader) PartyInvite {
+	var f PartyInviteFields
+	f.Seq = r.U32()
+	f.Player = decodePlayerId(r)
+	return PartyInvite{f}
+}
+
+func (f PartyInviteFields) appendText(b []byte) []byte {
+	b = append(b, "party_invite{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " player:"...)
+	b = f.Player.appendText(b)
+	return append(b, '}')
+}
+
+func (v PartyInvite) String() string { return string(v.f.appendText(nil)) }
+
+func (PartyInvite) MessageID() uint32 { return 268 }
+
+func (PartyInvite) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (PartyInvite) intentsMsg() {}
+
+func (v PartyInvite) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(268)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type PartyAcceptFields struct {
+	Seq uint32
+}
+
+type PartyAccept struct {
+	f PartyAcceptFields
+}
+
+func (f PartyAcceptFields) Build() (PartyAccept, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return PartyAccept{}, err
+	}
+	return PartyAccept{f}, nil
+}
+
+func (v PartyAccept) Seq() uint32 { return v.f.Seq }
+
+func (f PartyAcceptFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+}
+
+func decodePartyAccept(r *codec.Reader) PartyAccept {
+	var f PartyAcceptFields
+	f.Seq = r.U32()
+	return PartyAccept{f}
+}
+
+func (f PartyAcceptFields) appendText(b []byte) []byte {
+	b = append(b, "party_accept{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	return append(b, '}')
+}
+
+func (v PartyAccept) String() string { return string(v.f.appendText(nil)) }
+
+func (PartyAccept) MessageID() uint32 { return 269 }
+
+func (PartyAccept) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (PartyAccept) intentsMsg() {}
+
+func (v PartyAccept) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(269)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type PartyDeclineFields struct {
+	Seq uint32
+}
+
+type PartyDecline struct {
+	f PartyDeclineFields
+}
+
+func (f PartyDeclineFields) Build() (PartyDecline, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return PartyDecline{}, err
+	}
+	return PartyDecline{f}, nil
+}
+
+func (v PartyDecline) Seq() uint32 { return v.f.Seq }
+
+func (f PartyDeclineFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+}
+
+func decodePartyDecline(r *codec.Reader) PartyDecline {
+	var f PartyDeclineFields
+	f.Seq = r.U32()
+	return PartyDecline{f}
+}
+
+func (f PartyDeclineFields) appendText(b []byte) []byte {
+	b = append(b, "party_decline{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	return append(b, '}')
+}
+
+func (v PartyDecline) String() string { return string(v.f.appendText(nil)) }
+
+func (PartyDecline) MessageID() uint32 { return 270 }
+
+func (PartyDecline) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (PartyDecline) intentsMsg() {}
+
+func (v PartyDecline) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(270)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type PartyLeaveFields struct {
+	Seq uint32
+}
+
+type PartyLeave struct {
+	f PartyLeaveFields
+}
+
+func (f PartyLeaveFields) Build() (PartyLeave, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return PartyLeave{}, err
+	}
+	return PartyLeave{f}, nil
+}
+
+func (v PartyLeave) Seq() uint32 { return v.f.Seq }
+
+func (f PartyLeaveFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+}
+
+func decodePartyLeave(r *codec.Reader) PartyLeave {
+	var f PartyLeaveFields
+	f.Seq = r.U32()
+	return PartyLeave{f}
+}
+
+func (f PartyLeaveFields) appendText(b []byte) []byte {
+	b = append(b, "party_leave{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	return append(b, '}')
+}
+
+func (v PartyLeave) String() string { return string(v.f.appendText(nil)) }
+
+func (PartyLeave) MessageID() uint32 { return 271 }
+
+func (PartyLeave) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (PartyLeave) intentsMsg() {}
+
+func (v PartyLeave) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(271)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type PartyKickFields struct {
+	Seq    uint32
+	Player PlayerId
+}
+
+type PartyKick struct {
+	f PartyKickFields
+}
+
+func (f PartyKickFields) Build() (PartyKick, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return PartyKick{}, err
+	}
+	return PartyKick{f}, nil
+}
+
+func (v PartyKick) Seq() uint32 { return v.f.Seq }
+
+func (v PartyKick) Player() PlayerId { return v.f.Player }
+
+func (f PartyKickFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	f.Player.encode(w)
+}
+
+func decodePartyKick(r *codec.Reader) PartyKick {
+	var f PartyKickFields
+	f.Seq = r.U32()
+	f.Player = decodePlayerId(r)
+	return PartyKick{f}
+}
+
+func (f PartyKickFields) appendText(b []byte) []byte {
+	b = append(b, "party_kick{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " player:"...)
+	b = f.Player.appendText(b)
+	return append(b, '}')
+}
+
+func (v PartyKick) String() string { return string(v.f.appendText(nil)) }
+
+func (PartyKick) MessageID() uint32 { return 272 }
+
+func (PartyKick) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (PartyKick) intentsMsg() {}
+
+func (v PartyKick) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(272)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type AdminFields struct {
+	Seq  uint32
+	Line string
+}
+
+type Admin struct {
+	f AdminFields
+}
+
+func (f AdminFields) Build() (Admin, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Admin{}, err
+	}
+	return Admin{f}, nil
+}
+
+func (v Admin) Seq() uint32 { return v.f.Seq }
+
+func (v Admin) Line() string { return v.f.Line }
+
+func (f AdminFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	w.String(f.Line, 1024)
+}
+
+func decodeAdmin(r *codec.Reader) Admin {
+	var f AdminFields
+	f.Seq = r.U32()
+	f.Line = r.String(1024)
+	return Admin{f}
+}
+
+func (f AdminFields) appendText(b []byte) []byte {
+	b = append(b, "admin{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " line:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Line)
+	return append(b, '}')
+}
+
+func (v Admin) String() string { return string(v.f.appendText(nil)) }
+
+func (Admin) MessageID() uint32 { return 273 }
+
+func (Admin) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (Admin) intentsMsg() {}
+
+func (v Admin) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(273)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type ApplicationCommitFields struct {
+	Stream   uint64
+	Epoch    uint64
+	Tick     uint32
+	EventEnd uint64
+}
+
+type ApplicationCommit struct {
+	f ApplicationCommitFields
+}
+
+func (f ApplicationCommitFields) Build() (ApplicationCommit, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return ApplicationCommit{}, err
+	}
+	return ApplicationCommit{f}, nil
+}
+
+func (v ApplicationCommit) Stream() uint64 { return v.f.Stream }
+
+func (v ApplicationCommit) Epoch() uint64 { return v.f.Epoch }
+
+func (v ApplicationCommit) Tick() uint32 { return v.f.Tick }
+
+func (v ApplicationCommit) EventEnd() uint64 { return v.f.EventEnd }
+
+func (f ApplicationCommitFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.Epoch)
+	w.U32(f.Tick)
+	w.U64(f.EventEnd)
+}
+
+func decodeApplicationCommit(r *codec.Reader) ApplicationCommit {
+	var f ApplicationCommitFields
+	f.Stream = r.U64()
+	f.Epoch = r.U64()
+	f.Tick = r.U32()
+	f.EventEnd = r.U64()
+	return ApplicationCommit{f}
+}
+
+func (f ApplicationCommitFields) appendText(b []byte) []byte {
+	b = append(b, "application_commit{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " epoch:"...)
+	b = strconv.AppendUint(b, uint64(f.Epoch), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " event_end:"...)
+	b = strconv.AppendUint(b, uint64(f.EventEnd), 10)
+	return append(b, '}')
+}
+
+func (v ApplicationCommit) String() string { return string(v.f.appendText(nil)) }
+
+func (ApplicationCommit) MessageID() uint32 { return 274 }
+
+func (ApplicationCommit) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (ApplicationCommit) intentsMsg() {}
+
+func (v ApplicationCommit) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(274)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type UseStationFields struct {
+	Seq  uint32
+	Slot uint8
+	Node NodeId
+}
+
+type UseStation struct {
+	f UseStationFields
+}
+
+func (f UseStationFields) Build() (UseStation, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return UseStation{}, err
+	}
+	return UseStation{f}, nil
+}
+
+func (v UseStation) Seq() uint32 { return v.f.Seq }
+
+func (v UseStation) Slot() uint8 { return v.f.Slot }
+
+func (v UseStation) Node() NodeId { return v.f.Node }
+
+func (f UseStationFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	w.U8(f.Slot)
+	f.Node.encode(w)
+}
+
+func decodeUseStation(r *codec.Reader) UseStation {
+	var f UseStationFields
+	f.Seq = r.U32()
+	f.Slot = r.U8()
+	f.Node = decodeNodeId(r)
+	return UseStation{f}
+}
+
+func (f UseStationFields) appendText(b []byte) []byte {
+	b = append(b, "use_station{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " slot:"...)
+	b = strconv.AppendUint(b, uint64(f.Slot), 10)
+	b = append(b, " node:"...)
+	b = f.Node.appendText(b)
+	return append(b, '}')
+}
+
+func (v UseStation) String() string { return string(v.f.appendText(nil)) }
+
+func (UseStation) MessageID() uint32 { return 275 }
+
+func (UseStation) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (UseStation) intentsMsg() {}
+
+func (v UseStation) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(275)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type AttackNpcFields struct {
+	Seq    uint32
+	Target NpcId
+}
+
+type AttackNpc struct {
+	f AttackNpcFields
+}
+
+func (f AttackNpcFields) Build() (AttackNpc, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return AttackNpc{}, err
+	}
+	return AttackNpc{f}, nil
+}
+
+func (v AttackNpc) Seq() uint32 { return v.f.Seq }
+
+func (v AttackNpc) Target() NpcId { return v.f.Target }
+
+func (f AttackNpcFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	f.Target.encode(w)
+}
+
+func decodeAttackNpc(r *codec.Reader) AttackNpc {
+	var f AttackNpcFields
+	f.Seq = r.U32()
+	f.Target = decodeNpcId(r)
+	return AttackNpc{f}
+}
+
+func (f AttackNpcFields) appendText(b []byte) []byte {
+	b = append(b, "attack_npc{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " target:"...)
+	b = f.Target.appendText(b)
+	return append(b, '}')
+}
+
+func (v AttackNpc) String() string { return string(v.f.appendText(nil)) }
+
+func (AttackNpc) MessageID() uint32 { return 276 }
+
+func (AttackNpc) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (AttackNpc) intentsMsg() {}
+
+func (v AttackNpc) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(276)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type CastPlayerFields struct {
+	Seq     uint32
+	Ability string
+	Target  PlayerId
+}
+
+type CastPlayer struct {
+	f CastPlayerFields
+}
+
+func (f CastPlayerFields) Build() (CastPlayer, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return CastPlayer{}, err
+	}
+	return CastPlayer{f}, nil
+}
+
+func (v CastPlayer) Seq() uint32 { return v.f.Seq }
+
+func (v CastPlayer) Ability() string { return v.f.Ability }
+
+func (v CastPlayer) Target() PlayerId { return v.f.Target }
+
+func (f CastPlayerFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	w.String(f.Ability, 64)
+	f.Target.encode(w)
+}
+
+func decodeCastPlayer(r *codec.Reader) CastPlayer {
+	var f CastPlayerFields
+	f.Seq = r.U32()
+	f.Ability = r.String(64)
+	f.Target = decodePlayerId(r)
+	return CastPlayer{f}
+}
+
+func (f CastPlayerFields) appendText(b []byte) []byte {
+	b = append(b, "cast_player{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " ability:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Ability)
+	b = append(b, " target:"...)
+	b = f.Target.appendText(b)
+	return append(b, '}')
+}
+
+func (v CastPlayer) String() string { return string(v.f.appendText(nil)) }
+
+func (CastPlayer) MessageID() uint32 { return 277 }
+
+func (CastPlayer) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (CastPlayer) intentsMsg() {}
+
+func (v CastPlayer) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(277)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type CastNpcFields struct {
+	Seq     uint32
+	Ability string
+	Target  NpcId
+}
+
+type CastNpc struct {
+	f CastNpcFields
+}
+
+func (f CastNpcFields) Build() (CastNpc, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return CastNpc{}, err
+	}
+	return CastNpc{f}, nil
+}
+
+func (v CastNpc) Seq() uint32 { return v.f.Seq }
+
+func (v CastNpc) Ability() string { return v.f.Ability }
+
+func (v CastNpc) Target() NpcId { return v.f.Target }
+
+func (f CastNpcFields) encode(w *codec.Writer) {
+	w.U32(f.Seq)
+	w.String(f.Ability, 64)
+	f.Target.encode(w)
+}
+
+func decodeCastNpc(r *codec.Reader) CastNpc {
+	var f CastNpcFields
+	f.Seq = r.U32()
+	f.Ability = r.String(64)
+	f.Target = decodeNpcId(r)
+	return CastNpc{f}
+}
+
+func (f CastNpcFields) appendText(b []byte) []byte {
+	b = append(b, "cast_npc{seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " ability:"...)
+	b = strconv.AppendQuoteToASCII(b, f.Ability)
+	b = append(b, " target:"...)
+	b = f.Target.appendText(b)
+	return append(b, '}')
+}
+
+func (v CastNpc) String() string { return string(v.f.appendText(nil)) }
+
+func (CastNpc) MessageID() uint32 { return 278 }
+
+func (CastNpc) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (CastNpc) intentsMsg() {}
+
+func (v CastNpc) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(278)
+	v.f.encode(&w)
+	return w.Result()
+}
+
 func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	var m StateMsg
 	switch r.Varint() {
@@ -1483,8 +4710,38 @@ func DecodeState(b []byte) (StateMsg, error) {
 func DecodeNextEvents(r *codec.Reader) (EventsMsg, error) {
 	var m EventsMsg
 	switch r.Varint() {
-	case 4:
+	case 128:
+		m = decodeInventory(r)
+	case 129:
+		m = decodeEquipment(r)
+	case 130:
+		m = decodeClass(r)
+	case 131:
+		m = decodeSkills(r)
+	case 132:
+		m = decodeQuestLog(r)
+	case 133:
+		m = decodeDialog(r)
+	case 134:
+		m = decodeParty(r)
+	case 135:
+		m = decodeInvite(r)
+	case 136:
+		m = decodeAdminReply(r)
+	case 137:
+		m = decodeCooldown(r)
+	case 138:
 		m = decodeRefused(r)
+	case 139:
+		m = decodeTickClose(r)
+	case 140:
+		m = decodeResumeBoundary(r)
+	case 141:
+		m = decodeDialogClear(r)
+	case 142:
+		m = decodePartyClear(r)
+	case 143:
+		m = decodeInviteClear(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
 	}
@@ -1535,6 +4792,52 @@ func DecodeInput(b []byte) (InputMsg, error) {
 func DecodeNextIntents(r *codec.Reader) (IntentsMsg, error) {
 	var m IntentsMsg
 	switch r.Varint() {
+	case 256:
+		m = decodePickup(r)
+	case 257:
+		m = decodeDrop(r)
+	case 258:
+		m = decodeEquip(r)
+	case 259:
+		m = decodeUnequip(r)
+	case 260:
+		m = decodeGather(r)
+	case 261:
+		m = decodeUseSelf(r)
+	case 262:
+		m = decodeAttackPlayer(r)
+	case 263:
+		m = decodeRespawn(r)
+	case 264:
+		m = decodeCastSelf(r)
+	case 265:
+		m = decodeTalk(r)
+	case 266:
+		m = decodeDialogOption(r)
+	case 267:
+		m = decodeGive(r)
+	case 268:
+		m = decodePartyInvite(r)
+	case 269:
+		m = decodePartyAccept(r)
+	case 270:
+		m = decodePartyDecline(r)
+	case 271:
+		m = decodePartyLeave(r)
+	case 272:
+		m = decodePartyKick(r)
+	case 273:
+		m = decodeAdmin(r)
+	case 274:
+		m = decodeApplicationCommit(r)
+	case 275:
+		m = decodeUseStation(r)
+	case 276:
+		m = decodeAttackNpc(r)
+	case 277:
+		m = decodeCastPlayer(r)
+	case 278:
+		m = decodeCastNpc(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
 	}

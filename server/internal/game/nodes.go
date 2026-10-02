@@ -155,12 +155,14 @@ func (w *World) gather(p *player, msg mnet.Gather, seq mnet.Seq) {
 
 	w.cancelGather(p)
 	p.pending = 0
+ p.pickupOrigin=Origin{}
 	w.clearPendingTalk(p)
 	w.clearPendingUse(p)
 	w.cancelAttack(p, CauseGather)
 	w.cancelCast(p, CauseGather)
 	p.clearSteer()
 	p.gatherNode = n.id
+ p.gatherOrigin=p.origin
 	p.gatherProgress = 0
 	w.log.Event(w.tick, EvGather, withSeq(playerNodeFields(p.id, n.id), seq))
 
@@ -191,6 +193,7 @@ func (w *World) wornKinds(p *player) map[string]string {
 }
 
 func (w *World) resolveGather(p *player) {
+ previous:=p.origin;p.origin=p.gatherOrigin;defer func(){p.origin=previous}()
 	n, live := w.nodes[p.gatherNode]
 	if !live {
 		w.loseGather(p)
@@ -231,7 +234,7 @@ func (w *World) resolveGather(p *player) {
 	case errors.Is(err, ErrInventoryFull):
 		w.log.Event(w.tick, EvGatherNoRoom, playerNodeFields(p.id, n.id))
 		w.clearGather(p)
-		w.send(p, mnet.Error{Re: mnet.MsgGather, Msg: "inventory is full"})
+		w.send(p, mnet.Error{Re: mnet.MsgGather, Msg: "inventory is full",Reason:mnet.ReasonInventoryFull})
 		return
 	case err != nil:
 		panic(fmt.Sprintf("game: granting %s to player %d: %v", yield, p.id, err))
@@ -276,10 +279,11 @@ func (w *World) respawnNodes() {
 }
 
 func (w *World) loseGather(p *player) {
+ previous:=p.origin;p.origin=p.gatherOrigin;defer func(){p.origin=previous}()
 	w.log.Event(w.tick, EvGatherLost, playerNodeFields(p.id, p.gatherNode))
 	w.clearGather(p)
 	w.assignHalt(p)
-	w.send(p, mnet.Error{Re: mnet.MsgGather, Msg: "the node is gone"})
+	w.send(p, mnet.Error{Re: mnet.MsgGather, Msg: "the node is gone",Reason:mnet.ReasonUnknownNode})
 }
 
 func (w *World) cancelGather(p *player) {
@@ -292,6 +296,7 @@ func (w *World) cancelGather(p *player) {
 
 func (w *World) clearGather(p *player) {
 	p.gatherNode = 0
+ p.gatherOrigin=Origin{}
 	p.gatherProgress = 0
 }
 

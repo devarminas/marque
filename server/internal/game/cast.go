@@ -62,6 +62,10 @@ func (t *castTarget) applyDamage(amount int) int {
 }
 
 func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
+	w.castWithTarget(p, msg, seq, combatTargetHandle{})
+}
+
+func (w *World) castWithTarget(p *player, msg mnet.Cast, seq mnet.Seq, handle combatTargetHandle) {
 	if w.refuseIfDead(p, mnet.MsgCast) {
 		return
 	}
@@ -94,6 +98,10 @@ func (w *World) cast(p *player, msg mnet.Cast, seq mnet.Seq) {
 		return
 	}
 
+	if !w.validCombatTarget(msg.Player, handle) {
+		w.refuse(p, &mnet.RejectError{Reason: mnet.ReasonUnknownPlayer, Detail: "unknown target handle", Re: mnet.MsgCast, Disposition: mnet.ReplyError})
+		return
+	}
 	target, rejection := w.resolveCastTarget(p, ability, msg.Player)
 	if rejection != nil {
 		w.refuse(p, rejection)
@@ -210,6 +218,7 @@ func (w *World) castAbility(c combatant, abilityID string, targetID mnet.PlayerI
 func (w *World) preparePlayerCast(p *player, ability abilitydef.Ability) {
 	w.cancelCast(p, CauseReplaced)
 	p.pending = 0
+ p.pickupOrigin=Origin{}
 	w.clearPendingTalk(p)
 	w.closeDialog(p)
 	w.cancelGather(p)
@@ -222,7 +231,8 @@ func (w *World) preparePlayerCast(p *player, ability abilitydef.Ability) {
 
 func (w *World) beginCast(c combatant, ability abilitydef.Ability, targetID mnet.PlayerID, cost int, seq mnet.Seq) {
 	rt := c.runtimeCast()
-	rt.castAbility = ability.ID
+	if p:=playerCombatant(c); p!=nil {rt.castOrigin=p.origin}
+ rt.castAbility = ability.ID
 	rt.castLocomotion = ability.Locomotion
 	rt.castTarget = targetID
 	rt.castProgress = 0
@@ -261,6 +271,7 @@ func (w *World) advanceCast(c combatant) {
 
 func (w *World) finishCast(c combatant) {
 	rt := c.runtimeCast()
+ if p:=playerCombatant(c); p!=nil {previous:=p.origin;p.origin=rt.castOrigin;defer func(){p.origin=previous}()}
 	ability, ok := w.abilities.Get(rt.castAbility)
 	if !ok {
 		w.cancelCast(c, CauseUnknownAbility)
@@ -324,6 +335,7 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 	cooldown := 0
 	if p := playerCombatant(c); p != nil {
 		p.cooldowns.start(ability.ID, ability.CooldownTicks, w.tick)
+ if ability.CooldownTicks>0 {w.emitOwner(p,CooldownValue{ability.ID,uint32(w.tick+int64(ability.CooldownTicks))})}
 		cooldown = ability.CooldownTicks
 	}
 	w.broadcast(mnet.CastPhase{
