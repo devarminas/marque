@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -305,11 +306,26 @@ func order(t *testing.T, received [][]byte, expected []fingerprint) [][]byte {
 }
 func residual(t *testing.T, s *net.UDPConn) {
 	t.Helper()
-	require(t, s.SetReadDeadline(time.Now()) == nil, "residual deadline")
+	queued, err := hasResidual(s)
+	require(t, err == nil && !queued, "unlisted residual UDP queued=%v err=%v", queued, err)
+}
+func hasResidual(s *net.UDPConn) (bool, error) {
+	raw, err := s.SyscallConn()
+	if err != nil {
+		return false, err
+	}
 	b := make([]byte, transport.MaxDatagram+1)
-	_, _, err := s.ReadFromUDP(b)
-	e, ok := err.(net.Error)
-	require(t, ok && e.Timeout(), "unlisted residual UDP err=%v", err)
+	var receiveErr error
+	err = raw.Control(func(fd uintptr) {
+		_, _, receiveErr = syscall.Recvfrom(int(fd), b, syscall.MSG_DONTWAIT)
+	})
+	if err != nil {
+		return false, err
+	}
+	if receiveErr == syscall.EAGAIN || receiveErr == syscall.EWOULDBLOCK {
+		return false, nil
+	}
+	return receiveErr == nil, receiveErr
 }
 func metadata(t *testing.T, b []byte) string {
 	t.Helper()
@@ -397,6 +413,8 @@ func run(t *testing.T, ctx context.Context, helper, profile string, seed uint64,
 	seen := map[fingerprint]bool{}
 	var newestReceivedNonce uint64
 	haveReceivedNonce := false
+	var latestReceivedSequence uint16
+	haveReceivedWindow := false
 	var emittedNonce [2]uint64
 	var haveEmittedNonce [2]bool
 	queued := 0
@@ -479,7 +497,9 @@ func run(t *testing.T, ctx context.Context, helper, profile string, seed uint64,
 			if e != nil {
 				duplicate := seen[f]
 				aged := haveReceivedNonce && packetNonce <= newestReceivedNonce && newestReceivedNonce-packetNonce >= transport.ReplayWindow
-				require(t, (e == transport.ErrMalformed && (duplicate || aged)) || e == transport.ErrTooOld, "server receive %v t=%d duplicate=%v aged=%v", e, now, duplicate, aged)
+				seq := binary.LittleEndian.Uint16(b[12:14])
+				old := haveReceivedWindow && seq-latestReceivedSequence >= 0x8000 && latestReceivedSequence-seq > transport.AckBits
+				require(t, (e == transport.ErrMalformed && (duplicate || aged)) || (e == transport.ErrTooOld && old), "server receive %v t=%d duplicate=%v aged=%v old=%v", e, now, duplicate, aged, old)
 				kind := "aged_nonce"
 				if !duplicate && e == transport.ErrMalformed {
 					agedErrors++
@@ -501,6 +521,8 @@ func run(t *testing.T, ctx context.Context, helper, profile string, seed uint64,
 				newestReceivedNonce = packetNonce
 			}
 			haveReceivedNonce = true
+			latestReceivedSequence = r.OwnAck.Latest
+			haveReceivedWindow = true
 			if r.Stale {
 				serverStale++
 			}
@@ -757,6 +779,27 @@ func fixture(t *testing.T, name string, size int) []byte {
 }
 
 func TestGoCppInterop(t *testing.T) {
+	t.Run("residual_queued_packet", func(t *testing.T) {
+		s := socket(t)
+		defer s.Close()
+		queued, err := hasResidual(s)
+		require(t, err == nil && !queued, "empty socket queued=%v err=%v", queued, err)
+		_, err = s.WriteToUDP(nil, s.LocalAddr().(*net.UDPAddr))
+		require(t, err == nil, "queue empty datagram %v", err)
+		raw, err := s.SyscallConn()
+		require(t, err == nil, "peek connection %v", err)
+		require(t, s.SetReadDeadline(time.Now().Add(3*time.Second)) == nil, "peek deadline")
+		var peekErr error
+		err = raw.Read(func(fd uintptr) bool {
+			_, _, peekErr = syscall.Recvfrom(int(fd), make([]byte, 1), syscall.MSG_DONTWAIT|syscall.MSG_PEEK)
+			return peekErr != syscall.EAGAIN && peekErr != syscall.EWOULDBLOCK
+		})
+		require(t, err == nil && peekErr == nil, "queued datagram ready err=%v peek=%v", err, peekErr)
+		queued, err = hasResidual(s)
+		require(t, err == nil && queued, "queued zero-length datagram missed err=%v", err)
+		queued, err = hasResidual(s)
+		require(t, err == nil && !queued, "drained socket queued=%v err=%v", queued, err)
+	})
 	helper := os.Getenv("TRANSPORT_INTEROP_CLIENT")
 	if helper == "" {
 		t.Skip("external C++ helper absent; run scripts/transport_interop.sh")

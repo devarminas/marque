@@ -172,6 +172,8 @@ int main() {
         std::set<Fingerprint> opened;
         std::uint64_t newest_nonce = 0;
         bool have_nonce = false;
+        std::uint16_t latest_sequence = 0;
+        bool have_window = false;
         std::uint64_t last_emitted_nonce = 0;
         bool emitted_nonce = false;
         for (std::uint32_t step = 0; step < 1000; ++step) {
@@ -259,7 +261,10 @@ int main() {
                     auto error = received.error();
                     bool duplicate = opened.contains(f);
                     bool aged = have_nonce && nonce <= newest_nonce && newest_nonce - nonce >= mt::kReplayWindow;
-                    require((error == mt::Error::malformed && (duplicate || aged)) || error == mt::Error::too_old,
+                    auto seq = static_cast<std::uint16_t>(little(packet, 12, 2));
+                    bool old = have_window && static_cast<std::uint16_t>(seq - latest_sequence) >= 0x8000 &&
+                               static_cast<std::uint16_t>(latest_sequence - seq) > mt::kAckBits;
+                    require((error == mt::Error::malformed && (duplicate || aged)) || (error == mt::Error::too_old && old),
                             std::string("client receive ") + mt::to_string(error));
                     if (error == mt::Error::too_old) opened.insert(f);
                     outcomes.push_back(error == mt::Error::too_old ? 5 : duplicate ? 3 : 4);
@@ -268,6 +273,8 @@ int main() {
                 opened.insert(f);
                 newest_nonce = have_nonce ? std::max(newest_nonce, nonce) : nonce;
                 have_nonce = true;
+                latest_sequence = received->own_ack.latest;
+                have_window = true;
                 outcomes.push_back(received->stale ? 7 : 6);
                 for (const auto& message : received->reliable) {
                     if (!connected) {
