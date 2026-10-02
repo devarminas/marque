@@ -29,7 +29,7 @@ int main() {
 
     const auto before_ok = allocations;
     auto ok = probe::decode_events(one_pair);
-    check(ok.has_value() && std::get<probe::Crowd>(*ok).pairs.size() == 1, "a crowd of one pair decodes");
+    check(ok.has_value() && std::get<probe::Crowd>(*ok).pairs().size() == 1, "a crowd of one pair decodes");
     check(allocations > before_ok, "the allocation counter sees the decoder's list allocation");
 
     const auto before = allocations;

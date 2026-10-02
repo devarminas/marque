@@ -1,0 +1,15 @@
+# A server whose next message id is 65534 numbers three events 65534, 65535
+# and 0. One ack removes all three, the next event is id 1, and none of the
+# acked events is sent again.
+endpoint server 0123456789abcdef 4800 1024 262144 200000 plain 0 65534 0 0
+send 0401
+send 0402
+send 0403
+flush 40000
+> datagram 4d525131efcdab89674523010000ffff00000000020300feff0001020401ffff000102040200000001020403
+recv 60000 4d525131efcdab89674523010000000000000000
+send 0404
+flush 80000
+> datagram 4d525131efcdab8967452301010000000000000002010001000001020404
+flush 240000
+> datagram 4d525131efcdab89674523010200000000000000

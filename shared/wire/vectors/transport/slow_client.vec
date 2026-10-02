@@ -1,0 +1,15 @@
+# With BacklogLimit 2, a third unacked event closes the connection as
+# slow_client. After that it sends nothing and refuses sends and datagrams.
+endpoint server 0123456789abcdef 4800 2 262144 200000 plain 0 0 0 0
+send 0401
+send 0402
+flush 40000
+> datagram 4d525131efcdab89674523010000ffff000000000202000000000102040101000001020402
+send 0403
+flush 80000 2 02
+> unreliable_sent 0
+> state slow_client
+send 0404
+> error closed
+recv 90000 4d525131efcdab89674523010000000000000000
+> error closed

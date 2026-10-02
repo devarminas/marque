@@ -1,0 +1,17 @@
+# Keepalives go out once KeepaliveAfter passes with nothing sent. The
+# connection times out TimeoutAfter after the last accepted datagram. A closed
+# connection refuses sends.
+endpoint client 0123456789abcdef 4800 1024 262144 200000 plain 0 0 0 0
+flush 40000
+flush 100000
+> datagram 4d525131efcdab89674523010000ffff00000000
+flush 199999
+flush 200000
+> datagram 4d525131efcdab89674523010100ffff00000000
+recv 1000000 4d525131efcdab89674523010000ffff00000000
+flush 5999999
+> datagram 4d525131efcdab89674523010200000000000000
+flush 6000000
+> state timed_out
+send 05
+> error closed

@@ -3,7 +3,9 @@ package codec
 import (
 	"encoding/binary"
 	"errors"
+	"iter"
 	"math"
+	"slices"
 	"unicode/utf8"
 )
 
@@ -41,6 +43,7 @@ var (
 	ErrBadEnum        = errors.New("wire: unknown enum value")
 	ErrBadVarint      = errors.New("wire: overlong or oversized varint")
 	ErrBadUTF8        = errors.New("wire: string is not valid UTF-8")
+	ErrRule           = errors.New("wire: value breaks a schema rule")
 )
 
 type Quant struct {
@@ -49,19 +52,28 @@ type Quant struct {
 	Width             int
 }
 
+func (q Quant) Step(v float64) uint64 { return uint64(math.Round(v*q.PerUnit) - q.Min*q.PerUnit) }
+
 type Writer struct {
 	buf   []byte
 	start int
 	err   error
+	check bool
 }
 
 func NewWriter(dst []byte) Writer { return Writer{buf: dst, start: len(dst)} }
+
+func NewChecker() Writer { return Writer{check: true} }
 
 func (w *Writer) Fail(err error) {
 	if w.err == nil {
 		w.err = err
 	}
 }
+
+func (w *Writer) Err() error { return w.err }
+
+func (w *Writer) writing() bool { return w.err == nil && !w.check }
 
 func (w *Writer) Result() ([]byte, error) {
 	if w.err != nil {
@@ -71,25 +83,25 @@ func (w *Writer) Result() ([]byte, error) {
 }
 
 func (w *Writer) U8(v uint8) {
-	if w.err == nil {
+	if w.writing() {
 		w.buf = append(w.buf, v)
 	}
 }
 
 func (w *Writer) U16(v uint16) {
-	if w.err == nil {
+	if w.writing() {
 		w.buf = binary.LittleEndian.AppendUint16(w.buf, v)
 	}
 }
 
 func (w *Writer) U32(v uint32) {
-	if w.err == nil {
+	if w.writing() {
 		w.buf = binary.LittleEndian.AppendUint32(w.buf, v)
 	}
 }
 
 func (w *Writer) U64(v uint64) {
-	if w.err == nil {
+	if w.writing() {
 		w.buf = binary.LittleEndian.AppendUint64(w.buf, v)
 	}
 }
@@ -111,7 +123,7 @@ func (w *Writer) F32(v float32) {
 }
 
 func (w *Writer) Varint(v uint32) {
-	if w.err == nil {
+	if w.writing() {
 		w.buf = binary.AppendUvarint(w.buf, uint64(v))
 	}
 }
@@ -130,7 +142,7 @@ func (w *Writer) String(s string, bound int) {
 		return
 	}
 	w.Count(len(s), bound)
-	if w.err == nil {
+	if w.writing() {
 		w.buf = append(w.buf, s...)
 	}
 }
@@ -144,7 +156,7 @@ func (w *Writer) Quant(v float64, q Quant) {
 		w.Fail(ErrOutOfRange)
 		return
 	}
-	w.fixed(uint64(math.Round(v*q.PerUnit)-q.Min*q.PerUnit), q.Width)
+	w.fixed(q.Step(v), q.Width)
 }
 
 func (w *Writer) fixed(v uint64, width int) {
@@ -311,4 +323,34 @@ func (r *Reader) Quant(q Quant) float64 {
 		return 0
 	}
 	return (float64(n) + q.Min*q.PerUnit) / q.PerUnit
+}
+
+func Unique(n int, equal func(i, j int) bool) bool {
+	for i := 1; i < n; i++ {
+		for j := 0; j < i; j++ {
+			if equal(i, j) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func Clone[T any](s []T) []T {
+	if len(s) == 0 {
+		return nil
+	}
+	return append([]T(nil), s...)
+}
+
+type List[T any] struct{ s []T }
+
+func ListOf[T any](s []T) List[T] { return List[T]{s} }
+
+func (l List[T]) Len() int { return len(l.s) }
+
+func (l List[T]) At(i int) T { return l.s[i] }
+
+func (l List[T]) All() iter.Seq2[int, T] {
+	return slices.All(l.s)
 }

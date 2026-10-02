@@ -4,6 +4,7 @@ package wire
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
@@ -57,7 +58,15 @@ func decodePlayerId(r *codec.Reader) (v PlayerId) {
 	return v
 }
 
-func (v PlayerId) String() string { return fmt.Sprintf("PlayerId(%d/%d)", v.Index, v.Gen) }
+func (v PlayerId) appendText(b []byte) []byte {
+	b = append(b, "PlayerId("...)
+	b = strconv.AppendUint(b, uint64(v.Index), 10)
+	b = append(b, '/')
+	b = strconv.AppendUint(b, uint64(v.Gen), 10)
+	return append(b, ')')
+}
+
+func (v PlayerId) String() string { return string(v.appendText(nil)) }
 
 type NpcId struct {
 	Index uint32
@@ -75,7 +84,15 @@ func decodeNpcId(r *codec.Reader) (v NpcId) {
 	return v
 }
 
-func (v NpcId) String() string { return fmt.Sprintf("NpcId(%d/%d)", v.Index, v.Gen) }
+func (v NpcId) appendText(b []byte) []byte {
+	b = append(b, "NpcId("...)
+	b = strconv.AppendUint(b, uint64(v.Index), 10)
+	b = append(b, '/')
+	b = strconv.AppendUint(b, uint64(v.Gen), 10)
+	return append(b, ')')
+}
+
+func (v NpcId) String() string { return string(v.appendText(nil)) }
 
 type ItemId struct {
 	Index uint32
@@ -93,7 +110,15 @@ func decodeItemId(r *codec.Reader) (v ItemId) {
 	return v
 }
 
-func (v ItemId) String() string { return fmt.Sprintf("ItemId(%d/%d)", v.Index, v.Gen) }
+func (v ItemId) appendText(b []byte) []byte {
+	b = append(b, "ItemId("...)
+	b = strconv.AppendUint(b, uint64(v.Index), 10)
+	b = append(b, '/')
+	b = strconv.AppendUint(b, uint64(v.Gen), 10)
+	return append(b, ')')
+}
+
+func (v ItemId) String() string { return string(v.appendText(nil)) }
 
 type NodeId struct {
 	Index uint32
@@ -111,7 +136,15 @@ func decodeNodeId(r *codec.Reader) (v NodeId) {
 	return v
 }
 
-func (v NodeId) String() string { return fmt.Sprintf("NodeId(%d/%d)", v.Index, v.Gen) }
+func (v NodeId) appendText(b []byte) []byte {
+	b = append(b, "NodeId("...)
+	b = strconv.AppendUint(b, uint64(v.Index), 10)
+	b = append(b, '/')
+	b = strconv.AppendUint(b, uint64(v.Gen), 10)
+	return append(b, ')')
+}
+
+func (v NodeId) String() string { return string(v.appendText(nil)) }
 
 type RefuseReason uint32
 
@@ -169,31 +202,63 @@ func decodeRefuseReason(r *codec.Reader) RefuseReason {
 	return v
 }
 
-type Input struct {
+type InputFields struct {
 	Dx   float64
 	Dz   float64
 	Jump bool
 	Seq  uint32
 }
 
-func (v Input) encode(w *codec.Writer) {
-	w.Quant(v.Dx, quantWish)
-	w.Quant(v.Dz, quantWish)
-	w.Bool(v.Jump)
-	w.U32(v.Seq)
+type Input struct {
+	f InputFields
 }
 
-func decodeInput(r *codec.Reader) (v Input) {
-	v.Dx = r.Quant(quantWish)
-	v.Dz = r.Quant(quantWish)
-	v.Jump = r.Bool()
-	v.Seq = r.U32()
-	return v
+func (f InputFields) Build() (Input, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Input{}, err
+	}
+	return Input{f}, nil
 }
 
-func (v Input) String() string {
-	return fmt.Sprintf("input{dx:%v dz:%v jump:%v seq:%v}", v.Dx, v.Dz, v.Jump, v.Seq)
+func (v Input) Dx() float64 { return v.f.Dx }
+
+func (v Input) Dz() float64 { return v.f.Dz }
+
+func (v Input) Jump() bool { return v.f.Jump }
+
+func (v Input) Seq() uint32 { return v.f.Seq }
+
+func (f InputFields) encode(w *codec.Writer) {
+	w.Quant(f.Dx, quantWish)
+	w.Quant(f.Dz, quantWish)
+	w.Bool(f.Jump)
+	w.U32(f.Seq)
 }
+
+func decodeInput(r *codec.Reader) Input {
+	var f InputFields
+	f.Dx = r.Quant(quantWish)
+	f.Dz = r.Quant(quantWish)
+	f.Jump = r.Bool()
+	f.Seq = r.U32()
+	return Input{f}
+}
+
+func (f InputFields) appendText(b []byte) []byte {
+	b = append(b, "input{dx:"...)
+	b = strconv.AppendFloat(b, f.Dx, 'g', -1, 64)
+	b = append(b, " dz:"...)
+	b = strconv.AppendFloat(b, f.Dz, 'g', -1, 64)
+	b = append(b, " jump:"...)
+	b = strconv.AppendBool(b, f.Jump)
+	b = append(b, " seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	return append(b, '}')
+}
+
+func (v Input) String() string { return string(v.f.appendText(nil)) }
 
 func (Input) MessageID() uint32 { return 1 }
 
@@ -204,35 +269,67 @@ func (Input) inputMsg() {}
 func (v Input) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
 	w.Varint(1)
-	v.encode(&w)
+	v.f.encode(&w)
 	return w.Result()
 }
 
-type Pose struct {
+type PoseFields struct {
 	Id PlayerId
 	X  float64
 	Y  float64
 	Z  float64
 }
 
-func (v Pose) encode(w *codec.Writer) {
-	v.Id.encode(w)
-	w.Quant(v.X, quantPos)
-	w.Quant(v.Y, quantPos)
-	w.Quant(v.Z, quantPos)
+type Pose struct {
+	f PoseFields
 }
 
-func decodePose(r *codec.Reader) (v Pose) {
-	v.Id = decodePlayerId(r)
-	v.X = r.Quant(quantPos)
-	v.Y = r.Quant(quantPos)
-	v.Z = r.Quant(quantPos)
-	return v
+func (f PoseFields) Build() (Pose, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Pose{}, err
+	}
+	return Pose{f}, nil
 }
 
-func (v Pose) String() string {
-	return fmt.Sprintf("pose{id:%v x:%v y:%v z:%v}", v.Id, v.X, v.Y, v.Z)
+func (v Pose) Id() PlayerId { return v.f.Id }
+
+func (v Pose) X() float64 { return v.f.X }
+
+func (v Pose) Y() float64 { return v.f.Y }
+
+func (v Pose) Z() float64 { return v.f.Z }
+
+func (f PoseFields) encode(w *codec.Writer) {
+	f.Id.encode(w)
+	w.Quant(f.X, quantPos)
+	w.Quant(f.Y, quantPos)
+	w.Quant(f.Z, quantPos)
 }
+
+func decodePose(r *codec.Reader) Pose {
+	var f PoseFields
+	f.Id = decodePlayerId(r)
+	f.X = r.Quant(quantPos)
+	f.Y = r.Quant(quantPos)
+	f.Z = r.Quant(quantPos)
+	return Pose{f}
+}
+
+func (f PoseFields) appendText(b []byte) []byte {
+	b = append(b, "pose{id:"...)
+	b = f.Id.appendText(b)
+	b = append(b, " x:"...)
+	b = strconv.AppendFloat(b, f.X, 'g', -1, 64)
+	b = append(b, " y:"...)
+	b = strconv.AppendFloat(b, f.Y, 'g', -1, 64)
+	b = append(b, " z:"...)
+	b = strconv.AppendFloat(b, f.Z, 'g', -1, 64)
+	return append(b, '}')
+}
+
+func (v Pose) String() string { return string(v.f.appendText(nil)) }
 
 func (Pose) MessageID() uint32 { return 2 }
 
@@ -243,32 +340,60 @@ func (Pose) stateMsg() {}
 func (v Pose) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
 	w.Varint(2)
-	v.encode(&w)
+	v.f.encode(&w)
 	return w.Result()
 }
 
-type Hp struct {
+type HpFields struct {
 	Id    PlayerId
 	Hp    uint32
 	MaxHp uint32
 }
 
-func (v Hp) encode(w *codec.Writer) {
-	v.Id.encode(w)
-	w.U32(v.Hp)
-	w.U32(v.MaxHp)
+type Hp struct {
+	f HpFields
 }
 
-func decodeHp(r *codec.Reader) (v Hp) {
-	v.Id = decodePlayerId(r)
-	v.Hp = r.U32()
-	v.MaxHp = r.U32()
-	return v
+func (f HpFields) Build() (Hp, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Hp{}, err
+	}
+	return Hp{f}, nil
 }
 
-func (v Hp) String() string {
-	return fmt.Sprintf("hp{id:%v hp:%v max_hp:%v}", v.Id, v.Hp, v.MaxHp)
+func (v Hp) Id() PlayerId { return v.f.Id }
+
+func (v Hp) Hp() uint32 { return v.f.Hp }
+
+func (v Hp) MaxHp() uint32 { return v.f.MaxHp }
+
+func (f HpFields) encode(w *codec.Writer) {
+	f.Id.encode(w)
+	w.U32(f.Hp)
+	w.U32(f.MaxHp)
 }
+
+func decodeHp(r *codec.Reader) Hp {
+	var f HpFields
+	f.Id = decodePlayerId(r)
+	f.Hp = r.U32()
+	f.MaxHp = r.U32()
+	return Hp{f}
+}
+
+func (f HpFields) appendText(b []byte) []byte {
+	b = append(b, "hp{id:"...)
+	b = f.Id.appendText(b)
+	b = append(b, " hp:"...)
+	b = strconv.AppendUint(b, uint64(f.Hp), 10)
+	b = append(b, " max_hp:"...)
+	b = strconv.AppendUint(b, uint64(f.MaxHp), 10)
+	return append(b, '}')
+}
+
+func (v Hp) String() string { return string(v.f.appendText(nil)) }
 
 func (Hp) MessageID() uint32 { return 3 }
 
@@ -279,32 +404,60 @@ func (Hp) stateMsg() {}
 func (v Hp) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
 	w.Varint(3)
-	v.encode(&w)
+	v.f.encode(&w)
 	return w.Result()
 }
 
-type Refused struct {
+type RefusedFields struct {
 	Tick   uint32
 	Seq    uint32
 	Reason RefuseReason
 }
 
-func (v Refused) encode(w *codec.Writer) {
-	w.U32(v.Tick)
-	w.U32(v.Seq)
-	v.Reason.encode(w)
+type Refused struct {
+	f RefusedFields
 }
 
-func decodeRefused(r *codec.Reader) (v Refused) {
-	v.Tick = r.U32()
-	v.Seq = r.U32()
-	v.Reason = decodeRefuseReason(r)
-	return v
+func (f RefusedFields) Build() (Refused, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return Refused{}, err
+	}
+	return Refused{f}, nil
 }
 
-func (v Refused) String() string {
-	return fmt.Sprintf("refused{tick:%v seq:%v reason:%v}", v.Tick, v.Seq, v.Reason)
+func (v Refused) Tick() uint32 { return v.f.Tick }
+
+func (v Refused) Seq() uint32 { return v.f.Seq }
+
+func (v Refused) Reason() RefuseReason { return v.f.Reason }
+
+func (f RefusedFields) encode(w *codec.Writer) {
+	w.U32(f.Tick)
+	w.U32(f.Seq)
+	f.Reason.encode(w)
 }
+
+func decodeRefused(r *codec.Reader) Refused {
+	var f RefusedFields
+	f.Tick = r.U32()
+	f.Seq = r.U32()
+	f.Reason = decodeRefuseReason(r)
+	return Refused{f}
+}
+
+func (f RefusedFields) appendText(b []byte) []byte {
+	b = append(b, "refused{tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " seq:"...)
+	b = strconv.AppendUint(b, uint64(f.Seq), 10)
+	b = append(b, " reason:"...)
+	b = append(b, f.Reason.String()...)
+	return append(b, '}')
+}
+
+func (v Refused) String() string { return string(v.f.appendText(nil)) }
 
 func (Refused) MessageID() uint32 { return 4 }
 
@@ -315,7 +468,7 @@ func (Refused) eventsMsg() {}
 func (v Refused) Append(dst []byte) ([]byte, error) {
 	w := codec.NewWriter(dst)
 	w.Varint(4)
-	v.encode(&w)
+	v.f.encode(&w)
 	return w.Result()
 }
 

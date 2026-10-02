@@ -1,0 +1,11 @@
+# A client whose next expected message id is 65534 buffers ids 0 and 65535,
+# delivers 65534, 65535 and 0 in order once 65534 arrives, then ignores
+# repeats of 65535 and 0, which are behind next (reassembly rule 1).
+endpoint client 0123456789abcdef 4800 1024 262144 200000 plain 0 0 65534 0
+recv 10000 4d525131efcdab89674523010000ffff0000000002020000000001020400ffff00010204ff
+recv 20000 4d525131efcdab89674523010100ffff00000000020100feff00010204fe
+> reliable 04fe
+> reliable 04ff
+> reliable 0400
+recv 30000 4d525131efcdab89674523010200ffff00000000020300ffff00010204ee000000010204ee01000001020401
+> reliable 0401
