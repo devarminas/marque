@@ -42,6 +42,7 @@ func (w *World) pickup(p *player, msg mnet.Pickup, seq mnet.Seq) {
 	}
 
 	p.pending = item.ID
+ p.pickupOrigin=p.origin
 	w.clearPendingTalk(p)
 	w.cancelGather(p)
 	w.clearPendingUse(p)
@@ -88,6 +89,7 @@ func (w *World) drop(p *player, msg mnet.Drop, seq mnet.Seq) {
 }
 
 func (w *World) resolvePickup(p *player) {
+ previous:=p.origin;p.origin=p.pickupOrigin;defer func(){p.origin=previous}()
 	item, live := w.items.GroundItem(p.pending)
 	if !live {
 		w.losePickup(p)
@@ -102,8 +104,9 @@ func (w *World) resolvePickup(p *player) {
 	case errors.Is(err, ErrInventoryFull):
 		w.log.Event(w.tick, EvPickupNoRoom, playerItemFields(p.id, item.ID))
 		p.pending = 0
+ p.pickupOrigin=Origin{}
 		p.clearSteer()
-		w.send(p, mnet.Error{Re: mnet.MsgPickup, Msg: "inventory is full"})
+		w.send(p, mnet.Error{Re: mnet.MsgPickup, Msg: "inventory is full",Reason:mnet.ReasonInventoryFull})
 		return
 	case errors.Is(err, ErrNoSuchItem):
 		w.losePickup(p)
@@ -113,6 +116,7 @@ func (w *World) resolvePickup(p *player) {
 	}
 
 	p.pending = 0
+ p.pickupOrigin=Origin{}
 	p.clearSteer()
 	fields := playerItemFields(p.id, item.ID)
 	fields["kind"] = item.Kind
@@ -124,10 +128,12 @@ func (w *World) resolvePickup(p *player) {
 }
 
 func (w *World) losePickup(p *player) {
+ previous:=p.origin;p.origin=p.pickupOrigin;defer func(){p.origin=previous}()
 	w.log.Event(w.tick, EvPickupLost, playerItemFields(p.id, p.pending))
 	p.pending = 0
+ p.pickupOrigin=Origin{}
 	w.assignHalt(p)
-	w.send(p, mnet.Error{Re: mnet.MsgPickup, Msg: "the item is gone"})
+	w.send(p, mnet.Error{Re: mnet.MsgPickup, Msg: "the item is gone",Reason:mnet.ReasonUnknownItem})
 }
 
 func (w *World) assignHalt(p *player) {

@@ -115,6 +115,42 @@ namespace {
     case RefuseReason::out_of_range:
     case RefuseReason::cooldown:
     case RefuseReason::dead:
+    case RefuseReason::protocol_error:
+    case RefuseReason::illegal_sample:
+    case RefuseReason::unknown_item:
+    case RefuseReason::no_such_slot:
+    case RefuseReason::empty_slot:
+    case RefuseReason::not_equippable:
+    case RefuseReason::no_such_worn_slot:
+    case RefuseReason::empty_worn_slot:
+    case RefuseReason::inventory_full:
+    case RefuseReason::unknown_node:
+    case RefuseReason::node_depleted:
+    case RefuseReason::needs_class:
+    case RefuseReason::no_recipe:
+    case RefuseReason::missing_mat:
+    case RefuseReason::unknown_player:
+    case RefuseReason::self:
+    case RefuseReason::target_dead:
+    case RefuseReason::not_dead:
+    case RefuseReason::no_dialog:
+    case RefuseReason::unknown_option:
+    case RefuseReason::quest_active:
+    case RefuseReason::quest_complete:
+    case RefuseReason::quest_inactive:
+    case RefuseReason::quest_incomplete:
+    case RefuseReason::wrong_item:
+    case RefuseReason::not_leader:
+    case RefuseReason::party_full:
+    case RefuseReason::already_in_party:
+    case RefuseReason::duplicate_invite:
+    case RefuseReason::no_invite:
+    case RefuseReason::not_in_party:
+    case RefuseReason::not_same_party:
+    case RefuseReason::unauthorized:
+    case RefuseReason::usage:
+    case RefuseReason::non_finite:
+    case RefuseReason::out_of_bounds:
         return true;
     }
     return false;
@@ -157,9 +193,344 @@ namespace {
     case RefuseReason::dead:
         out += "dead";
         return;
+    case RefuseReason::protocol_error:
+        out += "protocol_error";
+        return;
+    case RefuseReason::illegal_sample:
+        out += "illegal_sample";
+        return;
+    case RefuseReason::unknown_item:
+        out += "unknown_item";
+        return;
+    case RefuseReason::no_such_slot:
+        out += "no_such_slot";
+        return;
+    case RefuseReason::empty_slot:
+        out += "empty_slot";
+        return;
+    case RefuseReason::not_equippable:
+        out += "not_equippable";
+        return;
+    case RefuseReason::no_such_worn_slot:
+        out += "no_such_worn_slot";
+        return;
+    case RefuseReason::empty_worn_slot:
+        out += "empty_worn_slot";
+        return;
+    case RefuseReason::inventory_full:
+        out += "inventory_full";
+        return;
+    case RefuseReason::unknown_node:
+        out += "unknown_node";
+        return;
+    case RefuseReason::node_depleted:
+        out += "node_depleted";
+        return;
+    case RefuseReason::needs_class:
+        out += "needs_class";
+        return;
+    case RefuseReason::no_recipe:
+        out += "no_recipe";
+        return;
+    case RefuseReason::missing_mat:
+        out += "missing_mat";
+        return;
+    case RefuseReason::unknown_player:
+        out += "unknown_player";
+        return;
+    case RefuseReason::self:
+        out += "self";
+        return;
+    case RefuseReason::target_dead:
+        out += "target_dead";
+        return;
+    case RefuseReason::not_dead:
+        out += "not_dead";
+        return;
+    case RefuseReason::no_dialog:
+        out += "no_dialog";
+        return;
+    case RefuseReason::unknown_option:
+        out += "unknown_option";
+        return;
+    case RefuseReason::quest_active:
+        out += "quest_active";
+        return;
+    case RefuseReason::quest_complete:
+        out += "quest_complete";
+        return;
+    case RefuseReason::quest_inactive:
+        out += "quest_inactive";
+        return;
+    case RefuseReason::quest_incomplete:
+        out += "quest_incomplete";
+        return;
+    case RefuseReason::wrong_item:
+        out += "wrong_item";
+        return;
+    case RefuseReason::not_leader:
+        out += "not_leader";
+        return;
+    case RefuseReason::party_full:
+        out += "party_full";
+        return;
+    case RefuseReason::already_in_party:
+        out += "already_in_party";
+        return;
+    case RefuseReason::duplicate_invite:
+        out += "duplicate_invite";
+        return;
+    case RefuseReason::no_invite:
+        out += "no_invite";
+        return;
+    case RefuseReason::not_in_party:
+        out += "not_in_party";
+        return;
+    case RefuseReason::not_same_party:
+        out += "not_same_party";
+        return;
+    case RefuseReason::unauthorized:
+        out += "unauthorized";
+        return;
+    case RefuseReason::usage:
+        out += "usage";
+        return;
+    case RefuseReason::non_finite:
+        out += "non_finite";
+        return;
+    case RefuseReason::out_of_bounds:
+        out += "out_of_bounds";
+        return;
     }
     out += "RefuseReason(" + std::to_string(static_cast<std::uint32_t>(v)) + ")";
 }
+
+[[maybe_unused]] bool valid(OriginSource v) {
+    switch (v) {
+    case OriginSource::input:
+    case OriginSource::intent:
+        return true;
+    }
+    return false;
+}
+
+[[maybe_unused]] void write(codec::Writer& w, OriginSource v) {
+    if (!valid(v)) {
+        w.fail(codec::Error::bad_enum);
+        return;
+    }
+    w.varint(static_cast<std::uint32_t>(v));
+}
+
+[[maybe_unused]] OriginSource read_OriginSource(codec::Reader& r) {
+    const auto v = static_cast<OriginSource>(r.varint());
+    if (!r.error() && !valid(v)) r.fail(codec::Error::bad_enum);
+    return v;
+}
+
+[[maybe_unused]] void text(std::string& out, OriginSource v) {
+    switch (v) {
+    case OriginSource::input:
+        out += "input";
+        return;
+    case OriginSource::intent:
+        out += "intent";
+        return;
+    }
+    out += "OriginSource(" + std::to_string(static_cast<std::uint32_t>(v)) + ")";
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const BagEntryFields& f) {
+    w.u8(f.slot);
+    if (!w.error() && !(f.slot <= std::uint8_t{27})) w.fail(codec::Error::rule);
+    w.string(f.kind, 64);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const BagEntry& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] BagEntry read_BagEntry(codec::Reader& r) {
+    BagEntryFields f;
+    f.slot = r.u8();
+    if (!r.error() && !(f.slot <= std::uint8_t{27})) r.fail(codec::Error::rule);
+    f.kind = r.string(64);
+    return detail::Access::make<BagEntry>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const BagEntryFields& f) {
+    out += "BagEntry{slot:";
+    out += std::to_string(static_cast<unsigned long long>(f.slot));
+    out += " kind:";
+    codec::text_quoted(out, f.kind);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const BagEntry& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const WornNameFields& f) {
+    w.string(f.name, 32);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const WornName& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] WornName read_WornName(codec::Reader& r) {
+    WornNameFields f;
+    f.name = r.string(32);
+    return detail::Access::make<WornName>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const WornNameFields& f) {
+    out += "WornName{name:";
+    codec::text_quoted(out, f.name);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const WornName& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const WornEntryFields& f) {
+    w.string(f.slot, 32);
+    w.string(f.kind, 64);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const WornEntry& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] WornEntry read_WornEntry(codec::Reader& r) {
+    WornEntryFields f;
+    f.slot = r.string(32);
+    f.kind = r.string(64);
+    return detail::Access::make<WornEntry>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const WornEntryFields& f) {
+    out += "WornEntry{slot:";
+    codec::text_quoted(out, f.slot);
+    out += " kind:";
+    codec::text_quoted(out, f.kind);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const WornEntry& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const SkillEntryFields& f) {
+    w.string(f.id, 64);
+    w.u64(static_cast<std::uint64_t>(f.xp));
+    if (!w.error() && !(f.xp >= std::int64_t{0LL})) w.fail(codec::Error::rule);
+    w.u32(f.level);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const SkillEntry& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] SkillEntry read_SkillEntry(codec::Reader& r) {
+    SkillEntryFields f;
+    f.id = r.string(64);
+    f.xp = static_cast<std::int64_t>(r.u64());
+    if (!r.error() && !(f.xp >= std::int64_t{0LL})) r.fail(codec::Error::rule);
+    f.level = r.u32();
+    return detail::Access::make<SkillEntry>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const SkillEntryFields& f) {
+    out += "SkillEntry{id:";
+    codec::text_quoted(out, f.id);
+    out += " xp:";
+    out += std::to_string(static_cast<long long>(f.xp));
+    out += " level:";
+    out += std::to_string(static_cast<unsigned long long>(f.level));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const SkillEntry& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const QuestEntryFields& f) {
+    w.string(f.id, 64);
+    w.string(f.title, 256);
+    w.string(f.objective, 512);
+    w.string(f.status, 32);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const QuestEntry& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] QuestEntry read_QuestEntry(codec::Reader& r) {
+    QuestEntryFields f;
+    f.id = r.string(64);
+    f.title = r.string(256);
+    f.objective = r.string(512);
+    f.status = r.string(32);
+    return detail::Access::make<QuestEntry>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const QuestEntryFields& f) {
+    out += "QuestEntry{id:";
+    codec::text_quoted(out, f.id);
+    out += " title:";
+    codec::text_quoted(out, f.title);
+    out += " objective:";
+    codec::text_quoted(out, f.objective);
+    out += " status:";
+    codec::text_quoted(out, f.status);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const QuestEntry& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const TextLineFields& f) {
+    w.string(f.text, 1024);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const TextLine& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] TextLine read_TextLine(codec::Reader& r) {
+    TextLineFields f;
+    f.text = r.string(1024);
+    return detail::Access::make<TextLine>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const TextLineFields& f) {
+    out += "TextLine{text:";
+    codec::text_quoted(out, f.text);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const TextLine& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const DialogChoiceFields& f) {
+    w.string(f.id, 64);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const DialogChoice& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] DialogChoice read_DialogChoice(codec::Reader& r) {
+    DialogChoiceFields f;
+    f.id = r.string(64);
+    return detail::Access::make<DialogChoice>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const DialogChoiceFields& f) {
+    out += "DialogChoice{id:";
+    codec::text_quoted(out, f.id);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const DialogChoice& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const ToolEntryFields& f) {
+    w.string(f.kind, 64);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const ToolEntry& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] ToolEntry read_ToolEntry(codec::Reader& r) {
+    ToolEntryFields f;
+    f.kind = r.string(64);
+    return detail::Access::make<ToolEntry>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const ToolEntryFields& f) {
+    out += "ToolEntry{kind:";
+    codec::text_quoted(out, f.kind);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const ToolEntry& v) { text(out, detail::Access::fields(v)); }
 
 [[maybe_unused]] void write(codec::Writer& w, const InputFields& f) {
     w.quant(f.dx, quant_wish);
@@ -253,8 +624,501 @@ namespace {
 
 [[maybe_unused]] void text(std::string& out, const Hp& v) { text(out, detail::Access::fields(v)); }
 
-[[maybe_unused]] void write(codec::Writer& w, const RefusedFields& f) {
+[[maybe_unused]] void write(codec::Writer& w, const InventoryFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
     w.u32(f.tick);
+    w.u8(f.size);
+    if (!w.error() && !(f.size >= std::uint8_t{28} && f.size <= std::uint8_t{28})) w.fail(codec::Error::rule);
+    w.count(f.slots.size(), 28);
+    for (const auto& e : f.slots) {
+        write(w, e);
+    }
+    if (!w.error() && !codec::unique(f.slots.size(), [&](std::size_t i, std::size_t j) { return f.slots[i].slot() == f.slots[j].slot(); })) w.fail(codec::Error::rule);
+    if (!w.error() && std::ranges::any_of(f.slots, [&](const auto& e) { return !(e.slot() < f.size); })) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Inventory& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Inventory read_Inventory(codec::Reader& r) {
+    InventoryFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.size = r.u8();
+    if (!r.error() && !(f.size >= std::uint8_t{28} && f.size <= std::uint8_t{28})) r.fail(codec::Error::rule);
+    f.slots.resize(r.count(28, 2));
+    for (std::size_t i = 0; i < f.slots.size(); ++i) {
+        f.slots[i] = read_BagEntry(r);
+    }
+    if (!r.error() && !codec::unique(f.slots.size(), [&](std::size_t i, std::size_t j) { return f.slots[i].slot() == f.slots[j].slot(); })) r.fail(codec::Error::rule);
+    if (!r.error() && std::ranges::any_of(f.slots, [&](const auto& e) { return !(e.slot() < f.size); })) r.fail(codec::Error::rule);
+    return detail::Access::make<Inventory>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const InventoryFields& f) {
+    out += "inventory{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " size:";
+    out += std::to_string(static_cast<unsigned long long>(f.size));
+    out += " slots:";
+    out += '[';
+    for (std::size_t i = 0; i < f.slots.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.slots[i]);
+    }
+    out += ']';
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Inventory& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const EquipmentFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    w.count(f.worn.size(), 6);
+    for (const auto& e : f.worn) {
+        write(w, e);
+    }
+    if (!w.error() && !codec::unique(f.worn.size(), [&](std::size_t i, std::size_t j) { return f.worn[i].name() == f.worn[j].name(); })) w.fail(codec::Error::rule);
+    w.count(f.slots.size(), 6);
+    for (const auto& e : f.slots) {
+        write(w, e);
+    }
+    if (!w.error() && !codec::unique(f.slots.size(), [&](std::size_t i, std::size_t j) { return f.slots[i].slot() == f.slots[j].slot(); })) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Equipment& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Equipment read_Equipment(codec::Reader& r) {
+    EquipmentFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.worn.resize(r.count(6, 1));
+    for (std::size_t i = 0; i < f.worn.size(); ++i) {
+        f.worn[i] = read_WornName(r);
+    }
+    if (!r.error() && !codec::unique(f.worn.size(), [&](std::size_t i, std::size_t j) { return f.worn[i].name() == f.worn[j].name(); })) r.fail(codec::Error::rule);
+    f.slots.resize(r.count(6, 2));
+    for (std::size_t i = 0; i < f.slots.size(); ++i) {
+        f.slots[i] = read_WornEntry(r);
+    }
+    if (!r.error() && !codec::unique(f.slots.size(), [&](std::size_t i, std::size_t j) { return f.slots[i].slot() == f.slots[j].slot(); })) r.fail(codec::Error::rule);
+    return detail::Access::make<Equipment>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const EquipmentFields& f) {
+    out += "equipment{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " worn:";
+    out += '[';
+    for (std::size_t i = 0; i < f.worn.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.worn[i]);
+    }
+    out += ']';
+    out += " slots:";
+    out += '[';
+    for (std::size_t i = 0; i < f.slots.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.slots[i]);
+    }
+    out += ']';
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Equipment& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const ClassFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    w.string(f.class_id, 64);
+    w.count(f.missing_slots.size(), 6);
+    for (const auto& e : f.missing_slots) {
+        write(w, e);
+    }
+    if (!w.error() && !codec::unique(f.missing_slots.size(), [&](std::size_t i, std::size_t j) { return f.missing_slots[i].slot() == f.missing_slots[j].slot(); })) w.fail(codec::Error::rule);
+    w.count(f.missing_tools.size(), 16);
+    for (const auto& e : f.missing_tools) {
+        write(w, e);
+    }
+    if (!w.error() && !codec::unique(f.missing_tools.size(), [&](std::size_t i, std::size_t j) { return f.missing_tools[i].kind() == f.missing_tools[j].kind(); })) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Class& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Class read_Class(codec::Reader& r) {
+    ClassFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.class_id = r.string(64);
+    f.missing_slots.resize(r.count(6, 2));
+    for (std::size_t i = 0; i < f.missing_slots.size(); ++i) {
+        f.missing_slots[i] = read_WornEntry(r);
+    }
+    if (!r.error() && !codec::unique(f.missing_slots.size(), [&](std::size_t i, std::size_t j) { return f.missing_slots[i].slot() == f.missing_slots[j].slot(); })) r.fail(codec::Error::rule);
+    f.missing_tools.resize(r.count(16, 1));
+    for (std::size_t i = 0; i < f.missing_tools.size(); ++i) {
+        f.missing_tools[i] = read_ToolEntry(r);
+    }
+    if (!r.error() && !codec::unique(f.missing_tools.size(), [&](std::size_t i, std::size_t j) { return f.missing_tools[i].kind() == f.missing_tools[j].kind(); })) r.fail(codec::Error::rule);
+    return detail::Access::make<Class>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const ClassFields& f) {
+    out += "class{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " class_id:";
+    codec::text_quoted(out, f.class_id);
+    out += " missing_slots:";
+    out += '[';
+    for (std::size_t i = 0; i < f.missing_slots.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.missing_slots[i]);
+    }
+    out += ']';
+    out += " missing_tools:";
+    out += '[';
+    for (std::size_t i = 0; i < f.missing_tools.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.missing_tools[i]);
+    }
+    out += ']';
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Class& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const SkillsFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    w.count(f.skills.size(), 64);
+    for (const auto& e : f.skills) {
+        write(w, e);
+    }
+    if (!w.error() && !codec::unique(f.skills.size(), [&](std::size_t i, std::size_t j) { return f.skills[i].id() == f.skills[j].id(); })) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Skills& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Skills read_Skills(codec::Reader& r) {
+    SkillsFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.skills.resize(r.count(64, 13));
+    for (std::size_t i = 0; i < f.skills.size(); ++i) {
+        f.skills[i] = read_SkillEntry(r);
+    }
+    if (!r.error() && !codec::unique(f.skills.size(), [&](std::size_t i, std::size_t j) { return f.skills[i].id() == f.skills[j].id(); })) r.fail(codec::Error::rule);
+    return detail::Access::make<Skills>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const SkillsFields& f) {
+    out += "skills{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " skills:";
+    out += '[';
+    for (std::size_t i = 0; i < f.skills.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.skills[i]);
+    }
+    out += ']';
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Skills& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const QuestLogFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    w.count(f.quests.size(), 64);
+    for (const auto& e : f.quests) {
+        write(w, e);
+    }
+    if (!w.error() && !codec::unique(f.quests.size(), [&](std::size_t i, std::size_t j) { return f.quests[i].id() == f.quests[j].id(); })) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const QuestLog& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] QuestLog read_QuestLog(codec::Reader& r) {
+    QuestLogFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.quests.resize(r.count(64, 4));
+    for (std::size_t i = 0; i < f.quests.size(); ++i) {
+        f.quests[i] = read_QuestEntry(r);
+    }
+    if (!r.error() && !codec::unique(f.quests.size(), [&](std::size_t i, std::size_t j) { return f.quests[i].id() == f.quests[j].id(); })) r.fail(codec::Error::rule);
+    return detail::Access::make<QuestLog>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const QuestLogFields& f) {
+    out += "quest_log{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " quests:";
+    out += '[';
+    for (std::size_t i = 0; i < f.quests.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.quests[i]);
+    }
+    out += ']';
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const QuestLog& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const DialogFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    write(w, f.npc);
+    w.count(f.lines.size(), 16);
+    for (const auto& e : f.lines) {
+        write(w, e);
+    }
+    w.count(f.options.size(), 16);
+    for (const auto& e : f.options) {
+        write(w, e);
+    }
+    if (!w.error() && !codec::unique(f.options.size(), [&](std::size_t i, std::size_t j) { return f.options[i].id() == f.options[j].id(); })) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Dialog& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Dialog read_Dialog(codec::Reader& r) {
+    DialogFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.npc = read_NpcId(r);
+    f.lines.resize(r.count(16, 1));
+    for (std::size_t i = 0; i < f.lines.size(); ++i) {
+        f.lines[i] = read_TextLine(r);
+    }
+    f.options.resize(r.count(16, 1));
+    for (std::size_t i = 0; i < f.options.size(); ++i) {
+        f.options[i] = read_DialogChoice(r);
+    }
+    if (!r.error() && !codec::unique(f.options.size(), [&](std::size_t i, std::size_t j) { return f.options[i].id() == f.options[j].id(); })) r.fail(codec::Error::rule);
+    return detail::Access::make<Dialog>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const DialogFields& f) {
+    out += "dialog{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " npc:";
+    text(out, f.npc);
+    out += " lines:";
+    out += '[';
+    for (std::size_t i = 0; i < f.lines.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.lines[i]);
+    }
+    out += ']';
+    out += " options:";
+    out += '[';
+    for (std::size_t i = 0; i < f.options.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.options[i]);
+    }
+    out += ']';
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Dialog& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    w.u64(f.id);
+    write(w, f.leader);
+    w.count(f.members.size(), 4);
+    for (const auto& e : f.members) {
+        write(w, e);
+    }
+    if (!w.error() && !codec::unique(f.members.size(), [&](std::size_t i, std::size_t j) { return f.members[i] == f.members[j]; })) w.fail(codec::Error::rule);
+    if (!w.error() && !std::ranges::any_of(f.members, [&](const auto& e) { return e == f.leader; })) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Party& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Party read_Party(codec::Reader& r) {
+    PartyFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.id = r.u64();
+    f.leader = read_PlayerId(r);
+    f.members.resize(r.count(4, 2));
+    for (std::size_t i = 0; i < f.members.size(); ++i) {
+        f.members[i] = read_PlayerId(r);
+    }
+    if (!r.error() && !codec::unique(f.members.size(), [&](std::size_t i, std::size_t j) { return f.members[i] == f.members[j]; })) r.fail(codec::Error::rule);
+    if (!r.error() && !std::ranges::any_of(f.members, [&](const auto& e) { return e == f.leader; })) r.fail(codec::Error::rule);
+    return detail::Access::make<Party>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyFields& f) {
+    out += "party{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " id:";
+    out += std::to_string(static_cast<unsigned long long>(f.id));
+    out += " leader:";
+    text(out, f.leader);
+    out += " members:";
+    out += '[';
+    for (std::size_t i = 0; i < f.members.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.members[i]);
+    }
+    out += ']';
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Party& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const InviteFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    write(w, f.from);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Invite& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Invite read_Invite(codec::Reader& r) {
+    InviteFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.from = read_PlayerId(r);
+    return detail::Access::make<Invite>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const InviteFields& f) {
+    out += "invite{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " from:";
+    text(out, f.from);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Invite& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const AdminReplyFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    w.string(f.text, 8192);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const AdminReply& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] AdminReply read_AdminReply(codec::Reader& r) {
+    AdminReplyFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.text = r.string(8192);
+    return detail::Access::make<AdminReply>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const AdminReplyFields& f) {
+    out += "admin_reply{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " text:";
+    codec::text_quoted(out, f.text);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const AdminReply& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const CooldownFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    w.string(f.ability, 64);
+    w.u32(f.ready_tick);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Cooldown& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Cooldown read_Cooldown(codec::Reader& r) {
+    CooldownFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.ability = r.string(64);
+    f.ready_tick = r.u32();
+    return detail::Access::make<Cooldown>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const CooldownFields& f) {
+    out += "cooldown{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " ability:";
+    codec::text_quoted(out, f.ability);
+    out += " ready_tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.ready_tick));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Cooldown& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const RefusedFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    write(w, f.source);
     w.u32(f.seq);
     write(w, f.reason);
 }
@@ -263,15 +1127,24 @@ namespace {
 
 [[maybe_unused]] Refused read_Refused(codec::Reader& r) {
     RefusedFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
     f.tick = r.u32();
+    f.source = read_OriginSource(r);
     f.seq = r.u32();
     f.reason = read_RefuseReason(r);
     return detail::Access::make<Refused>(std::move(f));
 }
 
 [[maybe_unused]] void text(std::string& out, const RefusedFields& f) {
-    out += "refused{tick:";
+    out += "refused{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
     out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " source:";
+    text(out, f.source);
     out += " seq:";
     out += std::to_string(static_cast<unsigned long long>(f.seq));
     out += " reason:";
@@ -281,6 +1154,838 @@ namespace {
 
 [[maybe_unused]] void text(std::string& out, const Refused& v) { text(out, detail::Access::fields(v)); }
 
+[[maybe_unused]] void write(codec::Writer& w, const TickCloseFields& f) {
+    w.u64(f.stream);
+    w.u64(f.epoch);
+    w.u32(f.tick);
+    w.u64(f.event_end);
+    w.u16(f.state_items);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const TickClose& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] TickClose read_TickClose(codec::Reader& r) {
+    TickCloseFields f;
+    f.stream = r.u64();
+    f.epoch = r.u64();
+    f.tick = r.u32();
+    f.event_end = r.u64();
+    f.state_items = r.u16();
+    return detail::Access::make<TickClose>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const TickCloseFields& f) {
+    out += "tick_close{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " epoch:";
+    out += std::to_string(static_cast<unsigned long long>(f.epoch));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " event_end:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_end));
+    out += " state_items:";
+    out += std::to_string(static_cast<unsigned long long>(f.state_items));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const TickClose& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const ResumeBoundaryFields& f) {
+    w.u64(f.stream);
+    w.u64(f.epoch);
+    w.u32(f.tick);
+    w.u64(f.event_end);
+    w.u64(f.applied_event);
+    w.u32(f.next_intent);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const ResumeBoundary& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] ResumeBoundary read_ResumeBoundary(codec::Reader& r) {
+    ResumeBoundaryFields f;
+    f.stream = r.u64();
+    f.epoch = r.u64();
+    f.tick = r.u32();
+    f.event_end = r.u64();
+    f.applied_event = r.u64();
+    f.next_intent = r.u32();
+    return detail::Access::make<ResumeBoundary>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const ResumeBoundaryFields& f) {
+    out += "resume_boundary{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " epoch:";
+    out += std::to_string(static_cast<unsigned long long>(f.epoch));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " event_end:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_end));
+    out += " applied_event:";
+    out += std::to_string(static_cast<unsigned long long>(f.applied_event));
+    out += " next_intent:";
+    out += std::to_string(static_cast<unsigned long long>(f.next_intent));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const ResumeBoundary& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const DialogClearFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+    write(w, f.npc);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const DialogClear& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] DialogClear read_DialogClear(codec::Reader& r) {
+    DialogClearFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    f.npc = read_NpcId(r);
+    return detail::Access::make<DialogClear>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const DialogClearFields& f) {
+    out += "dialog_clear{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " npc:";
+    text(out, f.npc);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const DialogClear& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyClearFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyClear& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] PartyClear read_PartyClear(codec::Reader& r) {
+    PartyClearFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    return detail::Access::make<PartyClear>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyClearFields& f) {
+    out += "party_clear{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyClear& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const InviteClearFields& f) {
+    w.u64(f.stream);
+    w.u64(f.event_seq);
+    w.u32(f.tick);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const InviteClear& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] InviteClear read_InviteClear(codec::Reader& r) {
+    InviteClearFields f;
+    f.stream = r.u64();
+    f.event_seq = r.u64();
+    f.tick = r.u32();
+    return detail::Access::make<InviteClear>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const InviteClearFields& f) {
+    out += "invite_clear{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " event_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_seq));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const InviteClear& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const PickupFields& f) {
+    w.u32(f.seq);
+    write(w, f.item);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Pickup& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Pickup read_Pickup(codec::Reader& r) {
+    PickupFields f;
+    f.seq = r.u32();
+    f.item = read_ItemId(r);
+    return detail::Access::make<Pickup>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const PickupFields& f) {
+    out += "pickup{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " item:";
+    text(out, f.item);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Pickup& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const DropFields& f) {
+    w.u32(f.seq);
+    w.u8(f.slot);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Drop& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Drop read_Drop(codec::Reader& r) {
+    DropFields f;
+    f.seq = r.u32();
+    f.slot = r.u8();
+    return detail::Access::make<Drop>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const DropFields& f) {
+    out += "drop{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " slot:";
+    out += std::to_string(static_cast<unsigned long long>(f.slot));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Drop& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const EquipFields& f) {
+    w.u32(f.seq);
+    w.u8(f.slot);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Equip& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Equip read_Equip(codec::Reader& r) {
+    EquipFields f;
+    f.seq = r.u32();
+    f.slot = r.u8();
+    return detail::Access::make<Equip>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const EquipFields& f) {
+    out += "equip{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " slot:";
+    out += std::to_string(static_cast<unsigned long long>(f.slot));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Equip& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const UnequipFields& f) {
+    w.u32(f.seq);
+    w.string(f.worn, 32);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Unequip& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Unequip read_Unequip(codec::Reader& r) {
+    UnequipFields f;
+    f.seq = r.u32();
+    f.worn = r.string(32);
+    return detail::Access::make<Unequip>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const UnequipFields& f) {
+    out += "unequip{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " worn:";
+    codec::text_quoted(out, f.worn);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Unequip& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const GatherFields& f) {
+    w.u32(f.seq);
+    write(w, f.node);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Gather& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Gather read_Gather(codec::Reader& r) {
+    GatherFields f;
+    f.seq = r.u32();
+    f.node = read_NodeId(r);
+    return detail::Access::make<Gather>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const GatherFields& f) {
+    out += "gather{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " node:";
+    text(out, f.node);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Gather& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const UseSelfFields& f) {
+    w.u32(f.seq);
+    w.u8(f.slot);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const UseSelf& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] UseSelf read_UseSelf(codec::Reader& r) {
+    UseSelfFields f;
+    f.seq = r.u32();
+    f.slot = r.u8();
+    return detail::Access::make<UseSelf>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const UseSelfFields& f) {
+    out += "use_self{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " slot:";
+    out += std::to_string(static_cast<unsigned long long>(f.slot));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const UseSelf& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const AttackPlayerFields& f) {
+    w.u32(f.seq);
+    write(w, f.target);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const AttackPlayer& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] AttackPlayer read_AttackPlayer(codec::Reader& r) {
+    AttackPlayerFields f;
+    f.seq = r.u32();
+    f.target = read_PlayerId(r);
+    return detail::Access::make<AttackPlayer>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const AttackPlayerFields& f) {
+    out += "attack_player{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " target:";
+    text(out, f.target);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const AttackPlayer& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const RespawnFields& f) {
+    w.u32(f.seq);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Respawn& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Respawn read_Respawn(codec::Reader& r) {
+    RespawnFields f;
+    f.seq = r.u32();
+    return detail::Access::make<Respawn>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const RespawnFields& f) {
+    out += "respawn{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Respawn& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const CastSelfFields& f) {
+    w.u32(f.seq);
+    w.string(f.ability, 64);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const CastSelf& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] CastSelf read_CastSelf(codec::Reader& r) {
+    CastSelfFields f;
+    f.seq = r.u32();
+    f.ability = r.string(64);
+    return detail::Access::make<CastSelf>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const CastSelfFields& f) {
+    out += "cast_self{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " ability:";
+    codec::text_quoted(out, f.ability);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const CastSelf& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const TalkFields& f) {
+    w.u32(f.seq);
+    write(w, f.npc);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Talk& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Talk read_Talk(codec::Reader& r) {
+    TalkFields f;
+    f.seq = r.u32();
+    f.npc = read_NpcId(r);
+    return detail::Access::make<Talk>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const TalkFields& f) {
+    out += "talk{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " npc:";
+    text(out, f.npc);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Talk& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const DialogOptionFields& f) {
+    w.u32(f.seq);
+    write(w, f.npc);
+    w.string(f.option, 64);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const DialogOption& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] DialogOption read_DialogOption(codec::Reader& r) {
+    DialogOptionFields f;
+    f.seq = r.u32();
+    f.npc = read_NpcId(r);
+    f.option = r.string(64);
+    return detail::Access::make<DialogOption>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const DialogOptionFields& f) {
+    out += "dialog_option{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " npc:";
+    text(out, f.npc);
+    out += " option:";
+    codec::text_quoted(out, f.option);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const DialogOption& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const GiveFields& f) {
+    w.u32(f.seq);
+    write(w, f.npc);
+    w.u8(f.slot);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Give& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Give read_Give(codec::Reader& r) {
+    GiveFields f;
+    f.seq = r.u32();
+    f.npc = read_NpcId(r);
+    f.slot = r.u8();
+    return detail::Access::make<Give>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const GiveFields& f) {
+    out += "give{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " npc:";
+    text(out, f.npc);
+    out += " slot:";
+    out += std::to_string(static_cast<unsigned long long>(f.slot));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Give& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyInviteFields& f) {
+    w.u32(f.seq);
+    write(w, f.player);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyInvite& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] PartyInvite read_PartyInvite(codec::Reader& r) {
+    PartyInviteFields f;
+    f.seq = r.u32();
+    f.player = read_PlayerId(r);
+    return detail::Access::make<PartyInvite>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyInviteFields& f) {
+    out += "party_invite{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " player:";
+    text(out, f.player);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyInvite& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyAcceptFields& f) {
+    w.u32(f.seq);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyAccept& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] PartyAccept read_PartyAccept(codec::Reader& r) {
+    PartyAcceptFields f;
+    f.seq = r.u32();
+    return detail::Access::make<PartyAccept>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyAcceptFields& f) {
+    out += "party_accept{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyAccept& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyDeclineFields& f) {
+    w.u32(f.seq);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyDecline& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] PartyDecline read_PartyDecline(codec::Reader& r) {
+    PartyDeclineFields f;
+    f.seq = r.u32();
+    return detail::Access::make<PartyDecline>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyDeclineFields& f) {
+    out += "party_decline{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyDecline& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyLeaveFields& f) {
+    w.u32(f.seq);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyLeave& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] PartyLeave read_PartyLeave(codec::Reader& r) {
+    PartyLeaveFields f;
+    f.seq = r.u32();
+    return detail::Access::make<PartyLeave>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyLeaveFields& f) {
+    out += "party_leave{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyLeave& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyKickFields& f) {
+    w.u32(f.seq);
+    write(w, f.player);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const PartyKick& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] PartyKick read_PartyKick(codec::Reader& r) {
+    PartyKickFields f;
+    f.seq = r.u32();
+    f.player = read_PlayerId(r);
+    return detail::Access::make<PartyKick>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyKickFields& f) {
+    out += "party_kick{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " player:";
+    text(out, f.player);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const PartyKick& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const AdminFields& f) {
+    w.u32(f.seq);
+    w.string(f.line, 1024);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const Admin& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] Admin read_Admin(codec::Reader& r) {
+    AdminFields f;
+    f.seq = r.u32();
+    f.line = r.string(1024);
+    return detail::Access::make<Admin>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const AdminFields& f) {
+    out += "admin{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " line:";
+    codec::text_quoted(out, f.line);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const Admin& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const ApplicationCommitFields& f) {
+    w.u64(f.stream);
+    w.u64(f.epoch);
+    w.u32(f.tick);
+    w.u64(f.event_end);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const ApplicationCommit& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] ApplicationCommit read_ApplicationCommit(codec::Reader& r) {
+    ApplicationCommitFields f;
+    f.stream = r.u64();
+    f.epoch = r.u64();
+    f.tick = r.u32();
+    f.event_end = r.u64();
+    return detail::Access::make<ApplicationCommit>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const ApplicationCommitFields& f) {
+    out += "application_commit{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " epoch:";
+    out += std::to_string(static_cast<unsigned long long>(f.epoch));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " event_end:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_end));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const ApplicationCommit& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const UseStationFields& f) {
+    w.u32(f.seq);
+    w.u8(f.slot);
+    write(w, f.node);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const UseStation& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] UseStation read_UseStation(codec::Reader& r) {
+    UseStationFields f;
+    f.seq = r.u32();
+    f.slot = r.u8();
+    f.node = read_NodeId(r);
+    return detail::Access::make<UseStation>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const UseStationFields& f) {
+    out += "use_station{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " slot:";
+    out += std::to_string(static_cast<unsigned long long>(f.slot));
+    out += " node:";
+    text(out, f.node);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const UseStation& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const AttackNpcFields& f) {
+    w.u32(f.seq);
+    write(w, f.target);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const AttackNpc& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] AttackNpc read_AttackNpc(codec::Reader& r) {
+    AttackNpcFields f;
+    f.seq = r.u32();
+    f.target = read_NpcId(r);
+    return detail::Access::make<AttackNpc>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const AttackNpcFields& f) {
+    out += "attack_npc{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " target:";
+    text(out, f.target);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const AttackNpc& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const CastPlayerFields& f) {
+    w.u32(f.seq);
+    w.string(f.ability, 64);
+    write(w, f.target);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const CastPlayer& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] CastPlayer read_CastPlayer(codec::Reader& r) {
+    CastPlayerFields f;
+    f.seq = r.u32();
+    f.ability = r.string(64);
+    f.target = read_PlayerId(r);
+    return detail::Access::make<CastPlayer>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const CastPlayerFields& f) {
+    out += "cast_player{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " ability:";
+    codec::text_quoted(out, f.ability);
+    out += " target:";
+    text(out, f.target);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const CastPlayer& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const CastNpcFields& f) {
+    w.u32(f.seq);
+    w.string(f.ability, 64);
+    write(w, f.target);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const CastNpc& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] CastNpc read_CastNpc(codec::Reader& r) {
+    CastNpcFields f;
+    f.seq = r.u32();
+    f.ability = r.string(64);
+    f.target = read_NpcId(r);
+    return detail::Access::make<CastNpc>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const CastNpcFields& f) {
+    out += "cast_npc{seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.seq));
+    out += " ability:";
+    codec::text_quoted(out, f.ability);
+    out += " target:";
+    text(out, f.target);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const CastNpc& v) { text(out, detail::Access::fields(v)); }
+
+}
+
+std::expected<BagEntry, codec::Error> BagEntry::build(BagEntryFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<BagEntry>(std::move(f));
+}
+
+std::string to_text(const BagEntry& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<WornName, codec::Error> WornName::build(WornNameFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<WornName>(std::move(f));
+}
+
+std::string to_text(const WornName& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<WornEntry, codec::Error> WornEntry::build(WornEntryFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<WornEntry>(std::move(f));
+}
+
+std::string to_text(const WornEntry& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<SkillEntry, codec::Error> SkillEntry::build(SkillEntryFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<SkillEntry>(std::move(f));
+}
+
+std::string to_text(const SkillEntry& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<QuestEntry, codec::Error> QuestEntry::build(QuestEntryFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<QuestEntry>(std::move(f));
+}
+
+std::string to_text(const QuestEntry& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<TextLine, codec::Error> TextLine::build(TextLineFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<TextLine>(std::move(f));
+}
+
+std::string to_text(const TextLine& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<DialogChoice, codec::Error> DialogChoice::build(DialogChoiceFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<DialogChoice>(std::move(f));
+}
+
+std::string to_text(const DialogChoice& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<ToolEntry, codec::Error> ToolEntry::build(ToolEntryFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<ToolEntry>(std::move(f));
+}
+
+std::string to_text(const ToolEntry& v) {
+    std::string out;
+    text(out, v);
+    return out;
 }
 
 std::expected<Input, codec::Error> Input::build(InputFields f) {
@@ -322,6 +2027,136 @@ std::string to_text(const Hp& v) {
     return out;
 }
 
+std::expected<Inventory, codec::Error> Inventory::build(InventoryFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Inventory>(std::move(f));
+}
+
+std::string to_text(const Inventory& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Equipment, codec::Error> Equipment::build(EquipmentFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Equipment>(std::move(f));
+}
+
+std::string to_text(const Equipment& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Class, codec::Error> Class::build(ClassFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Class>(std::move(f));
+}
+
+std::string to_text(const Class& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Skills, codec::Error> Skills::build(SkillsFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Skills>(std::move(f));
+}
+
+std::string to_text(const Skills& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<QuestLog, codec::Error> QuestLog::build(QuestLogFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<QuestLog>(std::move(f));
+}
+
+std::string to_text(const QuestLog& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Dialog, codec::Error> Dialog::build(DialogFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Dialog>(std::move(f));
+}
+
+std::string to_text(const Dialog& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Party, codec::Error> Party::build(PartyFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Party>(std::move(f));
+}
+
+std::string to_text(const Party& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Invite, codec::Error> Invite::build(InviteFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Invite>(std::move(f));
+}
+
+std::string to_text(const Invite& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<AdminReply, codec::Error> AdminReply::build(AdminReplyFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<AdminReply>(std::move(f));
+}
+
+std::string to_text(const AdminReply& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Cooldown, codec::Error> Cooldown::build(CooldownFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Cooldown>(std::move(f));
+}
+
+std::string to_text(const Cooldown& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
 std::expected<Refused, codec::Error> Refused::build(RefusedFields f) {
     codec::Writer w;
     write(w, f);
@@ -330,6 +2165,370 @@ std::expected<Refused, codec::Error> Refused::build(RefusedFields f) {
 }
 
 std::string to_text(const Refused& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<TickClose, codec::Error> TickClose::build(TickCloseFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<TickClose>(std::move(f));
+}
+
+std::string to_text(const TickClose& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<ResumeBoundary, codec::Error> ResumeBoundary::build(ResumeBoundaryFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<ResumeBoundary>(std::move(f));
+}
+
+std::string to_text(const ResumeBoundary& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<DialogClear, codec::Error> DialogClear::build(DialogClearFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<DialogClear>(std::move(f));
+}
+
+std::string to_text(const DialogClear& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<PartyClear, codec::Error> PartyClear::build(PartyClearFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<PartyClear>(std::move(f));
+}
+
+std::string to_text(const PartyClear& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<InviteClear, codec::Error> InviteClear::build(InviteClearFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<InviteClear>(std::move(f));
+}
+
+std::string to_text(const InviteClear& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Pickup, codec::Error> Pickup::build(PickupFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Pickup>(std::move(f));
+}
+
+std::string to_text(const Pickup& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Drop, codec::Error> Drop::build(DropFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Drop>(std::move(f));
+}
+
+std::string to_text(const Drop& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Equip, codec::Error> Equip::build(EquipFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Equip>(std::move(f));
+}
+
+std::string to_text(const Equip& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Unequip, codec::Error> Unequip::build(UnequipFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Unequip>(std::move(f));
+}
+
+std::string to_text(const Unequip& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Gather, codec::Error> Gather::build(GatherFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Gather>(std::move(f));
+}
+
+std::string to_text(const Gather& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<UseSelf, codec::Error> UseSelf::build(UseSelfFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<UseSelf>(std::move(f));
+}
+
+std::string to_text(const UseSelf& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<AttackPlayer, codec::Error> AttackPlayer::build(AttackPlayerFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<AttackPlayer>(std::move(f));
+}
+
+std::string to_text(const AttackPlayer& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Respawn, codec::Error> Respawn::build(RespawnFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Respawn>(std::move(f));
+}
+
+std::string to_text(const Respawn& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<CastSelf, codec::Error> CastSelf::build(CastSelfFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<CastSelf>(std::move(f));
+}
+
+std::string to_text(const CastSelf& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Talk, codec::Error> Talk::build(TalkFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Talk>(std::move(f));
+}
+
+std::string to_text(const Talk& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<DialogOption, codec::Error> DialogOption::build(DialogOptionFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<DialogOption>(std::move(f));
+}
+
+std::string to_text(const DialogOption& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Give, codec::Error> Give::build(GiveFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Give>(std::move(f));
+}
+
+std::string to_text(const Give& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<PartyInvite, codec::Error> PartyInvite::build(PartyInviteFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<PartyInvite>(std::move(f));
+}
+
+std::string to_text(const PartyInvite& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<PartyAccept, codec::Error> PartyAccept::build(PartyAcceptFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<PartyAccept>(std::move(f));
+}
+
+std::string to_text(const PartyAccept& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<PartyDecline, codec::Error> PartyDecline::build(PartyDeclineFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<PartyDecline>(std::move(f));
+}
+
+std::string to_text(const PartyDecline& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<PartyLeave, codec::Error> PartyLeave::build(PartyLeaveFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<PartyLeave>(std::move(f));
+}
+
+std::string to_text(const PartyLeave& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<PartyKick, codec::Error> PartyKick::build(PartyKickFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<PartyKick>(std::move(f));
+}
+
+std::string to_text(const PartyKick& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<Admin, codec::Error> Admin::build(AdminFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<Admin>(std::move(f));
+}
+
+std::string to_text(const Admin& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<ApplicationCommit, codec::Error> ApplicationCommit::build(ApplicationCommitFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<ApplicationCommit>(std::move(f));
+}
+
+std::string to_text(const ApplicationCommit& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<UseStation, codec::Error> UseStation::build(UseStationFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<UseStation>(std::move(f));
+}
+
+std::string to_text(const UseStation& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<AttackNpc, codec::Error> AttackNpc::build(AttackNpcFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<AttackNpc>(std::move(f));
+}
+
+std::string to_text(const AttackNpc& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<CastPlayer, codec::Error> CastPlayer::build(CastPlayerFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<CastPlayer>(std::move(f));
+}
+
+std::string to_text(const CastPlayer& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<CastNpc, codec::Error> CastNpc::build(CastNpcFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<CastNpc>(std::move(f));
+}
+
+std::string to_text(const CastNpc& v) {
     std::string out;
     text(out, v);
     return out;
@@ -356,9 +2555,275 @@ std::expected<void, codec::Error> encode(const Hp& m, std::vector<std::uint8_t>&
     return w.finish();
 }
 
+std::expected<void, codec::Error> encode(const Inventory& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Inventory::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Equipment& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Equipment::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Class& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Class::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Skills& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Skills::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const QuestLog& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(QuestLog::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Dialog& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Dialog::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Party& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Party::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Invite& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Invite::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const AdminReply& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(AdminReply::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Cooldown& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Cooldown::message_id);
+    write(w, m);
+    return w.finish();
+}
+
 std::expected<void, codec::Error> encode(const Refused& m, std::vector<std::uint8_t>& out) {
     codec::Writer w{out};
     w.varint(Refused::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const TickClose& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(TickClose::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const ResumeBoundary& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(ResumeBoundary::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const DialogClear& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(DialogClear::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const PartyClear& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(PartyClear::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const InviteClear& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(InviteClear::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Pickup& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Pickup::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Drop& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Drop::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Equip& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Equip::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Unequip& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Unequip::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Gather& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Gather::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const UseSelf& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(UseSelf::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const AttackPlayer& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(AttackPlayer::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Respawn& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Respawn::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const CastSelf& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(CastSelf::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Talk& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Talk::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const DialogOption& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(DialogOption::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Give& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Give::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const PartyInvite& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(PartyInvite::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const PartyAccept& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(PartyAccept::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const PartyDecline& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(PartyDecline::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const PartyLeave& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(PartyLeave::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const PartyKick& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(PartyKick::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const Admin& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(Admin::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const ApplicationCommit& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(ApplicationCommit::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const UseStation& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(UseStation::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const AttackNpc& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(AttackNpc::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const CastPlayer& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(CastPlayer::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const CastNpc& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(CastNpc::message_id);
     write(w, m);
     return w.finish();
 }
@@ -399,8 +2864,53 @@ std::string text_state(const StateMsg& m) {
 std::expected<EventsMsg, codec::Error> decode_next_events(codec::Reader& r) {
     EventsMsg m;
     switch (r.varint()) {
+    case Inventory::message_id:
+        m = read_Inventory(r);
+        break;
+    case Equipment::message_id:
+        m = read_Equipment(r);
+        break;
+    case Class::message_id:
+        m = read_Class(r);
+        break;
+    case Skills::message_id:
+        m = read_Skills(r);
+        break;
+    case QuestLog::message_id:
+        m = read_QuestLog(r);
+        break;
+    case Dialog::message_id:
+        m = read_Dialog(r);
+        break;
+    case Party::message_id:
+        m = read_Party(r);
+        break;
+    case Invite::message_id:
+        m = read_Invite(r);
+        break;
+    case AdminReply::message_id:
+        m = read_AdminReply(r);
+        break;
+    case Cooldown::message_id:
+        m = read_Cooldown(r);
+        break;
     case Refused::message_id:
         m = read_Refused(r);
+        break;
+    case TickClose::message_id:
+        m = read_TickClose(r);
+        break;
+    case ResumeBoundary::message_id:
+        m = read_ResumeBoundary(r);
+        break;
+    case DialogClear::message_id:
+        m = read_DialogClear(r);
+        break;
+    case PartyClear::message_id:
+        m = read_PartyClear(r);
+        break;
+    case InviteClear::message_id:
+        m = read_InviteClear(r);
         break;
     default:
         r.fail(codec::Error::unknown_message);
@@ -459,6 +2969,75 @@ std::string text_input(const InputMsg& m) {
 std::expected<IntentsMsg, codec::Error> decode_next_intents(codec::Reader& r) {
     IntentsMsg m;
     switch (r.varint()) {
+    case Pickup::message_id:
+        m = read_Pickup(r);
+        break;
+    case Drop::message_id:
+        m = read_Drop(r);
+        break;
+    case Equip::message_id:
+        m = read_Equip(r);
+        break;
+    case Unequip::message_id:
+        m = read_Unequip(r);
+        break;
+    case Gather::message_id:
+        m = read_Gather(r);
+        break;
+    case UseSelf::message_id:
+        m = read_UseSelf(r);
+        break;
+    case AttackPlayer::message_id:
+        m = read_AttackPlayer(r);
+        break;
+    case Respawn::message_id:
+        m = read_Respawn(r);
+        break;
+    case CastSelf::message_id:
+        m = read_CastSelf(r);
+        break;
+    case Talk::message_id:
+        m = read_Talk(r);
+        break;
+    case DialogOption::message_id:
+        m = read_DialogOption(r);
+        break;
+    case Give::message_id:
+        m = read_Give(r);
+        break;
+    case PartyInvite::message_id:
+        m = read_PartyInvite(r);
+        break;
+    case PartyAccept::message_id:
+        m = read_PartyAccept(r);
+        break;
+    case PartyDecline::message_id:
+        m = read_PartyDecline(r);
+        break;
+    case PartyLeave::message_id:
+        m = read_PartyLeave(r);
+        break;
+    case PartyKick::message_id:
+        m = read_PartyKick(r);
+        break;
+    case Admin::message_id:
+        m = read_Admin(r);
+        break;
+    case ApplicationCommit::message_id:
+        m = read_ApplicationCommit(r);
+        break;
+    case UseStation::message_id:
+        m = read_UseStation(r);
+        break;
+    case AttackNpc::message_id:
+        m = read_AttackNpc(r);
+        break;
+    case CastPlayer::message_id:
+        m = read_CastPlayer(r);
+        break;
+    case CastNpc::message_id:
+        m = read_CastNpc(r);
+        break;
     default:
         r.fail(codec::Error::unknown_message);
         break;
@@ -475,10 +3054,12 @@ std::expected<IntentsMsg, codec::Error> decode_intents(std::span<const std::uint
     return m;
 }
 
-std::expected<void, codec::Error> encode_intents(const IntentsMsg&, std::vector<std::uint8_t>&) {
-    return std::unexpected(codec::Error::unknown_message);
+std::expected<void, codec::Error> encode_intents(const IntentsMsg& m, std::vector<std::uint8_t>& out) {
+    return std::visit([&](const auto& v) { return encode(v, out); }, m);
 }
 
-std::string text_intents(const IntentsMsg&) { return {}; }
+std::string text_intents(const IntentsMsg& m) {
+    return std::visit([](const auto& v) { return to_text(v); }, m);
+}
 
 }

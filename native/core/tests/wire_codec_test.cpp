@@ -152,8 +152,8 @@ void built_messages_encode_to_vector_bytes() {
           "built pose encodes to its vector");
     check(hex(must(wire::Hp::build({.id = id, .hp = 85, .max_hp = 120}))) == "0307025500000078000000",
           "built hp encodes to its vector");
-    check(hex(must(wire::Refused::build({.tick = 1000, .seq = 42, .reason = wire::RefuseReason::cooldown}))) ==
-              "04e80300002a00000006",
+    check(hex(must(wire::Refused::build({.stream = 1, .event_seq = 2, .tick = 1000, .source = wire::OriginSource::intent, .seq = 42, .reason = wire::RefuseReason::cooldown}))) ==
+              "8a0101000000000000000200000000000000e8030000022a00000006",
           "built refused encodes to its vector");
     check(hex(must(probe::Party::build({.leader = {1, 0}, .members = {{1, 0}, {2, 0}}}))) == "0401000201000200",
           "built party encodes to its vector");

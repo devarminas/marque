@@ -84,6 +84,7 @@ func (w *World) applyWish(p *player, msg mnet.Move) {
 	}
 
 	p.pending = 0
+ p.pickupOrigin=Origin{}
 	w.clearPendingTalk(p)
 	w.closeDialog(p)
 	w.cancelGather(p)

@@ -147,7 +147,7 @@ func TestBuiltMessagesEncodeToVectorBytes(t *testing.T) {
 		{must(wire.InputFields{Dx: 0.5, Dz: -1, Jump: true, Seq: 300}.Build()), "019600012c010000"},
 		{must(wire.PoseFields{Id: id, X: 12.34, Y: 0.5, Z: -100.25}.Build()), "020702d244060032400600d7180600"},
 		{must(wire.HpFields{Id: id, Hp: 85, MaxHp: 120}.Build()), "0307025500000078000000"},
-		{must(wire.RefusedFields{Tick: 1000, Seq: 42, Reason: wire.RefuseReasonCooldown}.Build()), "04e80300002a00000006"},
+		{must(wire.RefusedFields{Stream: 1, EventSeq: 2, Tick: 1000, Source: wire.OriginSourceIntent, Seq: 42, Reason: wire.RefuseReasonCooldown}.Build()), "8a0101000000000000000200000000000000e8030000022a00000006"},
 		{must(probe.PartyFields{Leader: probe.PlayerId{Index: 1}, Members: []probe.PlayerId{{Index: 1}, {Index: 2}}}.Build()), "0401000201000200"},
 	}
 	for _, c := range cases {

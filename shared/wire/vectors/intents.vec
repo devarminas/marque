@@ -1,0 +1,33 @@
+schema wire
+
+accept pickup intents 8002010000000702 pickup{seq:1 item:ItemId(7/2)}
+accept drop intents 810201000000ff drop{seq:1 slot:255}
+accept equip intents 82020100000000 equip{seq:1 slot:0}
+accept unequip intents 8302010000000668656c6d6574 unequip{seq:1 worn:"helmet"}
+accept gather intents 8402010000000702 gather{seq:1 node:NodeId(7/2)}
+accept use_self intents 85020100000000 use_self{seq:1 slot:0}
+accept attack_player intents 8602010000000702 attack_player{seq:1 target:PlayerId(7/2)}
+accept respawn intents 870201000000 respawn{seq:1}
+accept cast_self intents 880201000000046865616c cast_self{seq:1 ability:"heal"}
+accept talk intents 8902010000000702 talk{seq:1 npc:NpcId(7/2)}
+accept dialog_option intents 8a020100000007020c73746f705f74616c6b696e67 dialog_option{seq:1 npc:NpcId(7/2) option:"stop_talking"}
+accept give intents 8b0201000000070200 give{seq:1 npc:NpcId(7/2) slot:0}
+accept party_invite intents 8c02010000000702 party_invite{seq:1 player:PlayerId(7/2)}
+accept party_accept intents 8d0201000000 party_accept{seq:1}
+accept party_decline intents 8e0201000000 party_decline{seq:1}
+accept party_leave intents 8f0201000000 party_leave{seq:1}
+accept party_kick intents 9002010000000702 party_kick{seq:1 player:PlayerId(7/2)}
+accept admin intents 910201000000052f68656c70 admin{seq:1 line:"/help"}
+accept use_station intents 930201000000000702 use_station{seq:1 slot:0 node:NodeId(7/2)}
+accept attack_npc intents 9402010000000702 attack_npc{seq:1 target:NpcId(7/2)}
+accept cast_player intents 950201000000046865616c0702 cast_player{seq:1 ability:"heal" target:PlayerId(7/2)}
+accept cast_npc intents 960201000000046865616c0702 cast_npc{seq:1 ability:"heal" target:NpcId(7/2)}
+accept application_commit intents 920258000000000000000200000000000000030000001400000000000000 application_commit{stream:88 epoch:2 tick:3 event_end:20}
+reject admin_line_over_bound intents 9102010000008108 over_bound
+reject admin_line_bad_utf8 intents 91020100000001ff bad_utf8
+reject ability_over_bound intents 88020100000041 over_bound
+reject worn_name_over_bound intents 83020100000021 over_bound
+reject dialog_option_over_bound intents 8a0201000000010141 over_bound
+reject noncanonical_handle intents 800201000000810001 bad_varint
+reject truncated_application_commit intents 92025800000000000000 truncated
+reject intent_on_events events 870201000000 unknown_message

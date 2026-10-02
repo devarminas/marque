@@ -55,6 +55,10 @@ func (w *World) playerState(p *player) mnet.PlayerState {
 }
 
 func (w *World) attack(p *player, msg mnet.Attack, seq mnet.Seq) {
+	w.attackWithTarget(p, msg, seq, combatTargetHandle{})
+}
+
+func (w *World) attackWithTarget(p *player, msg mnet.Attack, seq mnet.Seq, handle combatTargetHandle) {
 	if p.dead() {
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonDead,
@@ -64,7 +68,7 @@ func (w *World) attack(p *player, msg mnet.Attack, seq mnet.Seq) {
 		})
 		return
 	}
-	if msg.Player == p.id {
+	if msg.Player == p.id && w.validCombatTarget(msg.Player, handle) {
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonSelf,
 			Detail:      "cannot attack yourself",
@@ -80,6 +84,10 @@ func (w *World) attack(p *player, msg mnet.Attack, seq mnet.Seq) {
 			Re:          mnet.MsgAttack,
 			Disposition: mnet.ReplyError,
 		})
+		return
+	}
+	if !w.validCombatTarget(msg.Player, handle) {
+		w.refuse(p, &mnet.RejectError{Reason: mnet.ReasonUnknownPlayer, Detail: "unknown target handle", Re: mnet.MsgAttack, Disposition: mnet.ReplyError})
 		return
 	}
 	if n, ok := w.npcs[msg.Player]; ok {
@@ -221,6 +229,7 @@ func (w *World) npcAttackPeriod(n *npc) int {
 
 func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, seq mnet.Seq) {
 	p.pending = 0
+ p.pickupOrigin=Origin{}
 	w.clearPendingTalk(p)
 	w.cancelGather(p)
 	w.clearPendingUse(p)

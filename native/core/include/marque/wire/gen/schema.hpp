@@ -13,7 +13,7 @@
 
 namespace marque::wire {
 
-inline constexpr std::uint64_t schema_hash = 0x60dfa19f4dc9df6fULL;
+inline constexpr std::uint64_t schema_hash = 0x925b39183c0f97a5ULL;
 
 namespace detail {
 struct Access;
@@ -55,6 +55,213 @@ enum class RefuseReason : std::uint32_t {
     out_of_range = 5,
     cooldown = 6,
     dead = 7,
+    protocol_error = 8,
+    illegal_sample = 9,
+    unknown_item = 10,
+    no_such_slot = 11,
+    empty_slot = 12,
+    not_equippable = 13,
+    no_such_worn_slot = 14,
+    empty_worn_slot = 15,
+    inventory_full = 16,
+    unknown_node = 17,
+    node_depleted = 18,
+    needs_class = 19,
+    no_recipe = 20,
+    missing_mat = 21,
+    unknown_player = 22,
+    self = 23,
+    target_dead = 24,
+    not_dead = 25,
+    no_dialog = 26,
+    unknown_option = 27,
+    quest_active = 28,
+    quest_complete = 29,
+    quest_inactive = 30,
+    quest_incomplete = 31,
+    wrong_item = 32,
+    not_leader = 33,
+    party_full = 34,
+    already_in_party = 35,
+    duplicate_invite = 36,
+    no_invite = 37,
+    not_in_party = 38,
+    not_same_party = 39,
+    unauthorized = 40,
+    usage = 41,
+    non_finite = 42,
+    out_of_bounds = 43,
+};
+
+enum class OriginSource : std::uint32_t {
+    input = 1,
+    intent = 2,
+};
+
+struct BagEntryFields {
+    std::uint8_t slot = 0;
+    std::string kind{};
+
+    bool operator==(const BagEntryFields&) const = default;
+};
+
+class BagEntry {
+public:
+    static std::expected<BagEntry, codec::Error> build(BagEntryFields f);
+
+    const std::uint8_t& slot() const { return f_.slot; }
+    const std::string& kind() const { return f_.kind; }
+
+    bool operator==(const BagEntry&) const = default;
+
+private:
+    friend struct detail::Access;
+    BagEntryFields f_;
+};
+
+struct WornNameFields {
+    std::string name{};
+
+    bool operator==(const WornNameFields&) const = default;
+};
+
+class WornName {
+public:
+    static std::expected<WornName, codec::Error> build(WornNameFields f);
+
+    const std::string& name() const { return f_.name; }
+
+    bool operator==(const WornName&) const = default;
+
+private:
+    friend struct detail::Access;
+    WornNameFields f_;
+};
+
+struct WornEntryFields {
+    std::string slot{};
+    std::string kind{};
+
+    bool operator==(const WornEntryFields&) const = default;
+};
+
+class WornEntry {
+public:
+    static std::expected<WornEntry, codec::Error> build(WornEntryFields f);
+
+    const std::string& slot() const { return f_.slot; }
+    const std::string& kind() const { return f_.kind; }
+
+    bool operator==(const WornEntry&) const = default;
+
+private:
+    friend struct detail::Access;
+    WornEntryFields f_;
+};
+
+struct SkillEntryFields {
+    std::string id{};
+    std::int64_t xp = 0;
+    std::uint32_t level = 0;
+
+    bool operator==(const SkillEntryFields&) const = default;
+};
+
+class SkillEntry {
+public:
+    static std::expected<SkillEntry, codec::Error> build(SkillEntryFields f);
+
+    const std::string& id() const { return f_.id; }
+    const std::int64_t& xp() const { return f_.xp; }
+    const std::uint32_t& level() const { return f_.level; }
+
+    bool operator==(const SkillEntry&) const = default;
+
+private:
+    friend struct detail::Access;
+    SkillEntryFields f_;
+};
+
+struct QuestEntryFields {
+    std::string id{};
+    std::string title{};
+    std::string objective{};
+    std::string status{};
+
+    bool operator==(const QuestEntryFields&) const = default;
+};
+
+class QuestEntry {
+public:
+    static std::expected<QuestEntry, codec::Error> build(QuestEntryFields f);
+
+    const std::string& id() const { return f_.id; }
+    const std::string& title() const { return f_.title; }
+    const std::string& objective() const { return f_.objective; }
+    const std::string& status() const { return f_.status; }
+
+    bool operator==(const QuestEntry&) const = default;
+
+private:
+    friend struct detail::Access;
+    QuestEntryFields f_;
+};
+
+struct TextLineFields {
+    std::string text{};
+
+    bool operator==(const TextLineFields&) const = default;
+};
+
+class TextLine {
+public:
+    static std::expected<TextLine, codec::Error> build(TextLineFields f);
+
+    const std::string& text() const { return f_.text; }
+
+    bool operator==(const TextLine&) const = default;
+
+private:
+    friend struct detail::Access;
+    TextLineFields f_;
+};
+
+struct DialogChoiceFields {
+    std::string id{};
+
+    bool operator==(const DialogChoiceFields&) const = default;
+};
+
+class DialogChoice {
+public:
+    static std::expected<DialogChoice, codec::Error> build(DialogChoiceFields f);
+
+    const std::string& id() const { return f_.id; }
+
+    bool operator==(const DialogChoice&) const = default;
+
+private:
+    friend struct detail::Access;
+    DialogChoiceFields f_;
+};
+
+struct ToolEntryFields {
+    std::string kind{};
+
+    bool operator==(const ToolEntryFields&) const = default;
+};
+
+class ToolEntry {
+public:
+    static std::expected<ToolEntry, codec::Error> build(ToolEntryFields f);
+
+    const std::string& kind() const { return f_.kind; }
+
+    bool operator==(const ToolEntry&) const = default;
+
+private:
+    friend struct detail::Access;
+    ToolEntryFields f_;
 };
 
 struct InputFields {
@@ -139,8 +346,309 @@ private:
     HpFields f_;
 };
 
-struct RefusedFields {
+struct InventoryFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
     std::uint32_t tick = 0;
+    std::uint8_t size = 0;
+    std::vector<BagEntry> slots{};
+
+    bool operator==(const InventoryFields&) const = default;
+};
+
+class Inventory {
+public:
+    static constexpr std::uint32_t message_id = 128;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<Inventory, codec::Error> build(InventoryFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::uint8_t& size() const { return f_.size; }
+    const std::vector<BagEntry>& slots() const { return f_.slots; }
+
+    bool operator==(const Inventory&) const = default;
+
+private:
+    friend struct detail::Access;
+    InventoryFields f_;
+};
+
+struct EquipmentFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    std::vector<WornName> worn{};
+    std::vector<WornEntry> slots{};
+
+    bool operator==(const EquipmentFields&) const = default;
+};
+
+class Equipment {
+public:
+    static constexpr std::uint32_t message_id = 129;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<Equipment, codec::Error> build(EquipmentFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::vector<WornName>& worn() const { return f_.worn; }
+    const std::vector<WornEntry>& slots() const { return f_.slots; }
+
+    bool operator==(const Equipment&) const = default;
+
+private:
+    friend struct detail::Access;
+    EquipmentFields f_;
+};
+
+struct ClassFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    std::string class_id{};
+    std::vector<WornEntry> missing_slots{};
+    std::vector<ToolEntry> missing_tools{};
+
+    bool operator==(const ClassFields&) const = default;
+};
+
+class Class {
+public:
+    static constexpr std::uint32_t message_id = 130;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<Class, codec::Error> build(ClassFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::string& class_id() const { return f_.class_id; }
+    const std::vector<WornEntry>& missing_slots() const { return f_.missing_slots; }
+    const std::vector<ToolEntry>& missing_tools() const { return f_.missing_tools; }
+
+    bool operator==(const Class&) const = default;
+
+private:
+    friend struct detail::Access;
+    ClassFields f_;
+};
+
+struct SkillsFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    std::vector<SkillEntry> skills{};
+
+    bool operator==(const SkillsFields&) const = default;
+};
+
+class Skills {
+public:
+    static constexpr std::uint32_t message_id = 131;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<Skills, codec::Error> build(SkillsFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::vector<SkillEntry>& skills() const { return f_.skills; }
+
+    bool operator==(const Skills&) const = default;
+
+private:
+    friend struct detail::Access;
+    SkillsFields f_;
+};
+
+struct QuestLogFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    std::vector<QuestEntry> quests{};
+
+    bool operator==(const QuestLogFields&) const = default;
+};
+
+class QuestLog {
+public:
+    static constexpr std::uint32_t message_id = 132;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<QuestLog, codec::Error> build(QuestLogFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::vector<QuestEntry>& quests() const { return f_.quests; }
+
+    bool operator==(const QuestLog&) const = default;
+
+private:
+    friend struct detail::Access;
+    QuestLogFields f_;
+};
+
+struct DialogFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    NpcId npc{};
+    std::vector<TextLine> lines{};
+    std::vector<DialogChoice> options{};
+
+    bool operator==(const DialogFields&) const = default;
+};
+
+class Dialog {
+public:
+    static constexpr std::uint32_t message_id = 133;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<Dialog, codec::Error> build(DialogFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const NpcId& npc() const { return f_.npc; }
+    const std::vector<TextLine>& lines() const { return f_.lines; }
+    const std::vector<DialogChoice>& options() const { return f_.options; }
+
+    bool operator==(const Dialog&) const = default;
+
+private:
+    friend struct detail::Access;
+    DialogFields f_;
+};
+
+struct PartyFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    std::uint64_t id = 0;
+    PlayerId leader{};
+    std::vector<PlayerId> members{};
+
+    bool operator==(const PartyFields&) const = default;
+};
+
+class Party {
+public:
+    static constexpr std::uint32_t message_id = 134;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<Party, codec::Error> build(PartyFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::uint64_t& id() const { return f_.id; }
+    const PlayerId& leader() const { return f_.leader; }
+    const std::vector<PlayerId>& members() const { return f_.members; }
+
+    bool operator==(const Party&) const = default;
+
+private:
+    friend struct detail::Access;
+    PartyFields f_;
+};
+
+struct InviteFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    PlayerId from{};
+
+    bool operator==(const InviteFields&) const = default;
+};
+
+class Invite {
+public:
+    static constexpr std::uint32_t message_id = 135;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<Invite, codec::Error> build(InviteFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const PlayerId& from() const { return f_.from; }
+
+    bool operator==(const Invite&) const = default;
+
+private:
+    friend struct detail::Access;
+    InviteFields f_;
+};
+
+struct AdminReplyFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    std::string text{};
+
+    bool operator==(const AdminReplyFields&) const = default;
+};
+
+class AdminReply {
+public:
+    static constexpr std::uint32_t message_id = 136;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<AdminReply, codec::Error> build(AdminReplyFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::string& text() const { return f_.text; }
+
+    bool operator==(const AdminReply&) const = default;
+
+private:
+    friend struct detail::Access;
+    AdminReplyFields f_;
+};
+
+struct CooldownFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    std::string ability{};
+    std::uint32_t ready_tick = 0;
+
+    bool operator==(const CooldownFields&) const = default;
+};
+
+class Cooldown {
+public:
+    static constexpr std::uint32_t message_id = 137;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<Cooldown, codec::Error> build(CooldownFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::string& ability() const { return f_.ability; }
+    const std::uint32_t& ready_tick() const { return f_.ready_tick; }
+
+    bool operator==(const Cooldown&) const = default;
+
+private:
+    friend struct detail::Access;
+    CooldownFields f_;
+};
+
+struct RefusedFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    OriginSource source{};
     std::uint32_t seq = 0;
     RefuseReason reason{};
 
@@ -149,12 +657,15 @@ struct RefusedFields {
 
 class Refused {
 public:
-    static constexpr std::uint32_t message_id = 4;
+    static constexpr std::uint32_t message_id = 138;
     static constexpr codec::Channel channel = codec::Channel::events;
 
     static std::expected<Refused, codec::Error> build(RefusedFields f);
 
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
     const std::uint32_t& tick() const { return f_.tick; }
+    const OriginSource& source() const { return f_.source; }
     const std::uint32_t& seq() const { return f_.seq; }
     const RefuseReason& reason() const { return f_.reason; }
 
@@ -165,20 +676,804 @@ private:
     RefusedFields f_;
 };
 
+struct TickCloseFields {
+    std::uint64_t stream = 0;
+    std::uint64_t epoch = 0;
+    std::uint32_t tick = 0;
+    std::uint64_t event_end = 0;
+    std::uint16_t state_items = 0;
+
+    bool operator==(const TickCloseFields&) const = default;
+};
+
+class TickClose {
+public:
+    static constexpr std::uint32_t message_id = 139;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<TickClose, codec::Error> build(TickCloseFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& epoch() const { return f_.epoch; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::uint64_t& event_end() const { return f_.event_end; }
+    const std::uint16_t& state_items() const { return f_.state_items; }
+
+    bool operator==(const TickClose&) const = default;
+
+private:
+    friend struct detail::Access;
+    TickCloseFields f_;
+};
+
+struct ResumeBoundaryFields {
+    std::uint64_t stream = 0;
+    std::uint64_t epoch = 0;
+    std::uint32_t tick = 0;
+    std::uint64_t event_end = 0;
+    std::uint64_t applied_event = 0;
+    std::uint32_t next_intent = 0;
+
+    bool operator==(const ResumeBoundaryFields&) const = default;
+};
+
+class ResumeBoundary {
+public:
+    static constexpr std::uint32_t message_id = 140;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<ResumeBoundary, codec::Error> build(ResumeBoundaryFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& epoch() const { return f_.epoch; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::uint64_t& event_end() const { return f_.event_end; }
+    const std::uint64_t& applied_event() const { return f_.applied_event; }
+    const std::uint32_t& next_intent() const { return f_.next_intent; }
+
+    bool operator==(const ResumeBoundary&) const = default;
+
+private:
+    friend struct detail::Access;
+    ResumeBoundaryFields f_;
+};
+
+struct DialogClearFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+    NpcId npc{};
+
+    bool operator==(const DialogClearFields&) const = default;
+};
+
+class DialogClear {
+public:
+    static constexpr std::uint32_t message_id = 141;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<DialogClear, codec::Error> build(DialogClearFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const NpcId& npc() const { return f_.npc; }
+
+    bool operator==(const DialogClear&) const = default;
+
+private:
+    friend struct detail::Access;
+    DialogClearFields f_;
+};
+
+struct PartyClearFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+
+    bool operator==(const PartyClearFields&) const = default;
+};
+
+class PartyClear {
+public:
+    static constexpr std::uint32_t message_id = 142;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<PartyClear, codec::Error> build(PartyClearFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+
+    bool operator==(const PartyClear&) const = default;
+
+private:
+    friend struct detail::Access;
+    PartyClearFields f_;
+};
+
+struct InviteClearFields {
+    std::uint64_t stream = 0;
+    std::uint64_t event_seq = 0;
+    std::uint32_t tick = 0;
+
+    bool operator==(const InviteClearFields&) const = default;
+};
+
+class InviteClear {
+public:
+    static constexpr std::uint32_t message_id = 143;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<InviteClear, codec::Error> build(InviteClearFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& event_seq() const { return f_.event_seq; }
+    const std::uint32_t& tick() const { return f_.tick; }
+
+    bool operator==(const InviteClear&) const = default;
+
+private:
+    friend struct detail::Access;
+    InviteClearFields f_;
+};
+
+struct PickupFields {
+    std::uint32_t seq = 0;
+    ItemId item{};
+
+    bool operator==(const PickupFields&) const = default;
+};
+
+class Pickup {
+public:
+    static constexpr std::uint32_t message_id = 256;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<Pickup, codec::Error> build(PickupFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const ItemId& item() const { return f_.item; }
+
+    bool operator==(const Pickup&) const = default;
+
+private:
+    friend struct detail::Access;
+    PickupFields f_;
+};
+
+struct DropFields {
+    std::uint32_t seq = 0;
+    std::uint8_t slot = 0;
+
+    bool operator==(const DropFields&) const = default;
+};
+
+class Drop {
+public:
+    static constexpr std::uint32_t message_id = 257;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<Drop, codec::Error> build(DropFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const std::uint8_t& slot() const { return f_.slot; }
+
+    bool operator==(const Drop&) const = default;
+
+private:
+    friend struct detail::Access;
+    DropFields f_;
+};
+
+struct EquipFields {
+    std::uint32_t seq = 0;
+    std::uint8_t slot = 0;
+
+    bool operator==(const EquipFields&) const = default;
+};
+
+class Equip {
+public:
+    static constexpr std::uint32_t message_id = 258;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<Equip, codec::Error> build(EquipFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const std::uint8_t& slot() const { return f_.slot; }
+
+    bool operator==(const Equip&) const = default;
+
+private:
+    friend struct detail::Access;
+    EquipFields f_;
+};
+
+struct UnequipFields {
+    std::uint32_t seq = 0;
+    std::string worn{};
+
+    bool operator==(const UnequipFields&) const = default;
+};
+
+class Unequip {
+public:
+    static constexpr std::uint32_t message_id = 259;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<Unequip, codec::Error> build(UnequipFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const std::string& worn() const { return f_.worn; }
+
+    bool operator==(const Unequip&) const = default;
+
+private:
+    friend struct detail::Access;
+    UnequipFields f_;
+};
+
+struct GatherFields {
+    std::uint32_t seq = 0;
+    NodeId node{};
+
+    bool operator==(const GatherFields&) const = default;
+};
+
+class Gather {
+public:
+    static constexpr std::uint32_t message_id = 260;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<Gather, codec::Error> build(GatherFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const NodeId& node() const { return f_.node; }
+
+    bool operator==(const Gather&) const = default;
+
+private:
+    friend struct detail::Access;
+    GatherFields f_;
+};
+
+struct UseSelfFields {
+    std::uint32_t seq = 0;
+    std::uint8_t slot = 0;
+
+    bool operator==(const UseSelfFields&) const = default;
+};
+
+class UseSelf {
+public:
+    static constexpr std::uint32_t message_id = 261;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<UseSelf, codec::Error> build(UseSelfFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const std::uint8_t& slot() const { return f_.slot; }
+
+    bool operator==(const UseSelf&) const = default;
+
+private:
+    friend struct detail::Access;
+    UseSelfFields f_;
+};
+
+struct AttackPlayerFields {
+    std::uint32_t seq = 0;
+    PlayerId target{};
+
+    bool operator==(const AttackPlayerFields&) const = default;
+};
+
+class AttackPlayer {
+public:
+    static constexpr std::uint32_t message_id = 262;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<AttackPlayer, codec::Error> build(AttackPlayerFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const PlayerId& target() const { return f_.target; }
+
+    bool operator==(const AttackPlayer&) const = default;
+
+private:
+    friend struct detail::Access;
+    AttackPlayerFields f_;
+};
+
+struct RespawnFields {
+    std::uint32_t seq = 0;
+
+    bool operator==(const RespawnFields&) const = default;
+};
+
+class Respawn {
+public:
+    static constexpr std::uint32_t message_id = 263;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<Respawn, codec::Error> build(RespawnFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+
+    bool operator==(const Respawn&) const = default;
+
+private:
+    friend struct detail::Access;
+    RespawnFields f_;
+};
+
+struct CastSelfFields {
+    std::uint32_t seq = 0;
+    std::string ability{};
+
+    bool operator==(const CastSelfFields&) const = default;
+};
+
+class CastSelf {
+public:
+    static constexpr std::uint32_t message_id = 264;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<CastSelf, codec::Error> build(CastSelfFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const std::string& ability() const { return f_.ability; }
+
+    bool operator==(const CastSelf&) const = default;
+
+private:
+    friend struct detail::Access;
+    CastSelfFields f_;
+};
+
+struct TalkFields {
+    std::uint32_t seq = 0;
+    NpcId npc{};
+
+    bool operator==(const TalkFields&) const = default;
+};
+
+class Talk {
+public:
+    static constexpr std::uint32_t message_id = 265;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<Talk, codec::Error> build(TalkFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const NpcId& npc() const { return f_.npc; }
+
+    bool operator==(const Talk&) const = default;
+
+private:
+    friend struct detail::Access;
+    TalkFields f_;
+};
+
+struct DialogOptionFields {
+    std::uint32_t seq = 0;
+    NpcId npc{};
+    std::string option{};
+
+    bool operator==(const DialogOptionFields&) const = default;
+};
+
+class DialogOption {
+public:
+    static constexpr std::uint32_t message_id = 266;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<DialogOption, codec::Error> build(DialogOptionFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const NpcId& npc() const { return f_.npc; }
+    const std::string& option() const { return f_.option; }
+
+    bool operator==(const DialogOption&) const = default;
+
+private:
+    friend struct detail::Access;
+    DialogOptionFields f_;
+};
+
+struct GiveFields {
+    std::uint32_t seq = 0;
+    NpcId npc{};
+    std::uint8_t slot = 0;
+
+    bool operator==(const GiveFields&) const = default;
+};
+
+class Give {
+public:
+    static constexpr std::uint32_t message_id = 267;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<Give, codec::Error> build(GiveFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const NpcId& npc() const { return f_.npc; }
+    const std::uint8_t& slot() const { return f_.slot; }
+
+    bool operator==(const Give&) const = default;
+
+private:
+    friend struct detail::Access;
+    GiveFields f_;
+};
+
+struct PartyInviteFields {
+    std::uint32_t seq = 0;
+    PlayerId player{};
+
+    bool operator==(const PartyInviteFields&) const = default;
+};
+
+class PartyInvite {
+public:
+    static constexpr std::uint32_t message_id = 268;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<PartyInvite, codec::Error> build(PartyInviteFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const PlayerId& player() const { return f_.player; }
+
+    bool operator==(const PartyInvite&) const = default;
+
+private:
+    friend struct detail::Access;
+    PartyInviteFields f_;
+};
+
+struct PartyAcceptFields {
+    std::uint32_t seq = 0;
+
+    bool operator==(const PartyAcceptFields&) const = default;
+};
+
+class PartyAccept {
+public:
+    static constexpr std::uint32_t message_id = 269;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<PartyAccept, codec::Error> build(PartyAcceptFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+
+    bool operator==(const PartyAccept&) const = default;
+
+private:
+    friend struct detail::Access;
+    PartyAcceptFields f_;
+};
+
+struct PartyDeclineFields {
+    std::uint32_t seq = 0;
+
+    bool operator==(const PartyDeclineFields&) const = default;
+};
+
+class PartyDecline {
+public:
+    static constexpr std::uint32_t message_id = 270;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<PartyDecline, codec::Error> build(PartyDeclineFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+
+    bool operator==(const PartyDecline&) const = default;
+
+private:
+    friend struct detail::Access;
+    PartyDeclineFields f_;
+};
+
+struct PartyLeaveFields {
+    std::uint32_t seq = 0;
+
+    bool operator==(const PartyLeaveFields&) const = default;
+};
+
+class PartyLeave {
+public:
+    static constexpr std::uint32_t message_id = 271;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<PartyLeave, codec::Error> build(PartyLeaveFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+
+    bool operator==(const PartyLeave&) const = default;
+
+private:
+    friend struct detail::Access;
+    PartyLeaveFields f_;
+};
+
+struct PartyKickFields {
+    std::uint32_t seq = 0;
+    PlayerId player{};
+
+    bool operator==(const PartyKickFields&) const = default;
+};
+
+class PartyKick {
+public:
+    static constexpr std::uint32_t message_id = 272;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<PartyKick, codec::Error> build(PartyKickFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const PlayerId& player() const { return f_.player; }
+
+    bool operator==(const PartyKick&) const = default;
+
+private:
+    friend struct detail::Access;
+    PartyKickFields f_;
+};
+
+struct AdminFields {
+    std::uint32_t seq = 0;
+    std::string line{};
+
+    bool operator==(const AdminFields&) const = default;
+};
+
+class Admin {
+public:
+    static constexpr std::uint32_t message_id = 273;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<Admin, codec::Error> build(AdminFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const std::string& line() const { return f_.line; }
+
+    bool operator==(const Admin&) const = default;
+
+private:
+    friend struct detail::Access;
+    AdminFields f_;
+};
+
+struct ApplicationCommitFields {
+    std::uint64_t stream = 0;
+    std::uint64_t epoch = 0;
+    std::uint32_t tick = 0;
+    std::uint64_t event_end = 0;
+
+    bool operator==(const ApplicationCommitFields&) const = default;
+};
+
+class ApplicationCommit {
+public:
+    static constexpr std::uint32_t message_id = 274;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<ApplicationCommit, codec::Error> build(ApplicationCommitFields f);
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& epoch() const { return f_.epoch; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::uint64_t& event_end() const { return f_.event_end; }
+
+    bool operator==(const ApplicationCommit&) const = default;
+
+private:
+    friend struct detail::Access;
+    ApplicationCommitFields f_;
+};
+
+struct UseStationFields {
+    std::uint32_t seq = 0;
+    std::uint8_t slot = 0;
+    NodeId node{};
+
+    bool operator==(const UseStationFields&) const = default;
+};
+
+class UseStation {
+public:
+    static constexpr std::uint32_t message_id = 275;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<UseStation, codec::Error> build(UseStationFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const std::uint8_t& slot() const { return f_.slot; }
+    const NodeId& node() const { return f_.node; }
+
+    bool operator==(const UseStation&) const = default;
+
+private:
+    friend struct detail::Access;
+    UseStationFields f_;
+};
+
+struct AttackNpcFields {
+    std::uint32_t seq = 0;
+    NpcId target{};
+
+    bool operator==(const AttackNpcFields&) const = default;
+};
+
+class AttackNpc {
+public:
+    static constexpr std::uint32_t message_id = 276;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<AttackNpc, codec::Error> build(AttackNpcFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const NpcId& target() const { return f_.target; }
+
+    bool operator==(const AttackNpc&) const = default;
+
+private:
+    friend struct detail::Access;
+    AttackNpcFields f_;
+};
+
+struct CastPlayerFields {
+    std::uint32_t seq = 0;
+    std::string ability{};
+    PlayerId target{};
+
+    bool operator==(const CastPlayerFields&) const = default;
+};
+
+class CastPlayer {
+public:
+    static constexpr std::uint32_t message_id = 277;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<CastPlayer, codec::Error> build(CastPlayerFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const std::string& ability() const { return f_.ability; }
+    const PlayerId& target() const { return f_.target; }
+
+    bool operator==(const CastPlayer&) const = default;
+
+private:
+    friend struct detail::Access;
+    CastPlayerFields f_;
+};
+
+struct CastNpcFields {
+    std::uint32_t seq = 0;
+    std::string ability{};
+    NpcId target{};
+
+    bool operator==(const CastNpcFields&) const = default;
+};
+
+class CastNpc {
+public:
+    static constexpr std::uint32_t message_id = 278;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<CastNpc, codec::Error> build(CastNpcFields f);
+
+    const std::uint32_t& seq() const { return f_.seq; }
+    const std::string& ability() const { return f_.ability; }
+    const NpcId& target() const { return f_.target; }
+
+    bool operator==(const CastNpc&) const = default;
+
+private:
+    friend struct detail::Access;
+    CastNpcFields f_;
+};
+
 using StateMsg = std::variant<Pose, Hp>;
-using EventsMsg = std::variant<Refused>;
+using EventsMsg = std::variant<Inventory, Equipment, Class, Skills, QuestLog, Dialog, Party, Invite, AdminReply, Cooldown, Refused, TickClose, ResumeBoundary, DialogClear, PartyClear, InviteClear>;
 using InputMsg = std::variant<Input>;
-using IntentsMsg = std::variant<std::monostate>;
+using IntentsMsg = std::variant<Pickup, Drop, Equip, Unequip, Gather, UseSelf, AttackPlayer, Respawn, CastSelf, Talk, DialogOption, Give, PartyInvite, PartyAccept, PartyDecline, PartyLeave, PartyKick, Admin, ApplicationCommit, UseStation, AttackNpc, CastPlayer, CastNpc>;
 
 std::expected<void, codec::Error> encode(const Input& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Pose& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Hp& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Inventory& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Equipment& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Class& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Skills& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const QuestLog& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Dialog& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Party& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Invite& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const AdminReply& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Cooldown& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Refused& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const TickClose& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const ResumeBoundary& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const DialogClear& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const PartyClear& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const InviteClear& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Pickup& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Drop& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Equip& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Unequip& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Gather& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const UseSelf& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const AttackPlayer& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Respawn& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const CastSelf& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Talk& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const DialogOption& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Give& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const PartyInvite& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const PartyAccept& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const PartyDecline& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const PartyLeave& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const PartyKick& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const Admin& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const ApplicationCommit& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const UseStation& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const AttackNpc& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const CastPlayer& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const CastNpc& m, std::vector<std::uint8_t>& out);
 
+std::string to_text(const BagEntry& v);
+std::string to_text(const WornName& v);
+std::string to_text(const WornEntry& v);
+std::string to_text(const SkillEntry& v);
+std::string to_text(const QuestEntry& v);
+std::string to_text(const TextLine& v);
+std::string to_text(const DialogChoice& v);
+std::string to_text(const ToolEntry& v);
 std::string to_text(const Input& v);
 std::string to_text(const Pose& v);
 std::string to_text(const Hp& v);
+std::string to_text(const Inventory& v);
+std::string to_text(const Equipment& v);
+std::string to_text(const Class& v);
+std::string to_text(const Skills& v);
+std::string to_text(const QuestLog& v);
+std::string to_text(const Dialog& v);
+std::string to_text(const Party& v);
+std::string to_text(const Invite& v);
+std::string to_text(const AdminReply& v);
+std::string to_text(const Cooldown& v);
 std::string to_text(const Refused& v);
+std::string to_text(const TickClose& v);
+std::string to_text(const ResumeBoundary& v);
+std::string to_text(const DialogClear& v);
+std::string to_text(const PartyClear& v);
+std::string to_text(const InviteClear& v);
+std::string to_text(const Pickup& v);
+std::string to_text(const Drop& v);
+std::string to_text(const Equip& v);
+std::string to_text(const Unequip& v);
+std::string to_text(const Gather& v);
+std::string to_text(const UseSelf& v);
+std::string to_text(const AttackPlayer& v);
+std::string to_text(const Respawn& v);
+std::string to_text(const CastSelf& v);
+std::string to_text(const Talk& v);
+std::string to_text(const DialogOption& v);
+std::string to_text(const Give& v);
+std::string to_text(const PartyInvite& v);
+std::string to_text(const PartyAccept& v);
+std::string to_text(const PartyDecline& v);
+std::string to_text(const PartyLeave& v);
+std::string to_text(const PartyKick& v);
+std::string to_text(const Admin& v);
+std::string to_text(const ApplicationCommit& v);
+std::string to_text(const UseStation& v);
+std::string to_text(const AttackNpc& v);
+std::string to_text(const CastPlayer& v);
+std::string to_text(const CastNpc& v);
 
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r);
 std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes);
