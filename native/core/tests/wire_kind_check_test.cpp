@@ -65,6 +65,12 @@ int main() {
     check(mutate.output.find("f_") != std::string::npos && mutate.output.find("private") != std::string::npos,
           "the compile error says the fields are private");
     std::printf("%s", mutate.output.c_str());
+
+    const auto unbuilt = compile(dir, "unbuilt", "PlayerId", "    marque::wire::Hp blank;\n    (void)blank;\n");
+    check(unbuilt.status != 0, "default-constructing an Hp without build does not compile");
+    check(unbuilt.output.find("deleted") != std::string::npos,
+          "the compile error says the default constructor is deleted");
+    std::printf("%s", unbuilt.output.c_str());
     std::filesystem::remove_all(dir);
     return marque::test::check_finish();
 }

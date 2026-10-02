@@ -7,8 +7,6 @@
 
 #include "check.hpp"
 
-// Seed the committed golden files were generated with. Kept in sync with
-// server/internal/netsim/netsim_test.go's goldenSeed.
 constexpr std::uint64_t kGoldenSeed = 424242;
 
 int main() {
@@ -32,9 +30,6 @@ int main() {
 
     char what[192];
 
-    // Literal counts at seed=kGoldenSeed: a regression that changes the
-    // draw order, the RNG, or lossy_5pct's numbers changes these exactly,
-    // not approximately. Kept in sync with the Go test's wantDrops etc.
     if (seed == kGoldenSeed) {
         constexpr int kWantDrops = 4990;
         constexpr int kWantDelivers = 94912;

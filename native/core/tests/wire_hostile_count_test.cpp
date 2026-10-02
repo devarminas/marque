@@ -1,7 +1,3 @@
-// A list count the remaining bytes cannot hold must fail before the decoder
-// sizes an allocation from it. This executable replaces global operator new to
-// count heap allocations around the decode.
-
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -28,9 +24,7 @@ int main() {
     using marque::test::check;
     namespace probe = marque::wire::probe;
 
-    // Crowd's list bound is 65535 and each Pair is at least 6 bytes, so 03 ff7f
-    // claims 16383 pairs (98298 bytes) with none behind it.
-    const std::vector<std::uint8_t> hostile{0x03, 0xff, 0x7f};
+    const std::vector<std::uint8_t> claims_16383_pairs_with_none_behind_it{0x03, 0xff, 0x7f};
     const std::vector<std::uint8_t> one_pair{0x03, 0x01, 0x05, 0x00, 0x00, 0x00, 0x80, 0x3f};
 
     const auto before_ok = allocations;
@@ -39,7 +33,7 @@ int main() {
     check(allocations > before_ok, "the allocation counter sees the decoder's list allocation");
 
     const auto before = allocations;
-    auto got = probe::decode_events(hostile);
+    auto got = probe::decode_events(claims_16383_pairs_with_none_behind_it);
     const auto during = allocations - before;
     check(!got.has_value() && got.error() == marque::wire::codec::Error::truncated, "hostile count is truncated");
     check(during == 0, "hostile count allocates nothing");

@@ -25,6 +25,7 @@ func (s State) String() string {
 type Flushed struct {
 	Datagrams [][]byte
 	UnreliableSent int
+	UnreliableSeq  uint16
 	State          State
 }
 
@@ -238,6 +239,9 @@ func (s *Sender) Flush(now uint64, u Unreliable) (Flushed, error) {
 
 	out := Flushed{UnreliableSent: sent, State: Open}
 	for _, d := range done {
+		if d.unreliable != nil {
+			out.UnreliableSeq = s.nextSeq
+		}
 		out.Datagrams = append(out.Datagrams, s.seal(d))
 	}
 	if len(done) > 0 {

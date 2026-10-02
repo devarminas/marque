@@ -1,0 +1,17 @@
+schema probe
+
+accept tag state 0c01010007020002010100070200010702000102686901030002000105 tag{who:PlayerId(1/0) other:NpcId(2/0) crowd:[PlayerId(1/0) NpcId(2/0)] by:NpcId(2/0) note:"hi" weight:3 pair:_ slots:[_ 5]}
+accept tag_all_absent state 0c010100070200010101000000000000 tag{who:PlayerId(1/0) other:NpcId(2/0) crowd:[PlayerId(1/0)] by:_ note:_ weight:_ pair:_ slots:[]}
+accept tag_pair state 0c010100070200010101000000000103000000803f00 tag{who:PlayerId(1/0) other:NpcId(2/0) crowd:[PlayerId(1/0)] by:_ note:_ weight:_ pair:Pair{who:NpcId(3/0) weight:1} slots:[]}
+
+reject tag_who_undeclared_tag state 0c020100 bad_enum
+reject tag_by_presence_2 state 0c0101000702000101010002 bad_bool
+reject tag_slot_presence_2 state 0c01010007020001010100000000000102 bad_bool
+reject tag_weight_10 state 0c010100070200010101000000010a0000 rule
+reject tag_weight_0 state 0c01010007020001010100000001000000 rule
+reject tag_other_is_who state 0c010100010100010101000000000000 rule
+reject tag_who_outside_crowd state 0c010100070200010702000000000000 rule
+reject tag_crowd_repeated state 0c010100070200020101000101000000000000 rule
+reject tag_note_over_bound state 0c01010007020001010100000105 over_bound
+reject tag_opt_truncated state 0c0101000702000101010001 truncated
+accept mark state 0d012d0200011e mark{spot:1.25 path:[_ -2.5]}

@@ -1,9 +1,3 @@
-// Command dump prints encoded wire messages as text.
-//
-//	go run ./cmd/wiregen/dump <hex> [<hex>...]
-//
-// It lives apart from wiregen so the generator never imports the package it
-// generates; a broken generated package must not stop regeneration.
 package main
 
 import (
@@ -36,7 +30,6 @@ func main() {
 	}
 }
 
-// channels pairs each channel's decoder with its direction.
 var channels = []struct {
 	dir    string
 	decode func([]byte) (wire.Message, error)
@@ -47,8 +40,6 @@ var channels = []struct {
 	{"c2s", func(b []byte) (wire.Message, error) { return wire.DecodeIntents(b) }},
 }
 
-// dump tries each channel's decoder. Message ids are unique across channels,
-// so at most one decoder knows any id.
 func dump(h string) (string, error) {
 	b, err := hex.DecodeString(h)
 	if err != nil {
