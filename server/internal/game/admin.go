@@ -198,9 +198,10 @@ func (w *World) refuseAdmin(p *player, rejection *mnet.RejectError, replyText st
 		w.log.Event(w.tick, EvIntentIgnored, fields)
 		return
 	}
+	w.emitOwner(p,RefusedValue{p.origin,domainReason(rejection.Reason)})
 	w.sendAdminReply(p, replyText)
 	if rejection.Disposition == mnet.ReplyErrorAndClose {
-		p.conn.CloseAfterFlush(mnet.DisconnectProtocol)
+		if p.conn != nil {p.conn.CloseAfterFlush(mnet.DisconnectProtocol)}
 	}
 }
 

@@ -4,17 +4,19 @@ accept input input 019600012c010000 input{dx:0.5 dz:-1 jump:true seq:300}
 accept pose state 020702d244060032400600d7180600 pose{id:PlayerId(7/2) x:12.34 y:0.5 z:-100.25}
 accept pose_at_floor state 020100881300000000000000000000 pose{id:PlayerId(1/0) x:-4046 y:-4096 z:-4096}
 accept hp state 0307025500000078000000 hp{id:PlayerId(7/2) hp:85 max_hp:120}
-accept refused events 04e80300002a00000006 refused{tick:1000 seq:42 reason:cooldown}
+accept refused events 8a0101000000000000000200000000000000e8030000022a00000006 refused{stream:1 event_seq:2 tick:1000 source:intent seq:42 reason:cooldown}
 
 reject truncated_pose state 020702d244060032400600d71806 truncated
 reject byte_after_input input 019600012c01000000 trailing
 reject byte_after_hp state 030702550000007800000000 trailing
 reject unknown_id state 7f unknown_message
 reject pose_on_events events 020702d244060032400600d7180600 unknown_message
-reject refused_on_state state 04e80300002a00000006 unknown_message
+reject refused_on_state state 8a0101000000000000000200000000000000e8030000022a00000006 unknown_message
 reject input_on_intents intents 019600012c010000 unknown_message
 reject pose_on_input input 020702d244060032400600d7180600 unknown_message
 reject overlong_id state 8100 bad_varint
 reject wish_above_range input 01c900012c010000 out_of_range
 reject bool_byte_2 input 019600022c010000 bad_bool
-reject refuse_reason_0 events 04e80300002a00000000 bad_enum
+reject refuse_reason_0 events 8a0101000000000000000200000000000000e8030000022a00000000 bad_enum
+
+reject retired_refused events 04e80300002a00000006 unknown_message
