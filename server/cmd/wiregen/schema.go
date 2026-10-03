@@ -15,6 +15,7 @@ type Schema struct {
 	Handles  []*Handle
 	Quants   []*Quant
 	Enums    []*Enum
+	Unions   []*Union
 	Structs  []*Struct
 	Messages []*Message
 }
@@ -26,7 +27,6 @@ type Quant struct {
 	Min, Max, PerUnit int64
 }
 
-// Steps is the largest encoded value; the wire value runs 0..Steps.
 func (q *Quant) Steps() uint64 { return uint64((q.Max - q.Min) * q.PerUnit) }
 
 func (q *Quant) Width() int {
@@ -48,6 +48,17 @@ type Enum struct {
 type EnumMember struct {
 	Name  string
 	Value uint32
+}
+
+type Union struct {
+	Name    string
+	Members []UnionMember
+}
+
+type UnionMember struct {
+	Name   string
+	Handle *Handle
+	Tag    uint32
 }
 
 type Struct struct {
@@ -128,6 +139,13 @@ func (o Operand) Leaf() Type {
 	return o.Field.Type.each()
 }
 
+func (t Type) present() Type {
+	if t.Kind == KindOpt {
+		return *t.Elem
+	}
+	return t
+}
+
 func (t Type) each() Type {
 	if t.Kind == KindList {
 		return *t.Elem
@@ -152,10 +170,10 @@ const (
 	KindList
 	KindHandle
 	KindStruct
+	KindUnion
+	KindOpt
 )
 
-// Type is a field type. Prim is set for KindPrim, Bound for strings and lists,
-// Elem for lists, and exactly one of the declaration pointers for named types.
 type Type struct {
 	Kind   Kind
 	Prim   string
@@ -165,20 +183,21 @@ type Type struct {
 	Enum   *Enum
 	Handle *Handle
 	Struct *Struct
+	Union  *Union
 }
 
-// MinSize is the fewest bytes any value of t encodes to. List decoders use it
-// to refuse a count the remaining bytes cannot hold before allocating.
 func (t Type) MinSize() int {
 	switch t.Kind {
 	case KindPrim:
 		return primSize[t.Prim]
 	case KindQuant:
 		return t.Quant.Width()
-	case KindString, KindEnum, KindList:
+	case KindString, KindEnum, KindList, KindOpt:
 		return 1
 	case KindHandle:
 		return 2
+	case KindUnion:
+		return 3
 	default:
 		n := 0
 		for _, f := range t.Struct.Fields {
@@ -202,6 +221,10 @@ func (t Type) Canonical() string {
 		return fmt.Sprintf("list(%s, %d)", t.Elem.Canonical(), t.Bound)
 	case KindHandle:
 		return t.Handle.Name
+	case KindUnion:
+		return t.Union.Name
+	case KindOpt:
+		return fmt.Sprintf("opt(%s)", t.Elem.Canonical())
 	default:
 		return t.Struct.Name
 	}
@@ -217,6 +240,8 @@ func (t Type) comparable() bool {
 		return t.Prim != "f32"
 	case KindList:
 		return false
+	case KindOpt:
+		return t.Elem.comparable()
 	case KindStruct:
 		for _, f := range t.Struct.Fields {
 			if !f.Type.comparable() {
@@ -227,7 +252,7 @@ func (t Type) comparable() bool {
 	return true
 }
 
-func (t Type) scalar() bool { return t.comparable() && t.Kind != KindStruct }
+func (t Type) scalar() bool { return t.comparable() && t.Kind != KindStruct && t.Kind != KindOpt }
 
 // primSize is each primitive's encoded width in bytes.
 var primSize = map[string]int{
@@ -423,6 +448,8 @@ func (p *parser) decl() error {
 		return p.quant(toks)
 	case "enum":
 		return p.enum(toks)
+	case "union":
+		return p.union(toks)
 	case "struct":
 		return p.structDecl(toks)
 	case "message":
@@ -450,7 +477,7 @@ func (p *parser) quant(toks []string) error {
 	if !snakeName.MatchString(q.Name) {
 		return p.errf("quant name %q must be snake_case", q.Name)
 	}
-	if _, dup := p.types[q.Name]; dup || primSize[q.Name] > 0 || q.Name == "string" || q.Name == "list" {
+	if _, dup := p.types[q.Name]; dup || primSize[q.Name] > 0 || q.Name == "string" || q.Name == "list" || q.Name == "opt" {
 		return p.errf("duplicate name %q", q.Name)
 	}
 	if q.Min >= q.Max || q.PerUnit < 1 {
@@ -475,7 +502,6 @@ func (p *parser) openBlock(toks []string, want int) error {
 	return nil
 }
 
-// block calls line for each body line until the closing brace.
 func (p *parser) block(line func([]string) error) error {
 	p.pos++
 	for ; p.pos < len(p.lines); p.pos++ {
@@ -525,6 +551,65 @@ func (p *parser) enum(toks []string) error {
 	}
 	p.schema.Enums = append(p.schema.Enums, e)
 	return err
+}
+
+func (p *parser) union(toks []string) error {
+	if err := p.openBlock(toks, 3); err != nil {
+		return err
+	}
+	u := &Union{Name: toks[1]}
+	header := p.lineNo[p.pos]
+	if err := p.declareType(u.Name, Type{Kind: KindUnion, Union: u}, header); err != nil {
+		return err
+	}
+	seenName, seenTag, seenHandle := map[string]bool{}, map[uint32]bool{}, map[*Handle]bool{}
+	err := p.block(func(t []string) error {
+		if len(t) != 4 || t[2] != "=" {
+			return p.errf("want: <member> <Handle> = <tag>")
+		}
+		v, err := strconv.ParseUint(t[3], 10, 32)
+		if err != nil {
+			return p.errf("union tag %q is not a u32", t[3])
+		}
+		if !snakeName.MatchString(t[0]) || cppKeywords[t[0]] {
+			return p.errf("union member %q must be snake_case and not a C++ keyword", t[0])
+		}
+		h := p.types[t[1]]
+		if h.Kind != KindHandle {
+			return p.errf("union member %s: %q is not a handle; union members are handles", t[0], t[1])
+		}
+		if seenName[t[0]] || seenTag[uint32(v)] || seenHandle[h.Handle] {
+			return p.errf("union %s: duplicate member, tag, or handle in %q", u.Name, strings.Join(t, " "))
+		}
+		seenName[t[0]], seenTag[uint32(v)], seenHandle[h.Handle] = true, true, true
+		u.Members = append(u.Members, UnionMember{Name: t[0], Handle: h.Handle, Tag: uint32(v)})
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(u.Members) == 0 {
+		return p.errAt(header, "union %s has no members", u.Name)
+	}
+	for _, prev := range p.schema.Unions {
+		if sameHandles(prev, u) {
+			return p.errAt(header, "union %s has the same handles in the same order as union %s, so C++ would see one std::variant type", u.Name, prev.Name)
+		}
+	}
+	p.schema.Unions = append(p.schema.Unions, u)
+	return nil
+}
+
+func sameHandles(a, b *Union) bool {
+	if len(a.Members) != len(b.Members) {
+		return false
+	}
+	for i := range a.Members {
+		if a.Members[i].Handle != b.Members[i].Handle {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *parser) structDecl(toks []string) error {
@@ -615,7 +700,7 @@ func (p *parser) fields() ([]Field, []Relation, error) {
 			if rest[0] != "where" {
 				return p.errf("unexpected %q after field type", strings.Join(rest, " "))
 			}
-			if f.Where, err = p.where(typ, rest[1:]); err != nil {
+			if f.Where, err = p.where(typ.present(), rest[1:]); err != nil {
 				return err
 			}
 		}
@@ -741,7 +826,7 @@ func (p *parser) set(e *Enum, toks []string) (Term, []string, error) {
 
 func holdsQuant(s *Struct) bool {
 	for _, f := range s.Fields {
-		if f.Type.Kind == KindQuant || f.Type.Kind == KindStruct && holdsQuant(f.Type.Struct) {
+		if t := f.Type.present(); t.Kind == KindQuant || t.Kind == KindStruct && holdsQuant(t.Struct) {
 			return true
 		}
 	}
@@ -878,6 +963,9 @@ func (p *parser) operand(fields []Field, tok string, line int) (Operand, error) 
 	if f == nil {
 		return Operand{}, p.errAt(line, "rule names %q, which is not a field of this block", head)
 	}
+	if f.Type.Kind == KindOpt {
+		return Operand{}, p.errAt(line, "rule names %q, an opt field; a rule sees only fields that are always present", head)
+	}
 	o := Operand{Field: f}
 	if !dotted {
 		return o, nil
@@ -889,10 +977,12 @@ func (p *parser) operand(fields []Field, tok string, line int) (Operand, error) 
 	if o.Sub = findField(st.Struct.Fields, sub); o.Sub == nil {
 		return Operand{}, p.errAt(line, "rule operand %q: struct %s has no field %q", tok, st.Struct.Name, sub)
 	}
+	if o.Sub.Type.Kind == KindOpt {
+		return Operand{}, p.errAt(line, "rule operand %q: %s is an opt field; a rule sees only fields that are always present", tok, sub)
+	}
 	return o, nil
 }
 
-// typ parses one type from the front of toks and returns the unread tail.
 func (p *parser) typ(toks []string) (Type, []string, error) {
 	if len(toks) == 0 {
 		return Type{}, nil, p.errf("missing type")
@@ -923,6 +1013,24 @@ func (p *parser) typ(toks []string) (Type, []string, error) {
 		}
 		n, err := p.bound(rest[1])
 		return Type{Kind: KindList, Bound: n, Elem: &elem}, rest[3:], err
+	case head == "opt":
+		if len(toks) < 2 || toks[1] != "(" {
+			return Type{}, nil, p.errf("want: opt(<type>)")
+		}
+		elem, rest, err := p.typ(toks[2:])
+		if err != nil {
+			return Type{}, nil, err
+		}
+		switch elem.Kind {
+		case KindOpt:
+			return Type{}, nil, p.errf("opt of opt is not supported")
+		case KindList:
+			return Type{}, nil, p.errf("opt of list is not supported; an empty list already says none, or wrap the list in a struct")
+		}
+		if len(rest) < 1 || rest[0] != ")" {
+			return Type{}, nil, p.errf("want: opt(<type>)")
+		}
+		return Type{Kind: KindOpt, Elem: &elem}, rest[1:], nil
 	}
 	if t, ok := p.types[head]; ok {
 		return t, toks[1:], nil
@@ -951,6 +1059,13 @@ func (s *Schema) Canonical() string {
 		fmt.Fprintf(&b, "enum %s {\n", e.Name)
 		for _, m := range e.Members {
 			fmt.Fprintf(&b, "%s = %d\n", m.Name, m.Value)
+		}
+		b.WriteString("}\n")
+	}
+	for _, u := range s.Unions {
+		fmt.Fprintf(&b, "union %s {\n", u.Name)
+		for _, m := range u.Members {
+			fmt.Fprintf(&b, "%s %s = %d\n", m.Name, m.Handle.Name, m.Tag)
 		}
 		b.WriteString("}\n")
 	}
@@ -983,8 +1098,6 @@ func (s *Schema) Canonical() string {
 	return b.String()
 }
 
-// Hash is the first 8 bytes of SHA-256(Canonical()), read big-endian, so its
-// hex spelling equals the first 16 hex digits of `wiregen canon | sha256sum`.
 func (s *Schema) Hash() uint64 {
 	sum := sha256.Sum256([]byte(s.Canonical()))
 	return binary.BigEndian.Uint64(sum[:8])
@@ -1000,7 +1113,6 @@ func (s *Schema) MessagesOn(channel string) []*Message {
 	return out
 }
 
-// goName turns snake_case into PascalCase: max_hp -> MaxHp.
 func goName(snake string) string {
 	var b strings.Builder
 	for _, part := range strings.Split(snake, "_") {

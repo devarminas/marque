@@ -26,8 +26,10 @@ target_compile_options(marque_core PRIVATE -Wall -Wextra -Werror)
 
 enable_testing()
 
-# Every core/tests/*.cpp becomes its own ctest executable named after its
-# file stem. Adding a test file needs no edit here either.
+add_executable(motion_peer EXCLUDE_FROM_ALL core/tests/motion_peer/main.cpp)
+target_link_libraries(motion_peer PRIVATE marque_core)
+target_compile_options(motion_peer PRIVATE -Wall -Wextra -Werror)
+
 file(GLOB MARQUE_CORE_TEST_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/*.cpp")
 

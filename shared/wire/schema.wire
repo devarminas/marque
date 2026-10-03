@@ -1,12 +1,8 @@
-# Marque wire schema. Grammar: shared/wire/README.md.
-# Regenerate with scripts/wiregen.sh after any edit.
-
 handle PlayerId
 handle NpcId
 handle ItemId
 handle NodeId
 
-# Range and precision are placeholders until ARM-362 measures them.
 quant pos min -4096 max 4096 per_unit 100
 quant wish min -1 max 1 per_unit 100
 
@@ -18,6 +14,42 @@ enum RefuseReason {
   out_of_range = 5
   cooldown = 6
   dead = 7
+  protocol_error = 8
+  illegal_sample = 9
+  unknown_item = 10
+  no_such_slot = 11
+  empty_slot = 12
+  not_equippable = 13
+  no_such_worn_slot = 14
+  empty_worn_slot = 15
+  inventory_full = 16
+  unknown_node = 17
+  node_depleted = 18
+  needs_class = 19
+  no_recipe = 20
+  missing_mat = 21
+  unknown_player = 22
+  self = 23
+  target_dead = 24
+  not_dead = 25
+  no_dialog = 26
+  unknown_option = 27
+  quest_active = 28
+  quest_complete = 29
+  quest_inactive = 30
+  quest_incomplete = 31
+  wrong_item = 32
+  not_leader = 33
+  party_full = 34
+  already_in_party = 35
+  duplicate_invite = 36
+  no_invite = 37
+  not_in_party = 38
+  not_same_party = 39
+  unauthorized = 40
+  usage = 41
+  non_finite = 42
+  out_of_bounds = 43
 }
 
 message input = 1 on input c2s {
@@ -40,8 +72,407 @@ message hp = 3 on state s2c {
   max_hp u32
 }
 
-message refused = 4 on events s2c {
+
+
+
+enum OriginSource {
+  input = 1
+  intent = 2
+}
+
+struct BagEntry {
+  slot u8 where 0..27
+  kind string(64)
+}
+struct WornName {
+  name string(32)
+}
+struct WornEntry {
+  slot string(32)
+  kind string(64)
+}
+struct SkillEntry {
+  id string(64)
+  xp i64 where 0..9223372036854775807
+  level u32
+}
+struct QuestEntry {
+  id string(64)
+  title string(256)
+  objective string(512)
+  status string(32)
+}
+struct TextLine {
+  text string(1024)
+}
+struct DialogChoice {
+  id string(64)
+}
+struct ToolEntry {
+  kind string(64)
+}
+
+message inventory = 128 on events s2c {
+  stream u64
+  event_seq u64
   tick u32
+  size u8 where 28..28
+  slots list(BagEntry, 28) where unique(slot)
+  rule slots.slot < size
+}
+
+message equipment = 129 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  worn list(WornName, 6) where unique(name)
+  slots list(WornEntry, 6) where unique(slot)
+}
+
+message class = 130 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  class_id string(64)
+  missing_slots list(WornEntry, 6) where unique(slot)
+  missing_tools list(ToolEntry, 16) where unique(kind)
+}
+
+message skills = 131 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  skills list(SkillEntry, 64) where unique(id)
+}
+
+message quest_log = 132 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  quests list(QuestEntry, 64) where unique(id)
+}
+
+message dialog = 133 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  npc NpcId
+  lines list(TextLine, 16)
+  options list(DialogChoice, 16) where unique(id)
+}
+
+message party = 134 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  id u64
+  leader PlayerId
+  members list(PlayerId, 4) where unique
+  rule leader in members
+}
+
+message invite = 135 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  from PlayerId
+}
+
+message admin_reply = 136 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  text string(8192)
+}
+
+message cooldown = 137 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  ability string(64)
+  ready_tick u32
+}
+
+message refused = 138 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  source OriginSource
   seq u32
   reason RefuseReason
+}
+
+union EntityId {
+  player PlayerId = 1
+  npc NpcId = 2
+  item ItemId = 3
+  node NodeId = 4
+}
+
+union CombatantId {
+  player PlayerId = 1
+  npc NpcId = 2
+}
+
+enum CastStep {
+  begin = 1
+  resolve = 2
+  cancel = 3
+}
+
+struct Transform {
+  x pos
+  y pos
+  z pos
+}
+
+struct Vitals {
+  hp u32
+  max_hp u32
+  mana u32
+  max_mana u32
+  rule hp <= max_hp
+  rule mana <= max_mana
+}
+
+struct Gear {
+  helmet opt(string(32))
+  chest opt(string(32))
+  trousers opt(string(32))
+  feet opt(string(32))
+  left_hand opt(string(32))
+  right_hand opt(string(32))
+}
+
+struct Casting {
+  ability string(32)
+  start u32
+  ticks u16 where 1..65535
+}
+
+struct CastBar {
+  casting opt(Casting)
+}
+
+struct Look {
+  kind string(32)
+}
+
+message entity = 16 on state s2c {
+  id EntityId
+  transform opt(Transform)
+  vitals opt(Vitals)
+  gear opt(Gear)
+  cast opt(CastBar)
+  look opt(Look)
+}
+
+message gone = 17 on state s2c {
+  id EntityId
+}
+
+message swing = 18 on state s2c {
+  tick u32
+  attacker CombatantId
+  target CombatantId
+  amount u32
+  crit bool
+  miss bool
+  rule target != attacker
+}
+
+message cast_phase = 19 on state s2c {
+  tick u32
+  caster CombatantId
+  ability string(32)
+  step CastStep
+  target opt(CombatantId)
+  amount u32
+}
+
+message gather_start = 20 on state s2c {
+  tick u32
+  player PlayerId
+  node NodeId
+}
+message tick_close = 139 on events s2c {
+  stream u64
+  epoch u64
+  tick u32
+  event_end u64
+  state_items u16
+}
+
+message resume_boundary = 140 on events s2c {
+  stream u64
+  epoch u64
+  tick u32
+  event_end u64
+  applied_event u64
+  next_intent u32
+}
+
+message dialog_clear = 141 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+  npc NpcId
+}
+
+message party_clear = 142 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+}
+
+message invite_clear = 143 on events s2c {
+  stream u64
+  event_seq u64
+  tick u32
+}
+
+message pickup = 256 on intents c2s {
+  seq u32
+  item ItemId
+}
+
+message drop = 257 on intents c2s {
+  seq u32
+  slot u8
+}
+
+message equip = 258 on intents c2s {
+  seq u32
+  slot u8
+}
+
+message unequip = 259 on intents c2s {
+  seq u32
+  worn string(32)
+}
+
+message gather = 260 on intents c2s {
+  seq u32
+  node NodeId
+}
+
+message use_self = 261 on intents c2s {
+  seq u32
+  slot u8
+}
+
+message attack_player = 262 on intents c2s {
+  seq u32
+  target PlayerId
+}
+
+message respawn = 263 on intents c2s {
+  seq u32
+}
+
+message cast_self = 264 on intents c2s {
+  seq u32
+  ability string(64)
+}
+
+message talk = 265 on intents c2s {
+  seq u32
+  npc NpcId
+}
+
+message dialog_option = 266 on intents c2s {
+  seq u32
+  npc NpcId
+  option string(64)
+}
+
+message give = 267 on intents c2s {
+  seq u32
+  npc NpcId
+  slot u8
+}
+
+message party_invite = 268 on intents c2s {
+  seq u32
+  player PlayerId
+}
+
+message party_accept = 269 on intents c2s {
+  seq u32
+}
+
+message party_decline = 270 on intents c2s {
+  seq u32
+}
+
+message party_leave = 271 on intents c2s {
+  seq u32
+}
+
+message party_kick = 272 on intents c2s {
+  seq u32
+  player PlayerId
+}
+
+message admin = 273 on intents c2s {
+  seq u32
+  line string(1024)
+}
+
+message application_commit = 274 on intents c2s {
+  stream u64
+  epoch u64
+  tick u32
+  event_end u64
+}
+
+message use_station = 275 on intents c2s {
+  seq u32
+  slot u8
+  node NodeId
+}
+
+message attack_npc = 276 on intents c2s {
+  seq u32
+  target NpcId
+}
+
+message cast_player = 277 on intents c2s {
+  seq u32
+  ability string(64)
+  target PlayerId
+}
+
+message cast_npc = 278 on intents c2s {
+  seq u32
+  ability string(64)
+  target NpcId
+}
+
+enum MotionMode {
+  free = 1
+  rooted = 2
+  interrupt_on_move = 3
+}
+
+message owner_motion = 21 on state s2c {
+  stream u64
+  epoch u64
+  player PlayerId
+  tick u32 where 0..4294967294
+  input_seq u32 where 0..4294967294
+  x f32
+  y f32
+  z f32
+  vy f32
+  dx f32
+  dz f32
+  grounded bool
+  mode MotionMode
+  cast_end u32 where 0..4294967294
+  map_id string(64)
+  map_revision u32 where 1..4294967295
+  half_extent f32
+  ground_y f32
+  tick_interval_us u32 where 33334..50000
 }

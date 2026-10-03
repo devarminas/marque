@@ -9,11 +9,6 @@ import (
 	"github.com/devarminas/marque/server/internal/netsim"
 )
 
-// goldenSeed is the seed the committed files under
-// shared/wire/vectors/netsim were generated with. Override it for a
-// one-off debugging run with NETSIM_SEED=<n>; that run's output will not
-// match the golden files (they are pinned to goldenSeed), but the fate
-// sequence it prints is what a seed-specific bug report should show.
 const goldenSeed uint64 = 424242
 
 const goldenVectorCount = 1000
@@ -62,8 +57,6 @@ func TestGoldenVectorsMatchCommittedFiles(t *testing.T) {
 	}
 }
 
-// firstLines returns up to n lines of s, for a compact failure message
-// instead of dumping a 1000-line golden file.
 func firstLines(s string, n int) string {
 	lines := strings.SplitN(s, "\n", n+1)
 	if len(lines) > n {
@@ -89,9 +82,6 @@ func TestStatisticalSanityLossy5Pct(t *testing.T) {
 		}
 	}
 
-	// Literal counts at seed=goldenSeed: a regression that changes the
-	// draw order, the RNG, or lossy_5pct's numbers changes these exactly,
-	// not approximately.
 	const wantDrops = 4990
 	const wantDelivers = 94912
 	const wantDuplicates = 98

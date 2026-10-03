@@ -1,8 +1,3 @@
-// Package codec is the hand-written runtime under the wiregen-generated
-// message code. Values are little-endian and byte-aligned. Message ids, entity
-// handle parts, enum values, and string and list lengths are unsigned LEB128
-// varints capped at 32 bits. Writer and Reader keep the first error and turn
-// every later call into a no-op, so generated code needs no per-field checks.
 package codec
 
 import (
@@ -51,8 +46,6 @@ var (
 	ErrRule           = errors.New("wire: value breaks a schema rule")
 )
 
-// Quant maps a float onto the integers 0..Steps: q = round(v*PerUnit) - Min*PerUnit.
-// Width is the byte count of the smallest unsigned integer holding Steps.
 type Quant struct {
 	Min, Max, PerUnit float64
 	Steps             uint64
@@ -60,6 +53,16 @@ type Quant struct {
 }
 
 func (q Quant) Step(v float64) uint64 { return uint64(math.Round(v*q.PerUnit) - q.Min*q.PerUnit) }
+
+func (q Quant) Value(n uint64) float64 { return (float64(n) + q.Min*q.PerUnit) / q.PerUnit }
+
+func (q Quant) Snap(v float64) float64 {
+	r := math.Round(v * q.PerUnit)
+	if !(r >= q.Min*q.PerUnit && r <= q.Max*q.PerUnit) {
+		return v
+	}
+	return q.Value(q.Step(v))
+}
 
 type Writer struct {
 	buf   []byte
@@ -82,7 +85,6 @@ func (w *Writer) Err() error { return w.err }
 
 func (w *Writer) writing() bool { return w.err == nil && !w.check }
 
-// Result returns the grown buffer, or the caller's buffer unchanged on error.
 func (w *Writer) Result() ([]byte, error) {
 	if w.err != nil {
 		return w.buf[:w.start], w.err
@@ -185,7 +187,6 @@ type Reader struct {
 
 func NewReader(b []byte) *Reader { return &Reader{buf: b} }
 
-// Len is the number of unread bytes.
 func (r *Reader) Len() int { return len(r.buf) }
 
 func (r *Reader) Err() error { return r.err }
@@ -196,7 +197,6 @@ func (r *Reader) Fail(err error) {
 	}
 }
 
-// Finish reports the first error, or ErrTrailing when bytes remain.
 func (r *Reader) Finish() error {
 	if r.err == nil && len(r.buf) > 0 {
 		r.err = ErrTrailing
@@ -265,7 +265,6 @@ func (r *Reader) F32() float32 {
 	return v
 }
 
-// Varint rejects overlong forms so every value has exactly one encoding.
 func (r *Reader) Varint() uint32 {
 	var v uint32
 	for i := 0; i < 5; i++ {
@@ -291,9 +290,6 @@ func (r *Reader) Varint() uint32 {
 	return 0
 }
 
-// Count reads a length and fails with ErrTruncated when n elements of at
-// least minElem bytes each cannot fit in what remains, so a hostile count
-// never sizes an allocation.
 func (r *Reader) Count(bound, minElem int) int {
 	n := r.Varint()
 	if r.err == nil && uint64(n) > uint64(bound) {
@@ -336,7 +332,7 @@ func (r *Reader) Quant(q Quant) float64 {
 	if r.err != nil {
 		return 0
 	}
-	return (float64(n) + q.Min*q.PerUnit) / q.PerUnit
+	return q.Value(n)
 }
 
 func Unique(n int, equal func(i, j int) bool) bool {
@@ -367,4 +363,20 @@ func (l List[T]) At(i int) T { return l.s[i] }
 
 func (l List[T]) All() iter.Seq2[int, T] {
 	return slices.All(l.s)
+}
+
+type Opt[T any] struct {
+	v  T
+	ok bool
+}
+
+func Some[T any](v T) Opt[T] { return Opt[T]{v: v, ok: true} }
+
+func (o Opt[T]) Get() (T, bool) { return o.v, o.ok }
+
+func ReadOpt[T any](r *Reader, read func(*Reader) T) Opt[T] {
+	if !r.Bool() || r.err != nil {
+		return Opt[T]{}
+	}
+	return Some(read(r))
 }

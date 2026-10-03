@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -135,7 +136,8 @@ void vectors() {
 template <typename T>
 T must(std::expected<T, Error> v) {
     check(v.has_value(), "build succeeds");
-    return v.has_value() ? *v : T{};
+    if (!v.has_value()) std::exit(marque::test::check_finish());
+    return std::move(*v);
 }
 
 void built_messages_encode_to_vector_bytes() {
@@ -152,8 +154,8 @@ void built_messages_encode_to_vector_bytes() {
           "built pose encodes to its vector");
     check(hex(must(wire::Hp::build({.id = id, .hp = 85, .max_hp = 120}))) == "0307025500000078000000",
           "built hp encodes to its vector");
-    check(hex(must(wire::Refused::build({.tick = 1000, .seq = 42, .reason = wire::RefuseReason::cooldown}))) ==
-              "04e80300002a00000006",
+    check(hex(must(wire::Refused::build({.stream = 1, .event_seq = 2, .tick = 1000, .source = wire::OriginSource::intent, .seq = 42, .reason = wire::RefuseReason::cooldown}))) ==
+              "8a0101000000000000000200000000000000e8030000022a00000006",
           "built refused encodes to its vector");
     check(hex(must(probe::Party::build({.leader = {1, 0}, .members = {{1, 0}, {2, 0}}}))) == "0401000201000200",
           "built party encodes to its vector");
@@ -216,15 +218,47 @@ void build_refuses_what_decoders_refuse() {
           "infinite ratio");
 }
 
-void encode_refuses_invalid_default_value() {
-    const auto refuses_default = [](const auto& m, Error want) {
-        std::vector<std::uint8_t> out{0xaa};
-        auto got = encode(m, out);
-        return !got.has_value() && got.error() == want && out == std::vector<std::uint8_t>{0xaa};
-    };
-    check(refuses_default(probe::Party{}, Error::rule), "default party refused");
-    check(refuses_default(probe::Inventory{}, Error::rule), "default inventory refused");
-    check(refuses_default(wire::Refused{}, Error::bad_enum), "default refused message refused");
+void unions_and_opts_build_encode_and_print() {
+    const probe::Who p1 = probe::PlayerId{1, 0};
+    const probe::Who n2 = probe::NpcId{2, 0};
+    const auto tag = must(probe::Tag::build({.who = p1,
+                                             .other = n2,
+                                             .crowd = {p1, n2},
+                                             .by = n2,
+                                             .note = "hi",
+                                             .weight = std::uint8_t{3},
+                                             .pair = std::nullopt,
+                                             .slots = {std::nullopt, std::uint8_t{5}}}));
+    std::vector<std::uint8_t> out;
+    check(encode(tag, out).has_value() && to_hex(out) == "0c01010007020002010100070200010702000102686901030002000105",
+          "built tag encodes to its vector");
+    check(to_text(tag) == R"(tag{who:PlayerId(1/0) other:NpcId(2/0) crowd:[PlayerId(1/0) NpcId(2/0)] by:NpcId(2/0) note:"hi" weight:3 pair:_ slots:[_ 5]})",
+          "built tag prints the absent opts as _");
+    check(std::holds_alternative<probe::NpcId>(*tag.by()) && std::get<probe::NpcId>(*tag.by()).index == 2,
+          "the opt union reads back as an NpcId");
+    check(refuses(probe::Tag::build({.who = p1, .other = p1, .crowd = {p1}}), Error::rule), "other equal to who");
+    check(refuses(probe::Tag::build({.who = p1, .other = n2, .crowd = {n2}}), Error::rule), "who outside crowd");
+    check(refuses(probe::Tag::build({.who = p1, .other = n2, .crowd = {p1, p1}}), Error::rule), "repeated crowd member");
+    check(refuses(probe::Tag::build({.who = p1, .other = n2, .crowd = {p1}, .weight = std::uint8_t{10}}), Error::rule),
+          "present weight 10 outside 1..9");
+    check(probe::Tag::build({.who = p1, .other = n2, .crowd = {p1}}).has_value(), "absent weight skips its range");
+
+    const auto mark = must(probe::Mark::build({.spot = 1.13, .path = {std::nullopt, -2.6}}));
+    check(mark.spot() == 1.25 && mark.path()[1] == -2.5, "build snaps opt and list quants to the grid");
+    std::vector<std::uint8_t> mark_bytes;
+    check(encode(mark, mark_bytes).has_value() && to_hex(mark_bytes) == "0d012d0200011e", "snapped mark encodes to its vector");
+    const auto pose = must(wire::Pose::build({.id = {7, 2}, .x = 87.49238566911093, .y = 0.005, .z = -36.739013361827794}));
+    check(pose.x() == 87.49 && pose.y() == 0.01 && pose.z() == -36.74, "build snaps a pose to what the peer decodes");
+    const auto edge = must(wire::Transform::build({.x = 4096, .y = -4096.004, .z = -4095.996}));
+    check(edge.x() == 4096 && edge.y() == -4096 && edge.z() == -4096, "build snaps a hair below min onto min and keeps max");
+    const auto entity = must(wire::Entity::build({.id = wire::PlayerId{1, 0}, .transform = edge}));
+    std::vector<std::uint8_t> entity_bytes;
+    check(encode(entity, entity_bytes).has_value() && to_hex(entity_bytes) == "100101000100800c00000000000000000000000000",
+          "an entity rebuilds around the edge transform");
+    check(refuses(wire::Transform::build({.x = 4096.006}), Error::out_of_range), "x a step past max");
+    check(refuses(wire::Transform::build({.x = -4096.006}), Error::out_of_range), "x a step below min");
+    check(refuses(wire::Transform::build({.x = 1e30}), Error::out_of_range), "x far past max");
+    check(refuses(wire::Transform::build({.x = std::nan("")}), Error::non_finite), "x not a number");
 }
 
 void decode_next_reads_packed_messages_in_order() {
@@ -300,7 +334,7 @@ int main() {
     built_messages_encode_to_vector_bytes();
     quantization_snaps_to_grid();
     build_refuses_what_decoders_refuse();
-    encode_refuses_invalid_default_value();
+    unions_and_opts_build_encode_and_print();
     decode_next_reads_packed_messages_in_order();
     text_matches_go();
     return marque::test::check_finish();

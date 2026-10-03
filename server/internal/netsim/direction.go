@@ -2,19 +2,11 @@ package netsim
 
 import "sort"
 
-// Delivery is a packet due to arrive: the opaque payload plus the time the
-// simulated network delivers it. Returned from Simulator.Poll in delivery
-// order.
 type Delivery struct {
 	Packet []byte
 	At     uint64
 }
 
-// scheduled is a delivery still waiting in a direction's queue. seq and
-// copyIndex exist only to break ties when two deliveries land at the same
-// microsecond (common with zero jitter, or a duplicate whose extra draw is
-// 0): seq orders by send order, copyIndex puts a duplicate's first copy
-// before its second.
 type scheduled struct {
 	seq       uint64
 	copyIndex uint8
@@ -22,10 +14,6 @@ type scheduled struct {
 	packet    []byte
 }
 
-// directionSim is one direction's independent fate stream: its own RNG
-// draws, its own send sequence, its own queue of not-yet-delivered
-// packets. Two of these (a to b, b to a) make up a Simulator; neither
-// direction's draws affect the other's.
 type directionSim struct {
 	r       *rng
 	nextSeq uint64
@@ -52,8 +40,6 @@ func (d *directionSim) send(profile Profile, packet []byte, now uint64) {
 	}
 }
 
-// poll drains and returns every packet due at or before now, ordered by
-// arrival time and then by send order for same-time arrivals.
 func (d *directionSim) poll(now uint64) []Delivery {
 	due := d.pending[:0:0]
 	rest := d.pending[:0:0]

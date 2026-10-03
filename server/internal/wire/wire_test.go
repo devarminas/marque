@@ -147,7 +147,7 @@ func TestBuiltMessagesEncodeToVectorBytes(t *testing.T) {
 		{must(wire.InputFields{Dx: 0.5, Dz: -1, Jump: true, Seq: 300}.Build()), "019600012c010000"},
 		{must(wire.PoseFields{Id: id, X: 12.34, Y: 0.5, Z: -100.25}.Build()), "020702d244060032400600d7180600"},
 		{must(wire.HpFields{Id: id, Hp: 85, MaxHp: 120}.Build()), "0307025500000078000000"},
-		{must(wire.RefusedFields{Tick: 1000, Seq: 42, Reason: wire.RefuseReasonCooldown}.Build()), "04e80300002a00000006"},
+		{must(wire.RefusedFields{Stream: 1, EventSeq: 2, Tick: 1000, Source: wire.OriginSourceIntent, Seq: 42, Reason: wire.RefuseReasonCooldown}.Build()), "8a0101000000000000000200000000000000e8030000022a00000006"},
 		{must(probe.PartyFields{Leader: probe.PlayerId{Index: 1}, Members: []probe.PlayerId{{Index: 1}, {Index: 2}}}.Build()), "0401000201000200"},
 	}
 	for _, c := range cases {
@@ -237,12 +237,73 @@ func TestAppendRefusesInvalidZeroValue(t *testing.T) {
 		{probe.Party{}, codec.ErrRule},
 		{probe.Inventory{}, codec.ErrRule},
 		{wire.Refused{}, codec.ErrBadEnum},
+		{wire.Gone{}, codec.ErrBadEnum},
 	}
 	for _, c := range cases {
 		got, err := c.msg.Append(prefix)
 		if !errors.Is(err, c.want) || string(got) != "\xaa" {
 			t.Errorf("%T zero value: got %x, %v; want aa, %v", c.msg, got, err, c.want)
 		}
+	}
+}
+
+func TestUnionsAndOptsBuildEncodeAndRead(t *testing.T) {
+	p1, n2 := probe.PlayerId{Index: 1}, probe.NpcId{Index: 2}
+	tag := must(probe.TagFields{
+		Who:    p1,
+		Other:  n2,
+		Crowd:  []probe.Who{p1, n2},
+		By:     codec.Some[probe.Who](n2),
+		Note:   codec.Some("hi"),
+		Weight: codec.Some[uint8](3),
+		Slots:  []codec.Opt[uint8]{{}, codec.Some[uint8](5)},
+	}.Build())
+	got, err := tag.Append(nil)
+	if err != nil || hex.EncodeToString(got) != "0c01010007020002010100070200010702000102686901030002000105" {
+		t.Fatalf("tag encoded %x, %v", got, err)
+	}
+	if by, ok := tag.By().Get(); !ok || by != probe.Who(n2) {
+		t.Fatalf("By() = %v, %v; want NpcId(2/0), true", by, ok)
+	}
+	if _, ok := tag.Pair().Get(); ok {
+		t.Fatal("Pair() is present; it was never set")
+	}
+	cases := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{"nil who", errOf(probe.TagFields{Other: n2, Crowd: []probe.Who{p1}}.Build()), codec.ErrBadEnum},
+		{"other equal to who", errOf(probe.TagFields{Who: p1, Other: p1, Crowd: []probe.Who{p1}}.Build()), codec.ErrRule},
+		{"present weight 10", errOf(probe.TagFields{Who: p1, Other: n2, Crowd: []probe.Who{p1}, Weight: codec.Some[uint8](10)}.Build()), codec.ErrRule},
+		{"absent weight", errOf(probe.TagFields{Who: p1, Other: n2, Crowd: []probe.Who{p1}}.Build()), nil},
+		{"note over bound", errOf(probe.TagFields{Who: p1, Other: n2, Crowd: []probe.Who{p1}, Note: codec.Some("hello")}.Build()), codec.ErrOverBound},
+	}
+	for _, c := range cases {
+		if !errors.Is(c.err, c.want) {
+			t.Errorf("%s: got %v, want %v", c.name, c.err, c.want)
+		}
+	}
+}
+
+func TestBuildSnapsQuantsToWhatThePeerDecodes(t *testing.T) {
+	tr := must(wire.TransformFields{X: 87.49238566911093, Y: 0.005, Z: -36.739013361827794}.Build())
+	if tr.X() != 87.49 || tr.Y() != 0.01 || tr.Z() != -36.74 {
+		t.Fatalf("built transform reads %v, want x 87.49 y 0.01 z -36.74", tr)
+	}
+	mark := must(probe.MarkFields{Spot: codec.Some(1.13), Path: []codec.Opt[float64]{{}, codec.Some(-2.6)}}.Build())
+	b, err := mark.Append(nil)
+	if err != nil || hex.EncodeToString(b) != "0d012d0200011e" {
+		t.Fatalf("mark encoded %x, %v", b, err)
+	}
+	spot, _ := mark.Spot().Get()
+	step, _ := mark.Path().At(1).Get()
+	if spot != 1.25 || step != -2.5 {
+		t.Fatalf("built mark reads spot %v path[1] %v, want 1.25 and -2.5", spot, step)
+	}
+	got, err := probe.DecodeState(b)
+	if err != nil || got.String() != mark.String() {
+		t.Fatalf("decoded %v, %v; built %v", got, err, mark)
 	}
 }
 
@@ -264,12 +325,10 @@ func TestListViewReadsDecodedElements(t *testing.T) {
 	}
 }
 
-// Crowd's list bound is 65535 and each Pair is at least 6 bytes, so the 3-byte
-// payload 03 ff7f claims 16383 pairs (98298 bytes) with none behind it.
 func TestHostileCountFailsBeforeAllocating(t *testing.T) {
-	b := mustHex(t, "03ff7f")
+	claims16383PairsWithNoneBehindIt := mustHex(t, "03ff7f")
 	var err error
-	allocs := testing.AllocsPerRun(100, func() { _, err = probe.DecodeEvents(b) })
+	allocs := testing.AllocsPerRun(100, func() { _, err = probe.DecodeEvents(claims16383PairsWithNoneBehindIt) })
 	if !errors.Is(err, codec.ErrTruncated) {
 		t.Fatalf("got %v, want %v", err, codec.ErrTruncated)
 	}

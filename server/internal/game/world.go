@@ -163,6 +163,13 @@ func newSessionToken() string {
 }
 
 type player struct {
+ origin Origin
+ pickupOrigin Origin
+ gatherOrigin Origin
+ useOrigin Origin
+ talkOrigin Origin
+ domainOwned bool
+
 	id mnet.PlayerID
 
 	session string
@@ -217,6 +224,8 @@ type player struct {
 func (p *player) suspended() bool { return p.conn == nil }
 
 type World struct {
+ ownerChanges []OwnerChange
+
 	transport Transport
 	log       *gamelog.Logger
 
@@ -266,6 +275,7 @@ type World struct {
 	order []*player
 
 	mapCfg MapConfig
+ motionRevision uint32
 
 	nav *navmesh.Mesh
 
@@ -297,6 +307,7 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		byConn:      make(map[*mnet.Conn]*player),
 		bySession:   make(map[string]*player),
 		mapCfg:      VillageMap,
+ motionRevision: 1,
 	}
 }
 
@@ -317,6 +328,7 @@ func (w *World) SetMap(cfg MapConfig) {
 		panic(fmt.Sprintf("game: SetMap %q half extent %v; must be > 0", cfg.ID, cfg.HalfExtent))
 	}
 	w.mapCfg = cfg
+ w.motionRevision++
 }
 
 func (w *World) SetStartMana(mana int) {
@@ -380,6 +392,7 @@ func (w *World) impArchetype() npcdef.Archetype {
 
 func (w *World) SetNav(m *navmesh.Mesh) {
 	w.nav = m
+ w.motionRevision++
 }
 
 func (w *World) Run(ctx context.Context) {
@@ -548,6 +561,19 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 		conn.CloseAfterFlush(mnet.DisconnectRefused)
 		return
 	}
+	p := w.initializePlayer(conn)
+
+	w.log.Event(w.tick, EvConnected, gamelog.Fields{
+		"player": p.id,
+		"remote": conn.Remote(),
+	})
+
+	w.seedJoinKit(p)
+	w.sendJoinStep(p)
+	w.broadcast(mnet.Spawn(w.playerState(p)), p)
+}
+
+func (w *World) initializePlayer(conn *mnet.Conn) *player {
 	w.nextID++
 	p := &player{
 		id:                w.nextID,
@@ -571,14 +597,7 @@ func (w *World) addPlayer(conn *mnet.Conn) {
 	w.order = append(w.order, p)
 	w.items.AddPlayer(p.id)
 
-	w.log.Event(w.tick, EvConnected, gamelog.Fields{
-		"player": p.id,
-		"remote": conn.Remote(),
-	})
-
-	w.seedJoinKit(p)
-	w.sendJoinStep(p)
-	w.broadcast(mnet.Spawn(w.playerState(p)), p)
+return p
 }
 
 func (w *World) sendJoinStep(p *player) {
@@ -649,7 +668,7 @@ func (w *World) suspend(p *player) {
 func (w *World) expireSuspended() {
 	var expired []*player
 	for _, p := range w.order {
-		if p.suspended() && w.tick >= p.expiresTick {
+		if !p.domainOwned && p.suspended() && w.tick >= p.expiresTick {
 			expired = append(expired, p)
 		}
 	}
@@ -710,6 +729,11 @@ func (w *World) handleFrame(ev mnet.Event) {
 		p.lastSeq = ev.Seq
 	}
 
+ previous:=p.origin
+ p.origin=Origin{Source:OriginIntent,Seq:uint32(ev.Seq)}
+ if _,ok:=ev.Msg.(mnet.Move);ok {p.origin.Source=OriginInput}
+ defer func(){p.origin=previous}()
+
 	if ev.Err != nil {
 		rejection, ok := mnet.Rejection(ev.Err)
 		if !ok {
@@ -719,79 +743,83 @@ func (w *World) handleFrame(ev mnet.Event) {
 		return
 	}
 
-	switch msg := ev.Msg.(type) {
+	w.dispatchAction(p,ev.Msg,ev.Seq)
+}
+
+func (w *World) dispatchAction(p *player, message mnet.ClientMessage, seq mnet.Seq) {
+	switch msg := message.(type) {
 	case mnet.MoveTo:
 		panic("game: move_to must not reach the game loop")
 	case mnet.Move:
 		if w.refuseIfDead(p, mnet.MsgMove) {
 			return
 		}
-		w.move(p, msg, ev.Seq)
+		w.move(p, msg, seq)
 	case mnet.Pickup:
 		if w.refuseIfDead(p, mnet.MsgPickup) {
 			return
 		}
-		w.pickup(p, msg, ev.Seq)
+		w.pickup(p, msg, seq)
 	case mnet.Drop:
 		if w.refuseIfDead(p, mnet.MsgDrop) {
 			return
 		}
-		w.drop(p, msg, ev.Seq)
+		w.drop(p, msg, seq)
 	case mnet.Equip:
 		if w.refuseIfDead(p, mnet.MsgEquip) {
 			return
 		}
-		w.equip(p, msg, ev.Seq)
+		w.equip(p, msg, seq)
 	case mnet.Unequip:
 		if w.refuseIfDead(p, mnet.MsgUnequip) {
 			return
 		}
-		w.unequip(p, msg, ev.Seq)
+		w.unequip(p, msg, seq)
 	case mnet.Gather:
 		if w.refuseIfDead(p, mnet.MsgGather) {
 			return
 		}
-		w.gather(p, msg, ev.Seq)
+		w.gather(p, msg, seq)
 	case mnet.Use:
 		if w.refuseIfDead(p, mnet.MsgUse) {
 			return
 		}
-		w.use(p, msg, ev.Seq)
+		w.use(p, msg, seq)
 	case mnet.Attack:
-		w.attack(p, msg, ev.Seq)
+		w.attack(p, msg, seq)
 	case mnet.Respawn:
-		w.respawnPlayer(p, ev.Seq)
+		w.respawnPlayer(p, seq)
 	case mnet.Cast:
-		w.cast(p, msg, ev.Seq)
+		w.cast(p, msg, seq)
 	case mnet.Talk:
 		if w.refuseIfDead(p, mnet.MsgTalk) {
 			return
 		}
-		w.talk(p, msg, ev.Seq)
+		w.talk(p, msg, seq)
 	case mnet.DialogOptionPick:
 		if w.refuseIfDead(p, mnet.MsgDialogOption) {
 			return
 		}
-		w.dialogOption(p, msg, ev.Seq)
+		w.dialogOption(p, msg, seq)
 	case mnet.Give:
 		if w.refuseIfDead(p, mnet.MsgGive) {
 			return
 		}
-		w.give(p, msg, ev.Seq)
+		w.give(p, msg, seq)
 	case mnet.PartyInvite:
-		w.partyInvite(p, msg, ev.Seq)
+		w.partyInvite(p, msg, seq)
 	case mnet.PartyAccept:
-		w.partyAccept(p, msg, ev.Seq)
+		w.partyAccept(p, msg, seq)
 	case mnet.PartyDecline:
-		w.partyDecline(p, msg, ev.Seq)
+		w.partyDecline(p, msg, seq)
 	case mnet.PartyLeave:
-		w.partyLeave(p, msg, ev.Seq)
+		w.partyLeave(p, msg, seq)
 	case mnet.PartyKick:
-		w.partyKick(p, msg, ev.Seq)
+		w.partyKick(p, msg, seq)
 	case mnet.Admin:
-		w.admin(p, msg, ev.Seq)
+		w.admin(p, msg, seq)
 	default:
-		panic(fmt.Sprintf("game: unhandled client message %T", ev.Msg))
+		panic(fmt.Sprintf("game: unhandled client message %T", message))
 	}
 }
 
@@ -813,7 +841,7 @@ func (w *World) refuse(p *player, rejection *mnet.RejectError) {
 	w.log.Event(w.tick, rejectionEvent(rejection.Re), fields)
 	w.send(p, mnet.Error{Re: rejection.Re, Msg: rejection.Detail, Reason: rejection.Reason})
 	if rejection.Disposition == mnet.ReplyErrorAndClose {
-		p.conn.CloseAfterFlush(mnet.DisconnectProtocol)
+		if p.conn != nil { p.conn.CloseAfterFlush(mnet.DisconnectProtocol) }
 	}
 }
 
@@ -892,6 +920,7 @@ func (w *World) checkCoordinates(x, z float64) (mnet.RejectReason, string) {
 }
 
 func (w *World) send(p *player, msg mnet.ServerMessage) {
+ w.captureOwner(p,msg)
 	if p.conn == nil {
 		return
 	}

@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fails with a diff when the committed wiregen output differs from what the
-# current schemas and generator produce. Fix a failure with scripts/wiregen.sh.
-
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fresh="$(mktemp -d)"
 trap 'rm -rf "${fresh}"' EXIT
