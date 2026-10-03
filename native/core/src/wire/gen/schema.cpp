@@ -1726,6 +1726,8 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
     w.u32(f.tick);
     w.u64(f.event_end);
     w.u16(f.state_items);
+    w.u32(f.next_intent);
+    if (!w.error() && !(f.next_intent >= std::uint32_t{1})) w.fail(codec::Error::rule);
 }
 
 [[maybe_unused]] void write(codec::Writer& w, const TickClose& v) { write(w, detail::Access::fields(v)); }
@@ -1736,7 +1738,9 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
     auto v_tick = r.u32();
     auto v_event_end = r.u64();
     auto v_state_items = r.u16();
-    TickCloseFields f{std::move(v_stream), std::move(v_epoch), std::move(v_tick), std::move(v_event_end), std::move(v_state_items)};
+    auto v_next_intent = r.u32();
+    if (!r.error() && !(v_next_intent >= std::uint32_t{1})) r.fail(codec::Error::rule);
+    TickCloseFields f{std::move(v_stream), std::move(v_epoch), std::move(v_tick), std::move(v_event_end), std::move(v_state_items), std::move(v_next_intent)};
     return detail::Access::make<TickClose>(std::move(f));
 }
 
@@ -1751,6 +1755,8 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
     out += std::to_string(static_cast<unsigned long long>(f.event_end));
     out += " state_items:";
     out += std::to_string(static_cast<unsigned long long>(f.state_items));
+    out += " next_intent:";
+    out += std::to_string(static_cast<unsigned long long>(f.next_intent));
     out += '}';
 }
 

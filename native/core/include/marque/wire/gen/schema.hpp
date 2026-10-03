@@ -15,7 +15,7 @@
 
 namespace marque::wire {
 
-inline constexpr std::uint64_t schema_hash = 0x7596ff1d19029532ULL;
+inline constexpr std::uint64_t schema_hash = 0x46165d3f4c6d67abULL;
 
 namespace detail {
 struct Access;
@@ -1108,6 +1108,7 @@ struct TickCloseFields {
     std::uint32_t tick = 0;
     std::uint64_t event_end = 0;
     std::uint16_t state_items = 0;
+    std::uint32_t next_intent = 0;
 
     bool operator==(const TickCloseFields&) const = default;
 };
@@ -1126,6 +1127,7 @@ public:
     const std::uint32_t& tick() const { return f_.tick; }
     const std::uint64_t& event_end() const { return f_.event_end; }
     const std::uint16_t& state_items() const { return f_.state_items; }
+    const std::uint32_t& next_intent() const { return f_.next_intent; }
 
     bool operator==(const TickClose&) const = default;
 

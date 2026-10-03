@@ -301,6 +301,7 @@ message tick_close = 139 on events s2c {
   tick u32
   event_end u64
   state_items u16
+  next_intent u32 where 1..4294967295
 }
 
 message resume_boundary = 140 on events s2c {
