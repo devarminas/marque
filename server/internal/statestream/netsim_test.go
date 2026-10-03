@@ -151,8 +151,8 @@ func TestClientRebuildsInterestSetThroughNetsim(t *testing.T) {
 			cfg.Budget = MaxBudget(0)
 			w, c := must(NewWorld(cfg)), must(NewClient(cfg, me))
 			tcfg := transport.DefaultConfig(wire.SchemaHash)
-			srv := must(transport.NewEndpoint(transport.Server, tcfg, 0))
-			cli := must(transport.NewEndpoint(transport.Client, tcfg, 0))
+			srv := must(transport.NewEndpoint(transport.Server, tcfg, transport.Plain{}, transport.Plain{}, 0))
+			cli := must(transport.NewEndpoint(transport.Client, tcfg, transport.Plain{}, transport.Plain{}, 0))
 			sim := netsim.New(netsim.Profiles[tc.profile], seed)
 			sc := newScene(rand.New(rand.NewPCG(seed, 356)))
 			tester := &testClient{world: map[wire.EntityId]rebuilt{}, facts: map[string]bool{}, ticks: map[uint32]map[string]string{}}

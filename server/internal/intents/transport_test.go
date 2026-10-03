@@ -40,13 +40,13 @@ type pair struct {
 
 func newPair(t *testing.T, profile netsim.Profile, seed uint64) *pair {
 	cfg := transport.DefaultConfig(wire.SchemaHash)
-	cs, e := transport.NewSender(transport.Client, cfg, 0)
+	cs, e := transport.NewSender(transport.Client, cfg, transport.Plain{}, 0)
 	cs = must(t, cs, e)
-	ss, e := transport.NewSender(transport.Server, cfg, 0)
+	ss, e := transport.NewSender(transport.Server, cfg, transport.Plain{}, 0)
 	ss = must(t, ss, e)
-	cr, e := transport.NewReceiver(transport.Client, cfg)
+	cr, e := transport.NewReceiver(transport.Client, cfg, transport.Plain{})
 	cr = must(t, cr, e)
-	sr, e := transport.NewReceiver(transport.Server, cfg)
+	sr, e := transport.NewReceiver(transport.Server, cfg, transport.Plain{})
 	sr = must(t, sr, e)
 	return &pair{cs: cs, ss: ss, cr: cr, sr: sr, sim: netsim.New(profile, seed)}
 }

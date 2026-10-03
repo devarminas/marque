@@ -5,11 +5,13 @@
 #include <cstdint>
 #include <deque>
 #include <expected>
+#include <memory>
 #include <span>
 #include <vector>
 
 #include "marque/transport/config.hpp"
 #include "marque/transport/packet.hpp"
+#include "marque/transport/seal.hpp"
 
 namespace marque::transport {
 
@@ -27,7 +29,8 @@ struct Flushed {
 
 class Sender {
 public:
-    static std::expected<Sender, ConfigError> create(Role role, const Config& cfg, std::uint64_t now);
+    static std::expected<Sender, ConfigError> create(Role role, const Config& cfg, std::shared_ptr<Sealer> sealer,
+                                                     std::uint64_t now);
 
     std::expected<void, Error> send(std::span<const std::uint8_t> msg);
 
@@ -64,7 +67,7 @@ private:
 
     struct Datagram;
 
-    Sender(Role role, const Config& cfg, std::uint64_t now);
+    Sender(Role role, const Config& cfg, std::shared_ptr<Sealer> sealer, std::uint64_t now);
 
     void close(State state);
     void ack(std::uint16_t seq);
@@ -73,6 +76,7 @@ private:
 
     Role role_;
     Config cfg_;
+    std::shared_ptr<Sealer> sealer_;
     std::uint16_t next_seq_ = 0;
     std::array<SentDatagram, 256> ring_;
     AckWindow own_;

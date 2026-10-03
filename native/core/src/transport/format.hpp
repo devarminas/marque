@@ -53,4 +53,9 @@ void put_body(std::vector<std::uint8_t>& out, Role from, std::uint32_t stamp,
 
 std::optional<Body> parse_body(std::span<const std::uint8_t> body, Role from);
 
+void put_u16(std::vector<std::uint8_t>& out, std::uint16_t v);
+void put_u32(std::vector<std::uint8_t>& out, std::uint32_t v);
+void put_u64(std::vector<std::uint8_t>& out, std::uint64_t v);
+std::uint64_t load_le(std::span<const std::uint8_t> b);
+
 }

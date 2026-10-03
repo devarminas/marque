@@ -40,17 +40,21 @@ std::expected<AckWindow, Error> accept(std::optional<AckWindow> window, std::uin
 
 }
 
-Receiver::Receiver(Role role, const Config& cfg) : from_(peer(role)), hash_(cfg.schema_hash), seal_(cfg.seal) {}
+Receiver::Receiver(Role role, const Config& cfg, std::shared_ptr<Opener> opener)
+    : from_(peer(role)), hash_(cfg.schema_hash), opener_(std::move(opener)) {}
 
-std::expected<Receiver, ConfigError> Receiver::create(Role role, const Config& cfg) {
+std::expected<Receiver, ConfigError> Receiver::create(Role role, const Config& cfg, std::shared_ptr<Opener> opener) {
     if (auto ok = cfg.validate(); !ok) {
         return std::unexpected(ok.error());
     }
-    return Receiver(role, cfg);
+    if (opener == nullptr) {
+        return std::unexpected(ConfigError::opener_missing);
+    }
+    return Receiver(role, cfg, std::move(opener));
 }
 
 std::expected<Received, Error> Receiver::receive(std::span<const std::uint8_t> d) {
-    if (d.size() < kHeaderSize + seal_->overhead() || d.size() > kMaxDatagram) {
+    if (d.size() < kHeaderSize + opener_->overhead() || d.size() > kMaxDatagram) {
         ++stats_.malformed;
         return std::unexpected(Error::malformed);
     }
@@ -60,7 +64,7 @@ std::expected<Received, Error> Receiver::receive(std::span<const std::uint8_t> d
         return std::unexpected(Error::foreign);
     }
     scratch_.clear();
-    if (!seal_->open(d.first(kHeaderSize), d.subspan(kHeaderSize), scratch_)) {
+    if (!opener_->open(d.first(kHeaderSize), d.subspan(kHeaderSize), scratch_)) {
         ++stats_.malformed;
         return std::unexpected(Error::malformed);
     }

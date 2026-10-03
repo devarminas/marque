@@ -7,7 +7,7 @@ import (
 
 func mustSender(t *testing.T, role Role, cfg Config, now uint64) *Sender {
 	t.Helper()
-	s, err := NewSender(role, cfg, now)
+	s, err := NewSender(role, cfg, Plain{}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestConfigCapsBacklogLimit(t *testing.T) {
 	for _, n := range []int{0, 1, 65280, 65281} {
 		cfg := testConfig()
 		cfg.BacklogLimit = n
-		_, err := NewSender(Server, cfg, 0)
+		_, err := NewSender(Server, cfg, Plain{}, 0)
 		got = append(got, fmt.Sprintf("%d:%v", n, err))
 	}
 	want := "[0:transport: BacklogLimit 0 outside 1 to 65280 1:<nil> 65280:<nil> 65281:transport: BacklogLimit 65281 outside 1 to 65280]"

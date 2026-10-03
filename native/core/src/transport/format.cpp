@@ -28,8 +28,6 @@ const char* to_string(Role r) { return r == Role::server ? "server" : "client"; 
 
 namespace marque::transport::format {
 
-namespace {
-
 void put_u16(std::vector<std::uint8_t>& out, std::uint16_t v) {
     out.push_back(static_cast<std::uint8_t>(v));
     out.push_back(static_cast<std::uint8_t>(v >> 8));
@@ -47,6 +45,16 @@ void put_u64(std::vector<std::uint8_t>& out, std::uint64_t v) {
     }
 }
 
+std::uint64_t load_le(std::span<const std::uint8_t> b) {
+    std::uint64_t v = 0;
+    for (std::size_t i = b.size(); i > 0; --i) {
+        v = v << 8 | b[i - 1];
+    }
+    return v;
+}
+
+namespace {
+
 void put_length(std::vector<std::uint8_t>& out, std::size_t n) {
     if (n < 0x80) {
         out.push_back(static_cast<std::uint8_t>(n));
@@ -59,14 +67,6 @@ void put_length(std::vector<std::uint8_t>& out, std::size_t n) {
 void put_sized(std::vector<std::uint8_t>& out, std::span<const std::uint8_t> bytes) {
     put_length(out, bytes.size());
     out.insert(out.end(), bytes.begin(), bytes.end());
-}
-
-std::uint64_t load_le(std::span<const std::uint8_t> b) {
-    std::uint64_t v = 0;
-    for (std::size_t i = b.size(); i > 0; --i) {
-        v = v << 8 | b[i - 1];
-    }
-    return v;
 }
 
 class Parser {

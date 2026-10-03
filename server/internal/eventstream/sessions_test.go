@@ -23,7 +23,7 @@ func collection(t *testing.T, cfg Config) (*Sessions, Epoch, *transport.Sender) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	sender, err := transport.NewSender(transport.Server, transport.DefaultConfig(wire.SchemaHash), 0)
+	sender, err := transport.NewSender(transport.Server, transport.DefaultConfig(wire.SchemaHash), transport.Plain{}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,11 +267,11 @@ func TestCloseCertifiesTrimmedAndEmptyActualFlush(t *testing.T) {
 	ss, epoch, _ := collection(t, DefaultConfig())
 	cfg := transport.DefaultConfig(wire.SchemaHash)
 	cfg.TickBudget = 1200
-	sender, err := transport.NewSender(transport.Server, cfg, 0)
+	sender, err := transport.NewSender(transport.Server, cfg, transport.Plain{}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	receiver, err := transport.NewReceiver(transport.Client, cfg)
+	receiver, err := transport.NewReceiver(transport.Client, cfg, transport.Plain{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func TestCloseCertifiesTrimmedAndEmptyActualFlush(t *testing.T) {
 	if !found {
 		t.Fatal("actual count close not transported")
 	}
-	fresh, err := transport.NewSender(transport.Server, cfg, 0)
+	fresh, err := transport.NewSender(transport.Server, cfg, transport.Plain{}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +361,7 @@ func TestCloseCertifiesTrimmedAndEmptyActualFlush(t *testing.T) {
 	if boundary.Tick != 2 || boundary.EventEnd != 1 || boundary.StateItems != 0 {
 		t.Fatalf("empty actual close %+v", boundary)
 	}
-	emptyReceiver, err := transport.NewReceiver(transport.Client, cfg)
+	emptyReceiver, err := transport.NewReceiver(transport.Client, cfg, transport.Plain{})
 	if err != nil {
 		t.Fatal(err)
 	}

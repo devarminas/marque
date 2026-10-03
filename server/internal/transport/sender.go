@@ -1,6 +1,9 @@
 package transport
 
-import "bytes"
+import (
+	"bytes"
+	"errors"
+)
 
 type State uint8
 
@@ -32,6 +35,7 @@ type Flushed struct {
 type Sender struct {
 	role Role
 	cfg  Config
+	seal Sealer
 
 	nextSeq uint16
 	sent    [256]sentPacket
@@ -77,11 +81,14 @@ type fragRef struct {
 	index  uint8
 }
 
-func NewSender(role Role, cfg Config, now uint64) (*Sender, error) {
+func NewSender(role Role, cfg Config, seal Sealer, now uint64) (*Sender, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	return &Sender{role: role, cfg: cfg, own: NoAcks, lastSend: now, lastRecv: now}, nil
+	if seal == nil {
+		return nil, errors.New("transport: Sealer is nil")
+	}
+	return &Sender{role: role, cfg: cfg, seal: seal, own: NoAcks, lastSend: now, lastRecv: now}, nil
 }
 
 func (s *Sender) State() State { return s.state }
@@ -171,7 +178,7 @@ func (s *Sender) Flush(now uint64, u Unreliable) (Flushed, error) {
 	if s.state != Open {
 		return Flushed{State: s.state}, nil
 	}
-	empty := HeaderSize + s.cfg.Seal.Overhead()
+	empty := HeaderSize + s.seal.Overhead()
 	for _, it := range u.Items {
 		if len(it) == 0 || empty+unreliableSectionHeader+itemSize(it) > MaxDatagram {
 			return Flushed{State: s.state}, ErrItem
@@ -242,7 +249,7 @@ func (s *Sender) Flush(now uint64, u Unreliable) (Flushed, error) {
 		if d.unreliable != nil {
 			out.UnreliableSeq = s.nextSeq
 		}
-		out.Datagrams = append(out.Datagrams, s.seal(d))
+		out.Datagrams = append(out.Datagrams, s.emit(d))
 	}
 	if len(done) > 0 {
 		s.lastSend = now
@@ -286,12 +293,12 @@ func fitItems(items [][]byte, room int) int {
 	return len(items)
 }
 
-func (s *Sender) seal(d *datagram) []byte {
+func (s *Sender) emit(d *datagram) []byte {
 	seq := s.nextSeq
 	s.nextSeq++
 	s.sent[seq%uint16(len(s.sent))] = sentPacket{live: true, seq: seq, frags: d.refs}
 
 	hdr := putHeader(make([]byte, 0, MaxDatagram), header{protocol: ProtocolID, hash: s.cfg.SchemaHash, seq: seq, ack: s.own})
 	body := encodeBody(nil, s.role, d.unreliable, d.entries)
-	return s.cfg.Seal.Seal(hdr, hdr[:HeaderSize], body)
+	return s.seal.Seal(hdr, hdr[:HeaderSize], body)
 }
