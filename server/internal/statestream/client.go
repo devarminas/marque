@@ -1,6 +1,7 @@
 package statestream
 
 import (
+ "errors"
 	"maps"
 	"math"
 	"slices"
@@ -33,6 +34,7 @@ const (
 	itemEntity itemKind = iota
 	itemGone
 	itemFact
+ itemMotion
 )
 
 type item struct {
@@ -70,6 +72,23 @@ func NewClient(cfg Config, self wire.PlayerId) (*Client, error) {
 }
 
 func (c *Client) Build(w *World, focus Focus) transport.Unreliable {
+ return c.build(w, focus, nil)
+}
+
+var ErrOwnerMotion = errors.New("statestream: owner motion identity, producing tick or budget")
+
+func (c *Client) BuildOwner(w *World, focus Focus, baseline wire.OwnerMotion) (transport.Unreliable, error) {
+ if baseline.Player() != c.self || baseline.Tick() != w.tick {
+  return transport.Unreliable{}, ErrOwnerMotion
+ }
+ data, err := baseline.Append(nil)
+ if err != nil || itemCost(len(data)) > c.cfg.Budget-sectionHeader {
+  return transport.Unreliable{}, ErrOwnerMotion
+ }
+ return c.build(w, focus, data), nil
+}
+
+func (c *Client) build(w *World, focus Focus, ownerMotion []byte) transport.Unreliable {
 	tick := w.tick
 	if c.unacked >= FullAfter {
 		for _, v := range c.views {
@@ -115,6 +134,9 @@ func (c *Client) Build(w *World, focus Focus) transport.Unreliable {
 		items = append(items, b)
 		c.draft.items = append(c.draft.items, it)
 	}
+ if ownerMotion != nil {
+  add(ownerMotion, item{kind:itemMotion})
+ }
 	for _, id := range slices.SortedFunc(maps.Keys(c.gone), compareIds) {
 		b := must(must(wire.GoneFields{Id: id}.Build()).Append(nil))
 		if used+itemCost(len(b)) > small {

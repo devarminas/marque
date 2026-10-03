@@ -275,6 +275,7 @@ type World struct {
 	order []*player
 
 	mapCfg MapConfig
+ motionRevision uint32
 
 	nav *navmesh.Mesh
 
@@ -306,6 +307,7 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		byConn:      make(map[*mnet.Conn]*player),
 		bySession:   make(map[string]*player),
 		mapCfg:      VillageMap,
+ motionRevision: 1,
 	}
 }
 
@@ -326,6 +328,7 @@ func (w *World) SetMap(cfg MapConfig) {
 		panic(fmt.Sprintf("game: SetMap %q half extent %v; must be > 0", cfg.ID, cfg.HalfExtent))
 	}
 	w.mapCfg = cfg
+ w.motionRevision++
 }
 
 func (w *World) SetStartMana(mana int) {
@@ -389,6 +392,7 @@ func (w *World) impArchetype() npcdef.Archetype {
 
 func (w *World) SetNav(m *navmesh.Mesh) {
 	w.nav = m
+ w.motionRevision++
 }
 
 func (w *World) Run(ctx context.Context) {
