@@ -15,7 +15,7 @@
 
 namespace marque::wire {
 
-inline constexpr std::uint64_t schema_hash = 0x46165d3f4c6d67abULL;
+inline constexpr std::uint64_t schema_hash = 0xa6e251d9e4e60702ULL;
 
 namespace detail {
 struct Access;
@@ -104,6 +104,12 @@ enum class CastStep : std::uint32_t {
     begin = 1,
     resolve = 2,
     cancel = 3,
+};
+
+enum class MotionMode : std::uint32_t {
+    free = 1,
+    rooted = 2,
+    interrupt_on_move = 3,
 };
 
 using EntityId = std::variant<PlayerId, NpcId, ItemId, NodeId>;
@@ -1916,7 +1922,69 @@ private:
     CastNpcFields f_;
 };
 
-using StateMsg = std::variant<Pose, Hp, Entity, Gone, Swing, CastPhase, GatherStart>;
+struct OwnerMotionFields {
+    std::uint64_t stream = 0;
+    std::uint64_t epoch = 0;
+    PlayerId player{};
+    std::uint32_t tick = 0;
+    std::uint32_t input_seq = 0;
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    float vy = 0;
+    float dx = 0;
+    float dz = 0;
+    bool grounded = false;
+    MotionMode mode{};
+    std::uint32_t cast_end = 0;
+    std::string map_id{};
+    std::uint32_t map_revision = 0;
+    float half_extent = 0;
+    float ground_y = 0;
+    std::uint32_t tick_interval_us = 0;
+
+    bool operator==(const OwnerMotionFields&) const = default;
+};
+
+class OwnerMotion {
+public:
+    static constexpr std::uint32_t message_id = 21;
+    static constexpr codec::Channel channel = codec::Channel::state;
+
+    static std::expected<OwnerMotion, codec::Error> build(OwnerMotionFields f);
+
+    OwnerMotion() = delete;
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& epoch() const { return f_.epoch; }
+    const PlayerId& player() const { return f_.player; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::uint32_t& input_seq() const { return f_.input_seq; }
+    const float& x() const { return f_.x; }
+    const float& y() const { return f_.y; }
+    const float& z() const { return f_.z; }
+    const float& vy() const { return f_.vy; }
+    const float& dx() const { return f_.dx; }
+    const float& dz() const { return f_.dz; }
+    const bool& grounded() const { return f_.grounded; }
+    const MotionMode& mode() const { return f_.mode; }
+    const std::uint32_t& cast_end() const { return f_.cast_end; }
+    const std::string& map_id() const { return f_.map_id; }
+    const std::uint32_t& map_revision() const { return f_.map_revision; }
+    const float& half_extent() const { return f_.half_extent; }
+    const float& ground_y() const { return f_.ground_y; }
+    const std::uint32_t& tick_interval_us() const { return f_.tick_interval_us; }
+
+    bool operator==(const OwnerMotion&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit OwnerMotion(OwnerMotionFields f) : f_(std::move(f)) {}
+
+    OwnerMotionFields f_;
+};
+
+using StateMsg = std::variant<Pose, Hp, Entity, Gone, Swing, CastPhase, GatherStart, OwnerMotion>;
 using EventsMsg = std::variant<Inventory, Equipment, Class, Skills, QuestLog, Dialog, Party, Invite, AdminReply, Cooldown, Refused, TickClose, ResumeBoundary, DialogClear, PartyClear, InviteClear>;
 using InputMsg = std::variant<Input>;
 using IntentsMsg = std::variant<Pickup, Drop, Equip, Unequip, Gather, UseSelf, AttackPlayer, Respawn, CastSelf, Talk, DialogOption, Give, PartyInvite, PartyAccept, PartyDecline, PartyLeave, PartyKick, Admin, ApplicationCommit, UseStation, AttackNpc, CastPlayer, CastNpc>;
@@ -1968,6 +2036,7 @@ std::expected<void, codec::Error> encode(const UseStation& m, std::vector<std::u
 std::expected<void, codec::Error> encode(const AttackNpc& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const CastPlayer& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const CastNpc& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const OwnerMotion& m, std::vector<std::uint8_t>& out);
 
 std::string to_text(const BagEntry& v);
 std::string to_text(const WornName& v);
@@ -2030,6 +2099,7 @@ std::string to_text(const UseStation& v);
 std::string to_text(const AttackNpc& v);
 std::string to_text(const CastPlayer& v);
 std::string to_text(const CastNpc& v);
+std::string to_text(const OwnerMotion& v);
 
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r);
 std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes);

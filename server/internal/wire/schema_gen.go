@@ -10,7 +10,7 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-const SchemaHash uint64 = 0x46165d3f4c6d67ab
+const SchemaHash uint64 = 0xa6e251d9e4e60702
 
 type Message interface {
 	MessageID() uint32
@@ -390,6 +390,50 @@ func (v CastStep) encode(w *codec.Writer) {
 
 func decodeCastStep(r *codec.Reader) CastStep {
 	v := CastStep(r.Varint())
+	if r.Err() == nil && !v.valid() {
+		r.Fail(codec.ErrBadEnum)
+	}
+	return v
+}
+
+type MotionMode uint32
+
+const (
+	MotionModeFree            MotionMode = 1
+	MotionModeRooted          MotionMode = 2
+	MotionModeInterruptOnMove MotionMode = 3
+)
+
+func (v MotionMode) String() string {
+	switch v {
+	case MotionModeFree:
+		return "free"
+	case MotionModeRooted:
+		return "rooted"
+	case MotionModeInterruptOnMove:
+		return "interrupt_on_move"
+	}
+	return fmt.Sprintf("MotionMode(%d)", uint32(v))
+}
+
+func (v MotionMode) valid() bool {
+	switch v {
+	case MotionModeFree, MotionModeRooted, MotionModeInterruptOnMove:
+		return true
+	}
+	return false
+}
+
+func (v MotionMode) encode(w *codec.Writer) {
+	if !v.valid() {
+		w.Fail(codec.ErrBadEnum)
+		return
+	}
+	w.Varint(uint32(v))
+}
+
+func decodeMotionMode(r *codec.Reader) MotionMode {
+	v := MotionMode(r.Varint())
 	if r.Err() == nil && !v.valid() {
 		r.Fail(codec.ErrBadEnum)
 	}
@@ -4682,6 +4726,212 @@ func (v CastNpc) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
+type OwnerMotionFields struct {
+	Stream         uint64
+	Epoch          uint64
+	Player         PlayerId
+	Tick           uint32
+	InputSeq       uint32
+	X              float32
+	Y              float32
+	Z              float32
+	Vy             float32
+	Dx             float32
+	Dz             float32
+	Grounded       bool
+	Mode           MotionMode
+	CastEnd        uint32
+	MapId          string
+	MapRevision    uint32
+	HalfExtent     float32
+	GroundY        float32
+	TickIntervalUs uint32
+}
+
+type OwnerMotion struct {
+	f OwnerMotionFields
+}
+
+func (f OwnerMotionFields) Build() (OwnerMotion, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return OwnerMotion{}, err
+	}
+	return OwnerMotion{f}, nil
+}
+
+func (v OwnerMotion) Stream() uint64 { return v.f.Stream }
+
+func (v OwnerMotion) Epoch() uint64 { return v.f.Epoch }
+
+func (v OwnerMotion) Player() PlayerId { return v.f.Player }
+
+func (v OwnerMotion) Tick() uint32 { return v.f.Tick }
+
+func (v OwnerMotion) InputSeq() uint32 { return v.f.InputSeq }
+
+func (v OwnerMotion) X() float32 { return v.f.X }
+
+func (v OwnerMotion) Y() float32 { return v.f.Y }
+
+func (v OwnerMotion) Z() float32 { return v.f.Z }
+
+func (v OwnerMotion) Vy() float32 { return v.f.Vy }
+
+func (v OwnerMotion) Dx() float32 { return v.f.Dx }
+
+func (v OwnerMotion) Dz() float32 { return v.f.Dz }
+
+func (v OwnerMotion) Grounded() bool { return v.f.Grounded }
+
+func (v OwnerMotion) Mode() MotionMode { return v.f.Mode }
+
+func (v OwnerMotion) CastEnd() uint32 { return v.f.CastEnd }
+
+func (v OwnerMotion) MapId() string { return v.f.MapId }
+
+func (v OwnerMotion) MapRevision() uint32 { return v.f.MapRevision }
+
+func (v OwnerMotion) HalfExtent() float32 { return v.f.HalfExtent }
+
+func (v OwnerMotion) GroundY() float32 { return v.f.GroundY }
+
+func (v OwnerMotion) TickIntervalUs() uint32 { return v.f.TickIntervalUs }
+
+func (f OwnerMotionFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	w.U64(f.Epoch)
+	f.Player.encode(w)
+	w.U32(f.Tick)
+	if w.Err() == nil && !(f.Tick <= 4294967294) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U32(f.InputSeq)
+	if w.Err() == nil && !(f.InputSeq <= 4294967294) {
+		w.Fail(codec.ErrRule)
+	}
+	w.F32(f.X)
+	w.F32(f.Y)
+	w.F32(f.Z)
+	w.F32(f.Vy)
+	w.F32(f.Dx)
+	w.F32(f.Dz)
+	w.Bool(f.Grounded)
+	f.Mode.encode(w)
+	w.U32(f.CastEnd)
+	if w.Err() == nil && !(f.CastEnd <= 4294967294) {
+		w.Fail(codec.ErrRule)
+	}
+	w.String(f.MapId, 64)
+	w.U32(f.MapRevision)
+	if w.Err() == nil && !(f.MapRevision >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	w.F32(f.HalfExtent)
+	w.F32(f.GroundY)
+	w.U32(f.TickIntervalUs)
+	if w.Err() == nil && !(f.TickIntervalUs >= 33334 && f.TickIntervalUs <= 50000) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeOwnerMotion(r *codec.Reader) OwnerMotion {
+	var f OwnerMotionFields
+	f.Stream = r.U64()
+	f.Epoch = r.U64()
+	f.Player = decodePlayerId(r)
+	f.Tick = r.U32()
+	if r.Err() == nil && !(f.Tick <= 4294967294) {
+		r.Fail(codec.ErrRule)
+	}
+	f.InputSeq = r.U32()
+	if r.Err() == nil && !(f.InputSeq <= 4294967294) {
+		r.Fail(codec.ErrRule)
+	}
+	f.X = r.F32()
+	f.Y = r.F32()
+	f.Z = r.F32()
+	f.Vy = r.F32()
+	f.Dx = r.F32()
+	f.Dz = r.F32()
+	f.Grounded = r.Bool()
+	f.Mode = decodeMotionMode(r)
+	f.CastEnd = r.U32()
+	if r.Err() == nil && !(f.CastEnd <= 4294967294) {
+		r.Fail(codec.ErrRule)
+	}
+	f.MapId = r.String(64)
+	f.MapRevision = r.U32()
+	if r.Err() == nil && !(f.MapRevision >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.HalfExtent = r.F32()
+	f.GroundY = r.F32()
+	f.TickIntervalUs = r.U32()
+	if r.Err() == nil && !(f.TickIntervalUs >= 33334 && f.TickIntervalUs <= 50000) {
+		r.Fail(codec.ErrRule)
+	}
+	return OwnerMotion{f}
+}
+
+func (f OwnerMotionFields) appendText(b []byte) []byte {
+	b = append(b, "owner_motion{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " epoch:"...)
+	b = strconv.AppendUint(b, uint64(f.Epoch), 10)
+	b = append(b, " player:"...)
+	b = f.Player.appendText(b)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " input_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.InputSeq), 10)
+	b = append(b, " x:"...)
+	b = strconv.AppendFloat(b, float64(f.X), 'g', -1, 32)
+	b = append(b, " y:"...)
+	b = strconv.AppendFloat(b, float64(f.Y), 'g', -1, 32)
+	b = append(b, " z:"...)
+	b = strconv.AppendFloat(b, float64(f.Z), 'g', -1, 32)
+	b = append(b, " vy:"...)
+	b = strconv.AppendFloat(b, float64(f.Vy), 'g', -1, 32)
+	b = append(b, " dx:"...)
+	b = strconv.AppendFloat(b, float64(f.Dx), 'g', -1, 32)
+	b = append(b, " dz:"...)
+	b = strconv.AppendFloat(b, float64(f.Dz), 'g', -1, 32)
+	b = append(b, " grounded:"...)
+	b = strconv.AppendBool(b, f.Grounded)
+	b = append(b, " mode:"...)
+	b = append(b, f.Mode.String()...)
+	b = append(b, " cast_end:"...)
+	b = strconv.AppendUint(b, uint64(f.CastEnd), 10)
+	b = append(b, " map_id:"...)
+	b = strconv.AppendQuoteToASCII(b, f.MapId)
+	b = append(b, " map_revision:"...)
+	b = strconv.AppendUint(b, uint64(f.MapRevision), 10)
+	b = append(b, " half_extent:"...)
+	b = strconv.AppendFloat(b, float64(f.HalfExtent), 'g', -1, 32)
+	b = append(b, " ground_y:"...)
+	b = strconv.AppendFloat(b, float64(f.GroundY), 'g', -1, 32)
+	b = append(b, " tick_interval_us:"...)
+	b = strconv.AppendUint(b, uint64(f.TickIntervalUs), 10)
+	return append(b, '}')
+}
+
+func (v OwnerMotion) String() string { return string(v.f.appendText(nil)) }
+
+func (OwnerMotion) MessageID() uint32 { return 21 }
+
+func (OwnerMotion) Channel() codec.Channel { return codec.ChannelState }
+
+func (OwnerMotion) stateMsg() {}
+
+func (v OwnerMotion) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(21)
+	v.f.encode(&w)
+	return w.Result()
+}
+
 func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	var m StateMsg
 	switch r.Varint() {
@@ -4699,6 +4949,8 @@ func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 		m = decodeCastPhase(r)
 	case 20:
 		m = decodeGatherStart(r)
+	case 21:
+		m = decodeOwnerMotion(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
 	}

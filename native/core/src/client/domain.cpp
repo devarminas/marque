@@ -138,7 +138,7 @@ std::expected<std::optional<Publication>, DomainError> Assembler::publish(std::s
     if (close.next_intent()<next_intent_ || close.next_intent()>frontier_) return std::unexpected(DomainError::cursor);
     auto previous=latest();
     auto owner=std::make_shared<OwnerState>(previous ? *previous->events().owner : OwnerState{});
-    Events output{owner,{}, {},stream_,epoch_,close.event_end(),close.next_intent()};
+    Events output{owner,{}, {},stream_,epoch_,close.event_end(),close.next_intent(),{}};
     for (auto seq=applied_+1;seq<=close.event_end();++seq) {
         const auto it=events_.find(seq);
         if (it==events_.end()) return std::optional<Publication>{};
@@ -181,6 +181,9 @@ std::expected<std::optional<Publication>, DomainError> Assembler::publish(std::s
                         if (!row.visible && !std::get<std::optional<wire::Transform>>(row.values)) return false;
                         row.visible=true;
                     }
+                } else if constexpr (std::is_same_v<T,wire::OwnerMotion>) {
+                    if (value.tick()!=stamp || value.stream()!=stream_ || value.epoch()!=epoch_) return false;
+                    if (stamp==close.tick()) output.motion=value;
                 } else if constexpr (std::is_same_v<T,wire::Pose> || std::is_same_v<T,wire::Hp>) return false;
                 else output.presentation.emplace_back(value);
                 return true;

@@ -383,6 +383,45 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
     out += "CastStep(" + std::to_string(static_cast<std::uint32_t>(v)) + ")";
 }
 
+[[maybe_unused]] bool valid(MotionMode v) {
+    switch (v) {
+    case MotionMode::free:
+    case MotionMode::rooted:
+    case MotionMode::interrupt_on_move:
+        return true;
+    }
+    return false;
+}
+
+[[maybe_unused]] void write(codec::Writer& w, MotionMode v) {
+    if (!valid(v)) {
+        w.fail(codec::Error::bad_enum);
+        return;
+    }
+    w.varint(static_cast<std::uint32_t>(v));
+}
+
+[[maybe_unused]] MotionMode read_MotionMode(codec::Reader& r) {
+    const auto v = static_cast<MotionMode>(r.varint());
+    if (!r.error() && !valid(v)) r.fail(codec::Error::bad_enum);
+    return v;
+}
+
+[[maybe_unused]] void text(std::string& out, MotionMode v) {
+    switch (v) {
+    case MotionMode::free:
+        out += "free";
+        return;
+    case MotionMode::rooted:
+        out += "rooted";
+        return;
+    case MotionMode::interrupt_on_move:
+        out += "interrupt_on_move";
+        return;
+    }
+    out += "MotionMode(" + std::to_string(static_cast<std::uint32_t>(v)) + ")";
+}
+
 [[maybe_unused]] void write(codec::Writer& w, const EntityId& v) {
     switch (v.index()) {
     case 0:
@@ -2454,6 +2493,108 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
 
 [[maybe_unused]] void text(std::string& out, const CastNpc& v) { text(out, detail::Access::fields(v)); }
 
+[[maybe_unused]] void write(codec::Writer& w, const OwnerMotionFields& f) {
+    w.u64(f.stream);
+    w.u64(f.epoch);
+    write(w, f.player);
+    w.u32(f.tick);
+    if (!w.error() && !(f.tick <= std::uint32_t{4294967294})) w.fail(codec::Error::rule);
+    w.u32(f.input_seq);
+    if (!w.error() && !(f.input_seq <= std::uint32_t{4294967294})) w.fail(codec::Error::rule);
+    w.f32(f.x);
+    w.f32(f.y);
+    w.f32(f.z);
+    w.f32(f.vy);
+    w.f32(f.dx);
+    w.f32(f.dz);
+    w.boolean(f.grounded);
+    write(w, f.mode);
+    w.u32(f.cast_end);
+    if (!w.error() && !(f.cast_end <= std::uint32_t{4294967294})) w.fail(codec::Error::rule);
+    w.string(f.map_id, 64);
+    w.u32(f.map_revision);
+    if (!w.error() && !(f.map_revision >= std::uint32_t{1})) w.fail(codec::Error::rule);
+    w.f32(f.half_extent);
+    w.f32(f.ground_y);
+    w.u32(f.tick_interval_us);
+    if (!w.error() && !(f.tick_interval_us >= std::uint32_t{33334} && f.tick_interval_us <= std::uint32_t{50000})) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const OwnerMotion& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] OwnerMotion read_OwnerMotion(codec::Reader& r) {
+    auto v_stream = r.u64();
+    auto v_epoch = r.u64();
+    auto v_player = read_PlayerId(r);
+    auto v_tick = r.u32();
+    if (!r.error() && !(v_tick <= std::uint32_t{4294967294})) r.fail(codec::Error::rule);
+    auto v_input_seq = r.u32();
+    if (!r.error() && !(v_input_seq <= std::uint32_t{4294967294})) r.fail(codec::Error::rule);
+    auto v_x = r.f32();
+    auto v_y = r.f32();
+    auto v_z = r.f32();
+    auto v_vy = r.f32();
+    auto v_dx = r.f32();
+    auto v_dz = r.f32();
+    auto v_grounded = r.boolean();
+    auto v_mode = read_MotionMode(r);
+    auto v_cast_end = r.u32();
+    if (!r.error() && !(v_cast_end <= std::uint32_t{4294967294})) r.fail(codec::Error::rule);
+    auto v_map_id = r.string(64);
+    auto v_map_revision = r.u32();
+    if (!r.error() && !(v_map_revision >= std::uint32_t{1})) r.fail(codec::Error::rule);
+    auto v_half_extent = r.f32();
+    auto v_ground_y = r.f32();
+    auto v_tick_interval_us = r.u32();
+    if (!r.error() && !(v_tick_interval_us >= std::uint32_t{33334} && v_tick_interval_us <= std::uint32_t{50000})) r.fail(codec::Error::rule);
+    OwnerMotionFields f{std::move(v_stream), std::move(v_epoch), std::move(v_player), std::move(v_tick), std::move(v_input_seq), std::move(v_x), std::move(v_y), std::move(v_z), std::move(v_vy), std::move(v_dx), std::move(v_dz), std::move(v_grounded), std::move(v_mode), std::move(v_cast_end), std::move(v_map_id), std::move(v_map_revision), std::move(v_half_extent), std::move(v_ground_y), std::move(v_tick_interval_us)};
+    return detail::Access::make<OwnerMotion>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const OwnerMotionFields& f) {
+    out += "owner_motion{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " epoch:";
+    out += std::to_string(static_cast<unsigned long long>(f.epoch));
+    out += " player:";
+    text(out, f.player);
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " input_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.input_seq));
+    out += " x:";
+    codec::text_f32(out, f.x);
+    out += " y:";
+    codec::text_f32(out, f.y);
+    out += " z:";
+    codec::text_f32(out, f.z);
+    out += " vy:";
+    codec::text_f32(out, f.vy);
+    out += " dx:";
+    codec::text_f32(out, f.dx);
+    out += " dz:";
+    codec::text_f32(out, f.dz);
+    out += " grounded:";
+    out += f.grounded ? "true" : "false";
+    out += " mode:";
+    text(out, f.mode);
+    out += " cast_end:";
+    out += std::to_string(static_cast<unsigned long long>(f.cast_end));
+    out += " map_id:";
+    codec::text_quoted(out, f.map_id);
+    out += " map_revision:";
+    out += std::to_string(static_cast<unsigned long long>(f.map_revision));
+    out += " half_extent:";
+    codec::text_f32(out, f.half_extent);
+    out += " ground_y:";
+    codec::text_f32(out, f.ground_y);
+    out += " tick_interval_us:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick_interval_us));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const OwnerMotion& v) { text(out, detail::Access::fields(v)); }
+
 }
 
 std::expected<BagEntry, codec::Error> BagEntry::build(BagEntryFields f) {
@@ -3257,6 +3398,19 @@ std::string to_text(const CastNpc& v) {
     return out;
 }
 
+std::expected<OwnerMotion, codec::Error> OwnerMotion::build(OwnerMotionFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<OwnerMotion>(std::move(f));
+}
+
+std::string to_text(const OwnerMotion& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
 std::expected<void, codec::Error> encode(const Input& m, std::vector<std::uint8_t>& out) {
     codec::Writer w{out};
     w.varint(Input::message_id);
@@ -3586,6 +3740,13 @@ std::expected<void, codec::Error> encode(const CastNpc& m, std::vector<std::uint
     return w.finish();
 }
 
+std::expected<void, codec::Error> encode(const OwnerMotion& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(OwnerMotion::message_id);
+    write(w, m);
+    return w.finish();
+}
+
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r) {
     std::optional<StateMsg> m;
     switch (r.varint()) {
@@ -3609,6 +3770,9 @@ std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r) {
         break;
     case GatherStart::message_id:
         m.emplace(read_GatherStart(r));
+        break;
+    case OwnerMotion::message_id:
+        m.emplace(read_OwnerMotion(r));
         break;
     default:
         r.fail(codec::Error::unknown_message);

@@ -5,6 +5,7 @@ import (
 
 	"github.com/devarminas/marque/server/internal/abilitydef"
 	"github.com/devarminas/marque/server/internal/gamelog"
+ "github.com/devarminas/marque/server/internal/motion"
 	mnet "github.com/devarminas/marque/server/internal/net"
 )
 
@@ -33,7 +34,7 @@ func (w *World) groundYAt(x, z, nearY float64) float64 {
 }
 
 func (w *World) grounded(p *player) bool {
-	return p.y <= w.groundYAt(p.pos.X, p.pos.Z, p.y)+GroundEpsilon && p.vy <= 0
+	return motion.Grounded(p.motionState(), w.motionMap())
 }
 
 func (p *player) clearSteer() {
@@ -57,7 +58,8 @@ func (w *World) applyJumpEdge(p *player, jump bool) {
 	if !jump {
 		return
 	}
-	if !w.grounded(p) {
+	state, accepted := motion.Jump(p.motionState(), w.motionMap())
+ if !accepted {
 		w.refuse(p, &mnet.RejectError{
 			Reason:      mnet.ReasonIllegalSample,
 			Detail:      "illegal_sample: jump while airborne",
@@ -66,12 +68,12 @@ func (w *World) applyJumpEdge(p *player, jump bool) {
 		})
 		return
 	}
-	p.vy = JumpSpeed
+	p.setMotion(state)
 }
 
 func (w *World) applyWish(p *player, msg mnet.Move) {
-	length := math.Hypot(msg.DX, msg.DZ)
-	if length < SteerEpsilon {
+	dx, dz, active := motion.Normalize(msg.DX, msg.DZ)
+	if !active {
 		p.clearSteer()
 		w.broadcastPose(p)
 		return
@@ -91,8 +93,8 @@ func (w *World) applyWish(p *player, msg mnet.Move) {
 	w.clearPendingUse(p)
 	p.attackApproaching = false
 	w.interruptCastOnMove(p, CauseMove)
-	p.steerDX = msg.DX / length
-	p.steerDZ = msg.DZ / length
+	p.steerDX = dx
+	p.steerDZ = dz
 }
 
 // steerToward sets sticky wish toward dest for out-of-range interact approach.
@@ -110,44 +112,15 @@ func (w *World) steerToward(p *player, dest Point) bool {
 }
 
 func (w *World) stepSteer(p *player, distance float64) bool {
-	from := p.pos
-	toX := w.clampWorld(from.X + p.steerDX*distance)
-	toZ := w.clampWorld(from.Z + p.steerDZ*distance)
-	if w.nav != nil {
-		toX, toZ = w.nav.Move(from.X, from.Z, toX, toZ)
-	}
-	to := Point{X: toX, Z: toZ}
-	if math.Hypot(to.X-from.X, to.Z-from.Z) < MinPathLength {
-		return false
-	}
-	wasGrounded := w.grounded(p)
-	if wasGrounded {
-		newY := w.groundYAt(to.X, to.Z, p.y)
-		if w.nav != nil && math.Abs(newY-p.y) > MaxNavStepHeight {
-			return false
-		}
-		p.pos = to
-		p.y = newY
-		return true
-	}
-	p.pos = to
-	return true
+ state, moved := motion.Horizontal(p.motionState(), w.motionMap(), distance)
+ p.setMotion(state)
+ return moved
 }
 
 func (w *World) stepVertical(p *player, dt float64) bool {
-	gy := w.groundYAt(p.pos.X, p.pos.Z, p.y)
-	if w.grounded(p) {
-		p.y = gy
-		p.vy = 0
-		return false
-	}
-	p.vy -= Gravity * dt
-	p.y += p.vy * dt
-	if p.y <= gy {
-		p.y = gy
-		p.vy = 0
-	}
-	return true
+ state, moved := motion.Vertical(p.motionState(), w.motionMap(), dt)
+ p.setMotion(state)
+ return moved
 }
 
 func (w *World) broadcastPose(p *player) {

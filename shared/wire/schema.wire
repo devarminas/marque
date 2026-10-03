@@ -449,3 +449,31 @@ message cast_npc = 278 on intents c2s {
   ability string(64)
   target NpcId
 }
+
+enum MotionMode {
+  free = 1
+  rooted = 2
+  interrupt_on_move = 3
+}
+
+message owner_motion = 21 on state s2c {
+  stream u64
+  epoch u64
+  player PlayerId
+  tick u32 where 0..4294967294
+  input_seq u32 where 0..4294967294
+  x f32
+  y f32
+  z f32
+  vy f32
+  dx f32
+  dz f32
+  grounded bool
+  mode MotionMode
+  cast_end u32 where 0..4294967294
+  map_id string(64)
+  map_revision u32 where 1..4294967295
+  half_extent f32
+  ground_y f32
+  tick_interval_us u32 where 33334..50000
+}

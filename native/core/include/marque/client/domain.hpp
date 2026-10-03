@@ -49,6 +49,7 @@ struct Events {
     std::uint64_t epoch;
     std::uint64_t event_end;
     std::uint32_t next_intent;
+    std::optional<wire::OwnerMotion> motion;
 };
 
 using Tick = world::PublishedTick<Catalog, Events>;
