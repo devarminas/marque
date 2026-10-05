@@ -53,8 +53,8 @@ func newLink(t testing.TB, cfg Config) *link {
 		t:   t,
 		w:   must(NewWorld(cfg)),
 		c:   must(NewClient(cfg, me)),
-		srv: must(transport.NewEndpoint(transport.Server, tc, 0)),
-		cli: must(transport.NewEndpoint(transport.Client, tc, 0)),
+		srv: must(transport.NewEndpoint(transport.Server, tc, transport.Plain{}, transport.Plain{}, 0)),
+		cli: must(transport.NewEndpoint(transport.Client, tc, transport.Plain{}, transport.Plain{}, 0)),
 	}
 }
 

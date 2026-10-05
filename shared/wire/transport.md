@@ -1,6 +1,6 @@
 # Transport
 
-This is the byte-level specification of the reliable-UDP transport in ADR 0018 section 1. The Go implementation is `server/internal/transport`. The C++ client core implements the same rules. The vectors in `vectors/transport/` hold both to this document, and the last section defines their format.
+This is the byte-level specification of the reliable-UDP transport in ADR 0018 section 1. The Go implementation is `server/internal/transport`. The C++ client core implements the same rules. The vectors in `vectors/transport/` and `vectors/handshake/` hold both to this document, and the last section defines their format.
 
 The transport knows nothing about the schema. It moves schema messages as opaque byte strings. The only schema fact it carries is the 64-bit schema hash in every header.
 
@@ -231,21 +231,154 @@ A connection has one of three states: `open`, `timed_out`, or `slow_client`. It 
 
 ## Seal seam
 
-A seal has an overhead and two operations. `seal(header, body)` returns the sealed body. `open(header, sealed)` returns the body or fails. The 20-byte header is sent in the clear and is the associated data. Packing reserves the overhead inside `MaxDatagram`. Until the handshake exists (ARM-354), the seal is the identity with overhead 0.
+A seal comes in two halves with the same overhead. An opener has one operation, `open(header, sealed)`, which returns the body or fails. A sealer has one operation, `seal(header, body)`, which returns the sealed body. The receive path takes an opener and the send path takes a sealer, so a receive half cannot seal. The 20-byte header is sent in the clear and is the associated data. Packing reserves the overhead inside `MaxDatagram`. A connection the handshake admitted uses the session seal below. The identity seal (`plain`, overhead 0) is both an opener and a sealer, and remains for tests and vectors.
 
 The seal owns the nonce and replay protection. The transport does not.
 
 - Each direction of a connection has its own 64-bit nonce. The sealing side counts its datagrams from 0 and never reuses a value under one key. The nonce travels inside the overhead. The header's 16-bit sequence cannot be the nonce, because it repeats every 65536 datagrams.
 - `open` rejects a nonce it has already accepted, or one too old for its replay window, before the transport's sequence window sees the datagram. The receiver then refuses the datagram as `malformed`, like any datagram that fails to open. Without this, one replayed authentic datagram whose sequence is about 32767 ahead of `latest` moves `latest` forward, and every genuine datagram after it is `too_old`.
-- There is one seal per connection. The server's reader goroutine calls `open` and the tick loop calls `seal` on the same connection's seal at the same time, so a seal must be safe for concurrent `seal` and `open`. Keeping the send nonce and the receive window apart is enough for that.
+- Each connection has one opener and one sealer. The server's reader goroutine holds only the opener and the tick loop holds only the sealer. The halves share no state, so `open` and `seal` run at the same time without a lock, and the reader has no way to spend a send nonce.
 
-A connection starts established. The handshake creates it after the handshake completes.
+A connection starts established. The handshake creates it after the handshake completes, with new seal halves from that connection's session keys. No two connections share a seal half.
+
+### Session seal
+
+The session seal is ChaCha20-Poly1305 in its IETF form (12-byte nonce, 16-byte tag). Its overhead is 24. Its constructor takes a role and the session keys and returns the opener and the sealer for one connection.
+
+- The server's sealer uses `server_to_client` and its opener uses `client_to_server`. The client does the reverse.
+- The sealer's `seal(header, body)` takes its next nonce `n`, then returns `n` as a `u64`, then the ciphertext of `body` with its tag. The AEAD nonce is 4 zero bytes then `n` as a `u64`. The associated data is the 20-byte header.
+- The opener's `open(header, sealed)` fails when `sealed` is shorter than 24 bytes. It reads `n` from the first 8 bytes and fails when `n` is not fresh, before it decrypts. It fails when the tag does not verify. Only a datagram that opens marks `n` as accepted.
+- The opener's replay window is 64 nonces. Before any nonce is accepted, every nonce is fresh. After that, with `newest` the highest accepted nonce, `n` is fresh when `n > newest`, or when `newest - n < 64` and `n` was not accepted.
+
+A changed byte anywhere after the first 12 header bytes fails `open`, and the receiver refuses the datagram as `malformed`. A changed byte in the protocol id or the schema hash is refused as `foreign` first, because the receiver checks those before it opens.
+
+## Handshake
+
+ADR 0018 sections 1.6 and 1.7. A login service issues a connect token. The client sends it to the shard in a request. The shard answers with a challenge it can verify later without remembering it. The client proves it holds the token's client-to-server key in a response. Only then does the shard admit the client and create its connection.
+
+Handshake time is a `u64` count of Unix seconds from the caller's wall clock, not the transport's microsecond clock. A token or challenge is expired when `now >= expires`.
+
+Addresses are 18 bytes: the 16-byte IPv6 address, with an IPv4 address in its IPv4-mapped form (`::ffff:a.b.c.d`), then the port as a `u16`.
+
+| Name | Value | Meaning |
+|---|---|---|
+| `TokenVersion` | `0x3154524d` (bytes `4d 52 54 31`, "MRT1") | First field of a token. |
+| `HandshakeID` | `0x3148524d` (bytes `4d 52 48 31`, "MRH1") | First field of every handshake packet. |
+| `TokenSize` | 232 | Bytes in a token. |
+| `RequestSize` | 512 | Bytes in a request. |
+| `ChallengeSize` | 183 | Bytes in a challenge. |
+| `ResponseSize` | 199 | Bytes in a response. |
+| `ChallengeLifetime` | 10 s | How long a challenge stays answerable. |
+
+A handshake packet never starts with `ProtocolID`, so the first 4 bytes tell a handshake packet from a transport datagram.
+
+### Connect token
+
+The issuer and every shard share a 32-byte issuer key. The issuer picks a fresh random 24-byte token nonce and two fresh random 32-byte session keys per token. The token is public to its holder, except the sealed part.
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 4 | `TokenVersion` |
+| 4 | 8 | `expires` |
+| 12 | 24 | token nonce |
+| 36 | 18 | shard address |
+| 54 | 32 | `client_to_server` key |
+| 86 | 32 | `server_to_client` key |
+| 118 | 114 | sealed part |
+
+The sealed part is XChaCha20-Poly1305 with the issuer key and the token nonce, over the 12 bytes `TokenVersion, expires` as associated data. Its 98-byte plaintext is:
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 8 | account id |
+| 8 | 8 | session id |
+| 16 | 18 | shard address |
+| 34 | 32 | `client_to_server` key |
+| 66 | 32 | `server_to_client` key |
+
+The shard trusts only the sealed copies. The session id names the session the token belongs to. Reconnect (ARM-357) reuses the token to resume that session; this unit does not implement resume.
+
+### Request
+
+The client sends the request, padded to 512 bytes, so that the 183-byte challenge is never larger than what caused it.
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 4 | `HandshakeID` |
+| 4 | 1 | kind 1 |
+| 5 | 8 | schema hash |
+| 13 | 8 | token `expires` |
+| 21 | 24 | token nonce |
+| 45 | 114 | token sealed part |
+| 159 | 353 | zero |
+
+The shard checks a request in this order and refuses it, with no reply and no state, on the first failure:
+
+1. Not exactly 512 bytes, or a nonzero padding byte: `malformed`.
+2. Schema hash differs from the shard's: `foreign`.
+3. `now >= expires`: `expired`.
+4. The sealed part does not open under the issuer key: `forged`. A changed `expires` lands here too, since it is associated data.
+5. The sealed shard address differs from the shard's own: `wrong_shard`.
+6. The token nonce is in the admitted set: `replayed`.
+
+Otherwise the shard replies with a challenge and remembers nothing.
+
+### Challenge
+
+The shard holds a random 32-byte challenge key it never shares. It picks a fresh random 24-byte challenge nonce per challenge.
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 4 | `HandshakeID` |
+| 4 | 1 | kind 2 |
+| 5 | 24 | challenge nonce |
+| 29 | 154 | sealed box |
+
+The sealed box is XChaCha20-Poly1305 with the challenge key and the challenge nonce, over the 4 `HandshakeID` bytes as associated data. Its 138-byte plaintext is:
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 24 | token nonce |
+| 24 | 8 | account id |
+| 32 | 8 | session id |
+| 40 | 8 | token `expires` |
+| 48 | 8 | challenge deadline, `now + ChallengeLifetime` |
+| 56 | 18 | the request's source address |
+| 74 | 32 | `client_to_server` key |
+| 106 | 32 | `server_to_client` key |
+
+The client cannot read the box. It refuses a challenge that is not 183 bytes, does not start with `HandshakeID`, or is not kind 2, as `malformed`.
+
+### Response
+
+The response is the challenge with byte 4 set to 3, then a 16-byte proof. The proof is the tag of XChaCha20-Poly1305 with the token's `client_to_server` key and the challenge nonce, over an empty plaintext, with the first 183 bytes of the response as associated data.
+
+The shard checks a response in this order and refuses it with no reply on the first failure:
+
+1. Not exactly 199 bytes: `malformed`.
+2. The box does not open under the challenge key: `forged`.
+3. `now` is at or past the token's `expires` or the challenge deadline: `expired`.
+4. The source address differs from the boxed address: `address`.
+5. The proof does not verify under the boxed `client_to_server` key: `forged`.
+6. The token nonce is in the admitted set: `replayed`.
+
+Otherwise the shard drops every admitted-set entry whose `expires` has passed, adds the token nonce with its `expires`, and admits the client. The admission carries the source address, account id, session id, `expires` and both session keys. The shard then creates the connection with a session seal from those keys. The shard sends nothing in reply to a response; the client learns it was admitted from the first sealed datagram it opens.
+
+A packet shorter than 5 bytes, without `HandshakeID`, or of a kind other than 1 or 3 is `malformed`.
+
+### Shard state
+
+The admitted set is the only state the handshake keeps. It gains an entry only for a response that passes every check, and an entry lives until its token expires. A request, a refused packet, or an unanswered challenge leaves no trace. The shard never replies to a handshake packet with more bytes than the packet had: the only reply is a 183-byte challenge to a 512-byte request.
+
+### Development issuer
+
+The login service does not exist yet. A development issuer stands in for it. Its issuer key is the 32 ASCII bytes `marque-dev-issuer-key-not-secret`, and it draws the token nonce and session keys from the system random source. It is a development tool only, and release builds leave it out: Go builds `server/internal/devtoken` only under the `devtoken` build tag, and CMake builds `native/core/src/transport/dev/` only when configured with `-DMARQUE_DEV_ISSUER=ON`. The option is off by default for every build type, and `scripts/native_test.sh` turns it on.
 
 ## Server threading
 
 The server splits each connection into two halves that share no memory (ADR 0018 section 1.9).
 
-- The socket reader goroutine owns the receive half, `Receiver`: the sequence window, the staleness rule, and reassembly. It decodes each delivered `input` item and `intents` message with the channel's schema decoder and sends one `Inbound` value per accepted datagram over a channel. A decode failure is a fault. The reader forgets the peer and the tick loop drops it.
+- The socket reader goroutine owns the handshake gate and the receive half, `Receiver`: the sequence window, the staleness rule, and reassembly. A datagram from an address with no connection goes to the gate. A challenge goes straight back to the sender. An admission creates the address's `Receiver` with the opener of a session seal from the admission's keys, and reaches the tick loop as one `Inbound` carrying the admission. The tick loop creates the `Sender` with the sealer of a session seal from the same keys. It decodes each delivered `input` item and `intents` message with the channel's schema decoder and sends one `Inbound` value per accepted datagram over a channel. A decode failure is a fault. The reader forgets the peer and the tick loop drops it.
 - The tick loop owns the send half, `Sender`. It calls `Observe(peer_ack, own_ack, at)` with each `Inbound`, `Send` for events, and `Flush` once per tick.
 - When the tick loop drops a connection (`timed_out`, `slow_client`, or a fault), it calls `Reader.Forget(peer)`. That appends the peer to a list the reader drains before it handles its next datagram, so the reader goroutine stays the only one that touches its peer map, and the tick loop never blocks on it. Datagrams the reader accepted before the drain may still arrive as `Inbound` for a peer the tick loop no longer has; the tick loop discards them.
 
@@ -261,7 +394,7 @@ A runner runs each op, collects its outputs in order, and compares them with the
 
 | Op | Action | Outputs, in order |
 |---|---|---|
-| `endpoint <role> <hash> <budget> <backlog> <backlog_bytes> <resend> <seal> <seq> <send_id> <recv_id> <now>` | Create the connection at `now`. `role` is `server` or `client`. `hash` is 16 hex digits. `budget`, `backlog`, `backlog_bytes` and `resend` are `TickBudget`, `BacklogLimit`, `BacklogBytes` and `ResendAfter`. `seal` is `plain` (the identity) or `test` (below). `seq` is the sequence of the first datagram sent, `send_id` the id of the first message sent, and `recv_id` the receiver's starting `next`. | none |
+| `endpoint <role> <hash> <budget> <backlog> <backlog_bytes> <resend> <seal> <seq> <send_id> <recv_id> <now>` | Create the connection at `now`. `role` is `server` or `client`. `hash` is 16 hex digits. `budget`, `backlog`, `backlog_bytes` and `resend` are `TickBudget`, `BacklogLimit`, `BacklogBytes` and `ResendAfter`. `seal` is `plain` (the identity), `test` (below), or `session` (the session seal for `role`, with the vector session keys below). `seq` is the sequence of the first datagram sent, `send_id` the id of the first message sent, and `recv_id` the receiver's starting `next`. | none |
 | `send <hex>` | `send` one reliable message. | `error <name>` if refused |
 | `flush <now>` or `flush <now> <stamp> <hex>...` | `flush`, with the unreliable items if given. | `error item` if refused, and nothing else; otherwise `datagram <hex>` per datagram, `unreliable_sent <n>` if items were given (0 when closed), and `state <timed_out\|slow_client>` if closed |
 | `recv <now> <hex>` | Receive one datagram. | `error <name>` if refused, and nothing else; otherwise `stale` if the section was stale, `unreliable <stamp> <hex>...` if one was delivered, then `reliable <hex>` per delivered message |
@@ -269,6 +402,8 @@ A runner runs each op, collects its outputs in order, and compares them with the
 The error names are `malformed`, `foreign`, `duplicate`, `too_old`, `closed`, `message`, and `item`.
 
 A real connection starts with `seq`, `send_id` and `recv_id` all 0. The vectors start them elsewhere to reach the 65535 to 0 wraps in a few lines. An implementation needs a way to set them for its vector runner only.
+
+The vector session keys are `client_to_server` = bytes `00 01 ... 1f` and `server_to_client` = bytes `20 21 ... 3f`.
 
 The `test` seal exists only for the vectors. Its overhead is 4. `seal(header, body)` is every body byte XORed with `0xa5`, then a `u32` tag: the sum of every header byte and every body byte, mod 2^32. `open(header, sealed)` fails when `sealed` is shorter than 4 bytes or the tag differs from that sum over the header and the un-XORed body.
 
@@ -295,6 +430,33 @@ The files are:
 | `window_bytes_recv.vec` | Reassembly rule 4: a fragment that fills the buffer exactly is kept, one past it is ignored. |
 | `sequence_wrap_send.vec` | A sender's sequence wrapping 65535 to 0, the ring across the wrap, and ack `0xffff` with bits 0 taken as no ack. |
 | `sealed.vec` | The `test` seal: a 24-byte keepalive, a sealed datagram both ways, a changed tag and an unsealed datagram refused. |
+| `session_sealed.vec` | The session seal: a 44-byte keepalive, a sealed client datagram delivered, then refused as replayed and with a changed ack byte. |
+
+### Handshake vectors
+
+Each file in `vectors/handshake/*.vec` is a script in the same format, against one gate, a queue of fixed random bytes, and named session seals. `go test ./internal/transport -run TestHandshakeVectors -update` (from `server/`) regenerates them from `handshake_vectors_test.go`. Addresses are 18-byte hex, keys 32-byte hex, nonces 24-byte hex, and `now` is decimal seconds.
+
+| Op | Action | Outputs, in order |
+|---|---|---|
+| `gate <hash> <shard> <issuer_key> <challenge_key>` | Create the gate. The challenge key replaces the random one, and the gate draws every challenge nonce from the random queue. An implementation needs this hook for its vector runner only. | none |
+| `random <hex>` | Append bytes to the random queue. | none |
+| `token <issuer_key> <nonce> <account> <session> <shard> <expires> <c2s> <s2c>` | Issue a token. | `token <hex>` |
+| `request <hash> <token>` | The client's request for the token. | `request <hex>` |
+| `respond <token> <challenge>` | The client's response. | `response <hex>`, or `error malformed` |
+| `handle <now> <from> <hex>` | The gate handles one packet from `from`. | `challenge <hex>`, `admitted <from> <account> <session> <expires> <c2s> <s2c>`, or `error <name>`; then `admissions <n>` |
+| `session <role> <c2s> <s2c>` | Create the session seal for `role`, named by the role. | none |
+| `seal_body <role> <header> <body>` | `seal` with the named seal. | `sealed <hex>` |
+| `open_body <role> <header> <sealed>` | `open` with the named seal. | `opened <hex>`, or `error malformed` |
+
+The handshake error names are `malformed`, `foreign`, `expired`, `forged`, `wrong_shard`, `replayed`, and `address`.
+
+| File | Covers |
+|---|---|
+| `accept.vec` | A token, its request, challenge and response, and the admission. |
+| `refusals.vec` | Every request refusal, each with no reply and no admission. |
+| `responses.vec` | Every response refusal, a malformed challenge at the client, then the admission. |
+| `replay.vec` | An admitted token refused as replayed by request, by the same response, and by a second challenge. |
+| `session_seal.vec` | Session seal nonces out of order, replay and window refusals, tampered header and body, and both directions. |
 
 ## Local parameters
 

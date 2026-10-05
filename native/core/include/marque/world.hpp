@@ -163,6 +163,11 @@ public:
         const auto& record = data_->directory->records[it->second];
         return record.visible && record.entity == entity;
     }
+    std::optional<Entity> remembered(Entity entity) const {
+        const auto it = data_->directory->rows.find(slot_key(entity));
+        if (it == data_->directory->rows.end()) return std::nullopt;
+        return data_->directory->records[it->second].entity;
+    }
     std::span<const Entity> entities() const { return data_->directory->members; }
     std::size_t known_slots() const { return data_->directory->records.size(); }
     template<class T> Table<T> table() const {

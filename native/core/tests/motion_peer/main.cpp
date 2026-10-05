@@ -59,7 +59,8 @@ template <class E> void required(std::expected<void, E> v) {
 int main() {
     try {
         auto endpoint = required(tr::Endpoint::create(
-            tr::Role::client, tr::default_config(w::schema_hash), 0));
+            tr::Role::client, tr::default_config(w::schema_hash),
+            std::make_shared<tr::Plain>(), std::make_shared<tr::Plain>(), 0));
         std::optional<mo::Prediction> prediction;
         std::map<std::uint32_t, w::OwnerMotion> pending;
         std::map<std::uint32_t, w::TickClose> closes;

@@ -1,9 +1,13 @@
 package transport
 
-type Seal interface {
+type Opener interface {
+	Overhead() int
+	Open(dst, header, sealed []byte) ([]byte, error)
+}
+
+type Sealer interface {
 	Overhead() int
 	Seal(dst, header, body []byte) []byte
-	Open(dst, header, sealed []byte) ([]byte, error)
 }
 
 type Plain struct{}

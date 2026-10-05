@@ -20,9 +20,18 @@ endif()
 file(GLOB_RECURSE MARQUE_CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/core/src/*.cpp")
 
+option(MARQUE_DEV_ISSUER "Build the development connect-token issuer and its fixed key" OFF)
+if(NOT MARQUE_DEV_ISSUER)
+    list(FILTER MARQUE_CORE_SOURCES EXCLUDE REGEX "/core/src/transport/dev/")
+endif()
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET libsodium)
+
 add_library(marque_core STATIC ${MARQUE_CORE_SOURCES})
 target_include_directories(marque_core PUBLIC core/include)
 target_compile_options(marque_core PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(marque_core PUBLIC PkgConfig::SODIUM)
 
 enable_testing()
 
@@ -30,8 +39,15 @@ add_executable(motion_peer EXCLUDE_FROM_ALL core/tests/motion_peer/main.cpp)
 target_link_libraries(motion_peer PRIVATE marque_core)
 target_compile_options(motion_peer PRIVATE -Wall -Wextra -Werror)
 
+add_executable(client_runtime_peer EXCLUDE_FROM_ALL core/tests/client_runtime_peer/main.cpp)
+target_link_libraries(client_runtime_peer PRIVATE marque_core)
+target_compile_options(client_runtime_peer PRIVATE -Wall -Wextra -Werror)
+
 file(GLOB MARQUE_CORE_TEST_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/*.cpp")
+if(NOT MARQUE_DEV_ISSUER)
+    list(FILTER MARQUE_CORE_TEST_SOURCES EXCLUDE REGEX "dev_issuer")
+endif()
 
 foreach(test_source ${MARQUE_CORE_TEST_SOURCES})
     get_filename_component(test_name ${test_source} NAME_WE)
@@ -71,3 +87,6 @@ add_custom_target(marque_gdext_register ALL
         -P ${CMAKE_CURRENT_SOURCE_DIR}/gdext/register_extension.cmake
     DEPENDS marque_gdext
     VERBATIM)
+add_executable(transport_interop_client EXCLUDE_FROM_ALL core/tests/interop/client.cpp)
+target_link_libraries(transport_interop_client PRIVATE marque_core)
+target_compile_options(transport_interop_client PRIVATE -Wall -Wextra -Werror)

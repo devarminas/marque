@@ -1,0 +1,53 @@
+name: Transport interoperability
+on:
+  pull_request:
+    paths:
+      - 'shared/wire/**'
+      - 'server/internal/transport/**'
+      - 'server/internal/netsim/**'
+      - 'server/internal/wire/**'
+      - 'native/core/include/marque/transport/**'
+      - 'native/core/src/transport/**'
+      - 'native/core/include/marque/netsim/**'
+      - 'native/core/src/netsim/**'
+      - 'native/core/include/marque/wire/**'
+      - 'native/core/src/wire/**'
+      - 'native/core/tests/**'
+      - 'native/CMakeLists.txt'
+      - 'scripts/transport_interop.sh'
+      - 'server/go.mod'
+      - 'server/go.sum'
+      - '.github/workflows/transport-interop.yml'
+  push:
+    paths:
+      - 'shared/wire/**'
+      - 'server/internal/transport/**'
+      - 'server/internal/netsim/**'
+      - 'server/internal/wire/**'
+      - 'native/core/include/marque/transport/**'
+      - 'native/core/src/transport/**'
+      - 'native/core/include/marque/netsim/**'
+      - 'native/core/src/netsim/**'
+      - 'native/core/include/marque/wire/**'
+      - 'native/core/src/wire/**'
+      - 'native/core/tests/**'
+      - 'native/CMakeLists.txt'
+      - 'scripts/transport_interop.sh'
+      - 'server/go.mod'
+      - 'server/go.sum'
+      - '.github/workflows/transport-interop.yml'
+jobs:
+  interop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: sudo apt-get update && sudo apt-get install -y g++-14 cmake ninja-build pkg-config libsodium-dev
+      - run: scripts/transport_interop.sh
+        env:
+          CXX: g++-14
+          NETSIM_SEED: '355'

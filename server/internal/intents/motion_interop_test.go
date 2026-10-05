@@ -218,7 +218,7 @@ func TestMotionInterop(t *testing.T) {
 					}
 					w.SetAbilities(catalog)
 				}
-				endpoint, e := transport.NewEndpoint(transport.Server, transport.DefaultConfig(wire.SchemaHash), 0)
+				endpoint, e := transport.NewEndpoint(transport.Server, transport.DefaultConfig(wire.SchemaHash), transport.Plain{}, transport.Plain{}, 0)
 				if e != nil {
 					t.Fatal(e)
 				}
@@ -294,7 +294,7 @@ func TestMotionInterop(t *testing.T) {
 						sim.Send(netsim.BToA, d, now)
 					}
 					if flushed.UnreliableSent == 1 {
-						close := build((wire.TickCloseFields{Stream: baseline.Stream(), Epoch: baseline.Epoch(), Tick: baseline.Tick(), EventEnd: 0, StateItems: 1}).Build())
+						close := build((wire.TickCloseFields{Stream: baseline.Stream(), Epoch: baseline.Epoch(), Tick: baseline.Tick(), EventEnd: 0, StateItems: 1, NextIntent: 1}).Build())
 						if e = endpoint.Send(build(close.Append(nil))); e != nil {
 							t.Fatal(e)
 						}
@@ -427,7 +427,7 @@ func TestMotionApproachInterop(t *testing.T) {
 				if e := w.SeedGroundItem("logs", 2, 0); e != nil {
 					t.Fatal(e)
 				}
-				endpoint, e := transport.NewEndpoint(transport.Server, transport.DefaultConfig(wire.SchemaHash), 0)
+				endpoint, e := transport.NewEndpoint(transport.Server, transport.DefaultConfig(wire.SchemaHash), transport.Plain{}, transport.Plain{}, 0)
 				if e != nil {
 					t.Fatal(e)
 				}
@@ -522,7 +522,7 @@ func TestMotionApproachInterop(t *testing.T) {
 						sim.Send(netsim.BToA, d, now)
 					}
 					if flushed.UnreliableSent == 1 {
-						close := build((wire.TickCloseFields{Stream: baseline.Stream(), Epoch: baseline.Epoch(), Tick: baseline.Tick(), StateItems: 1}).Build())
+						close := build((wire.TickCloseFields{Stream: baseline.Stream(), Epoch: baseline.Epoch(), Tick: baseline.Tick(), StateItems: 1, NextIntent: 1}).Build())
 						if e = endpoint.Send(build(close.Append(nil))); e != nil {
 							t.Fatal(e)
 						}

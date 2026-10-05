@@ -23,7 +23,7 @@ func collection(t *testing.T, cfg Config) (*Sessions, Epoch, *transport.Sender) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	sender, err := transport.NewSender(transport.Server, transport.DefaultConfig(wire.SchemaHash), 0)
+	sender, err := transport.NewSender(transport.Server, transport.DefaultConfig(wire.SchemaHash), transport.Plain{}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestOfferedApplicationCommitControlsJournal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b != (Boundary{Stream: 88, Epoch: 1, Tick: 1, EventEnd: 1, StateItems: 3}) {
+	if b != (Boundary{Stream: 88, Epoch: 1, Tick: 1, EventEnd: 1, StateItems: 3, NextIntent: 1}) {
 		t.Fatalf("boundary %+v", b)
 	}
 	sender.Observe(transport.AckWindow{Latest: 0}, transport.NoAcks, 1)
@@ -245,7 +245,7 @@ func TestWireBoundaryPayloadSizes(t *testing.T) {
 	if _, err := ss.CloseTick(7, epoch, 1, 0, sender); err != nil {
 		t.Fatal(err)
 	}
-	close, e := built(wire.TickCloseFields{Stream: 88, Epoch: 1, Tick: 1, EventEnd: 0, StateItems: 0}.Build())
+	close, e := built(wire.TickCloseFields{Stream: 88, Epoch: 1, Tick: 1, EventEnd: 0, StateItems: 0, NextIntent: 1}.Build())
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -257,21 +257,21 @@ func TestWireBoundaryPayloadSizes(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if len(close) != 32 || len(resume) != 42 || len(refusal) != 28 {
+	if len(close) != 36 || len(resume) != 42 || len(refusal) != 28 {
 		t.Fatalf("close=%d resume=%d refusal=%d", len(close), len(resume), len(refusal))
 	}
-	t.Logf("close=32 bytes, resume=42 bytes, refusal=28 bytes; 25Hz empty closes=800 payload bytes/s")
+	t.Logf("close=36 bytes, resume=42 bytes, refusal=28 bytes; 25Hz empty closes=900 payload bytes/s")
 }
 
 func TestCloseCertifiesTrimmedAndEmptyActualFlush(t *testing.T) {
 	ss, epoch, _ := collection(t, DefaultConfig())
 	cfg := transport.DefaultConfig(wire.SchemaHash)
 	cfg.TickBudget = 1200
-	sender, err := transport.NewSender(transport.Server, cfg, 0)
+	sender, err := transport.NewSender(transport.Server, cfg, transport.Plain{}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	receiver, err := transport.NewReceiver(transport.Client, cfg)
+	receiver, err := transport.NewReceiver(transport.Client, cfg, transport.Plain{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func TestCloseCertifiesTrimmedAndEmptyActualFlush(t *testing.T) {
 	if !found {
 		t.Fatal("actual count close not transported")
 	}
-	fresh, err := transport.NewSender(transport.Server, cfg, 0)
+	fresh, err := transport.NewSender(transport.Server, cfg, transport.Plain{}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +361,7 @@ func TestCloseCertifiesTrimmedAndEmptyActualFlush(t *testing.T) {
 	if boundary.Tick != 2 || boundary.EventEnd != 1 || boundary.StateItems != 0 {
 		t.Fatalf("empty actual close %+v", boundary)
 	}
-	emptyReceiver, err := transport.NewReceiver(transport.Client, cfg)
+	emptyReceiver, err := transport.NewReceiver(transport.Client, cfg, transport.Plain{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -65,6 +65,7 @@ type Boundary struct {
 	Tick       uint32
 	EventEnd   uint64
 	StateItems uint16
+	NextIntent uint32
 }
 type Commit struct {
 	Stream   StreamID
@@ -339,13 +340,13 @@ func (ss *Sessions) CloseTick(id SessionID, epoch Epoch, tick uint32, actualStat
 	if !s.haveTick || tick != s.tick || actualStateItems < 0 || actualStateItems > math.MaxUint16 {
 		return Boundary{}, ErrTick
 	}
-	b := Boundary{Stream: s.stream, Epoch: epoch, Tick: tick, EventEnd: s.nextEvent - 1, StateItems: uint16(actualStateItems)}
+	b := Boundary{Stream: s.stream, Epoch: epoch, Tick: tick, EventEnd: s.nextEvent - 1, StateItems: uint16(actualStateItems), NextIntent: uint32(s.nextIntent)}
 	for _, old := range s.offered {
 		if old.Tick == tick {
-			if old != b {
+			if old.Stream != b.Stream || old.Epoch != b.Epoch || old.EventEnd != b.EventEnd || old.StateItems != b.StateItems {
 				return Boundary{}, ErrTick
 			}
-			return b, nil
+			return old, nil
 		}
 	}
 	if len(s.offered) >= ss.cfg.OfferedTicks {
@@ -354,7 +355,7 @@ func (ss *Sessions) CloseTick(id SessionID, epoch Epoch, tick uint32, actualStat
 	if err := ss.QueueEvents(id, epoch, sender); err != nil {
 		return Boundary{}, err
 	}
-	data, err := built(wire.TickCloseFields{Stream: uint64(s.stream), Epoch: uint64(epoch), Tick: tick, EventEnd: b.EventEnd, StateItems: b.StateItems}.Build())
+	data, err := built(wire.TickCloseFields{Stream: uint64(s.stream), Epoch: uint64(epoch), Tick: tick, EventEnd: b.EventEnd, StateItems: b.StateItems, NextIntent: b.NextIntent}.Build())
 	if err != nil {
 		return Boundary{}, err
 	}

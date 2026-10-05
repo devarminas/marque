@@ -3,10 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <memory>
 
 #include "marque/transport/packet.hpp"
-#include "marque/transport/seal.hpp"
 
 namespace marque::transport {
 
@@ -21,7 +19,8 @@ enum class ConfigError : std::uint8_t {
     backlog_limit_out_of_range,
     backlog_bytes_zero,
     resend_after_zero,
-    seal_missing,
+    opener_missing,
+    sealer_missing,
 };
 
 const char* to_string(ConfigError e);
@@ -32,7 +31,6 @@ struct Config {
     std::size_t backlog_limit = kDefaultBacklogLimit;
     std::size_t backlog_bytes = kDefaultBacklogBytes;
     std::uint64_t resend_after = kDefaultResendAfter;
-    std::shared_ptr<Seal> seal = std::make_shared<Plain>();
 
     std::expected<void, ConfigError> validate() const;
 };

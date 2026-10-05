@@ -13,8 +13,8 @@ func TestOwnerMotionEveryTickUsesScheduledBudget(t *testing.T) {
 	id := wire.PlayerId{Index: 1, Gen: 1}
 	world := must(NewWorld(cfg))
 	client := must(NewClient(cfg, id))
-	server := must(transport.NewEndpoint(transport.Server, transport.DefaultConfig(wire.SchemaHash), 0))
-	peer := must(transport.NewEndpoint(transport.Client, transport.DefaultConfig(wire.SchemaHash), 0))
+	server := must(transport.NewEndpoint(transport.Server, transport.DefaultConfig(wire.SchemaHash), transport.Plain{}, transport.Plain{}, 0))
+	peer := must(transport.NewEndpoint(transport.Client, transport.DefaultConfig(wire.SchemaHash), transport.Plain{}, transport.Plain{}, 0))
 	for tick := uint32(1); tick <= 4; tick++ {
 		entities := []Entity{player(id, 0, 0)}
 		for n := uint32(2); n < 80; n++ {

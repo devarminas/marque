@@ -10,7 +10,7 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-const SchemaHash uint64 = 0x9ead776ea7eed839
+const SchemaHash uint64 = 0xa6e251d9e4e60702
 
 type Message interface {
 	MessageID() uint32
@@ -3025,6 +3025,7 @@ type TickCloseFields struct {
 	Tick       uint32
 	EventEnd   uint64
 	StateItems uint16
+	NextIntent uint32
 }
 
 type TickClose struct {
@@ -3050,12 +3051,18 @@ func (v TickClose) EventEnd() uint64 { return v.f.EventEnd }
 
 func (v TickClose) StateItems() uint16 { return v.f.StateItems }
 
+func (v TickClose) NextIntent() uint32 { return v.f.NextIntent }
+
 func (f TickCloseFields) encode(w *codec.Writer) {
 	w.U64(f.Stream)
 	w.U64(f.Epoch)
 	w.U32(f.Tick)
 	w.U64(f.EventEnd)
 	w.U16(f.StateItems)
+	w.U32(f.NextIntent)
+	if w.Err() == nil && !(f.NextIntent >= 1) {
+		w.Fail(codec.ErrRule)
+	}
 }
 
 func decodeTickClose(r *codec.Reader) TickClose {
@@ -3065,6 +3072,10 @@ func decodeTickClose(r *codec.Reader) TickClose {
 	f.Tick = r.U32()
 	f.EventEnd = r.U64()
 	f.StateItems = r.U16()
+	f.NextIntent = r.U32()
+	if r.Err() == nil && !(f.NextIntent >= 1) {
+		r.Fail(codec.ErrRule)
+	}
 	return TickClose{f}
 }
 
@@ -3079,6 +3090,8 @@ func (f TickCloseFields) appendText(b []byte) []byte {
 	b = strconv.AppendUint(b, uint64(f.EventEnd), 10)
 	b = append(b, " state_items:"...)
 	b = strconv.AppendUint(b, uint64(f.StateItems), 10)
+	b = append(b, " next_intent:"...)
+	b = strconv.AppendUint(b, uint64(f.NextIntent), 10)
 	return append(b, '}')
 }
 
