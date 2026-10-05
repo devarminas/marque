@@ -1,4 +1,5 @@
 #include "marque/client/runtime.hpp"
+#include "marque/recording/replay.hpp"
 
 #include <chrono>
 #include <fstream>
@@ -16,6 +17,21 @@ int main(int argc,char** argv){
     if(mode=="count")limits.publications=2;
     else if(mode=="bytes")limits.publication_bytes=2*1024*1024;
     client::Runtime runtime({{motion::Map{128,0,{}} ,"village",2}},limits);
+    const auto recording_path=std::string(argv[1])+".recording";
+    if(!runtime.record_to(recording_path))return 18;
+    std::vector<std::vector<std::uint8_t>> observed;
+    auto stop_and_replay=[&](client::LocalError terminal) {
+        runtime.disconnect();
+        if(runtime.recording_error())return false;
+        auto trace=recording::Replay::load(recording_path);
+        if(!trace)return false;
+        std::size_t compared=0;bool equal=true;
+        auto replay=trace->run([&](const client::Publication& publication){
+            if(compared>=observed.size() || recording::canonical(publication)!=observed[compared])equal=false;
+            ++compared;
+        });
+        return replay && equal && compared==observed.size() && replay->terminal==terminal && replay->publications==observed.size() && !observed.empty();
+    };
     if(!runtime.connect(token))return 3;
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(12);
     std::optional<client::Publication> pinned;
@@ -25,6 +41,7 @@ int main(int argc,char** argv){
         if(!pinned){
             pinned=runtime.take();
             if(pinned){
+                observed.push_back(recording::canonical(*pinned));
                 if(pinned->current->tick().value!=1)return 4;
                 pinned_pose=runtime.prediction();
                 if(!runtime.queue(wire::RespawnFields{}))return 5;
@@ -32,7 +49,7 @@ int main(int argc,char** argv){
             }
         }
         if(mode=="gauntlet" && pinned){
-            while(auto publication=runtime.take())cumulative=publication->current;
+            while(auto publication=runtime.take()){observed.push_back(recording::canonical(*publication));cumulative=publication->current;}
             if(cumulative && cumulative->tick().value==5){
                 const auto* health=cumulative->world().table<wire::Vitals>().find(world::Player{7,1});
                 const auto* position=cumulative->world().table<wire::Transform>().find(world::Player{7,1});
@@ -50,7 +67,8 @@ int main(int argc,char** argv){
                 std::this_thread::sleep_for(std::chrono::milliseconds(150));
                 if(runtime.connection()!=client::Connection::connected)return 16;
                 std::cout<<"ARM360_LIVE_gauntlet_CUMULATIVE_PASS tick=5 hp=90 x=5 owner_prefix=2 presentation=3 pinned_hp=100\n";
-                runtime.disconnect();return 0;
+                if(!stop_and_replay(client::LocalError::none))return 19;
+                std::cout<<"ARM361_RUNTIME_RECORD_REPLAY_PASS publications="<<observed.size()<<'\n';return 0;
             }
         }
         if(runtime.connection()==client::Connection::failed)break;
@@ -63,6 +81,7 @@ int main(int argc,char** argv){
        pinned->current->events().next_intent!=1 || runtime.queue(wire::RespawnFields{}))return 7;
     std::size_t queued=0,bytes=0;
     while(auto publication=runtime.take()){
+        observed.push_back(recording::canonical(*publication));
         ++queued;bytes+=publication->retained_bytes;
         if(publication->current->tick().value>3)return 8;
     }
@@ -75,6 +94,7 @@ int main(int argc,char** argv){
     }
     if(queued>limits.publications || bytes>limits.publication_bytes)return 12;
     std::cout<<"ARM360_LIVE_"<<mode<<"_FAILURE_PASS queued="<<queued<<" bytes="<<bytes<<" pinned_tick=1\n";
-    runtime.disconnect();
+    if(!stop_and_replay(expected))return 19;
+    std::cout<<"ARM361_RUNTIME_RECORD_REPLAY_PASS publications="<<observed.size()<<'\n';
     return 0;
 }

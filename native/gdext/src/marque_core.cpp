@@ -4,6 +4,7 @@
 #include <cmath>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/json.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
 using namespace godot;
@@ -308,14 +309,19 @@ bool MarqueCore::give(const Ref<MarqueNpcHandle>& npc,int64_t slot){auto id=targ
 
 void MarqueRuntime::_bind_methods(){
     ClassDB::bind_method(D_METHOD("get_core"),&MarqueRuntime::get_core);
+    ClassDB::bind_method(D_METHOD("record_to","path"),&MarqueRuntime::record_to);
+    ClassDB::bind_method(D_METHOD("get_recording_error"),&MarqueRuntime::get_recording_error);
+    ADD_PROPERTY(PropertyInfo(Variant::STRING,"recording_error"),"","get_recording_error");
     ClassDB::bind_method(D_METHOD("connect_token","token"),&MarqueRuntime::connect_token);
-    ClassDB::bind_method(D_METHOD("disconnect"),&MarqueRuntime::disconnect);
+    ClassDB::bind_method(D_METHOD("disconnect_server"),&MarqueRuntime::disconnect_server);
     ADD_PROPERTY(PropertyInfo(Variant::OBJECT,"core",PROPERTY_HINT_RESOURCE_TYPE,"MarqueCore"),"","get_core");
 }
 MarqueRuntime::MarqueRuntime(){runtime_=std::make_shared<client::Runtime>(known_maps());core_.instantiate();core_->attach(runtime_);}
 MarqueRuntime::~MarqueRuntime(){runtime_->disconnect();}
+bool MarqueRuntime::record_to(const String& path){return !path.is_empty() && runtime_->record_to(text(ProjectSettings::get_singleton()->globalize_path(path)));}
+String MarqueRuntime::get_recording_error() const {const auto error=runtime_->recording_error();return error ? String(recording::to_string(*error)) : String();}
 bool MarqueRuntime::connect_token(const PackedByteArray& token){return is_inside_tree() && runtime_->connect(std::span<const std::uint8_t>(token.ptr(),token.size()));}
-void MarqueRuntime::disconnect(){runtime_->disconnect();}
+void MarqueRuntime::disconnect_server(){runtime_->disconnect();}
 void MarqueRuntime::_notification(int what){
     if(what==NOTIFICATION_ENTER_TREE){set_process_mode(PROCESS_MODE_ALWAYS);set_process_internal(true);}
     else if(what==NOTIFICATION_EXIT_TREE){set_process_internal(false);runtime_->disconnect();}

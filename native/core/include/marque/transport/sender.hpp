@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <expected>
+#include <functional>
 #include <memory>
 #include <span>
 #include <vector>
@@ -27,6 +28,8 @@ struct Flushed {
     State state = State::open;
 };
 
+using OutboundObserver=std::function<void(std::uint64_t,std::span<const std::uint8_t>,std::span<const std::uint8_t>)>;
+
 class Sender {
 public:
     static std::expected<Sender, ConfigError> create(Role role, const Config& cfg, std::shared_ptr<Sealer> sealer,
@@ -38,6 +41,7 @@ public:
 
     std::expected<Flushed, Error> flush(std::uint64_t now, const Unreliable& unreliable = {});
 
+    void capture(OutboundObserver observer) { observer_=std::move(observer); }
     State state() const { return state_; }
 
     std::size_t backlog() const { return queue_.size(); }
@@ -74,6 +78,7 @@ private:
 
     friend struct StartAt;
 
+    OutboundObserver observer_;
     Role role_;
     Config cfg_;
     std::shared_ptr<Sealer> sealer_;

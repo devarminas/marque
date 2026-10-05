@@ -90,3 +90,7 @@ add_custom_target(marque_gdext_register ALL
 add_executable(transport_interop_client EXCLUDE_FROM_ALL core/tests/interop/client.cpp)
 target_link_libraries(transport_interop_client PRIVATE marque_core)
 target_compile_options(transport_interop_client PRIVATE -Wall -Wextra -Werror)
+
+add_executable(recording_peer EXCLUDE_FROM_ALL core/tests/recording_peer/main.cpp)
+target_link_libraries(recording_peer PRIVATE marque_core)
+target_compile_options(recording_peer PRIVATE -Wall -Wextra -Werror)

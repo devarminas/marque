@@ -138,6 +138,8 @@ public:
     MarqueRuntime();
     ~MarqueRuntime();
     godot::Ref<MarqueCore> get_core() const{return core_;}
+    bool record_to(const godot::String& path);
+    godot::String get_recording_error() const;
     bool connect_token(const godot::PackedByteArray& token);
-    void disconnect();
+    void disconnect_server();
 };

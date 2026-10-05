@@ -37,3 +37,5 @@ func (e *Endpoint) State() State { return e.tx.State() }
 func (e *Endpoint) Backlog() int { return e.tx.Backlog() }
 
 func (e *Endpoint) Stats() Stats { return e.rx.Stats() }
+
+func (e *Endpoint) SetCapture(capture func(uint64, []byte, []byte)) { e.tx.SetCapture(capture) }

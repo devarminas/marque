@@ -5,6 +5,7 @@
 #include <expected>
 #include <memory>
 #include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -30,6 +31,8 @@ class Mesh {
     create(std::vector<Vec3> vertices,
            std::vector<std::array<std::uint32_t, 3>> triangles);
     std::optional<double> height_at(double x, double z, double near_y) const;
+    std::span<const Vec3> vertices() const { return vertices_; }
+    std::span<const std::array<std::uint32_t,3>> triangles() const { return triangles_; }
     bool contains(double x, double z) const;
     std::pair<double, double> move(double from_x, double from_z, double to_x,
                                    double to_z) const;
