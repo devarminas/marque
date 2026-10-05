@@ -67,6 +67,7 @@ class Prediction {
            std::uint64_t now);
     std::expected<void, PredictionError> sample(Input input);
     std::expected<std::size_t, PredictionError> advance(std::uint64_t now);
+    std::expected<void, PredictionError> validate(const PublishedBaseline &baseline) const;
     std::expected<std::size_t, PredictionError>
     reconcile(const PublishedBaseline &baseline);
     std::vector<wire::Input> inputs() const;

@@ -1,6 +1,7 @@
 #include "marque/client/runtime.hpp"
 
 #include <arpa/inet.h>
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cstring>
@@ -82,7 +83,7 @@ void Runtime::fail(LocalError error) {
     std::lock_guard lock(mutex_);
     error_=error;
     connection_=Connection::failed;
-    commands_.clear(); inputs_.clear();
+    commands_.clear(); input_.reset();
     queued_bytes_=reserved_bytes_=reserved_count_=0;
 }
 
@@ -108,7 +109,8 @@ void Runtime::disconnect() {
     if(worker_.joinable()) worker_.join();
     std::lock_guard lock(mutex_);
     connection_=Connection::disconnected;
-    commands_.clear(); inputs_.clear(); publications_.clear();
+    prediction_.reset();
+    commands_.clear(); input_.reset(); publications_.clear();
     queued_bytes_=reserved_bytes_=reserved_count_=publication_bytes_=0;
 }
 
@@ -128,8 +130,8 @@ bool Runtime::move(double dx,double dz,bool jump) {
     auto value=wire::Input::build({dx,dz,jump,1});
     if(!value) return false;
     std::lock_guard lock(mutex_);
-    if(connection_!=Connection::connected || inputs_.size()>=256) return false;
-    inputs_.push_back({dx,dz,jump,0});
+    if(connection_!=Connection::connected || !prediction_) return false;
+    input_=motion::Input{dx,dz,jump || (input_ && input_->jump)};
     wake_.notify_all();
     return true;
 }
@@ -141,6 +143,7 @@ std::optional<Publication> Runtime::take() {
     publication_bytes_-=value.retained_bytes;
     return value;
 }
+std::shared_ptr<const motion::PredictedPose> Runtime::prediction() const {std::lock_guard lock(mutex_);return prediction_;}
 Connection Runtime::connection() const {std::lock_guard lock(mutex_);return connection_;}
 LocalError Runtime::error() const {std::lock_guard lock(mutex_);return error_;}
 
@@ -155,8 +158,9 @@ void Runtime::run(transport::ConnectToken token) {
     std::optional<transport::Endpoint> endpoint;
     auto assembler=Assembler::create();
     std::deque<Canonical> journal;
-    std::uint32_t next_intent=1,next_input=1;
-    std::optional<wire::Input> latest_input;
+    std::uint32_t next_intent=1;
+    std::optional<motion::Prediction> prediction;
+    std::uint32_t interval=40000;
     const auto started=micros();
     std::uint64_t retry=0,flush=started;
     for(;;) {
@@ -217,47 +221,67 @@ void Runtime::run(transport::ConnectToken token) {
             }
             now=micros();
             if(now>=flush) {
-                transport::Unreliable unreliable{next_input-1,{}};
-                for(std::size_t count=0;count<64;++count) {
-                    std::optional<wire::InputFields> input;
-                    {std::lock_guard lock(mutex_);if(!inputs_.empty()){input=inputs_.front();inputs_.pop_front();}}
-                    if(!input) break;
-                    if(next_input==std::numeric_limits<std::uint32_t>::max()){fail(LocalError::sequence);return;}
-                    input->seq=next_input++;
-                    latest_input=*wire::Input::build(*input);
-                    std::vector<std::uint8_t> bytes;
-                    if(!wire::encode(*latest_input,bytes)){fail(LocalError::transport);return;}
-                    unreliable.items.push_back(std::move(bytes));
-                }
-                unreliable.stamp=next_input-1;
-                if(unreliable.items.empty() && latest_input) {
-                    std::vector<std::uint8_t> bytes;
-                    if(!wire::encode(*latest_input,bytes)){fail(LocalError::transport);return;}
-                    unreliable.items.push_back(std::move(bytes));
+                transport::Unreliable unreliable{};
+                if(prediction) {
+                    std::optional<motion::Input> input;
+                    {std::lock_guard lock(mutex_);input=std::exchange(input_,std::nullopt);}
+                    if(input && !prediction->sample(*input)){fail(LocalError::sequence);return;}
+                    if(!prediction->advance(now)){fail(LocalError::sequence);return;}
+                    for(const auto& input:prediction->inputs()) {
+                        std::vector<std::uint8_t> bytes;
+                        if(!wire::encode(input,bytes)){fail(LocalError::transport);return;}
+                        unreliable.stamp=std::max(unreliable.stamp,input.seq());
+                        unreliable.items.push_back(std::move(bytes));
+                    }
+                    {std::lock_guard lock(mutex_);prediction_=prediction->pose();}
                 }
                 auto packets=endpoint->flush(now,unreliable);
                 if(!packets || packets->state!=transport::State::open){fail(LocalError::transport);return;}
                 for(const auto& bytes:packets->datagrams) if(!socket.send(bytes)){fail(LocalError::socket);return;}
-                flush=now+40000;
+                flush=now+interval;
             }
             for(std::size_t count=0;count<64;++count) {
                 std::size_t available;
                 {std::lock_guard lock(mutex_);
-                    available=128*1024*1024-publication_bytes_;
+                    available=limits_.publication_bytes-publication_bytes_;
                 }
                 bool full;
-                {std::lock_guard lock(mutex_);full=publications_.size()>=256;}
+                {std::lock_guard lock(mutex_);full=publications_.size()>=limits_.publications;}
                 if(full){fail(LocalError::capacity);return;}
-                auto value=assembler.publish(available);
-                if(!value){fail(value.error()==DomainError::capacity ? LocalError::capacity : LocalError::decode);return;}
+                std::optional<motion::Prediction> initial_prediction;
+                std::optional<motion::PublishedBaseline> published_baseline;
+                auto value=assembler.publish(available,[&](const Events& events,world::Tick tick) -> std::expected<void,DomainError> {
+                    if(const auto& value=events.motion;value) {
+                        auto baseline=motion::PublishedBaseline::complete(*value,tick.value);
+                        if(!baseline)return std::unexpected(DomainError::malformed);
+                        published_baseline=*baseline;
+                        if(prediction) {
+                            if(!prediction->validate(*baseline))return std::unexpected(DomainError::recovery_required);
+                        } else {
+                            auto map=std::find_if(maps_.begin(),maps_.end(),[&](const auto& map){
+                                return map.id==value->map_id() && map.revision==value->map_revision();
+                            });
+                            if(map!=maps_.end()) {
+                                auto made=motion::Prediction::create(*baseline,*map,now);
+                                if(!made)return std::unexpected(DomainError::recovery_required);
+                                initial_prediction=std::move(*made);
+                            }
+                        }
+                    }
+                    return {};
+                });
+                if(!value){fail(value.error()==DomainError::capacity ? LocalError::capacity : value.error()==DomainError::recovery_required ? LocalError::recovery : LocalError::decode);return;}
                 if(!*value) break;
                 auto publication=std::move(**value);
                 if(!endpoint->send(publication.application_commit)){fail(LocalError::transport);return;}
+                if(published_baseline && prediction && !prediction->reconcile(*published_baseline)){fail(LocalError::recovery);return;}
+                if(initial_prediction){prediction=std::move(initial_prediction);interval=published_baseline->motion().tick_interval_us();}
                 const auto cursor=publication.current->events().next_intent;
                 {std::lock_guard lock(mutex_);
                     while(!journal.empty() && journal.front().seq<cursor) {
                         reserved_bytes_-=journal.front().bytes.size();--reserved_count_;journal.pop_front();
                     }
+                    if(prediction)prediction_=prediction->pose();
                     publication_bytes_+=publication.retained_bytes;
                     publications_.push_back(std::move(publication));
                 }

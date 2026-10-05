@@ -90,6 +90,30 @@ int main(){
     close(limited,1,0,2);
     auto mismatch=limited.publish(128*1024*1024);
     check(!mismatch && mismatch.error()==client::DomainError::state_count && !limited.latest(),"literal actual count mismatch refuses whole publication");
+    auto motion_atomic=client::Assembler::create();
+    check(motion_atomic.receive(slice(1,{bytes(player(1,1))}),{40000}).has_value(),"initial motion atomic world received");
+    close(motion_atomic,1,0,1);
+    auto good_motion_world=motion_atomic.publish(128*1024*1024);
+    check(good_motion_world && good_motion_world->has_value(),"initial motion atomic world published");
+    const auto pinned_motion_world=motion_atomic.latest();
+    wire::OwnerMotionFields bad_motion;
+    bad_motion.stream=88;bad_motion.epoch=1;bad_motion.player={7,1};bad_motion.tick=2;
+    bad_motion.x=129;bad_motion.map_id="village";bad_motion.map_revision=2;
+    bad_motion.half_extent=128;bad_motion.tick_interval_us=40000;bad_motion.mode=wire::MotionMode::free;
+    auto invalid_motion=wire::OwnerMotion::build(bad_motion);
+    check(invalid_motion.has_value(),"wire-valid motion tuple crosses domain boundary");
+    auto bad_motion_packet=slice(2,{bytes(player(1,9)),bytes(*invalid_motion)});
+    bad_motion_packet.reliable={bytes(*wire::Inventory::build({88,1,2,28,{*wire::BagEntry::build({0,"logs"})}}))};
+    check(motion_atomic.receive(bad_motion_packet,{80000}).has_value(),"wire-valid tuple and world and owner staged together");
+    motion_atomic.admitted_frontier(2);
+    close(motion_atomic,2,1,2,2);
+    const auto staged_bad_motion=motion_atomic.staged_bytes();
+    auto bad_motion_publication=motion_atomic.publish(128*1024*1024);
+    check(!bad_motion_publication && bad_motion_publication.error()==client::DomainError::world,"full motion tuple rejected before world apply");
+    check(motion_atomic.latest()==pinned_motion_world && motion_atomic.latest()->events().event_end==0 &&
+          motion_atomic.latest()->events().next_intent==1 && !motion_atomic.latest()->events().owner->inventory &&
+          motion_atomic.latest()->world().table<wire::Transform>().find(world::Player{7,1})->x()==1 &&
+          motion_atomic.staged_bytes()==staged_bad_motion,"invalid motion preserves world owner cursor and staged transaction");
     auto action=client::encode_action(wire::PickupFields{0,{11,3}},27);
     check(action.has_value(),"typed action encoding");
     auto decoded=wire::decode_intents(*action);

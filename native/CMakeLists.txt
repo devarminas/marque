@@ -39,6 +39,10 @@ add_executable(motion_peer EXCLUDE_FROM_ALL core/tests/motion_peer/main.cpp)
 target_link_libraries(motion_peer PRIVATE marque_core)
 target_compile_options(motion_peer PRIVATE -Wall -Wextra -Werror)
 
+add_executable(client_runtime_peer EXCLUDE_FROM_ALL core/tests/client_runtime_peer/main.cpp)
+target_link_libraries(client_runtime_peer PRIVATE marque_core)
+target_compile_options(client_runtime_peer PRIVATE -Wall -Wextra -Werror)
+
 file(GLOB MARQUE_CORE_TEST_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/core/tests/*.cpp")
 if(NOT MARQUE_DEV_ISSUER)

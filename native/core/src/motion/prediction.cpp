@@ -168,8 +168,8 @@ Prediction::advance(std::uint64_t now) {
     publish();
     return steps;
 }
-std::expected<std::size_t, PredictionError>
-Prediction::reconcile(const PublishedBaseline &published) {
+std::expected<void, PredictionError>
+Prediction::validate(const PublishedBaseline &published) const {
     const auto &m = published.motion();
     if (mode_ == PredictionMode::ended)
         return std::unexpected(PredictionError::ended);
@@ -183,6 +183,13 @@ Prediction::reconcile(const PublishedBaseline &published) {
     if (m.tick() <= baseline_tick_ || m.input_seq() < baseline_cursor_ ||
         m.input_seq() > highest_)
         return std::unexpected(PredictionError::baseline);
+    return {};
+}
+std::expected<std::size_t, PredictionError>
+Prediction::reconcile(const PublishedBaseline &published) {
+    if (auto result=validate(published); !result)
+        return std::unexpected(result.error());
+    const auto &m=published.motion();
     baseline_tick_ = m.tick();
     baseline_cursor_ = m.input_seq();
     baseline_state_ = restore(m, map_);

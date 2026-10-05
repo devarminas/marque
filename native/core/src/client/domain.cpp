@@ -1,4 +1,5 @@
 #include "marque/client/domain.hpp"
+#include "marque/motion/prediction.hpp"
 
 #include <limits>
 #include <stdexcept>
@@ -124,7 +125,7 @@ std::expected<void, DomainError> Assembler::receive(const transport::Received& p
     return {};
 }
 
-std::expected<std::optional<Publication>, DomainError> Assembler::publish(std::size_t available_bytes) {
+std::expected<std::optional<Publication>, DomainError> Assembler::publish(std::size_t available_bytes,const ValidatePublication& validate) {
     auto chosen=boundaries_.end();
     for (auto it=boundaries_.begin();it!=boundaries_.end();++it) {
         const auto slice=slices_.find(it->tick());
@@ -182,7 +183,8 @@ std::expected<std::optional<Publication>, DomainError> Assembler::publish(std::s
                         row.visible=true;
                     }
                 } else if constexpr (std::is_same_v<T,wire::OwnerMotion>) {
-                    if (value.tick()!=stamp || value.stream()!=stream_ || value.epoch()!=epoch_) return false;
+                    if (value.tick()!=stamp || value.stream()!=stream_ || value.epoch()!=epoch_ ||
+                        !motion::PublishedBaseline::complete(value,stamp)) return false;
                     if (stamp==close.tick()) output.motion=value;
                 } else if constexpr (std::is_same_v<T,wire::Pose> || std::is_same_v<T,wire::Hp>) return false;
                 else output.presentation.emplace_back(value);
@@ -202,6 +204,7 @@ std::expected<std::optional<Publication>, DomainError> Assembler::publish(std::s
     auto commit=wire::ApplicationCommit::build({stream_,epoch_,close.tick(),close.event_end()});
     std::vector<std::uint8_t> encoded;
     if (!commit || !wire::encode(*commit,encoded)) return std::unexpected(DomainError::malformed);
+    if(validate){auto result=validate(output,world::Tick{close.tick()});if(!result)return std::unexpected(result.error());}
     auto applied=world_.apply({world::Tick{close.tick()},slices_.at(close.tick()).received,std::move(changes),std::move(output)});
     if (!applied) return std::unexpected(DomainError::world);
     applied_=close.event_end();

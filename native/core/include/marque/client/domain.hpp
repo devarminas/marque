@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -89,7 +90,8 @@ class Assembler {
 public:
     static Assembler create(DomainLimits limits = {});
     std::expected<void, DomainError> receive(const transport::Received& packet, world::Time now);
-    std::expected<std::optional<Publication>, DomainError> publish(std::size_t available_bytes);
+    using ValidatePublication=std::function<std::expected<void,DomainError>(const Events&,world::Tick)>;
+    std::expected<std::optional<Publication>, DomainError> publish(std::size_t available_bytes,const ValidatePublication& validate={});
     std::shared_ptr<const Tick> latest() const { return world_.reader().latest(); }
     void admitted_frontier(std::uint32_t next) { frontier_ = next; }
     std::size_t staged_bytes() const { return bytes_; }

@@ -6,6 +6,7 @@
 #include <thread>
 
 #include "marque/client/domain.hpp"
+#include "marque/motion/prediction.hpp"
 #include "marque/transport/handshake.hpp"
 
 namespace marque::client {
@@ -22,6 +23,11 @@ std::expected<std::vector<std::uint8_t>,wire::codec::Error> encode_action(Action
 enum class Connection { disconnected, connecting, connected, failed };
 enum class LocalError { none, token, socket, handshake, transport, decode, capacity, recovery, sequence };
 
+struct RuntimeLimits {
+    std::size_t publications=256;
+    std::size_t publication_bytes=128*1024*1024;
+};
+
 class Runtime {
     struct Command { Action action; std::size_t bytes; };
     struct Canonical { std::uint32_t seq; std::vector<std::uint8_t> bytes; };
@@ -32,7 +38,10 @@ class Runtime {
     Connection connection_=Connection::disconnected;
     LocalError error_=LocalError::none;
     std::deque<Command> commands_;
-    std::deque<wire::InputFields> inputs_;
+    std::optional<motion::Input> input_;
+    std::shared_ptr<const motion::PredictedPose> prediction_;
+    const std::vector<motion::PredictionMap> maps_;
+    const RuntimeLimits limits_;
     std::deque<Publication> publications_;
     std::size_t queued_bytes_=0;
     std::size_t reserved_bytes_=0;
@@ -41,7 +50,8 @@ class Runtime {
     void run(transport::ConnectToken token);
     void fail(LocalError error);
 public:
-    Runtime()=default;
+    explicit Runtime(std::vector<motion::PredictionMap> maps={},RuntimeLimits limits={})
+        : maps_(std::move(maps)),limits_(limits) {}
     Runtime(const Runtime&)=delete;
     Runtime& operator=(const Runtime&)=delete;
     ~Runtime();
@@ -50,6 +60,7 @@ public:
     bool queue(Action action);
     bool move(double dx,double dz,bool jump);
     std::optional<Publication> take();
+    std::shared_ptr<const motion::PredictedPose> prediction() const;
     Connection connection() const;
     LocalError error() const;
 };

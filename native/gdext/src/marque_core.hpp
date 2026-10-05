@@ -69,6 +69,23 @@ public:
     int64_t get_next_intent() const{return value_ ? value_->events().next_intent : 0;}
 };
 
+class MarquePredictedPose : public godot::RefCounted {
+    GDCLASS(MarquePredictedPose,godot::RefCounted)
+    std::shared_ptr<const marque::motion::PredictedPose> value_;
+protected:
+    static void _bind_methods();
+public:
+    void set_native(std::shared_ptr<const marque::motion::PredictedPose> value){value_=std::move(value);}
+    int64_t get_tick() const{return value_ ? value_->tick : 0;}
+    int64_t get_mode() const{return value_ ? static_cast<int64_t>(value_->mode) : 2;}
+    double get_x() const{return value_ ? value_->state.x : 0;}
+    double get_y() const{return value_ ? value_->state.y : 0;}
+    double get_z() const{return value_ ? value_->state.z : 0;}
+    double get_vy() const{return value_ ? value_->state.vy : 0;}
+    double get_dx() const{return value_ ? value_->state.dx : 0;}
+    double get_dz() const{return value_ ? value_->state.dz : 0;}
+};
+
 class MarqueCore : public godot::RefCounted {
     GDCLASS(MarqueCore,godot::RefCounted)
     std::shared_ptr<marque::client::Runtime> runtime_;
@@ -81,8 +98,8 @@ public:
     godot::Ref<MarqueWorldView> get_world() const;
     godot::Ref<MarqueOwnerView> get_owner() const;
     godot::Ref<MarqueTickView> get_tick() const;
-    bool get_prediction_available() const{return false;}
-    godot::Ref<MarqueTransform> get_predicted_local_pose() const{return {};}
+    bool get_prediction_available() const{return runtime_ && runtime_->connection()==marque::client::Connection::connected && runtime_->prediction()!=nullptr;}
+    godot::Ref<MarquePredictedPose> get_predicted_local_pose() const;
     int64_t get_connection() const{return runtime_ ? static_cast<int64_t>(runtime_->connection()) : 0;}
     int64_t get_error() const{return runtime_ ? static_cast<int64_t>(runtime_->error()) : 0;}
     bool move(double dx,double dz,bool jump);

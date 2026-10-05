@@ -1,12 +1,53 @@
 #include "marque_core.hpp"
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
 using namespace godot;
 using namespace marque;
 
 namespace {
+std::vector<motion::PredictionMap> known_maps(){
+    std::vector<motion::PredictionMap> maps{{motion::Map{128,0,{}} ,"village",2}};
+    const auto file=FileAccess::open("res://../shared/maps/arena_ring_of_trials_nav.json",FileAccess::READ);
+    if(file.is_null() || file->get_length()>1024*1024)return maps;
+    const auto parsed=JSON::parse_string(file->get_as_text());
+    if(parsed.get_type()!=Variant::DICTIONARY)return maps;
+    const Dictionary data=parsed;
+    if(!data.has("id") || data["id"]!=Variant("arena_ring_of_trials") ||
+       !data.has("vertices") || !data.has("polygons") ||
+       data["vertices"].get_type()!=Variant::ARRAY || data["polygons"].get_type()!=Variant::ARRAY)return maps;
+    const Array points=data["vertices"],faces=data["polygons"];
+    if(points.is_empty() || points.size()>10000 || faces.is_empty() || faces.size()>20000)return maps;
+    std::vector<motion::Vec3> vertices;
+    std::vector<std::array<std::uint32_t,3>> triangles;
+    for(int64_t i=0;i<points.size();++i){
+        if(points[i].get_type()!=Variant::ARRAY)return maps;
+        const Array point=points[i];
+        if(point.size()!=3)return maps;
+        for(int64_t j=0;j<3;++j)if(point[j].get_type()!=Variant::FLOAT && point[j].get_type()!=Variant::INT)return maps;
+        vertices.push_back({point[0],point[1],point[2]});
+    }
+    for(int64_t i=0;i<faces.size();++i){
+        if(faces[i].get_type()!=Variant::ARRAY)return maps;
+        const Array face=faces[i];
+        if(face.size()!=3)return maps;
+        std::array<std::uint32_t,3> indices;
+        for(int64_t j=0;j<3;++j){
+            if(face[j].get_type()!=Variant::FLOAT && face[j].get_type()!=Variant::INT)return maps;
+            const double index=face[j];
+            if(!std::isfinite(index) || index<0 || index>=points.size() || std::floor(index)!=index)return maps;
+            indices[j]=static_cast<std::uint32_t>(index);
+        }
+        triangles.push_back(indices);
+    }
+    auto mesh=motion::Mesh::create(std::move(vertices),std::move(triangles));
+    if(mesh)maps.push_back({motion::Map{84,0.4,*mesh},"arena_ring_of_trials",3});
+    return maps;
+}
 std::string text(const String& value){const auto bytes=value.utf8();return std::string(bytes.get_data(),bytes.length());}
 template<class W,class G,class N> std::optional<W> target_native(const Ref<G>& value){
     if(value.is_null() || !value->native()) return std::nullopt;
@@ -15,6 +56,30 @@ template<class W,class G,class N> std::optional<W> target_native(const Ref<G>& v
     return W{id->index,id->generation};
 }
 template<class G,class W> Ref<G> optional_value(const std::optional<W>& value){return value ? marque_value<G>(*value) : Ref<G>{};}
+}
+
+void MarquePredictedPose::_bind_methods(){
+    ClassDB::bind_method(D_METHOD("get_tick"),&MarquePredictedPose::get_tick);
+    ADD_PROPERTY(PropertyInfo(Variant::INT,"tick"),"","get_tick");
+    ClassDB::bind_method(D_METHOD("get_mode"),&MarquePredictedPose::get_mode);
+    ADD_PROPERTY(PropertyInfo(Variant::INT,"mode"),"","get_mode");
+    ClassDB::bind_method(D_METHOD("get_x"),&MarquePredictedPose::get_x);
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT,"x"),"","get_x");
+    ClassDB::bind_method(D_METHOD("get_y"),&MarquePredictedPose::get_y);
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT,"y"),"","get_y");
+    ClassDB::bind_method(D_METHOD("get_z"),&MarquePredictedPose::get_z);
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT,"z"),"","get_z");
+    ClassDB::bind_method(D_METHOD("get_vy"),&MarquePredictedPose::get_vy);
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT,"vy"),"","get_vy");
+    ClassDB::bind_method(D_METHOD("get_dx"),&MarquePredictedPose::get_dx);
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT,"dx"),"","get_dx");
+    ClassDB::bind_method(D_METHOD("get_dz"),&MarquePredictedPose::get_dz);
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT,"dz"),"","get_dz");
+}
+Ref<MarquePredictedPose> MarqueCore::get_predicted_local_pose() const{
+    const auto pose=runtime_ ? runtime_->prediction() : nullptr;
+    if(!pose)return {};
+    Ref<MarquePredictedPose> value;value.instantiate();value->set_native(pose);return value;
 }
 
 void MarqueEntityView::_bind_methods(){
@@ -247,7 +312,7 @@ void MarqueRuntime::_bind_methods(){
     ClassDB::bind_method(D_METHOD("disconnect"),&MarqueRuntime::disconnect);
     ADD_PROPERTY(PropertyInfo(Variant::OBJECT,"core",PROPERTY_HINT_RESOURCE_TYPE,"MarqueCore"),"","get_core");
 }
-MarqueRuntime::MarqueRuntime(){runtime_=std::make_shared<client::Runtime>();core_.instantiate();core_->attach(runtime_);}
+MarqueRuntime::MarqueRuntime(){runtime_=std::make_shared<client::Runtime>(known_maps());core_.instantiate();core_->attach(runtime_);}
 MarqueRuntime::~MarqueRuntime(){runtime_->disconnect();}
 bool MarqueRuntime::connect_token(const PackedByteArray& token){return is_inside_tree() && runtime_->connect(std::span<const std::uint8_t>(token.ptr(),token.size()));}
 void MarqueRuntime::disconnect(){runtime_->disconnect();}

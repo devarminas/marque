@@ -51,6 +51,7 @@ static void initialize_marque(ModuleInitializationLevel level) {
     GDREGISTER_CLASS(MarqueWorldView);
     GDREGISTER_CLASS(MarqueOwnerView);
     GDREGISTER_CLASS(MarqueTickView);
+    GDREGISTER_CLASS(MarquePredictedPose);
     GDREGISTER_CLASS(MarqueCore);
     GDREGISTER_CLASS(MarqueRuntime);
 }

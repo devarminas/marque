@@ -69,7 +69,7 @@ func exercise() -> void:
 		return
 	if not check(player != null and npc != null and item != null and node != null, "all full-kind handles exposed"):
 		return
-	if not check(not core.prediction_available and core.predicted_local_pose == null, "prediction readiness explicit"):
+	if not check(core.prediction_available and core.predicted_local_pose != null, "actual worker prediction ready from complete known-map baseline"):
 		return
 	if not check(not core.pickup(ClassDB.instantiate("MarqueItemHandle")), "default handle is invalid"):
 		return
@@ -88,9 +88,15 @@ func exercise() -> void:
 		core.owner.inventory.slots[0] = core.owner.inventory.slots[0]
 		print("ARM360_NESTED_ASSIGNMENT_UNEXPECTEDLY_SUCCEEDED")
 		return
+	var pinned_pose: RefCounted = core.predicted_local_pose
+	if not check(pinned_pose.x == 0 and pinned_pose.dx == 0, "prediction is distinct from authoritative world transform"):
+		return
 	var accepted := [core.pickup(item), core.drop(3), core.equip(4), core.unequip("helmet"), core.gather(node), core.use_self(5), core.attack_player(player), core.respawn(), core.cast_self("heal"), core.talk(npc), core.dialog_option(npc,"accept"), core.give(npc,6), core.party_invite(player), core.party_accept(), core.party_decline(), core.party_leave(), core.party_kick(player), core.admin("status"), core.use_station(7,node), core.attack_npc(npc), core.cast_player("heal",player), core.cast_npc("fireball",npc), core.move(0.5,-0.25,true)]
 	if not check(accepted.all(func(value): return value), "all public typed actions admitted"):
 		return
+	for frame_sample in range(100):
+		if not check(core.move(0.503, -0.251, false), "render samples coalesce without new canonical ticks"):
+			return
 	var extra := 0
 	while extra < 4096 and core.respawn():
 		extra += 1
@@ -104,7 +110,26 @@ func exercise() -> void:
 		await process_frame
 	if not check(core.tick.tick == 3 and core.admin("after_full"), "consumed cursor frees canonical command admission"):
 		return
-	await create_timer(0.15, true).timeout
+	if not check(core.move(0,0,false), "explicit horizontal release admitted"):
+		return
+	var stop_deadline := Time.get_ticks_msec() + 150
+	while core.predicted_local_pose.dx != 0 and Time.get_ticks_msec() < stop_deadline:
+		await process_frame
+	if not check(core.predicted_local_pose.dx == 0 and core.predicted_local_pose.dz == 0, "local horizontal release applies on next canonical tick"):
+		return
+	var stopped_pose: RefCounted = core.predicted_local_pose
+	while core.tick.tick < 4 and Time.get_ticks_msec() < deadline:
+		await process_frame
+	if not check(core.tick.tick == 4 and core.predicted_local_pose.dx == 0 and core.predicted_local_pose.y == 0, "complete stopped grounded baseline converges"):
+			return
+	FileAccess.open(token_path + ".passive", FileAccess.WRITE).store_string("passive")
+	while core.tick.tick < 5 and Time.get_ticks_msec() < deadline:
+		await process_frame
+	await create_timer(0.12, true).timeout
+	if not check(core.tick.tick == 5 and core.predicted_local_pose.dx == 1 and core.predicted_local_pose.x > 1.0, "consumed release leaves passive server approach free to advance"):
+		return
+	if not check(pinned_pose.x == 0 and pinned_pose.dx == 0 and stopped_pose.dx == 0 and core.world.entities[0].transform.x == 5.0, "pinned prediction and authoritative tables stay independent"):
+		return
 	var retained := core
 	runtime.free()
 	if not check(retained.connection == 0 and not retained.respawn(), "retained facade is disconnected after node exit"):
