@@ -47,7 +47,10 @@ type Sender struct {
 
 	lastSend, lastRecv uint64
 	state              State
+	capture            func(uint64, []byte, []byte)
 }
+
+func (s *Sender) SetCapture(capture func(uint64, []byte, []byte)) { s.capture = capture }
 
 type outMsg struct {
 	data  []byte
@@ -249,7 +252,7 @@ func (s *Sender) Flush(now uint64, u Unreliable) (Flushed, error) {
 		if d.unreliable != nil {
 			out.UnreliableSeq = s.nextSeq
 		}
-		out.Datagrams = append(out.Datagrams, s.emit(d))
+		out.Datagrams = append(out.Datagrams, s.emit(d, now))
 	}
 	if len(done) > 0 {
 		s.lastSend = now
@@ -293,12 +296,15 @@ func fitItems(items [][]byte, room int) int {
 	return len(items)
 }
 
-func (s *Sender) emit(d *datagram) []byte {
+func (s *Sender) emit(d *datagram, now uint64) []byte {
 	seq := s.nextSeq
 	s.nextSeq++
 	s.sent[seq%uint16(len(s.sent))] = sentPacket{live: true, seq: seq, frags: d.refs}
 
 	hdr := putHeader(make([]byte, 0, MaxDatagram), header{protocol: ProtocolID, hash: s.cfg.SchemaHash, seq: seq, ack: s.own})
 	body := encodeBody(nil, s.role, d.unreliable, d.entries)
+	if s.capture != nil {
+		s.capture(now, bytes.Clone(hdr[:HeaderSize]), bytes.Clone(body))
+	}
 	return s.seal.Seal(hdr, hdr[:HeaderSize], body)
 }

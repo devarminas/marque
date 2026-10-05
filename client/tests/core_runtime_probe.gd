@@ -36,6 +36,8 @@ func exercise() -> void:
 		quests_seen = value.quests[0].id == "quest_one" and core.owner.quests.quests[0].status == "active"
 	)
 	var token_path := OS.get_environment("MARQUE_RUNTIME_TOKEN")
+	if not check(runtime.record_to(token_path + ".recording"), "native runtime recording configured"):
+		return
 	if not check(runtime.connect_token(FileAccess.get_file_as_bytes(token_path)), "token connection admitted"):
 		return
 	paused = true
@@ -43,6 +45,8 @@ func exercise() -> void:
 	while core.tick.tick < 2 and not stopped and Time.get_ticks_msec() < deadline:
 		await process_frame
 	if stopped or not check(core.tick.tick == 2, "automatic core publication while tree paused"):
+		return
+	if not check(not runtime.record_to(token_path + ".late"), "late capture cannot start from an advanced session"):
 		return
 	if not check(inventory_seen and quests_seen, "typed inventory and quest signals"):
 		return
@@ -131,6 +135,10 @@ func exercise() -> void:
 	if not check(pinned_pose.x == 0 and pinned_pose.dx == 0 and stopped_pose.dx == 0 and core.world.entities[0].transform.x == 5.0, "pinned prediction and authoritative tables stay independent"):
 		return
 	var retained := core
+	runtime.disconnect_server()
+	if not check(runtime.recording_error.is_empty() and FileAccess.file_exists(token_path + ".recording"), "recording finalized without capture error"):
+		return
+	print("ARM361_GODOT_CAPTURE_FINALIZED_PASS")
 	runtime.free()
 	if not check(retained.connection == 0 and not retained.respawn(), "retained facade is disconnected after node exit"):
 		return

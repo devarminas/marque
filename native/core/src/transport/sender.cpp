@@ -222,6 +222,7 @@ std::expected<Flushed, Error> Sender::flush(std::uint64_t now, const Unreliable&
         std::vector<std::uint8_t> datagram;
         datagram.reserve(kMaxDatagram);
         datagram.insert(datagram.end(), header.begin(), header.end());
+        if(observer_)observer_(now,header,body);
         sealer_->seal(header, body, datagram);
         out.datagrams.push_back(std::move(datagram));
     }

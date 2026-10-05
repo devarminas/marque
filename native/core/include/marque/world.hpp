@@ -170,6 +170,15 @@ public:
     }
     std::span<const Entity> entities() const { return data_->directory->members; }
     std::size_t known_slots() const { return data_->directory->records.size(); }
+    template<class F> void visit_records(F&& visit) const {
+        for(std::size_t row=0;row<data_->directory->records.size();++row) {
+            const auto& record=data_->directory->records[row];
+            visit(record.entity,record.visible,([&]() -> std::optional<C> {
+                const auto& column=*std::get<std::shared_ptr<const Column<C>>>(data_->columns);
+                return row<column.size() ? column[row] : std::nullopt;
+            }())...);
+        }
+    }
     template<class T> Table<T> table() const {
         return Table<T>(data_->directory, std::get<std::shared_ptr<const Column<T>>>(data_->columns));
     }

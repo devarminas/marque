@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -16,6 +17,7 @@
 namespace marque::transport {
 
 struct StartAt;
+using PlaintextObserver=std::function<void(std::span<const std::uint8_t>,std::span<const std::uint8_t>)>;
 
 struct Received {
     AckWindow peer_ack;
@@ -38,7 +40,7 @@ struct Stats {
 
 class Receiver {
 public:
-    static std::expected<Receiver, ConfigError> create(Role role, const Config& cfg, std::shared_ptr<Opener> opener);
+    static std::expected<Receiver, ConfigError> create(Role role, const Config& cfg, std::shared_ptr<Opener> opener, PlaintextObserver observer={});
 
     std::expected<Received, Error> receive(std::span<const std::uint8_t> datagram);
 
@@ -60,6 +62,9 @@ private:
     void store(std::uint16_t id, std::uint8_t index, std::uint8_t count, std::span<const std::uint8_t> data);
 
     friend struct StartAt;
+    friend class Endpoint;
+    std::expected<Received,Error> consume(std::span<const std::uint8_t> header,std::span<const std::uint8_t> body);
+    PlaintextObserver observer_;
 
     Role from_;
     std::uint64_t hash_;

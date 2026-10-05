@@ -43,14 +43,16 @@ std::expected<AckWindow, Error> accept(std::optional<AckWindow> window, std::uin
 Receiver::Receiver(Role role, const Config& cfg, std::shared_ptr<Opener> opener)
     : from_(peer(role)), hash_(cfg.schema_hash), opener_(std::move(opener)) {}
 
-std::expected<Receiver, ConfigError> Receiver::create(Role role, const Config& cfg, std::shared_ptr<Opener> opener) {
+std::expected<Receiver, ConfigError> Receiver::create(Role role, const Config& cfg, std::shared_ptr<Opener> opener, PlaintextObserver observer) {
     if (auto ok = cfg.validate(); !ok) {
         return std::unexpected(ok.error());
     }
     if (opener == nullptr) {
         return std::unexpected(ConfigError::opener_missing);
     }
-    return Receiver(role, cfg, std::move(opener));
+    Receiver result(role, cfg, std::move(opener));
+    result.observer_=std::move(observer);
+    return result;
 }
 
 std::expected<Received, Error> Receiver::receive(std::span<const std::uint8_t> d) {
@@ -68,7 +70,13 @@ std::expected<Received, Error> Receiver::receive(std::span<const std::uint8_t> d
         ++stats_.malformed;
         return std::unexpected(Error::malformed);
     }
-    auto body = format::parse_body(scratch_, from_);
+    if(observer_)observer_(d.first(kHeaderSize),scratch_);
+    return consume(d.first(kHeaderSize),scratch_);
+}
+
+std::expected<Received,Error> Receiver::consume(std::span<const std::uint8_t> header,std::span<const std::uint8_t> plaintext) {
+    const auto h=format::read_header(header);
+    auto body = format::parse_body(plaintext, from_);
     if (!body) {
         ++stats_.malformed;
         return std::unexpected(Error::malformed);

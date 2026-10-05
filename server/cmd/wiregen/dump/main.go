@@ -11,8 +11,15 @@ import (
 )
 
 func main() {
+	if len(os.Args)==3 && os.Args[1]=="--recording" {
+		if err:=dumpRecording(os.Args[2],os.Stdout); err!=nil {
+			fmt.Fprintln(os.Stderr,err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: dump <hex> [<hex>...]")
+		fmt.Fprintln(os.Stderr, "usage: dump <hex> [<hex>...] | dump --recording <file>")
 		os.Exit(2)
 	}
 	failed := false

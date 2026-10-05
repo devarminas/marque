@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devarminas/marque/server/internal/recording"
 	"github.com/devarminas/marque/server/internal/transport"
 	"github.com/devarminas/marque/server/internal/wire"
 	"github.com/devarminas/marque/server/internal/wire/codec"
@@ -82,7 +83,9 @@ func godotRuntime(t *testing.T, mode string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	script := "res://tests/core_runtime_probe.gd"
-	if mode=="arena" || mode=="unknown" || mode=="recovery" { script="res://tests/core_map_probe.gd" }
+	if mode == "arena" || mode == "unknown" || mode == "recovery" {
+		script = "res://tests/core_map_probe.gd"
+	}
 	cmd := exec.CommandContext(ctx, "godot", "--headless", "--path", client, "--script", script, "--quit-after", "4000")
 	cmd.Env = append(os.Environ(), "MARQUE_RUNTIME_TOKEN="+tokenPath, "MARQUE_RUNTIME_NEGATIVE="+mode)
 	var output capturedOutput
@@ -140,11 +143,17 @@ func godotRuntime(t *testing.T, mode string) {
 		select {
 		case err := <-finished:
 			finished <- err
-			if mode=="arena" || mode=="unknown" || mode=="recovery" {
-				marker:="ARM360_AUTHORED_ARENA_MESH_PREDICTION_PASS"
-				if mode=="unknown" { marker="ARM360_UNKNOWN_MAP_NOT_READY_PASS" }
-				if mode=="recovery" { marker="ARM360_LIVE_PASSIVE_BOUNDED_RECOVERY_PASS" }
-				if err!=nil || !strings.Contains(output.String(),marker) || mode=="arena" && !inputSeen { t.Fatalf("map err=%v input=%v\n%s",err,inputSeen,output.String()) }
+			if mode == "arena" || mode == "unknown" || mode == "recovery" {
+				marker := "ARM360_AUTHORED_ARENA_MESH_PREDICTION_PASS"
+				if mode == "unknown" {
+					marker = "ARM360_UNKNOWN_MAP_NOT_READY_PASS"
+				}
+				if mode == "recovery" {
+					marker = "ARM360_LIVE_PASSIVE_BOUNDED_RECOVERY_PASS"
+				}
+				if err != nil || !strings.Contains(output.String(), marker) || mode == "arena" && !inputSeen {
+					t.Fatalf("map err=%v input=%v\n%s", err, inputSeen, output.String())
+				}
 				t.Log(marker)
 				return
 			}
@@ -159,6 +168,21 @@ func godotRuntime(t *testing.T, mode string) {
 			if err != nil || !strings.Contains(output.String(), "ARM360_REAL_UDP_TYPED_ACTIONS_AND_IMMUTABLE_STATE_PASS") {
 				t.Fatalf("godot err=%v actions=%d extra=%d cursor_sent=%v commits=%d\n%s", err, seen, extra, cursorSent, commits, output.String())
 			}
+			if !strings.Contains(output.String(), "ARM361_GODOT_CAPTURE_FINALIZED_PASS") {
+				t.Fatal("actual Godot recording was not finalized")
+			}
+			if _, readErr := recording.Read(tokenPath+".recording", wire.SchemaHash); readErr != nil {
+				t.Fatal(readErr)
+			}
+			replayHelper := os.Getenv("MARQUE_RECORDING_PEER")
+			if replayHelper == "" {
+				t.Fatal("MARQUE_RECORDING_PEER is required for actual Godot recording replay")
+			}
+			replayOutput, replayErr := exec.CommandContext(ctx, replayHelper, "read", tokenPath+".recording").CombinedOutput()
+			if replayErr != nil || string(replayOutput) != "REPLAY_PASS publications=5 terminal=0\n" {
+				t.Fatalf("actual Godot core trace replay err=%v output=%q", replayErr, replayOutput)
+			}
+			t.Log("ARM361_GODOT_CORE_RECORD_REPLAY_PASS publications=5")
 			if extra < 1 || seen != 23+extra || !inputSeen || !jumpSeen || commits < 3 || blockedPackets < 2 {
 				t.Fatalf("actions=%d input=%v commits=%d blocked_packets=%d\n%s", seen, inputSeen, commits, blockedPackets, output.String())
 			}
@@ -271,10 +295,20 @@ func godotRuntime(t *testing.T, mode string) {
 			if e := endpoint.Send(encoded(t, party, e)); e != nil {
 				t.Fatal(e)
 			}
-			fields:=wire.OwnerMotionFields{Stream:0xfedcba9876543210,Epoch:1,Player:wire.PlayerId{Index:7,Gen:1},Tick:2,MapId:"village",MapRevision:2,TickIntervalUs:40000,HalfExtent:128,Grounded:true,Mode:wire.MotionModeFree}
-			if mode=="arena" { fields.MapId="arena_ring_of_trials";fields.MapRevision=3;fields.HalfExtent=84;fields.GroundY=0.4;fields.X=-26.26;fields.Y=5.8;fields.Z=-80.21 }
-			if mode=="unknown" { fields.MapRevision=3 }
-			motion,motionErr:=fields.Build()
+			fields := wire.OwnerMotionFields{Stream: 0xfedcba9876543210, Epoch: 1, Player: wire.PlayerId{Index: 7, Gen: 1}, Tick: 2, MapId: "village", MapRevision: 2, TickIntervalUs: 40000, HalfExtent: 128, Grounded: true, Mode: wire.MotionModeFree}
+			if mode == "arena" {
+				fields.MapId = "arena_ring_of_trials"
+				fields.MapRevision = 3
+				fields.HalfExtent = 84
+				fields.GroundY = 0.4
+				fields.X = -26.26
+				fields.Y = 5.8
+				fields.Z = -80.21
+			}
+			if mode == "unknown" {
+				fields.MapRevision = 3
+			}
+			motion, motionErr := fields.Build()
 			close, e = wire.TickCloseFields{Stream: 0xfedcba9876543210, Epoch: 1, Tick: 2, EventEnd: 3, StateItems: 2, NextIntent: 1}.Build()
 			if e := endpoint.Send(encoded(t, close, e)); e != nil {
 				t.Fatal(e)
@@ -304,24 +338,45 @@ func godotRuntime(t *testing.T, mode string) {
 			}
 			seen++
 		}
-		if len(packet.Unreliable.Items)>8 {t.Fatal("retained input copies exceed bound")}
+		if len(packet.Unreliable.Items) > 8 {
+			t.Fatal("retained input copies exceed bound")
+		}
 		for _, raw := range packet.Unreliable.Items {
 			message, e := wire.DecodeInput(raw)
 			if e != nil {
 				t.Fatal(e)
 			}
 			input := message.(wire.Input)
-			if mode=="arena" { if input.Dx()!=0.5 || input.Dz()!=0 || input.Jump() {t.Fatal("arena input")};inputSeen=true;continue }
-			if mode=="unknown" || mode=="recovery" { t.Fatal("passive or unknown map authored input") }
-			if input.Seq() == 0 || (input.Dx()!=0.5 || input.Dz()!=-0.25) && (input.Dx()!=0 || input.Dz()!=0) || (input.Seq()>1 && input.Jump()) {
+			if mode == "arena" {
+				if input.Dx() != 0.5 || input.Dz() != 0 || input.Jump() {
+					t.Fatal("arena input")
+				}
+				inputSeen = true
+				continue
+			}
+			if mode == "unknown" || mode == "recovery" {
+				t.Fatal("passive or unknown map authored input")
+			}
+			if input.Seq() == 0 || (input.Dx() != 0.5 || input.Dz() != -0.25) && (input.Dx() != 0 || input.Dz() != 0) || (input.Seq() > 1 && input.Jump()) {
 				t.Fatalf("input=%s", input)
 			}
-			if input.Seq()==1 { if !input.Jump(){t.Fatal("coalesced jump edge lost")};jumpSeen=true }
-			if input.Dx()==0 && input.Dz()==0 {
-				if stopInput!=0 && stopInput!=input.Seq() { t.Fatal("release minted multiple canonical sequences") }
-				stopInput=input.Seq()
-			} else if passiveSent && input.Seq()>highestInput { t.Fatal("passive server approach minted input") }
-			if input.Seq()>highestInput { highestInput=input.Seq() }
+			if input.Seq() == 1 {
+				if !input.Jump() {
+					t.Fatal("coalesced jump edge lost")
+				}
+				jumpSeen = true
+			}
+			if input.Dx() == 0 && input.Dz() == 0 {
+				if stopInput != 0 && stopInput != input.Seq() {
+					t.Fatal("release minted multiple canonical sequences")
+				}
+				stopInput = input.Seq()
+			} else if passiveSent && input.Seq() > highestInput {
+				t.Fatal("passive server approach minted input")
+			}
+			if input.Seq() > highestInput {
+				highestInput = input.Seq()
+			}
 			inputSeen = true
 		}
 		if extra >= 0 && seen == 22+extra && !cursorSent {
@@ -332,27 +387,35 @@ func godotRuntime(t *testing.T, mode string) {
 			send(transport.Unreliable{Stamp: 3})
 			cursorSent = true
 		}
-		if _,e:=os.Stat(tokenPath+".recovery");e==nil && !passiveSent {
-			motion,e:=wire.OwnerMotionFields{Stream:0xfedcba9876543210,Epoch:1,Player:wire.PlayerId{Index:7,Gen:1},Tick:300,X:1,MapId:"village",MapRevision:2,TickIntervalUs:40000,HalfExtent:128,Grounded:true,Mode:wire.MotionModeFree}.Build()
-			close,ce:=wire.TickCloseFields{Stream:0xfedcba9876543210,Epoch:1,Tick:300,EventEnd:3,StateItems:1,NextIntent:1}.Build()
-			if e:=endpoint.Send(encoded(t,close,ce));e!=nil{t.Fatal(e)}
-			send(transport.Unreliable{Stamp:300,Items:[][]byte{encoded(t,motion,e)}})
-			passiveSent=true
+		if _, e := os.Stat(tokenPath + ".recovery"); e == nil && !passiveSent {
+			motion, e := wire.OwnerMotionFields{Stream: 0xfedcba9876543210, Epoch: 1, Player: wire.PlayerId{Index: 7, Gen: 1}, Tick: 300, X: 1, MapId: "village", MapRevision: 2, TickIntervalUs: 40000, HalfExtent: 128, Grounded: true, Mode: wire.MotionModeFree}.Build()
+			close, ce := wire.TickCloseFields{Stream: 0xfedcba9876543210, Epoch: 1, Tick: 300, EventEnd: 3, StateItems: 1, NextIntent: 1}.Build()
+			if e := endpoint.Send(encoded(t, close, ce)); e != nil {
+				t.Fatal(e)
+			}
+			send(transport.Unreliable{Stamp: 300, Items: [][]byte{encoded(t, motion, e)}})
+			passiveSent = true
 		}
-		if stopInput!=0 && !stoppedSent {
-			if highestInput>15 { t.Fatal("render samples allocated canonical input sequences") }
-			motion, e := wire.OwnerMotionFields{Stream: 0xfedcba9876543210, Epoch: 1, Player: wire.PlayerId{Index:7,Gen:1}, Tick:4, InputSeq:stopInput, MapId:"village", MapRevision:2, TickIntervalUs:40000, HalfExtent:128, Grounded:true, Mode:wire.MotionModeFree}.Build()
-			close, closeErr := wire.TickCloseFields{Stream:0xfedcba9876543210, Epoch:1, Tick:4, EventEnd:3, StateItems:1, NextIntent:uint32(seen+1)}.Build()
-			if e:=endpoint.Send(encoded(t,close,closeErr)); e!=nil { t.Fatal(e) }
-			send(transport.Unreliable{Stamp:4,Items:[][]byte{encoded(t,motion,e)}})
-			stoppedSent=true
+		if stopInput != 0 && !stoppedSent {
+			if highestInput > 15 {
+				t.Fatal("render samples allocated canonical input sequences")
+			}
+			motion, e := wire.OwnerMotionFields{Stream: 0xfedcba9876543210, Epoch: 1, Player: wire.PlayerId{Index: 7, Gen: 1}, Tick: 4, InputSeq: stopInput, MapId: "village", MapRevision: 2, TickIntervalUs: 40000, HalfExtent: 128, Grounded: true, Mode: wire.MotionModeFree}.Build()
+			close, closeErr := wire.TickCloseFields{Stream: 0xfedcba9876543210, Epoch: 1, Tick: 4, EventEnd: 3, StateItems: 1, NextIntent: uint32(seen + 1)}.Build()
+			if e := endpoint.Send(encoded(t, close, closeErr)); e != nil {
+				t.Fatal(e)
+			}
+			send(transport.Unreliable{Stamp: 4, Items: [][]byte{encoded(t, motion, e)}})
+			stoppedSent = true
 		}
-		if _,e:=os.Stat(tokenPath+".passive");e==nil && !passiveSent {
-			motion, e := wire.OwnerMotionFields{Stream: 0xfedcba9876543210, Epoch:1, Player:wire.PlayerId{Index:7,Gen:1}, Tick:5, InputSeq:stopInput, X:1, Dx:1, MapId:"village", MapRevision:2, TickIntervalUs:40000, HalfExtent:128, Grounded:true, Mode:wire.MotionModeFree}.Build()
-			close, closeErr := wire.TickCloseFields{Stream:0xfedcba9876543210, Epoch:1, Tick:5, EventEnd:3, StateItems:1, NextIntent:uint32(seen+1)}.Build()
-			if e:=endpoint.Send(encoded(t,close,closeErr));e!=nil { t.Fatal(e) }
-			send(transport.Unreliable{Stamp:5,Items:[][]byte{encoded(t,motion,e)}})
-			passiveSent=true
+		if _, e := os.Stat(tokenPath + ".passive"); e == nil && !passiveSent {
+			motion, e := wire.OwnerMotionFields{Stream: 0xfedcba9876543210, Epoch: 1, Player: wire.PlayerId{Index: 7, Gen: 1}, Tick: 5, InputSeq: stopInput, X: 1, Dx: 1, MapId: "village", MapRevision: 2, TickIntervalUs: 40000, HalfExtent: 128, Grounded: true, Mode: wire.MotionModeFree}.Build()
+			close, closeErr := wire.TickCloseFields{Stream: 0xfedcba9876543210, Epoch: 1, Tick: 5, EventEnd: 3, StateItems: 1, NextIntent: uint32(seen + 1)}.Build()
+			if e := endpoint.Send(encoded(t, close, closeErr)); e != nil {
+				t.Fatal(e)
+			}
+			send(transport.Unreliable{Stamp: 5, Items: [][]byte{encoded(t, motion, e)}})
+			passiveSent = true
 		}
 		send(transport.Unreliable{})
 	}
