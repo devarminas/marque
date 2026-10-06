@@ -10,6 +10,7 @@ import (
 type MotionSnapshot struct {
 	Player              PlayerHandle
 	Tick                uint32
+	InputSeq            uint32
 	State               motion.State
 	Grounded            bool
 	Policy              motion.Policy
@@ -52,5 +53,5 @@ func (w *World) OwnerMotion(h PlayerHandle) (MotionSnapshot, error) {
 			policy.Mode = motion.InterruptOnMove
 		}
 	}
-	return MotionSnapshot{Player: h, Tick: uint32(w.tick), State: p.motionState(), Grounded: w.grounded(p), Policy: policy, MapID: w.mapCfg.ID, MapRevision: w.motionRevision, HalfExtent: w.HalfExtent(), GroundY: w.mapCfg.GroundY, TickIntervalUS: uint32(TickDuration.Microseconds())}, nil
+	return MotionSnapshot{Player: h, Tick: uint32(w.tick), InputSeq: p.inputSeq, State: p.motionState(), Grounded: w.grounded(p), Policy: policy, MapID: w.mapCfg.ID, MapRevision: w.motionRevision, HalfExtent: w.HalfExtent(), GroundY: w.mapCfg.GroundY, TickIntervalUS: uint32(TickDuration.Microseconds())}, nil
 }

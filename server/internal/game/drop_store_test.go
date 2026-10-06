@@ -1,6 +1,5 @@
 package game
 
-
 import (
 	"errors"
 	"testing"
@@ -11,7 +10,7 @@ import (
 func TestDropIsOneMove(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(7)
-	taken := s.SpawnGroundItem(KindAcorn, 3, -2)
+	taken := spawnGroundItemForTest(t, s, KindAcorn, 3, -2)
 	if _, err := s.TakeGroundItem(taken.ID, 7); err != nil {
 		t.Fatalf("taking item %d: %v", taken.ID, err)
 	}
@@ -39,7 +38,7 @@ func TestDropIsOneMove(t *testing.T) {
 func TestADroppedItemGetsANewId(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
-	taken := s.SpawnGroundItem(KindAcorn, 0, 0)
+	taken := spawnGroundItemForTest(t, s, KindAcorn, 0, 0)
 	if _, err := s.TakeGroundItem(taken.ID, 1); err != nil {
 		t.Fatalf("taking item %d: %v", taken.ID, err)
 	}
@@ -60,7 +59,7 @@ func TestADroppedItemGetsANewId(t *testing.T) {
 func TestTakeAndDropRoundTripReturnsTheStoreToItsShape(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
-	first := s.SpawnGroundItem(KindAcorn, 2, 2)
+	first := spawnGroundItemForTest(t, s, KindAcorn, 2, 2)
 
 	if _, err := s.TakeGroundItem(first.ID, 1); err != nil {
 		t.Fatalf("taking: %v", err)
@@ -88,7 +87,7 @@ func TestTakeAndDropRoundTripReturnsTheStoreToItsShape(t *testing.T) {
 func TestDroppingAnEmptySlotChangesNothing(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
-	item := s.SpawnGroundItem(KindAcorn, 0, 0)
+	item := spawnGroundItemForTest(t, s, KindAcorn, 0, 0)
 	if _, err := s.TakeGroundItem(item.ID, 1); err != nil {
 		t.Fatalf("taking item %d: %v", item.ID, err)
 	}
@@ -111,7 +110,7 @@ func TestDroppingAnIndexOutsideTheInventoryChangesNothing(t *testing.T) {
 	for _, slot := range []int{-1, InventorySize, InventorySize + 1000} {
 		s := NewMemoryStore(NoWearables)
 		s.AddPlayer(1)
-		item := s.SpawnGroundItem(KindAcorn, 0, 0)
+		item := spawnGroundItemForTest(t, s, KindAcorn, 0, 0)
 		if _, err := s.TakeGroundItem(item.ID, 1); err != nil {
 			t.Fatalf("taking item %d: %v", item.ID, err)
 		}
@@ -143,8 +142,8 @@ func TestADroppedItemJoinsTheBackOfTheGroundOrder(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 
-	first := s.SpawnGroundItem(KindAcorn, 1, 0)
-	second := s.SpawnGroundItem(KindAcorn, 2, 0)
+	first := spawnGroundItemForTest(t, s, KindAcorn, 1, 0)
+	second := spawnGroundItemForTest(t, s, KindAcorn, 2, 0)
 	if _, err := s.TakeGroundItem(first.ID, 1); err != nil {
 		t.Fatalf("taking item %d: %v", first.ID, err)
 	}

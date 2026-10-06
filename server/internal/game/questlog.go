@@ -1,39 +1,23 @@
-﻿package game
+package game
 
 import (
 	"fmt"
-	"sort"
 
 	mnet "github.com/devarminas/marque/server/internal/net"
 	"github.com/devarminas/marque/server/internal/questdef"
 )
 
 func (w *World) sendQuestLog(p *player) {
+	w.emitOwner(p, w.questLogValue(p))
 	w.send(p, w.questLogMessage(p))
 }
 
 func (w *World) questLogMessage(p *player) mnet.QuestLog {
-	ids := make([]string, 0, len(p.quests))
-	for id := range p.quests {
-		ids = append(ids, id)
+	out := mnet.QuestLog{Quests: make([]mnet.QuestLogEntry, 0, len(p.quests))}
+	for _, quest := range w.questLogValue(p).Quests {
+		out.Quests = append(out.Quests, mnet.QuestLogEntry{ID: quest.ID, Title: quest.Title, Objective: quest.Objective, Status: quest.Status})
 	}
-	sort.Strings(ids)
-
-	quests := make([]mnet.QuestLogEntry, 0, len(ids))
-	for _, id := range ids {
-		entry := mnet.QuestLogEntry{
-			ID:     id,
-			Status: string(p.quests[id]),
-		}
-		if w.quests != nil {
-			if q, ok := w.quests.Get(id); ok {
-				entry.Title = q.Name
-				entry.Objective = questObjective(q, p.questKillCount(id))
-			}
-		}
-		quests = append(quests, entry)
-	}
-	return mnet.QuestLog{Quests: quests}
+	return out
 }
 
 func questObjective(q questdef.Quest, killProgress int) string {

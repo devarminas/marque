@@ -32,6 +32,7 @@ const (
 type Origin struct {
 	Source OriginSource
 	Seq    uint32
+	Action ActionKind
 }
 type RefusalReason uint32
 
@@ -263,8 +264,10 @@ type CooldownValue struct {
 func (CooldownValue) ownerValue() {}
 
 type RefusedValue struct {
-	Origin Origin
-	Reason RefusalReason
+	Origin          Origin
+	Reason          RefusalReason
+	Detail          string
+	MissingMaterial string
 }
 
 func (RefusedValue) ownerValue() {}
@@ -311,7 +314,12 @@ func (w *World) emitOwner(p *player, v OwnerValue) {
 	if !p.domainOwned {
 		return
 	}
-	w.ownerChanges = append(w.ownerChanges, OwnerChange{Player: PlayerHandle{uint32(p.id), 1}, Tick: uint32(w.tick), Value: CloneOwnerValue(v)})
+	change := OwnerChange{Player: PlayerHandle{uint32(p.id), 1}, Tick: w.producingTick(), Value: CloneOwnerValue(v)}
+	if w.transaction != nil {
+		w.transaction.OwnerChanges = append(w.transaction.OwnerChanges, change)
+		return
+	}
+	w.ownerChanges = append(w.ownerChanges, change)
 }
 func (w *World) TakeOwnerChanges() []OwnerChange {
 	out := w.ownerChanges
@@ -325,76 +333,17 @@ func (w *World) AdvanceTick() uint32 {
 	w.step()
 	return uint32(w.tick)
 }
-func (w *World) captureOwner(p *player, msg mnet.ServerMessage) {
-	if !p.domainOwned {
-		return
+
+func (w *World) emitRefusal(p *player, reason RefusalReason, detail, missingMaterial string) {
+	if w.transaction == nil {
+		detail = ""
+		missingMaterial = ""
 	}
-	switch v := msg.(type) {
-	case mnet.Inventory:
-		out := InventoryValue{Size: uint8(v.Size)}
-		for _, x := range v.Slots {
-			out.Slots = append(out.Slots, BagEntry{uint8(x.Slot), x.Kind})
-		}
-		w.emitOwner(p, out)
-	case mnet.Equipment:
-		out := EquipmentValue{}
-		for _, name := range v.Worn {
-			out.Worn = append(out.Worn, string(name))
-		}
-		for _, x := range v.Slots {
-			out.Slots = append(out.Slots, WornEntry{string(x.Slot), x.Kind})
-		}
-		w.emitOwner(p, out)
-	case mnet.Class:
-		out := ClassValue{ID: v.Class, MissingTools: v.Missing.Tools}
-		for _, x := range v.Missing.Slots {
-			out.MissingSlots = append(out.MissingSlots, WornEntry{x.Slot, x.Kind})
-		}
-		w.emitOwner(p, out)
-	case mnet.Skills:
-		out := SkillsValue{}
-		for _, x := range v.Skills {
-			out.Skills = append(out.Skills, SkillEntry{x.ID, x.XP, uint32(x.Level)})
-		}
-		w.emitOwner(p, out)
-	case mnet.QuestLog:
-		out := QuestLogValue{}
-		for _, x := range v.Quests {
-			out.Quests = append(out.Quests, QuestEntry{x.ID, x.Title, x.Objective, x.Status})
-		}
-		w.emitOwner(p, out)
-	case mnet.Dialog:
-		npc := NPCHandle{uint32(v.NPC), 1}
-		if len(v.Lines) == 0 && len(v.Options) == 0 {
-			w.emitOwner(p, DialogClearValue{npc})
-			return
-		}
-		out := DialogValue{NPC: npc, Lines: v.Lines}
-		for _, x := range v.Options {
-			out.Options = append(out.Options, x.ID)
-		}
-		w.emitOwner(p, out)
-	case mnet.Party:
-		if v.ID == 0 {
-			w.emitOwner(p, PartyClearValue{})
-			return
-		}
-		out := PartyValue{ID: uint64(v.ID), Leader: PlayerHandle{uint32(v.Leader), 1}}
-		for _, x := range v.Members {
-			out.Members = append(out.Members, PlayerHandle{uint32(x), 1})
-		}
-		w.emitOwner(p, out)
-	case mnet.PartyInviteNotice:
-		if v.From == 0 {
-			w.emitOwner(p, InviteClearValue{})
-			return
-		}
-		w.emitOwner(p, InviteValue{PlayerHandle{uint32(v.From), 1}})
-	case mnet.AdminReply:
-		w.emitOwner(p, AdminReplyValue{v.Text})
-	case mnet.Error:
-		if v.Reason != "" {
-			w.emitOwner(p, RefusedValue{p.origin, domainReason(v.Reason)})
-		}
+	w.emitOwner(p, RefusedValue{Origin: p.origin, Reason: reason, Detail: detail, MissingMaterial: missingMaterial})
+}
+func (w *World) sendRefusal(p *player, message mnet.Error) {
+	if p.domainOwned && message.Reason != "" {
+		w.emitRefusal(p, domainReason(message.Reason), message.Msg, "")
 	}
+	w.send(p, message)
 }

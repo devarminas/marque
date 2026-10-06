@@ -60,6 +60,9 @@ func (w *World) seedCamp(content CampContent) error {
 	if err := validateCampContent(content); err != nil {
 		return err
 	}
+	if uint64(content.PoolMax) > w.npcHandleCapacity() {
+		return ErrNPCHandlesExhausted
+	}
 	c := &camp{content: content}
 	w.camps = append(w.camps, c)
 	for range content.PoolMax {
@@ -118,6 +121,9 @@ func campDiskFits(radius, spacing float64, pool int) bool {
 func (w *World) spawnCampMember(c *camp) error {
 	if w.campLiveCount(c) >= c.content.PoolMax {
 		return nil
+	}
+	if w.npcHandleCapacity() == 0 {
+		return ErrNPCHandlesExhausted
 	}
 	pos, ok := w.placeCampHome(c)
 	if !ok {

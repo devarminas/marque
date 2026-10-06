@@ -1,8 +1,6 @@
 package game
 
 import (
-	"sort"
-
 	"github.com/devarminas/marque/server/internal/classdef"
 	"github.com/devarminas/marque/server/internal/gamelog"
 	mnet "github.com/devarminas/marque/server/internal/net"
@@ -47,22 +45,17 @@ func (w *World) grantSkillXP(p *player, skill string, amount int64) {
 }
 
 func (w *World) classMessage(p *player) mnet.Class {
-	out := mnet.Class{Player: p.id}
-	if w.classes == nil {
-		return out
+	value := w.classValue(p)
+	out := mnet.Class{Player: p.id, Class: value.ID}
+	for _, slot := range value.MissingSlots {
+		out.Missing.Slots = append(out.Missing.Slots, mnet.NamedSlot{Slot: slot.Slot, Kind: slot.Kind})
 	}
-	res := classdef.ClassOf(w.wornKinds(p), w.classes)
-	if res.Class == nil {
-		if len(res.Missing) > 0 {
-			out.Missing.Slots, out.Missing.Tools = classdef.WireMissing(res.Missing, WornSlots)
-		}
-		return out
-	}
-	out.Class = res.Class.ID
+	out.Missing.Tools = value.MissingTools
 	return out
 }
 
 func (w *World) sendClass(p *player) {
+	w.emitOwner(p, w.classValue(p))
 	msg := w.classMessage(p)
 	w.log.Event(w.tick, EvClass, gamelog.Fields{
 		"player": p.id,
@@ -73,17 +66,8 @@ func (w *World) sendClass(p *player) {
 
 func (w *World) skillsMessage(p *player) mnet.Skills {
 	out := mnet.Skills{Player: p.id}
-	if w.classes == nil {
-		return out
-	}
-	ids := w.classes.SkillIDs()
-	sort.Strings(ids)
-	for _, id := range ids {
-		out.Skills = append(out.Skills, mnet.SkillXP{
-			ID:    id,
-			XP:    p.skillXP[id],
-			Level: w.classes.LevelFor(id, p.skillXP[id]),
-		})
+	for _, skill := range w.skillsValue(p).Skills {
+		out.Skills = append(out.Skills, mnet.SkillXP{ID: skill.ID, XP: skill.XP, Level: int(skill.Level)})
 	}
 	return out
 }
@@ -92,5 +76,6 @@ func (w *World) sendSkills(p *player) {
 	if w.classes == nil {
 		return
 	}
+	w.emitOwner(p, w.skillsValue(p))
 	w.send(p, w.skillsMessage(p))
 }

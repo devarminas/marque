@@ -218,7 +218,7 @@ func (w *World) castAbility(c combatant, abilityID string, targetID mnet.PlayerI
 func (w *World) preparePlayerCast(p *player, ability abilitydef.Ability) {
 	w.cancelCast(p, CauseReplaced)
 	p.pending = 0
- p.pickupOrigin=Origin{}
+	p.pickupOrigin = Origin{}
 	w.clearPendingTalk(p)
 	w.closeDialog(p)
 	w.cancelGather(p)
@@ -231,10 +231,13 @@ func (w *World) preparePlayerCast(p *player, ability abilitydef.Ability) {
 
 func (w *World) beginCast(c combatant, ability abilitydef.Ability, targetID mnet.PlayerID, cost int, seq mnet.Seq) {
 	rt := c.runtimeCast()
-	if p:=playerCombatant(c); p!=nil {rt.castOrigin=p.origin}
- rt.castAbility = ability.ID
+	if p := playerCombatant(c); p != nil {
+		rt.castOrigin = p.origin
+	}
+	rt.castAbility = ability.ID
 	rt.castLocomotion = ability.Locomotion
 	rt.castTarget = targetID
+	rt.castHandle = w.combatantHandle(targetID)
 	rt.castProgress = 0
 	rt.castTotal = ability.CastTicks
 	rt.castCost = cost
@@ -248,7 +251,7 @@ func (w *World) beginCast(c combatant, ability abilitydef.Ability, targetID mnet
 	}, seq)
 	mergeCasterFields(fields, c)
 	w.log.Event(w.tick, EvCastBegin, fields)
-	w.broadcast(mnet.CastPhase{ID: c.combatID(), Ability: ability.ID, Target: targetID, Phase: mnet.CastPhaseBegin}, nil)
+	w.presentCast(CastPhaseValue{Caster: w.combatantHandle(c.combatID()), Ability: ability.ID, Target: w.combatantHandle(targetID), Phase: CastBegin})
 	if p := playerCombatant(c); p != nil {
 		w.sendCasting(p)
 	}
@@ -271,7 +274,11 @@ func (w *World) advanceCast(c combatant) {
 
 func (w *World) finishCast(c combatant) {
 	rt := c.runtimeCast()
- if p:=playerCombatant(c); p!=nil {previous:=p.origin;p.origin=rt.castOrigin;defer func(){p.origin=previous}()}
+	if p := playerCombatant(c); p != nil {
+		previous := p.origin
+		p.origin = rt.castOrigin
+		defer func() { p.origin = previous }()
+	}
 	ability, ok := w.abilities.Get(rt.castAbility)
 	if !ok {
 		w.cancelCast(c, CauseUnknownAbility)
@@ -335,18 +342,20 @@ func (w *World) applyCast(c combatant, ability abilitydef.Ability, target *castT
 	cooldown := 0
 	if p := playerCombatant(c); p != nil {
 		p.cooldowns.start(ability.ID, ability.CooldownTicks, w.tick)
- if ability.CooldownTicks>0 {w.emitOwner(p,CooldownValue{ability.ID,uint32(w.tick+int64(ability.CooldownTicks))})}
+		if ability.CooldownTicks > 0 {
+			w.emitOwner(p, CooldownValue{ability.ID, uint32(w.tick + int64(ability.CooldownTicks))})
+		}
 		cooldown = ability.CooldownTicks
 	}
-	w.broadcast(mnet.CastPhase{
-		ID:       c.combatID(),
+	w.presentCast(CastPhaseValue{
+		Caster:   w.combatantHandle(c.combatID()),
 		Ability:  ability.ID,
-		Target:   target.id,
-		Phase:    mnet.CastPhaseResolve,
+		Target:   w.combatantHandle(target.id),
+		Phase:    CastResolve,
 		Amount:   applied,
 		Effect:   string(ability.Effect.Kind),
 		Cooldown: cooldown,
-	}, nil)
+	})
 
 	effectFields := gamelog.Fields{
 		"ability":   ability.ID,
@@ -402,7 +411,7 @@ func (w *World) cancelCast(c combatant, cause string) {
 	}
 	mergeCasterFields(fields, c)
 	w.log.Event(w.tick, EvCastCancelled, fields)
-	w.broadcast(mnet.CastPhase{ID: c.combatID(), Ability: rt.castAbility, Target: rt.castTarget, Phase: mnet.CastPhaseCancel}, nil)
+	w.presentCast(CastPhaseValue{Caster: w.combatantHandle(c.combatID()), Ability: rt.castAbility, Target: rt.castHandle, Phase: CastCancel})
 	w.closeCast(c)
 }
 

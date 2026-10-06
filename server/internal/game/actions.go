@@ -160,12 +160,12 @@ func (w *World) ReleaseOwner(h PlayerHandle) error {
 	return nil
 }
 func (w *World) ApplyInput(h PlayerHandle, origin Origin, dx, dz float64, jump bool) error {
+	return w.applyInput(h, origin, dx, dz, jump)
+}
+func (w *World) applyInput(h PlayerHandle, origin Origin, dx, dz float64, jump bool) error {
 	if origin.Source != OriginInput {
 		return errors.New("game: input origin required")
 	}
-	return w.applyDomain(h, origin, mnet.Move{DX: dx, DZ: dz, Jump: jump})
-}
-func (w *World) applyDomain(h PlayerHandle, origin Origin, msg mnet.ClientMessage) error {
 	p := w.players[mnet.PlayerID(h.Index)]
 	if h.Gen != 1 || p == nil {
 		return ErrOwner
@@ -173,10 +173,18 @@ func (w *World) applyDomain(h PlayerHandle, origin Origin, msg mnet.ClientMessag
 	previous := p.origin
 	p.origin = origin
 	defer func() { p.origin = previous }()
-	w.dispatchAction(p, msg, mnet.Seq(origin.Seq))
+	if origin.Seq > p.inputSeq {
+		p.inputSeq = origin.Seq
+	}
+	if !w.refuseIfDead(p, mnet.MsgMove) {
+		w.move(p, mnet.Move{DX: dx, DZ: dz, Jump: jump}, mnet.Seq(origin.Seq))
+	}
 	return nil
 }
 func (w *World) ApplyAction(h PlayerHandle, origin Origin, action Action) error {
+	return w.applyAction(h, origin, action)
+}
+func (w *World) applyAction(h PlayerHandle, origin Origin, action Action) error {
 	if origin.Source != OriginIntent {
 		return errors.New("game: intent origin required")
 	}
@@ -187,28 +195,45 @@ func (w *World) ApplyAction(h PlayerHandle, origin Origin, action Action) error 
 	previous := p.origin
 	p.origin = origin
 	defer func() { p.origin = previous }()
-	var msg mnet.ClientMessage
 	switch a := action.(type) {
 	case PickupAction:
 		if a.Item.Gen != 1 {
 			w.refuse(p, &mnet.RejectError{Reason: mnet.ReasonUnknownItem, Detail: "stale handle", Re: mnet.MsgPickup, Disposition: mnet.ReplyError})
 			return nil
 		}
-		msg = mnet.Pickup{Item: mnet.ItemID(a.Item.Index)}
+		if !w.refuseIfDead(p, mnet.MsgPickup) {
+			w.pickup(p, mnet.Pickup{Item: mnet.ItemID(a.Item.Index)}, mnet.Seq(origin.Seq))
+		}
+		return nil
 	case DropAction:
-		msg = mnet.Drop{Slot: int(a.Slot)}
+		if !w.refuseIfDead(p, mnet.MsgDrop) {
+			w.drop(p, mnet.Drop{Slot: int(a.Slot)}, mnet.Seq(origin.Seq))
+		}
+		return nil
 	case EquipAction:
-		msg = mnet.Equip{Slot: int(a.Slot)}
+		if !w.refuseIfDead(p, mnet.MsgEquip) {
+			w.equip(p, mnet.Equip{Slot: int(a.Slot)}, mnet.Seq(origin.Seq))
+		}
+		return nil
 	case UnequipAction:
-		msg = mnet.Unequip{Worn: mnet.EquipSlot(a.Worn)}
+		if !w.refuseIfDead(p, mnet.MsgUnequip) {
+			w.unequip(p, mnet.Unequip{Worn: mnet.EquipSlot(a.Worn)}, mnet.Seq(origin.Seq))
+		}
+		return nil
 	case GatherAction:
 		if a.Node.Gen != 1 {
 			w.refuse(p, &mnet.RejectError{Reason: mnet.ReasonUnknownNode, Detail: "stale handle", Re: mnet.MsgGather, Disposition: mnet.ReplyError})
 			return nil
 		}
-		msg = mnet.Gather{Node: mnet.NodeID(a.Node.Index)}
+		if !w.refuseIfDead(p, mnet.MsgGather) {
+			w.gather(p, mnet.Gather{Node: mnet.NodeID(a.Node.Index)}, mnet.Seq(origin.Seq))
+		}
+		return nil
 	case UseSelfAction:
-		msg = mnet.Use{Slot: int(a.Slot), On: int(a.Slot)}
+		if !w.refuseIfDead(p, mnet.MsgUse) {
+			w.use(p, mnet.Use{Slot: int(a.Slot), On: int(a.Slot)}, mnet.Seq(origin.Seq))
+		}
+		return nil
 	case AttackPlayerAction:
 		w.attackWithTarget(p, mnet.Attack{Player: mnet.PlayerID(a.Target.Index)}, mnet.Seq(origin.Seq), combatTargetHandle{kind: playerCombatTargetKind, gen: a.Target.Gen})
 		return nil
@@ -216,9 +241,11 @@ func (w *World) ApplyAction(h PlayerHandle, origin Origin, action Action) error 
 		w.attackWithTarget(p, mnet.Attack{Player: mnet.PlayerID(a.Target.Index)}, mnet.Seq(origin.Seq), combatTargetHandle{kind: npcCombatTargetKind, gen: a.Target.Gen})
 		return nil
 	case RespawnAction:
-		msg = mnet.Respawn{}
+		w.respawnPlayer(p, mnet.Seq(origin.Seq))
+		return nil
 	case CastSelfAction:
-		msg = mnet.Cast{Ability: a.Ability}
+		w.cast(p, mnet.Cast{Ability: a.Ability}, mnet.Seq(origin.Seq))
+		return nil
 	case CastPlayerAction:
 		w.castWithTarget(p, mnet.Cast{Ability: a.Ability, Player: mnet.PlayerID(a.Target.Index)}, mnet.Seq(origin.Seq), combatTargetHandle{kind: playerCombatTargetKind, gen: a.Target.Gen})
 		return nil
@@ -230,39 +257,54 @@ func (w *World) ApplyAction(h PlayerHandle, origin Origin, action Action) error 
 			w.refuse(p, &mnet.RejectError{Reason: mnet.ReasonUnknownPlayer, Detail: "stale handle", Re: mnet.MsgTalk, Disposition: mnet.ReplyError})
 			return nil
 		}
-		msg = mnet.Talk{NPC: mnet.PlayerID(a.NPC.Index)}
+		if !w.refuseIfDead(p, mnet.MsgTalk) {
+			w.talk(p, mnet.Talk{NPC: mnet.PlayerID(a.NPC.Index)}, mnet.Seq(origin.Seq))
+		}
+		return nil
 	case DialogOptionAction:
 		if a.NPC.Gen != 1 {
 			w.refuse(p, &mnet.RejectError{Reason: mnet.ReasonUnknownPlayer, Detail: "stale handle", Re: mnet.MsgDialogOption, Disposition: mnet.ReplyError})
 			return nil
 		}
-		msg = mnet.DialogOptionPick{NPC: mnet.PlayerID(a.NPC.Index), Option: a.Option}
+		if !w.refuseIfDead(p, mnet.MsgDialogOption) {
+			w.dialogOption(p, mnet.DialogOptionPick{NPC: mnet.PlayerID(a.NPC.Index), Option: a.Option}, mnet.Seq(origin.Seq))
+		}
+		return nil
 	case GiveAction:
 		if a.NPC.Gen != 1 {
 			w.refuse(p, &mnet.RejectError{Reason: mnet.ReasonUnknownPlayer, Detail: "stale handle", Re: mnet.MsgGive, Disposition: mnet.ReplyError})
 			return nil
 		}
-		msg = mnet.Give{NPC: mnet.PlayerID(a.NPC.Index), Slot: int(a.Slot)}
+		if !w.refuseIfDead(p, mnet.MsgGive) {
+			w.give(p, mnet.Give{NPC: mnet.PlayerID(a.NPC.Index), Slot: int(a.Slot)}, mnet.Seq(origin.Seq))
+		}
+		return nil
 	case PartyInviteAction:
 		if a.Player.Gen != 1 {
 			w.refuse(p, &mnet.RejectError{Reason: mnet.ReasonUnknownPlayer, Detail: "stale handle", Re: mnet.MsgPartyInvite, Disposition: mnet.ReplyError})
 			return nil
 		}
-		msg = mnet.PartyInvite{Player: mnet.PlayerID(a.Player.Index)}
+		w.partyInvite(p, mnet.PartyInvite{Player: mnet.PlayerID(a.Player.Index)}, mnet.Seq(origin.Seq))
+		return nil
 	case PartyAcceptAction:
-		msg = mnet.PartyAccept{}
+		w.partyAccept(p, mnet.PartyAccept{}, mnet.Seq(origin.Seq))
+		return nil
 	case PartyDeclineAction:
-		msg = mnet.PartyDecline{}
+		w.partyDecline(p, mnet.PartyDecline{}, mnet.Seq(origin.Seq))
+		return nil
 	case PartyLeaveAction:
-		msg = mnet.PartyLeave{}
+		w.partyLeave(p, mnet.PartyLeave{}, mnet.Seq(origin.Seq))
+		return nil
 	case PartyKickAction:
 		if a.Player.Gen != 1 {
 			w.refuse(p, &mnet.RejectError{Reason: mnet.ReasonUnknownPlayer, Detail: "stale handle", Re: mnet.MsgPartyKick, Disposition: mnet.ReplyError})
 			return nil
 		}
-		msg = mnet.PartyKick{Player: mnet.PlayerID(a.Player.Index)}
+		w.partyKick(p, mnet.PartyKick{Player: mnet.PlayerID(a.Player.Index)}, mnet.Seq(origin.Seq))
+		return nil
 	case AdminAction:
-		msg = mnet.Admin{Line: a.Line}
+		w.admin(p, mnet.Admin{Line: a.Line}, mnet.Seq(origin.Seq))
+		return nil
 	case UseStationAction:
 		if w.refuseIfDead(p, mnet.MsgUse) {
 			return nil
@@ -276,6 +318,4 @@ func (w *World) ApplyAction(h PlayerHandle, origin Origin, action Action) error 
 	default:
 		return fmt.Errorf("game: unknown action %T", action)
 	}
-	w.dispatchAction(p, msg, mnet.Seq(origin.Seq))
-	return nil
 }

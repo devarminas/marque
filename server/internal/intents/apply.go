@@ -7,41 +7,57 @@ import (
 	"github.com/devarminas/marque/server/internal/wire"
 )
 
-func Apply(world *game.World, sessions *eventstream.Sessions, id eventstream.SessionID, epoch eventstream.Epoch, message wire.IntentsMsg) error {
+func Admit(sessions *eventstream.Sessions, id eventstream.SessionID, epoch eventstream.Epoch, message wire.IntentsMsg) (game.Command, error) {
 	owner, err := sessions.Resolve(id, epoch)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if commit, ok := message.(wire.ApplicationCommit); ok {
 		if eventstream.Epoch(commit.Epoch()) != epoch {
-			return eventstream.ErrEpoch
+			return nil, eventstream.ErrEpoch
 		}
-		return sessions.Commit(id, eventstream.Commit{Stream: eventstream.StreamID(commit.Stream()), Epoch: epoch, Tick: commit.Tick(), EventEnd: commit.EventEnd()})
+		return nil, sessions.Commit(id, eventstream.Commit{Stream: eventstream.StreamID(commit.Stream()), Epoch: epoch, Tick: commit.Tick(), EventEnd: commit.EventEnd()})
 	}
 	seq, action, err := actionOf(message)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	canonical, err := message.Append(nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	admitted, err := sessions.AcceptIntent(id, epoch, seq, canonical)
 	if err != nil || !admitted {
-		return err
+		return nil, err
 	}
-	return world.ApplyAction(owner, game.Origin{Source: game.OriginIntent, Seq: seq}, action)
+	return game.ActionCommand{Player: owner, Origin: game.Origin{Source: game.OriginIntent, Seq: seq}, Action: action}, nil
 }
-func ApplyInput(world *game.World, sessions *eventstream.Sessions, id eventstream.SessionID, epoch eventstream.Epoch, message wire.Input) error {
+func AdmitInput(sessions *eventstream.Sessions, id eventstream.SessionID, epoch eventstream.Epoch, message wire.Input) (game.Command, error) {
 	owner, err := sessions.Resolve(id, epoch)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	accepted, err := sessions.AcceptInput(id, epoch, message.Seq())
 	if err != nil || !accepted {
+		return nil, err
+	}
+	return game.InputCommand{Player: owner, Origin: game.Origin{Source: game.OriginInput, Seq: message.Seq()}, DX: message.Dx(), DZ: message.Dz(), Jump: message.Jump()}, nil
+}
+func Apply(world *game.World, sessions *eventstream.Sessions, id eventstream.SessionID, epoch eventstream.Epoch, message wire.IntentsMsg) error {
+	command, err := Admit(sessions, id, epoch, message)
+	if err != nil || command == nil {
 		return err
 	}
-	return world.ApplyInput(owner, game.Origin{Source: game.OriginInput, Seq: message.Seq()}, message.Dx(), message.Dz(), message.Jump())
+	c := command.(game.ActionCommand)
+	return world.ApplyAction(c.Player, c.Origin, c.Action)
+}
+func ApplyInput(world *game.World, sessions *eventstream.Sessions, id eventstream.SessionID, epoch eventstream.Epoch, message wire.Input) error {
+	command, err := AdmitInput(sessions, id, epoch, message)
+	if err != nil || command == nil {
+		return err
+	}
+	c := command.(game.InputCommand)
+	return world.ApplyInput(c.Player, c.Origin, c.DX, c.DZ, c.Jump)
 }
 func player(v wire.PlayerId) game.PlayerHandle { return game.PlayerHandle{Index: v.Index, Gen: v.Gen} }
 func npc(v wire.NpcId) game.NPCHandle          { return game.NPCHandle{Index: v.Index, Gen: v.Gen} }

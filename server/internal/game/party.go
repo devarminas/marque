@@ -109,6 +109,7 @@ func (w *World) partyInvite(p *player, msg mnet.PartyInvite, seq mnet.Seq) {
 	}
 
 	target.pendingInviteFrom = p.id
+	w.emitOwner(target, InviteValue{PlayerHandle{uint32(p.id), 1}})
 	w.send(target, mnet.PartyInviteNotice{From: p.id})
 	w.log.Event(w.tick, EvPartyInvited, gamelog.Fields{
 		"player": p.id,
@@ -301,6 +302,7 @@ func (w *World) removeFromParty(p *player, leaveEv string) {
 	pt := w.parties[p.partyID]
 	if pt == nil {
 		p.partyID = 0
+		w.emitOwner(p, PartyClearValue{})
 		w.send(p, emptyParty())
 		return
 	}
@@ -316,6 +318,7 @@ func (w *World) removeFromParty(p *player, leaveEv string) {
 		delete(w.parties, pt.id)
 		w.clearInvitesFrom(p.id)
 		w.log.Event(w.tick, EvPartyDisbanded, gamelog.Fields{"party": pt.id})
+		w.emitOwner(p, PartyClearValue{})
 		w.send(p, emptyParty())
 		return
 	}
@@ -331,6 +334,7 @@ func (w *World) removeFromParty(p *player, leaveEv string) {
 		})
 	}
 
+	w.emitOwner(p, PartyClearValue{})
 	w.send(p, emptyParty())
 	w.restatedParty(pt)
 }
@@ -340,6 +344,7 @@ func (w *World) clearPendingInvite(p *player) {
 		return
 	}
 	p.pendingInviteFrom = 0
+	w.emitOwner(p, InviteClearValue{})
 	w.send(p, mnet.PartyInviteNotice{From: 0})
 }
 
@@ -355,6 +360,7 @@ func (w *World) restatedParty(pt *party) {
 	msg := partyMessage(pt)
 	for _, id := range pt.members {
 		if member, ok := w.players[id]; ok {
+			w.emitOwner(member, partyValue(pt))
 			w.send(member, msg)
 		}
 	}
@@ -363,10 +369,12 @@ func (w *World) restatedParty(pt *party) {
 func (w *World) sendPartyCatchUp(p *player) {
 	if p.partyID != 0 {
 		if pt := w.parties[p.partyID]; pt != nil {
+			w.emitOwner(p, partyValue(pt))
 			w.send(p, partyMessage(pt))
 		}
 	}
 	if p.pendingInviteFrom != 0 {
+		w.emitOwner(p, InviteValue{PlayerHandle{uint32(p.pendingInviteFrom), 1}})
 		w.send(p, mnet.PartyInviteNotice{From: p.pendingInviteFrom})
 	}
 }

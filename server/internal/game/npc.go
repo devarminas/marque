@@ -128,7 +128,19 @@ func (n *npc) wire() mnet.NpcState {
 	}
 }
 
+var ErrNPCHandlesExhausted = errors.New("game: npc handles exhausted")
+
+func (w *World) npcHandleCapacity() uint64 {
+	if w.nextNpcID >= mnet.PlayerID(^uint32(0))-practiceNpcIDBand {
+		return 0
+	}
+	return uint64(^uint32(0)) - uint64(practiceNpcIDBand) - uint64(w.nextNpcID)
+}
+
 func (w *World) SeedPracticeDummies() error {
+	if w.npcHandleCapacity() < 2 {
+		return ErrNPCHandlesExhausted
+	}
 	if err := w.seedNPC(KindDummy, FactionFriendly, FriendlyDummyX, FriendlyDummyZ, DummyMaxHP); err != nil {
 		return err
 	}
@@ -181,6 +193,9 @@ func (w *World) seedNPCAt(kind, faction string, x, z float64, maxHP int, camp st
 		attrs = attrsFromArchetype(arch)
 		weapon = arch.WeaponID
 		maxHP = arch.MaxHP
+	}
+	if w.nextNpcID >= mnet.PlayerID(^uint32(0))-practiceNpcIDBand {
+		return ErrNPCHandlesExhausted
 	}
 	w.nextNpcID++
 	n := &npc{

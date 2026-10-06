@@ -19,7 +19,11 @@ func (w *World) SeedGroundItem(kind string, x, z float64) error {
 	if reason, detail := w.checkCoordinates(x, z); reason != "" {
 		return fmt.Errorf("seed item %q at (%v, %v): %s", kind, x, z, detail)
 	}
-	w.noteItemEntered(w.items.SpawnGroundItem(kind, x, z))
+	item, err := w.items.SpawnGroundItem(kind, x, z)
+	if err != nil {
+		return err
+	}
+	w.noteItemEntered(item)
 	return nil
 }
 
@@ -42,7 +46,7 @@ func (w *World) pickup(p *player, msg mnet.Pickup, seq mnet.Seq) {
 	}
 
 	p.pending = item.ID
- p.pickupOrigin=p.origin
+	p.pickupOrigin = p.origin
 	w.clearPendingTalk(p)
 	w.cancelGather(p)
 	w.clearPendingUse(p)
@@ -89,7 +93,9 @@ func (w *World) drop(p *player, msg mnet.Drop, seq mnet.Seq) {
 }
 
 func (w *World) resolvePickup(p *player) {
- previous:=p.origin;p.origin=p.pickupOrigin;defer func(){p.origin=previous}()
+	previous := p.origin
+	p.origin = p.pickupOrigin
+	defer func() { p.origin = previous }()
 	item, live := w.items.GroundItem(p.pending)
 	if !live {
 		w.losePickup(p)
@@ -104,9 +110,9 @@ func (w *World) resolvePickup(p *player) {
 	case errors.Is(err, ErrInventoryFull):
 		w.log.Event(w.tick, EvPickupNoRoom, playerItemFields(p.id, item.ID))
 		p.pending = 0
- p.pickupOrigin=Origin{}
+		p.pickupOrigin = Origin{}
 		p.clearSteer()
-		w.send(p, mnet.Error{Re: mnet.MsgPickup, Msg: "inventory is full",Reason:mnet.ReasonInventoryFull})
+		w.sendRefusal(p, mnet.Error{Re: mnet.MsgPickup, Msg: "inventory is full", Reason: mnet.ReasonInventoryFull})
 		return
 	case errors.Is(err, ErrNoSuchItem):
 		w.losePickup(p)
@@ -116,7 +122,7 @@ func (w *World) resolvePickup(p *player) {
 	}
 
 	p.pending = 0
- p.pickupOrigin=Origin{}
+	p.pickupOrigin = Origin{}
 	p.clearSteer()
 	fields := playerItemFields(p.id, item.ID)
 	fields["kind"] = item.Kind
@@ -128,12 +134,14 @@ func (w *World) resolvePickup(p *player) {
 }
 
 func (w *World) losePickup(p *player) {
- previous:=p.origin;p.origin=p.pickupOrigin;defer func(){p.origin=previous}()
+	previous := p.origin
+	p.origin = p.pickupOrigin
+	defer func() { p.origin = previous }()
 	w.log.Event(w.tick, EvPickupLost, playerItemFields(p.id, p.pending))
 	p.pending = 0
- p.pickupOrigin=Origin{}
+	p.pickupOrigin = Origin{}
 	w.assignHalt(p)
-	w.send(p, mnet.Error{Re: mnet.MsgPickup, Msg: "the item is gone",Reason:mnet.ReasonUnknownItem})
+	w.sendRefusal(p, mnet.Error{Re: mnet.MsgPickup, Msg: "the item is gone", Reason: mnet.ReasonUnknownItem})
 }
 
 func (w *World) assignHalt(p *player) {
@@ -142,6 +150,8 @@ func (w *World) assignHalt(p *player) {
 }
 
 func (w *World) sendInventory(p *player) {
+	value := w.inventoryValue(p)
+	w.emitOwner(p, value)
 	occupied := w.items.Inventory(p.id)
 	slots := make([]mnet.InventorySlot, 0, len(occupied))
 	for _, s := range occupied {

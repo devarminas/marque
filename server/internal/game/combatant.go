@@ -14,10 +14,11 @@ type combatant interface {
 }
 
 type castRuntime struct {
- castOrigin Origin
+	castOrigin     Origin
 	castAbility    string
 	castLocomotion string
 	castTarget     mnet.PlayerID
+	castHandle     CombatantHandle
 	castProgress   int
 	castTotal      int
 	castCost       int

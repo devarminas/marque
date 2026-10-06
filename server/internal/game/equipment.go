@@ -1,6 +1,5 @@
 package game
 
-
 import (
 	"errors"
 	"fmt"
@@ -115,6 +114,7 @@ func (w *World) seedJoinKit(p *player) {
 }
 
 func (w *World) sendEquipment(p *player) {
+	w.emitOwner(p, w.equipmentValue(p))
 	w.send(p, mnet.Equipment{Worn: WornSlots, Slots: w.wornSlots(p)})
 }
 

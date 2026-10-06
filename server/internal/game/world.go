@@ -163,12 +163,13 @@ func newSessionToken() string {
 }
 
 type player struct {
- origin Origin
- pickupOrigin Origin
- gatherOrigin Origin
- useOrigin Origin
- talkOrigin Origin
- domainOwned bool
+	origin       Origin
+	pickupOrigin Origin
+	gatherOrigin Origin
+	useOrigin    Origin
+	talkOrigin   Origin
+	domainOwned  bool
+	inputSeq     uint32
 
 	id mnet.PlayerID
 
@@ -224,7 +225,8 @@ type player struct {
 func (p *player) suspended() bool { return p.conn == nil }
 
 type World struct {
- ownerChanges []OwnerChange
+	ownerChanges []OwnerChange
+	transaction  *TickBatch
 
 	transport Transport
 	log       *gamelog.Logger
@@ -274,8 +276,8 @@ type World struct {
 
 	order []*player
 
-	mapCfg MapConfig
- motionRevision uint32
+	mapCfg         MapConfig
+	motionRevision uint32
 
 	nav *navmesh.Mesh
 
@@ -294,20 +296,20 @@ func NewWorld(transport Transport, log *gamelog.Logger, store Store, resumeGrace
 		panic(fmt.Sprintf("game: resume grace of %d ticks; it must be at least 1", resumeGrace))
 	}
 	return &World{
-		transport:   transport,
-		log:         log,
-		items:       store,
-		nodes:       make(map[mnet.NodeID]*resourceNode),
-		npcs:        make(map[mnet.PlayerID]*npc),
-		resumeGrace: resumeGrace,
-		startMana:   -1,
-		joinKit:     joinKit,
-		players:     make(map[mnet.PlayerID]*player),
-		parties:     make(map[mnet.PartyID]*party),
-		byConn:      make(map[*mnet.Conn]*player),
-		bySession:   make(map[string]*player),
-		mapCfg:      VillageMap,
- motionRevision: 1,
+		transport:      transport,
+		log:            log,
+		items:          store,
+		nodes:          make(map[mnet.NodeID]*resourceNode),
+		npcs:           make(map[mnet.PlayerID]*npc),
+		resumeGrace:    resumeGrace,
+		startMana:      -1,
+		joinKit:        joinKit,
+		players:        make(map[mnet.PlayerID]*player),
+		parties:        make(map[mnet.PartyID]*party),
+		byConn:         make(map[*mnet.Conn]*player),
+		bySession:      make(map[string]*player),
+		mapCfg:         VillageMap,
+		motionRevision: 1,
 	}
 }
 
@@ -328,7 +330,7 @@ func (w *World) SetMap(cfg MapConfig) {
 		panic(fmt.Sprintf("game: SetMap %q half extent %v; must be > 0", cfg.ID, cfg.HalfExtent))
 	}
 	w.mapCfg = cfg
- w.motionRevision++
+	w.motionRevision++
 }
 
 func (w *World) SetStartMana(mana int) {
@@ -392,7 +394,7 @@ func (w *World) impArchetype() npcdef.Archetype {
 
 func (w *World) SetNav(m *navmesh.Mesh) {
 	w.nav = m
- w.motionRevision++
+	w.motionRevision++
 }
 
 func (w *World) Run(ctx context.Context) {
@@ -597,7 +599,7 @@ func (w *World) initializePlayer(conn *mnet.Conn) *player {
 	w.order = append(w.order, p)
 	w.items.AddPlayer(p.id)
 
-return p
+	return p
 }
 
 func (w *World) sendJoinStep(p *player) {
@@ -729,10 +731,12 @@ func (w *World) handleFrame(ev mnet.Event) {
 		p.lastSeq = ev.Seq
 	}
 
- previous:=p.origin
- p.origin=Origin{Source:OriginIntent,Seq:uint32(ev.Seq)}
- if _,ok:=ev.Msg.(mnet.Move);ok {p.origin.Source=OriginInput}
- defer func(){p.origin=previous}()
+	previous := p.origin
+	p.origin = Origin{Source: OriginIntent, Seq: uint32(ev.Seq)}
+	if _, ok := ev.Msg.(mnet.Move); ok {
+		p.origin.Source = OriginInput
+	}
+	defer func() { p.origin = previous }()
 
 	if ev.Err != nil {
 		rejection, ok := mnet.Rejection(ev.Err)
@@ -743,7 +747,7 @@ func (w *World) handleFrame(ev mnet.Event) {
 		return
 	}
 
-	w.dispatchAction(p,ev.Msg,ev.Seq)
+	w.dispatchAction(p, ev.Msg, ev.Seq)
 }
 
 func (w *World) dispatchAction(p *player, message mnet.ClientMessage, seq mnet.Seq) {
@@ -824,6 +828,9 @@ func (w *World) dispatchAction(p *player, message mnet.ClientMessage, seq mnet.S
 }
 
 func (w *World) refuse(p *player, rejection *mnet.RejectError) {
+	w.refuseWithMaterial(p, rejection, "")
+}
+func (w *World) refuseWithMaterial(p *player, rejection *mnet.RejectError, missingMaterial string) {
 	fields := gamelog.Fields{
 		"player": p.id,
 		"reason": string(rejection.Reason),
@@ -839,9 +846,14 @@ func (w *World) refuse(p *player, rejection *mnet.RejectError) {
 	}
 
 	w.log.Event(w.tick, rejectionEvent(rejection.Re), fields)
+	if p.domainOwned {
+		w.emitRefusal(p, domainReason(rejection.Reason), rejection.Detail, missingMaterial)
+	}
 	w.send(p, mnet.Error{Re: rejection.Re, Msg: rejection.Detail, Reason: rejection.Reason})
 	if rejection.Disposition == mnet.ReplyErrorAndClose {
-		if p.conn != nil { p.conn.CloseAfterFlush(mnet.DisconnectProtocol) }
+		if p.conn != nil {
+			p.conn.CloseAfterFlush(mnet.DisconnectProtocol)
+		}
 	}
 }
 
@@ -920,7 +932,6 @@ func (w *World) checkCoordinates(x, z float64) (mnet.RejectReason, string) {
 }
 
 func (w *World) send(p *player, msg mnet.ServerMessage) {
- w.captureOwner(p,msg)
 	if p.conn == nil {
 		return
 	}

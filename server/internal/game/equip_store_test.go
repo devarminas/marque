@@ -1,6 +1,5 @@
 package game
 
-
 import (
 	"errors"
 	"testing"
@@ -106,7 +105,7 @@ func TestSpawnInventoryItemMintsNoItemId(t *testing.T) {
 		t.Fatalf("seeding a sword: %v", err)
 	}
 
-	item := s.SpawnGroundItem(KindAcorn, 0, 0)
+	item := spawnGroundItemForTest(t, s, KindAcorn, 0, 0)
 	if item.ID != 1 {
 		t.Fatalf("the first ground item is id %d, want 1: the bag item consumed an id it has no use for", item.ID)
 	}
@@ -154,7 +153,7 @@ func TestEquipSwapsThroughTheBagSlotItVacated(t *testing.T) {
 		t.Fatalf("the bag is not full, so the swap below proves nothing: %v", err)
 	}
 
-	ground := s.SpawnGroundItem(KindSword, 0, 0)
+	ground := spawnGroundItemForTest(t, s, KindSword, 0, 0)
 	if _, err := s.DropInventorySlot(1, 5, 0, 0); err != nil {
 		t.Fatalf("making room in slot 5: %v", err)
 	}

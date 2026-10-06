@@ -218,6 +218,7 @@ func TestMotionInterop(t *testing.T) {
 					}
 					w.SetAbilities(catalog)
 				}
+				w.TakeOwnerChanges()
 				endpoint, e := transport.NewEndpoint(transport.Server, transport.DefaultConfig(wire.SchemaHash), transport.Plain{}, transport.Plain{}, 0)
 				if e != nil {
 					t.Fatal(e)
@@ -236,9 +237,15 @@ func TestMotionInterop(t *testing.T) {
 				var sawRooted, resumedWish bool
 				for step := 0; step < 340; step++ {
 					now := uint64(step) * 40000
+					var commands []game.Command
+					var tickBatch game.TickBatch
 					if tc.rooted && step == 16 {
-						if e := intents.Apply(w, sessions, 7, plan.Epoch, build((wire.CastSelfFields{Seq: 5, Ability: "fireball"}).Build())); e != nil {
+						command, e := intents.Admit(sessions, 7, plan.Epoch, build((wire.CastSelfFields{Seq: 5, Ability: "fireball"}).Build()))
+						if e != nil {
 							t.Fatal(e)
+						}
+						if command != nil {
+							commands = append(commands, command)
 						}
 					}
 					deliveries := sim.Poll(netsim.AToB, now)
@@ -269,13 +276,25 @@ func TestMotionInterop(t *testing.T) {
 							}
 						}
 					}
-					if e = intents.ApplyInputBatch(w, sessions, 7, plan.Epoch, inputs); e != nil {
+					inputCommands, e := intents.AdmitInputBatch(sessions, 7, plan.Epoch, inputs)
+					if e != nil {
 						t.Fatal(e)
 					}
+					commands = append(commands, inputCommands...)
 					if step != 0 {
-						w.AdvanceTick()
+						tickBatch, e = w.Step(commands)
+						if e != nil {
+							t.Fatal(e)
+						}
+					} else if len(commands) != 0 {
+						t.Fatal("fixture initial baseline received a command before first step")
 					}
-					baseline, e := intents.OwnerMotion(w, sessions, 7, plan.Epoch)
+					var baseline wire.OwnerMotion
+					if step == 0 {
+						baseline, e = intents.OwnerMotion(w, sessions, 7, plan.Epoch)
+					} else {
+						baseline, e = intents.OwnerMotionFromFrame(tickBatch.Frame, plan.Player, plan.Stream, plan.Epoch)
+					}
 					if e != nil {
 						t.Fatal(e)
 					}
@@ -443,6 +462,8 @@ func TestMotionApproachInterop(t *testing.T) {
 				var final wire.OwnerMotion
 				for step := 0; step < 340; step++ {
 					now := uint64(step) * 40000
+					var commands []game.Command
+					var tickBatch game.TickBatch
 					var inputs []wire.Input
 					for _, d := range sim.Poll(netsim.AToB, now) {
 						got, e := endpoint.Receive(d.Packet, now)
@@ -465,8 +486,12 @@ func TestMotionApproachInterop(t *testing.T) {
 							if e != nil {
 								t.Fatal(e)
 							}
-							if e = intents.Apply(w, sessions, 7, plan.Epoch, command); e != nil {
+							admitted, e := intents.Admit(sessions, 7, plan.Epoch, command)
+							if e != nil {
 								t.Fatal(e)
+							}
+							if admitted != nil {
+								commands = append(commands, admitted)
 							}
 						}
 						for _, data := range got.Unreliable.Items {
@@ -481,18 +506,30 @@ func TestMotionApproachInterop(t *testing.T) {
 							}
 						}
 					}
-					if e = intents.ApplyInputBatch(w, sessions, 7, plan.Epoch, inputs); e != nil {
+					inputCommands, e := intents.AdmitInputBatch(sessions, 7, plan.Epoch, inputs)
+					if e != nil {
 						t.Fatal(e)
 					}
+					commands = append(commands, inputCommands...)
 					if step != 0 {
-						w.AdvanceTick()
+						tickBatch, e = w.Step(commands)
+						if e != nil {
+							t.Fatal(e)
+						}
+					} else if len(commands) != 0 {
+						t.Fatal("fixture initial baseline received a command before first step")
 					}
-					baseline, e := intents.OwnerMotion(w, sessions, 7, plan.Epoch)
+					var baseline wire.OwnerMotion
+					if step == 0 {
+						baseline, e = intents.OwnerMotion(w, sessions, 7, plan.Epoch)
+					} else {
+						baseline, e = intents.OwnerMotionFromFrame(tickBatch.Frame, plan.Player, plan.Stream, plan.Epoch)
+					}
 					if e != nil {
 						t.Fatal(e)
 					}
 					final = baseline
-					for _, change := range w.TakeOwnerChanges() {
+					for _, change := range tickBatch.OwnerChanges {
 						if inventory, ok := change.Value.(game.InventoryValue); ok {
 							for _, slot := range inventory.Slots {
 								if slot.Kind == "logs" {

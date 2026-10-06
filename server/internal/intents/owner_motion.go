@@ -38,8 +38,19 @@ func OwnerMotion(world *game.World, sessions *eventstream.Sessions, id eventstre
 	if err != nil {
 		return wire.OwnerMotion{}, err
 	}
+	return encodeOwnerMotion(snap, uint64(progress.Stream), epoch, progress.Seq)
+}
+func OwnerMotionFromFrame(frame game.StateFrame, player game.PlayerHandle, stream eventstream.StreamID, epoch eventstream.Epoch) (wire.OwnerMotion, error) {
+	for _, snap := range frame.OwnerMotion {
+		if snap.Player == player && snap.Tick == frame.Tick {
+			return encodeOwnerMotion(snap, uint64(stream), epoch, snap.InputSeq)
+		}
+	}
+	return wire.OwnerMotion{}, game.ErrOwner
+}
+func encodeOwnerMotion(snap game.MotionSnapshot, stream uint64, epoch eventstream.Epoch, inputSeq uint32) (wire.OwnerMotion, error) {
 	s := snap.State
-	m, err := (wire.OwnerMotionFields{Stream: uint64(progress.Stream), Epoch: uint64(epoch), Player: wire.PlayerId{Index: snap.Player.Index, Gen: snap.Player.Gen}, Tick: snap.Tick, InputSeq: progress.Seq, X: float32(s.X), Y: float32(s.Y), Z: float32(s.Z), Vy: float32(s.VY), Dx: float32(s.DX), Dz: float32(s.DZ), Grounded: snap.Grounded, Mode: wire.MotionMode(snap.Policy.Mode + 1), CastEnd: snap.Policy.EndTick, MapId: snap.MapID, MapRevision: snap.MapRevision, HalfExtent: float32(snap.HalfExtent), GroundY: float32(snap.GroundY), TickIntervalUs: snap.TickIntervalUS}).Build()
+	m, err := (wire.OwnerMotionFields{Stream: stream, Epoch: uint64(epoch), Player: wire.PlayerId{Index: snap.Player.Index, Gen: snap.Player.Gen}, Tick: snap.Tick, InputSeq: inputSeq, X: float32(s.X), Y: float32(s.Y), Z: float32(s.Z), Vy: float32(s.VY), Dx: float32(s.DX), Dz: float32(s.DZ), Grounded: snap.Grounded, Mode: wire.MotionMode(snap.Policy.Mode + 1), CastEnd: snap.Policy.EndTick, MapId: snap.MapID, MapRevision: snap.MapRevision, HalfExtent: float32(snap.HalfExtent), GroundY: float32(snap.GroundY), TickIntervalUs: snap.TickIntervalUS}).Build()
 	if err != nil {
 		return wire.OwnerMotion{}, err
 	}

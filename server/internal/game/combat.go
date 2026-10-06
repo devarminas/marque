@@ -229,7 +229,7 @@ func (w *World) npcAttackPeriod(n *npc) int {
 
 func (w *World) beginAttack(p *player, targetID mnet.PlayerID, targetPos Point, seq mnet.Seq) {
 	p.pending = 0
- p.pickupOrigin=Origin{}
+	p.pickupOrigin = Origin{}
 	w.clearPendingTalk(p)
 	w.cancelGather(p)
 	w.clearPendingUse(p)
@@ -317,14 +317,14 @@ func (w *World) resolveAttack(p *player) {
 		target.hp = 0
 	}
 	applied := hpBefore - target.hp
-	w.broadcast(mnet.Swing{
-		ID:     p.id,
-		Target: target.id,
-		Weapon: weaponID,
-		Amount: applied,
-		Crit:   hit.crit,
-		Miss:   hit.miss,
-	}, nil)
+	w.presentSwing(SwingValue{
+		Attacker: w.combatantHandle(p.id),
+		Target:   w.combatantHandle(target.id),
+		Weapon:   weaponID,
+		Amount:   applied,
+		Crit:     hit.crit,
+		Miss:     hit.miss,
+	})
 	w.markCombat(p)
 	w.markCombat(target)
 	fields := playerTargetFields(p.id, target.id)
@@ -371,14 +371,14 @@ func (w *World) resolveAttackOnNPC(p *player, target *npc) {
 		target.hp = 0
 	}
 	applied := hpBefore - target.hp
-	w.broadcast(mnet.Swing{
-		ID:     p.id,
-		Target: target.id,
-		Weapon: weaponID,
-		Amount: applied,
-		Crit:   hit.crit,
-		Miss:   hit.miss,
-	}, nil)
+	w.presentSwing(SwingValue{
+		Attacker: w.combatantHandle(p.id),
+		Target:   w.combatantHandle(target.id),
+		Weapon:   weaponID,
+		Amount:   applied,
+		Crit:     hit.crit,
+		Miss:     hit.miss,
+	})
 	w.markCombat(p)
 	fields := playerTargetFields(p.id, target.id)
 	fields["damage"] = hit.damage

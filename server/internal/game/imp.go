@@ -150,14 +150,14 @@ func (w *World) stepImpAttack(n *npc) {
 		target.hp = 0
 	}
 	applied := hpBefore - target.hp
-	w.broadcast(mnet.Swing{
-		ID:     n.id,
-		Target: target.id,
-		Weapon: weaponID,
-		Amount: applied,
-		Crit:   hit.crit,
-		Miss:   hit.miss,
-	}, nil)
+	w.presentSwing(SwingValue{
+		Attacker: w.combatantHandle(n.id),
+		Target:   w.combatantHandle(target.id),
+		Weapon:   weaponID,
+		Amount:   applied,
+		Crit:     hit.crit,
+		Miss:     hit.miss,
+	})
 	w.markCombat(target)
 	fields := gamelog.Fields{
 		"npc":       n.id,

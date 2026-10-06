@@ -60,9 +60,9 @@ func (w *World) talk(p *player, msg mnet.Talk, seq mnet.Seq) {
 	}
 
 	p.pendingTalk = n.id
- p.talkOrigin=p.origin
+	p.talkOrigin = p.origin
 	p.pending = 0
- p.pickupOrigin=Origin{}
+	p.pickupOrigin = Origin{}
 	w.cancelGather(p)
 	w.clearPendingUse(p)
 	w.cancelAttack(p, CauseTalk)
@@ -74,11 +74,13 @@ func (w *World) talk(p *player, msg mnet.Talk, seq mnet.Seq) {
 }
 
 func (w *World) resolveTalk(p *player) {
- previous:=p.origin;p.origin=p.talkOrigin;defer func(){p.origin=previous}()
+	previous := p.origin
+	p.origin = p.talkOrigin
+	defer func() { p.origin = previous }()
 	n, ok := w.npcs[p.pendingTalk]
 	if !ok || !w.isQuestTalkNPC(n.kind) {
 		p.pendingTalk = 0
- p.talkOrigin=Origin{}
+		p.talkOrigin = Origin{}
 		return
 	}
 	if distanceBetween(p.pos, n.pos) > TalkRange {
@@ -87,11 +89,11 @@ func (w *World) resolveTalk(p *player) {
 	q, ok := w.questForTalkNPC(n.kind)
 	if !ok {
 		p.pendingTalk = 0
- p.talkOrigin=Origin{}
+		p.talkOrigin = Origin{}
 		return
 	}
 	p.pendingTalk = 0
- p.talkOrigin=Origin{}
+	p.talkOrigin = Origin{}
 	p.clearSteer()
 	w.openDialog(p, n, q)
 	w.log.Event(w.tick, EvTalkResolved, playerNPCFields(p.id, n.id))
@@ -272,6 +274,7 @@ func (w *World) turnInQuest(p *player, n *npc) {
 
 func (w *World) openDialog(p *player, n *npc, q questdef.Quest) {
 	p.dialogNPC = n.id
+	w.emitOwner(p, w.dialogValue(p, n, q))
 	w.send(p, w.dialogMessage(p, n, q))
 }
 
@@ -281,6 +284,7 @@ func (w *World) closeDialog(p *player) {
 	if npcID == 0 {
 		return
 	}
+	w.emitOwner(p, DialogClearValue{NPCHandle{uint32(npcID), 1}})
 	w.send(p, mnet.Dialog{
 		NPC:     npcID,
 		Lines:   []string{},
@@ -289,51 +293,60 @@ func (w *World) closeDialog(p *player) {
 }
 
 func (w *World) dialogMessage(p *player, n *npc, q questdef.Quest) mnet.Dialog {
+	value := w.dialogValue(p, n, q)
+	out := mnet.Dialog{NPC: mnet.PlayerID(value.NPC.Index), Lines: value.Lines}
+	for _, id := range value.Options {
+		out.Options = append(out.Options, mnet.DialogOption{ID: id})
+	}
+	return out
+}
+
+func (w *World) dialogValue(p *player, n *npc, q questdef.Quest) DialogValue {
 	status := p.quests[q.ID]
 	switch status {
 	case questStatusActive:
 		if q.IsKill() {
 			progress := p.questKillCount(q.ID)
 			if w.killQuestReady(p, q) {
-				return mnet.Dialog{
-					NPC:   n.id,
+				return DialogValue{
+					NPC:   NPCHandle{uint32(n.id), 1},
 					Lines: []string{fmt.Sprintf("%s is done. Claim your reward.", q.Name)},
-					Options: []mnet.DialogOption{
-						{ID: mnet.OptionTurnInQuest},
-						{ID: mnet.OptionStopTalking},
+					Options: []string{
+						mnet.OptionTurnInQuest,
+						mnet.OptionStopTalking,
 					},
 				}
 			}
-			return mnet.Dialog{
-				NPC:   n.id,
+			return DialogValue{
+				NPC:   NPCHandle{uint32(n.id), 1},
 				Lines: []string{fmt.Sprintf("%s: %s", q.Name, questObjective(q, progress))},
-				Options: []mnet.DialogOption{
-					{ID: mnet.OptionStopTalking},
+				Options: []string{
+					mnet.OptionStopTalking,
 				},
 			}
 		}
-		return mnet.Dialog{
-			NPC:   n.id,
+		return DialogValue{
+			NPC:   NPCHandle{uint32(n.id), 1},
 			Lines: []string{fmt.Sprintf("You are already on %s.", q.Name)},
-			Options: []mnet.DialogOption{
-				{ID: mnet.OptionStopTalking},
+			Options: []string{
+				mnet.OptionStopTalking,
 			},
 		}
 	case questStatusComplete:
-		return mnet.Dialog{
-			NPC:   n.id,
+		return DialogValue{
+			NPC:   NPCHandle{uint32(n.id), 1},
 			Lines: []string{fmt.Sprintf("You already finished %s.", q.Name)},
-			Options: []mnet.DialogOption{
-				{ID: mnet.OptionStopTalking},
+			Options: []string{
+				mnet.OptionStopTalking,
 			},
 		}
 	default:
-		return mnet.Dialog{
-			NPC:   n.id,
+		return DialogValue{
+			NPC:   NPCHandle{uint32(n.id), 1},
 			Lines: []string{fmt.Sprintf("Will you accept %s?", q.Name)},
-			Options: []mnet.DialogOption{
-				{ID: mnet.OptionAcceptQuest},
-				{ID: mnet.OptionStopTalking},
+			Options: []string{
+				mnet.OptionAcceptQuest,
+				mnet.OptionStopTalking,
 			},
 		}
 	}
@@ -353,8 +366,8 @@ func (w *World) questForTalkNPC(kind string) (questdef.Quest, bool) {
 }
 
 func (w *World) clearPendingTalk(p *player) {
- p.pendingTalk = 0
- p.talkOrigin=Origin{}
+	p.pendingTalk = 0
+	p.talkOrigin = Origin{}
 }
 
 func playerNPCFields(player, npc mnet.PlayerID) gamelog.Fields {

@@ -36,17 +36,18 @@ var WornSlots = []mnet.EquipSlot{
 var DefaultJoinKit []string
 
 var (
-	ErrNoSuchItem     = errors.New("game: no such ground item")
-	ErrInventoryFull  = errors.New("game: inventory is full")
-	ErrNoSuchSlot     = errors.New("game: no such inventory slot")
-	ErrEmptySlot      = errors.New("game: inventory slot is empty")
-	ErrNoSuchPlayer   = errors.New("game: no such player")
-	ErrNotEquippable  = errors.New("game: that kind cannot be worn")
-	ErrNoSuchWornSlot = errors.New("game: no such worn slot")
-	ErrEmptyWornSlot  = errors.New("game: worn slot is empty")
-	ErrNoRecipe       = errors.New("game: no matching craft recipe")
-	ErrMissingMat     = errors.New("game: missing craft material")
-	ErrWrongKind      = errors.New("game: inventory slot holds the wrong kind")
+	ErrItemHandlesExhausted = errors.New("game: item handles exhausted")
+	ErrNoSuchItem           = errors.New("game: no such ground item")
+	ErrInventoryFull        = errors.New("game: inventory is full")
+	ErrNoSuchSlot           = errors.New("game: no such inventory slot")
+	ErrEmptySlot            = errors.New("game: inventory slot is empty")
+	ErrNoSuchPlayer         = errors.New("game: no such player")
+	ErrNotEquippable        = errors.New("game: that kind cannot be worn")
+	ErrNoSuchWornSlot       = errors.New("game: no such worn slot")
+	ErrEmptyWornSlot        = errors.New("game: worn slot is empty")
+	ErrNoRecipe             = errors.New("game: no matching craft recipe")
+	ErrMissingMat           = errors.New("game: missing craft material")
+	ErrWrongKind            = errors.New("game: inventory slot holds the wrong kind")
 )
 
 type missingMatError struct {
@@ -109,7 +110,9 @@ type Store interface {
 
 	RemovePlayer(mnet.PlayerID)
 
-	SpawnGroundItem(kind string, x, z float64) GroundItem
+	SpawnGroundItem(kind string, x, z float64) (GroundItem, error)
+
+	GroundItemCapacity() uint64
 
 	GroundItems() []GroundItem
 
@@ -215,15 +218,25 @@ func (s *memStore) RemovePlayer(id mnet.PlayerID) {
 	delete(s.held, id)
 }
 
-func (s *memStore) SpawnGroundItem(kind string, x, z float64) GroundItem {
+func (s *memStore) GroundItemCapacity() uint64 {
+	if s.nextItemID >= mnet.ItemID(^uint32(0)) {
+		return 0
+	}
+	return uint64(^uint32(0)) - uint64(s.nextItemID)
+}
+
+func (s *memStore) SpawnGroundItem(kind string, x, z float64) (GroundItem, error) {
 	if kind == "" {
 		panic("game: ground item with no kind")
+	}
+	if s.nextItemID >= mnet.ItemID(^uint32(0)) {
+		return GroundItem{}, ErrItemHandlesExhausted
 	}
 	s.nextItemID++
 	item := GroundItem{ID: s.nextItemID, Kind: kind, X: x, Z: z}
 	s.ground[item.ID] = item
 	s.order = append(s.order, item.ID)
-	return item
+	return item, nil
 }
 
 func (s *memStore) GroundItems() []GroundItem {
@@ -276,9 +289,11 @@ func (s *memStore) DropInventorySlot(player mnet.PlayerID, slot int, x, z float6
 		return GroundItem{}, fmt.Errorf("drop slot %d for player %d: %w", slot, player, ErrEmptySlot)
 	}
 
+	item, err := s.SpawnGroundItem(kind, x, z)
+	if err != nil {
+		return GroundItem{}, err
+	}
 	held.bag[slot] = ""
-	item := s.SpawnGroundItem(kind, x, z)
-
 	return item, nil
 }
 

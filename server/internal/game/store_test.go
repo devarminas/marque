@@ -1,6 +1,5 @@
 package game
 
-
 import (
 	"errors"
 	"testing"
@@ -14,8 +13,8 @@ func TestItemIdsComeFromTheirOwnSequence(t *testing.T) {
 	s.AddPlayer(1)
 	s.AddPlayer(2)
 
-	first := s.SpawnGroundItem(KindAcorn, 1, 1)
-	second := s.SpawnGroundItem(KindAcorn, 2, 2)
+	first := spawnGroundItemForTest(t, s, KindAcorn, 1, 1)
+	second := spawnGroundItemForTest(t, s, KindAcorn, 2, 2)
 	if first.ID != 1 || second.ID != 2 {
 		t.Fatalf("item ids are %d and %d, want 1 and 2 from an item-only counter", first.ID, second.ID)
 	}
@@ -25,12 +24,12 @@ func TestItemIdsAreNeverReused(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 
-	taken := s.SpawnGroundItem(KindAcorn, 1, 1)
+	taken := spawnGroundItemForTest(t, s, KindAcorn, 1, 1)
 	if _, err := s.TakeGroundItem(taken.ID, 1); err != nil {
 		t.Fatalf("taking item %d: %v", taken.ID, err)
 	}
 
-	next := s.SpawnGroundItem(KindAcorn, 2, 2)
+	next := spawnGroundItemForTest(t, s, KindAcorn, 2, 2)
 	if next.ID == taken.ID {
 		t.Fatalf("a new item reused id %d, which a taken item already had", next.ID)
 	}
@@ -39,7 +38,7 @@ func TestItemIdsAreNeverReused(t *testing.T) {
 func TestTakeIsOneMove(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(7)
-	item := s.SpawnGroundItem(KindAcorn, 3, -2)
+	item := spawnGroundItemForTest(t, s, KindAcorn, 3, -2)
 
 	slot, err := s.TakeGroundItem(item.ID, 7)
 	if err != nil {
@@ -60,7 +59,7 @@ func TestSecondTakeOfTheSameItemFails(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
 	s.AddPlayer(2)
-	item := s.SpawnGroundItem(KindAcorn, 0, 0)
+	item := spawnGroundItemForTest(t, s, KindAcorn, 0, 0)
 
 	if _, err := s.TakeGroundItem(item.ID, 1); err != nil {
 		t.Fatalf("first take: %v", err)
@@ -89,7 +88,7 @@ func TestSlotsFillLowestFirst(t *testing.T) {
 	s.AddPlayer(1)
 
 	for want := range 3 {
-		item := s.SpawnGroundItem(KindAcorn, 0, 0)
+		item := spawnGroundItemForTest(t, s, KindAcorn, 0, 0)
 		slot, err := s.TakeGroundItem(item.ID, 1)
 		if err != nil {
 			t.Fatalf("take %d: %v", want, err)
@@ -105,13 +104,13 @@ func TestAFullInventoryRefusesAndKeepsTheItemOnTheGround(t *testing.T) {
 	s.AddPlayer(1)
 
 	for i := range InventorySize {
-		item := s.SpawnGroundItem(KindAcorn, 0, 0)
+		item := spawnGroundItemForTest(t, s, KindAcorn, 0, 0)
 		if _, err := s.TakeGroundItem(item.ID, 1); err != nil {
 			t.Fatalf("filling slot %d: %v", i, err)
 		}
 	}
 
-	overflow := s.SpawnGroundItem(KindAcorn, 4, 4)
+	overflow := spawnGroundItemForTest(t, s, KindAcorn, 4, 4)
 	if _, err := s.TakeGroundItem(overflow.ID, 1); !errors.Is(err, ErrInventoryFull) {
 		t.Fatalf("take into a full inventory returned %v, want ErrInventoryFull", err)
 	}
@@ -125,7 +124,7 @@ func TestAFullInventoryRefusesAndKeepsTheItemOnTheGround(t *testing.T) {
 
 func TestTakingForAnUnknownPlayerFails(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
-	item := s.SpawnGroundItem(KindAcorn, 0, 0)
+	item := spawnGroundItemForTest(t, s, KindAcorn, 0, 0)
 
 	if _, err := s.TakeGroundItem(item.ID, 42); !errors.Is(err, ErrNoSuchPlayer) {
 		t.Fatalf("take for a player with no inventory returned %v, want ErrNoSuchPlayer", err)
@@ -140,7 +139,7 @@ func TestGroundItemsAreListedOldestFirst(t *testing.T) {
 	s.AddPlayer(1)
 
 	for i := range 6 {
-		s.SpawnGroundItem(KindAcorn, float64(i), 0)
+		spawnGroundItemForTest(t, s, KindAcorn, float64(i), 0)
 	}
 	if _, err := s.TakeGroundItem(3, 1); err != nil {
 		t.Fatalf("taking item 3: %v", err)
@@ -161,7 +160,7 @@ func TestGroundItemsAreListedOldestFirst(t *testing.T) {
 func TestRemovingAPlayerTakesTheirItemsWithThem(t *testing.T) {
 	s := NewMemoryStore(NoWearables)
 	s.AddPlayer(1)
-	item := s.SpawnGroundItem(KindAcorn, 0, 0)
+	item := spawnGroundItemForTest(t, s, KindAcorn, 0, 0)
 	if _, err := s.TakeGroundItem(item.ID, 1); err != nil {
 		t.Fatalf("taking item %d: %v", item.ID, err)
 	}
@@ -175,4 +174,13 @@ func TestRemovingAPlayerTakesTheirItemsWithThem(t *testing.T) {
 		t.Fatal("what they were carrying reappeared on the ground; M1 has no drop-on-logout")
 	}
 	s.RemovePlayer(1)
+}
+
+func spawnGroundItemForTest(t *testing.T, s Store, kind string, x, z float64) GroundItem {
+	t.Helper()
+	item, err := s.SpawnGroundItem(kind, x, z)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return item
 }
