@@ -121,6 +121,9 @@ public:
     std::expected<void, DomainError> replace_lease(std::uint64_t stream, std::uint64_t epoch, std::uint64_t lease, wire::PlayerId player, world::Time now, ResetLimits limits = {});
     std::expected<void, DomainError> advance_reset(world::Time now);
     DomainPhase phase() const { return phase_; }
+    std::optional<wire::ResetCertificate> pending_reset() const {
+        return reset_ && reset_->begin ? std::optional{reset_->begin->certificate()} : std::nullopt;
+    }
     std::optional<wire::ResetFailure> unavailable_reason() const { return unavailable_; }
     std::optional<std::vector<std::uint8_t>> take_reset_commit();
 private:

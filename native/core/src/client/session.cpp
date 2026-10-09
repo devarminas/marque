@@ -95,6 +95,50 @@ encode_action(Action action, std::uint32_t seq) {
       std::move(action));
 }
 
+std::expected<void, LocalError>
+Session::replace_lease(const LeaseIdentity &identity, std::shared_ptr<transport::Opener> opener,
+                       std::shared_ptr<transport::Sealer> sealer, std::uint64_t now, ResetLimits limits) {
+  if (recording_ || !prediction_ || !latest() || now < operation_time_ ||
+      now > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+    return std::unexpected(LocalError::recovery);
+  if (!identity.stream || !identity.epoch || !identity.lease || !prediction_->validate_replacement(identity.stream, identity.epoch, identity.player) ||
+      (lease_ && (identity.epoch <= lease_->epoch || identity.lease == lease_->lease)))
+    return std::unexpected(LocalError::sequence);
+  if (opener == opener_ || sealer == sealer_) return std::unexpected(LocalError::transport);
+  auto made = transport::Endpoint::create(transport::Role::client, config_, opener, sealer, now);
+  if (!made) return std::unexpected(LocalError::transport);
+  if (auto valid = assembler_.replace_lease(identity.stream, identity.epoch, identity.lease,
+          identity.player, {static_cast<std::int64_t>(now)}, limits); !valid)
+    return std::unexpected(LocalError::recovery);
+  endpoint_ = std::move(*made);
+  opener_ = std::move(opener); sealer_ = std::move(sealer);
+  lease_.emplace(identity); resend_next_ = journal_.empty() ? next_intent_ : journal_.front().seq;
+  pending_control_.reset(); error_ = LocalError::none; domain_error_.reset(); operation_time_ = now;
+  return {};
+}
+
+bool Session::send_control() {
+  if (!pending_control_) return true;
+  if (endpoint_->backlog()) return false;
+  if (!endpoint_->send(*pending_control_) || endpoint_->state() != transport::State::open) {
+    fail(LocalError::transport);
+    return false;
+  }
+  pending_control_.reset();
+  return true;
+}
+
+void Session::resend() {
+  if (!lease_ || assembler_.phase() != DomainPhase::live || pending_control_ || endpoint_->backlog()) return;
+  const auto command = std::find_if(journal_.begin(), journal_.end(), [&](const auto &value) { return value.seq >= resend_next_; });
+  if (command == journal_.end()) { resend_next_ = next_intent_; return; }
+  if (!endpoint_->send(command->bytes) || endpoint_->state() != transport::State::open) {
+    fail(LocalError::transport);
+    return;
+  }
+  resend_next_ = command->seq + 1;
+}
+
 std::expected<void, transport::Error>
 Session::receive(std::span<const std::uint8_t> bytes, std::uint64_t now) {
   return receive_packet(bytes, now, false);
@@ -135,17 +179,19 @@ Session::receive_packet(std::span<const std::uint8_t> bytes, std::uint64_t now,
             : endpoint_->receive(bytes, now);
   if (!packet)
     return std::unexpected(packet.error());
-  if (auto result =
-          assembler_.receive(*packet, {static_cast<std::int64_t>(now)});
-      !result)
-    fail(result.error() == DomainError::recovery_required ? LocalError::recovery
-                                                          : LocalError::decode);
+  if (auto result = assembler_.receive(*packet, {static_cast<std::int64_t>(now)}); !result) {
+    domain_error_ = result.error();
+    fail(result.error() == DomainError::recovery_required || result.error() == DomainError::unavailable || result.error() == DomainError::deadline
+             ? LocalError::recovery : result.error() == DomainError::capacity ? LocalError::capacity : LocalError::decode);
+  }
   return {};
 }
 
 bool Session::admit(std::span<const std::uint8_t> bytes, std::uint64_t now) {
   record(recording::Kind::command, now, bytes);
-  if (error_ != LocalError::none || !endpoint_)
+  operation_time_ = std::max(operation_time_, now);
+  if (error_ != LocalError::none || !endpoint_ || assembler_.phase() != DomainPhase::live || pending_control_ ||
+      (lease_ && resend_next_ < next_intent_))
     return false;
   if (next_intent_ == std::numeric_limits<std::uint32_t>::max()) {
     fail(LocalError::sequence);
@@ -174,13 +220,14 @@ bool Session::admit(std::span<const std::uint8_t> bytes, std::uint64_t now) {
     fail(LocalError::capacity);
     return false;
   }
-  if (!endpoint_->send(bytes)) {
+  if (!endpoint_->send(bytes) || endpoint_->state() != transport::State::open) {
     fail(LocalError::transport);
     return false;
   }
   journal_.push_back({next_intent_, {bytes.begin(), bytes.end()}});
   journal_bytes_ += bytes.size();
   ++next_intent_;
+  if (lease_) resend_next_ = next_intent_;
   assembler_.admitted_frontier(next_intent_);
   return true;
 }
@@ -193,6 +240,7 @@ bool Session::sample(motion::Input input, std::uint64_t now) {
   w.boolean(input.jump);
   (void)w.finish();
   record(recording::Kind::input, now, bytes);
+  operation_time_ = std::max(operation_time_, now);
   if (error_ != LocalError::none || !prediction_)
     return false;
   if (!prediction_->sample(input)) {
@@ -204,102 +252,89 @@ bool Session::sample(motion::Input input, std::uint64_t now) {
 
 std::vector<std::vector<std::uint8_t>> Session::turn(std::uint64_t now) {
   record(recording::Kind::turn, now);
+  operation_time_ = std::max(operation_time_, now);
   std::vector<std::vector<std::uint8_t>> outgoing;
-  if (error_ != LocalError::none || !endpoint_)
-    return outgoing;
-  if (now >= flush_) {
-    transport::Unreliable unreliable{};
-    if (prediction_) {
-      if (!prediction_->advance(now)) {
-        fail(LocalError::sequence);
-        return outgoing;
-      }
-      for (const auto &input : prediction_->inputs()) {
-        std::vector<std::uint8_t> bytes;
-        if (!wire::encode(input, bytes)) {
-          fail(LocalError::transport);
-          return outgoing;
-        }
-        unreliable.stamp = std::max(unreliable.stamp, input.seq());
-        unreliable.items.push_back(std::move(bytes));
-      }
-    }
-    auto packets = endpoint_->flush(now, unreliable);
-    if (!packets || packets->state != transport::State::open) {
-      fail(LocalError::transport);
-      return outgoing;
-    }
-    outgoing = std::move(packets->datagrams);
-    flush_ = now + interval_;
+  if (error_ != LocalError::none || !endpoint_) return outgoing;
+  if (now > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+    fail(LocalError::sequence); return outgoing;
   }
-  for (std::size_t count = 0; count < 64; ++count) {
-    if (publications_.size() >= limits_.publications) {
-      fail(LocalError::capacity);
-      return outgoing;
-    }
-    std::optional<motion::Prediction> initial;
-    std::optional<motion::PublishedBaseline> baseline;
-    auto value = assembler_.publish(
-        limits_.publication_bytes - publication_bytes_,
-        [&](const Events &events,
-            world::Tick tick) -> std::expected<void, DomainError> {
+  if (auto valid = assembler_.advance_reset({static_cast<std::int64_t>(now)}); !valid) {
+    domain_error_ = valid.error(); fail(LocalError::recovery); return outgoing;
+  }
+  const bool due = now >= flush_;
+  if (due && prediction_) {
+    const auto advanced = assembler_.phase() == DomainPhase::reset_pending ? prediction_->advance_retained(now) : prediction_->advance(now);
+    if (!advanced) { fail(LocalError::recovery); return outgoing; }
+  }
+  if (!pending_control_) pending_control_ = assembler_.take_reset_commit();
+  send_control();
+  if (error_ != LocalError::none) return outgoing;
+  for (std::size_t count = 0; count < 64 && !pending_control_; ++count) {
+    std::optional<motion::Prediction> prepared;
+    const auto certificate = assembler_.pending_reset();
+    const auto available = publications_.size() >= limits_.publications ? 0 : limits_.publication_bytes - publication_bytes_;
+    auto value = assembler_.publish(available,
+        [&](const Events &events, world::Tick tick) -> std::expected<void, DomainError> {
           if (const auto &value = events.motion; value) {
-            auto made = motion::PublishedBaseline::complete(*value, tick.value);
-            if (!made)
-              return std::unexpected(DomainError::malformed);
-            baseline = *made;
+            auto baseline = motion::PublishedBaseline::complete(*value, tick.value);
+            if (!baseline) return std::unexpected(DomainError::malformed);
             if (prediction_) {
-              if (!prediction_->validate(*baseline))
-                return std::unexpected(DomainError::recovery_required);
+              auto made = certificate && lease_ ? prediction_->prepare_reset(*baseline, *certificate, lease_->epoch, lease_->lease)
+                                                : prediction_->prepare(*baseline);
+              if (!made) return std::unexpected(DomainError::recovery_required);
+              prepared = std::move(*made);
             } else {
-              auto map = std::find_if(
-                  maps_.begin(), maps_.end(), [&](const auto &map) {
-                    return map.id == value->map_id() &&
-                           map.revision == value->map_revision();
-                  });
+              auto map = std::find_if(maps_.begin(), maps_.end(), [&](const auto &map) {
+                return map.id == value->map_id() && map.revision == value->map_revision();
+              });
               if (map != maps_.end()) {
-                auto predicted =
-                    motion::Prediction::create(*baseline, *map, now);
-                if (!predicted)
-                  return std::unexpected(DomainError::recovery_required);
-                initial = std::move(*predicted);
+                auto made = motion::Prediction::create(*baseline, *map, now);
+                if (!made) return std::unexpected(DomainError::recovery_required);
+                prepared = std::move(*made);
               }
             }
           }
           return {};
         });
     if (!value) {
-      domain_error_=value.error();
+      domain_error_ = value.error();
       fail(value.error() == DomainError::capacity ? LocalError::capacity
-           : value.error() == DomainError::recovery_required
-               ? LocalError::recovery
-               : LocalError::decode);
+           : value.error() == DomainError::recovery_required || value.error() == DomainError::unavailable ? LocalError::recovery : LocalError::decode);
       return outgoing;
     }
-    if (!*value)
-      break;
+    if (!*value) break;
     auto publication = std::move(**value);
-    if (!endpoint_->send(publication.application_commit)) {
-      fail(LocalError::transport);
-      return outgoing;
-    }
-    if (baseline && prediction_ && !prediction_->reconcile(*baseline)) {
-      fail(LocalError::recovery);
-      return outgoing;
-    }
-    if (initial) {
-      prediction_ = std::move(initial);
-      interval_ = baseline->motion().tick_interval_us();
+    if (prepared) {
+      prediction_ = std::move(prepared);
+      interval_ = publication.current->events().motion->tick_interval_us();
     }
     const auto cursor = publication.current->events().next_intent;
     while (!journal_.empty() && journal_.front().seq < cursor) {
-      journal_bytes_ -= journal_.front().bytes.size();
-      journal_.pop_front();
+      journal_bytes_ -= journal_.front().bytes.size(); journal_.pop_front();
     }
+    pending_control_ = publication.application_commit;
     publication_bytes_ += publication.retained_bytes;
     publications_.push_back(std::move(publication));
-    if (observer_)
-      observer_(publications_.back());
+    if (observer_) observer_(publications_.back());
+    send_control();
+    if (error_ != LocalError::none) return outgoing;
+  }
+  resend();
+  if (error_ != LocalError::none) return outgoing;
+  if (due) {
+    transport::Unreliable unreliable{};
+    if (prediction_ && assembler_.phase() == DomainPhase::live) {
+      for (const auto &input : prediction_->inputs()) {
+        std::vector<std::uint8_t> bytes;
+        if (!wire::encode(input, bytes)) { fail(LocalError::transport); return outgoing; }
+        unreliable.stamp = std::max(unreliable.stamp, input.seq());
+        unreliable.items.push_back(std::move(bytes));
+      }
+    }
+    auto packets = endpoint_->flush(now, unreliable);
+    if (!packets || packets->state != transport::State::open) { fail(LocalError::transport); return outgoing; }
+    outgoing = std::move(packets->datagrams);
+    flush_ = now + interval_;
   }
   return outgoing;
 }

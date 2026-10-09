@@ -34,14 +34,16 @@ int main() {
          "p.pose()->mode=marque::motion::PredictionMode::ended; return 0;",
          "const"},
         {"writer_copy", "auto second=p; return second.pose()->state.x;",
-         "deleted"},
+         "private"},
+        {"writer_prepare", "auto second=p.prepare(b); return 0;", "private"},
+        {"writer_reset_prepare", "auto second=p.prepare_reset(b, *marque::wire::ResetCertificate::build({}), 2, 3); return 0;", "private"},
         {"history_write", "p.records_[0].input.jump=true; return 0;",
          "private"}};
     for (const auto &test : cases) {
         const auto source = directory / (std::string(test.name) + ".cpp");
         std::ofstream(source)
             << "#include \"marque/motion/prediction.hpp\"\ndouble "
-               "probe(marque::motion::Prediction& p) {"
+               "probe(marque::motion::Prediction& p, const marque::motion::PublishedBaseline& b) {(void)b;"
             << test.body << "}\n";
         const std::string command =
             compiler + " -std=c++23 -Wall -Wextra -Werror -fsyntax-only -I'" +

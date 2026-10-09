@@ -103,7 +103,7 @@ func TestLiveRuntimeFailure(t *testing.T) {
 				}
 				flush()
 			}
-			initial, second, third, action := false, false, false, false
+			initial, second, third, fourth, action := false, false, false, false, false
 			var lastState []byte
 			commits := map[uint32]bool{}
 			next := time.Time{}
@@ -125,6 +125,12 @@ func TestLiveRuntimeFailure(t *testing.T) {
 						}
 						t.Logf("actual sealed UDP forced loss and Simulator seed36020261003; scheduled=%d delivered=%d duplicates=%d reordered=%d; %s", scheduled, delivered, duplicates, reordered, strings.TrimSpace(output.String()))
 						return
+					}
+					if mode == "count" && (!fourth || !commits[2] || !commits[3] ||
+						!strings.Contains(output.String(), "ARM360_LIVE_count_FAILURE_PASS queued=2") ||
+						!strings.Contains(output.String(), "pinned_tick=1") ||
+						!strings.Contains(output.String(), "ARM361_RUNTIME_RECORD_REPLAY_PASS publications=3")) {
+						t.Fatalf("actual fourth-boundary refusal missing fourth=%v commits=%v\n%s", fourth, commits, output.String())
 					}
 					if !commits[1] || !action || commits[4] || (mode == "bytes" && commits[3]) || ((mode == "epoch" || mode == "invalid_motion" || mode == "wrong_map" || mode == "future_input") && commits[2]) {
 						t.Fatalf("failed publication committed or first good boundary missing action=%v commits=%v", action, commits)
@@ -271,6 +277,10 @@ func TestLiveRuntimeFailure(t *testing.T) {
 						}
 						third = true
 					}
+					if mode == "count" && third && commits[3] && !fourth {
+						closeTick(4, 1, 2)
+						fourth = true
+					}
 				}
 				if faults {
 					for _, delivery := range simulator.Poll(netsim.BToA, clock()) {
@@ -346,6 +356,9 @@ func TestLiveRuntimeFailure(t *testing.T) {
 					}
 					switch value := value.(type) {
 					case wire.ApplicationCommit:
+						if mode == "count" && value.Tick() > 3 {
+							t.Fatalf("rejected fourth publication committed tick%d", value.Tick())
+						}
 						if value.Stream() != 88 || value.Epoch() != 1 || value.EventEnd() != 0 && mode != "gauntlet" {
 							t.Fatal("commit identity")
 						}

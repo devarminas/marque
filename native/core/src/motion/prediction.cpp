@@ -97,13 +97,23 @@ std::expected<void, PredictionError> Prediction::sample(Input input) {
     return {};
 }
 std::expected<std::size_t, PredictionError>
-Prediction::advance(std::uint64_t now) {
+Prediction::advance(std::uint64_t now) { return advance_checked(now, false); }
+std::expected<std::size_t, PredictionError>
+Prediction::advance_retained(std::uint64_t now) { return advance_checked(now, true); }
+std::expected<std::size_t, PredictionError>
+Prediction::advance_checked(std::uint64_t now, bool retained) {
     if (mode_ == PredictionMode::ended)
         return std::unexpected(PredictionError::ended);
     if (now < last_time_)
         return std::unexpected(PredictionError::clock);
     const auto ticks = (now - anchor_time_) / interval_;
     const auto elapsed = ticks - local_ticks_;
+    const auto fresh = wish_ && (wish_->dx != 0 || wish_->dz != 0 || pending_stop_ == 0);
+    const auto additional = fresh ? (wish_->dx != 0 || wish_->dz != 0 ? elapsed : std::min<std::uint64_t>(elapsed, 1)) : 0;
+    if (retained && (mode_ != PredictionMode::predicting || elapsed > 256 ||
+        static_cast<std::uint64_t>(horizon_) + elapsed - baseline_tick_ > 256 ||
+        additional > records_.size() - count_))
+        return std::unexpected(PredictionError::baseline);
     if (elapsed >=
         static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) -
             horizon_) {
@@ -169,7 +179,7 @@ Prediction::advance(std::uint64_t now) {
     return steps;
 }
 std::expected<void, PredictionError>
-Prediction::validate(const PublishedBaseline &published) const {
+Prediction::validate_context(const PublishedBaseline &published) const {
     const auto &m = published.motion();
     if (mode_ == PredictionMode::ended)
         return std::unexpected(PredictionError::ended);
@@ -180,6 +190,12 @@ Prediction::validate(const PublishedBaseline &published) const {
         m.ground_y() != static_cast<float>(map_.ground_y) ||
         m.tick_interval_us() != interval_)
         return std::unexpected(PredictionError::map);
+    return {};
+}
+std::expected<void, PredictionError>
+Prediction::validate(const PublishedBaseline &published) const {
+    if (auto valid = validate_context(published); !valid) return valid;
+    const auto &m = published.motion();
     if (m.tick() <= baseline_tick_ || m.input_seq() < baseline_cursor_ ||
         m.input_seq() > highest_)
         return std::unexpected(PredictionError::baseline);
@@ -189,6 +205,38 @@ std::expected<std::size_t, PredictionError>
 Prediction::reconcile(const PublishedBaseline &published) {
     if (auto result=validate(published); !result)
         return std::unexpected(result.error());
+    return reconcile_validated(published);
+}
+std::expected<void, PredictionError>
+Prediction::validate_replacement(std::uint64_t stream, std::uint64_t epoch, wire::PlayerId player) const {
+    if (mode_ != PredictionMode::predicting) return std::unexpected(PredictionError::baseline);
+    if (stream != stream_ || epoch <= epoch_ || player != player_) return std::unexpected(PredictionError::identity);
+    return {};
+}
+std::expected<Prediction, PredictionError>
+Prediction::prepare(const PublishedBaseline &published) const {
+    if (auto valid = validate(published); !valid) return std::unexpected(valid.error());
+    Prediction prepared(*this);
+    prepared.reconcile_validated(published);
+    return prepared;
+}
+std::expected<Prediction, PredictionError>
+Prediction::prepare_reset(const PublishedBaseline &published, const wire::ResetCertificate &certificate,
+        std::uint64_t epoch, std::uint64_t lease) const {
+    const auto &m = published.motion();
+    if (!lease || certificate.lease() != lease || certificate.epoch() != epoch ||
+        certificate.stream() != stream_ || certificate.tick() != m.tick() || epoch <= epoch_)
+        return std::unexpected(PredictionError::identity);
+    Prediction prepared(*this);
+    prepared.epoch_ = epoch;
+    if (auto valid = prepared.validate_context(published); !valid) return std::unexpected(valid.error());
+    if (m.tick() < baseline_tick_ || m.input_seq() < baseline_cursor_ || m.input_seq() > highest_ ||
+        mode_ != PredictionMode::predicting || (horizon_ > m.tick() && horizon_ - m.tick() > 256))
+        return std::unexpected(PredictionError::baseline);
+    prepared.reconcile_validated(published);
+    return prepared;
+}
+std::size_t Prediction::reconcile_validated(const PublishedBaseline &published) {
     const auto &m=published.motion();
     baseline_tick_ = m.tick();
     baseline_cursor_ = m.input_seq();

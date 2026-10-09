@@ -224,6 +224,7 @@ std::expected<std::optional<Publication>,DomainError> Assembler::publish_reset(s
         (void)seq;std::vector<std::uint8_t> bytes;
         std::visit([&](const auto& value){(void)wire::encode(value,bytes);},event);bytes_+=bytes.size();
     }
+    if (previous && previous->tick().value == cert.tick()) previous.reset();
     return std::optional<Publication>{Publication{std::move(previous),latest(),std::move(encoded),retained}};
 }
 }

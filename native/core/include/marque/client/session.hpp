@@ -37,6 +37,11 @@ enum class LocalError {
   sequence
 };
 
+struct LeaseIdentity {
+  const std::uint64_t stream, epoch, lease;
+  const wire::PlayerId player;
+};
+
 struct RuntimeLimits {
   std::size_t publications = 256;
   std::size_t publication_bytes = 128 * 1024 * 1024;
@@ -50,6 +55,9 @@ class Session {
   std::shared_ptr<transport::Opener> opener_;
   std::shared_ptr<transport::Sealer> sealer_;
   std::optional<transport::Endpoint> endpoint_;
+  std::optional<LeaseIdentity> lease_;
+  std::uint32_t resend_next_ = 1;
+  std::optional<std::vector<std::uint8_t>> pending_control_;
   Assembler assembler_ = Assembler::create();
   std::deque<Canonical> journal_;
   std::uint32_t next_intent_ = 1;
@@ -74,10 +82,11 @@ class Session {
   void record(recording::Kind kind, std::uint64_t time,
               std::span<const std::uint8_t> payload = {});
   std::function<void(const Publication &)> observer_;
+  bool send_control();
+  void resend();
   void fail(LocalError error) {
     error_ = error;
-    journal_.clear();
-    journal_bytes_ = 0;
+
   }
 
 public:
@@ -93,6 +102,12 @@ public:
   Session &operator=(const Session &) = delete;
   std::expected<void, transport::Error>
   receive(std::span<const std::uint8_t> bytes, std::uint64_t now);
+  std::expected<void, LocalError> replace_lease(const LeaseIdentity &identity,
+      std::shared_ptr<transport::Opener> opener, std::shared_ptr<transport::Sealer> sealer,
+      std::uint64_t now, ResetLimits limits = {});
+  DomainPhase phase() const {
+    return error_ == LocalError::none ? assembler_.phase() : DomainPhase::unavailable;
+  }
   bool admit(std::span<const std::uint8_t> bytes, std::uint64_t now);
   bool sample(motion::Input input, std::uint64_t now);
   std::vector<std::vector<std::uint8_t>> turn(std::uint64_t now);
@@ -115,6 +130,9 @@ public:
   bool flush_due(std::uint64_t now) const { return active() && now >= flush_; }
   std::size_t journal_bytes() const { return journal_bytes_; }
   std::size_t journal_size() const { return journal_.size(); }
+  std::span<const std::uint8_t> pending_commit() const {
+    return pending_control_ ? std::span<const std::uint8_t>{*pending_control_} : std::span<const std::uint8_t>{};
+  }
   std::shared_ptr<const motion::PredictedPose> prediction() const {
     return prediction_ ? prediction_->pose() : nullptr;
   }

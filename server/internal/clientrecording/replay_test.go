@@ -75,6 +75,7 @@ type peer struct {
 	errors       bytes.Buffer
 	endpoint     *transport.Endpoint
 	path         string
+	reliable     [][]byte
 	poses        []string
 	publications []string
 	pending      []string
@@ -126,8 +127,12 @@ func (p *peer) operation(now uint64, operation string) string {
 			if err != nil {
 				p.t.Fatal(err)
 			}
-			if _, err = p.endpoint.Receive(b, now); err != nil {
+			packet, err := p.endpoint.Receive(b, now)
+			if err != nil {
 				p.t.Fatal(err)
+			}
+			for _, raw := range packet.Reliable {
+				p.reliable = append(p.reliable, bytes.Clone(raw))
 			}
 			continue
 		}
@@ -278,29 +283,66 @@ func TestPublicationPressureAndDrainReplay(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			p := start(t, mode)
 			sim := netsim.New(netsim.Clean, 361)
-			for tick := uint32(1); tick <= 2; tick++ {
+			for tick := uint32(1); tick <= 3; tick++ {
 				now := uint64(tick) * 40000
 				p.send(closeTick(t, tick, 0, 1, 1))
 				p.flush(now, transport.Unreliable{Stamp: tick, Items: [][]byte{item(t, 1, float64(tick), true)}}, sim)
 				p.deliver(sim, now)
 				outcome := p.turn(now)
+				expected := "OK ok error=0 journal=0"
+				if mode == "capacity" && tick == 3 {
+					expected = "OK ok error=6 journal=0"
+				}
+				if outcome != expected {
+					t.Fatalf("tick%d outcome=%q expected=%q", tick, outcome, expected)
+				}
 				if mode == "drain" {
-					if !strings.Contains(outcome, "error=0") {
-						t.Fatal(outcome)
-					}
 					p.take(now + 1)
-				} else if tick == 2 && !strings.Contains(outcome, "error=6") {
-					t.Fatal(outcome)
+				} else if tick == 2 {
+					if out := p.turn(now + 1); out != "OK ok error=0 journal=0" || len(p.publications) != 2 {
+						t.Fatalf("full FIFO without another boundary must stay healthy outcome=%q publications=%q", out, p.publications)
+					}
 				}
 			}
 			if mode == "capacity" {
-				p.take(80001)
-				p.take(80002)
+				p.take(120001)
+				p.take(120002)
+				p.take(120003)
 			}
-			if len(p.publications) != 2 {
-				t.Fatalf("publication count %d", len(p.publications))
+			expected := []string{
+				"PUB 1 visible=1 gen=1 x=1 hp=10 end=0 cursor=1 producing=0 slots=0",
+				"PUB 2 visible=1 gen=1 x=2 hp=10 end=0 cursor=1 producing=0 slots=0",
 			}
-			p.finish()
+			terminal := byte(6)
+			if mode == "drain" {
+				expected = append(expected, "PUB 3 visible=1 gen=1 x=3 hp=10 end=0 cursor=1 producing=0 slots=0")
+				terminal = 0
+			}
+			if strings.Join(p.publications, "\n") != strings.Join(expected, "\n") {
+				t.Fatalf("accepted publications=%q expected=%q", p.publications, expected)
+			}
+			file := p.finish()
+			drains := [][]byte{}
+			for _, record := range file.Records {
+				if record.Kind == recording.Drain {
+					drains = append(drains, record.Payload)
+				}
+			}
+			expectedDrains := [][]byte{{1, 1, 0, 0, 0}, {1, 2, 0, 0, 0}, {0, 0, 0, 0, 0}}
+			if mode == "drain" {
+				expectedDrains[2] = []byte{1, 3, 0, 0, 0}
+			}
+			if len(drains) != 3 {
+				t.Fatalf("causal drain count=%d", len(drains))
+			}
+			for i := range drains {
+				if !bytes.Equal(drains[i], expectedDrains[i]) {
+					t.Fatalf("drain%d=%x expected=%x", i, drains[i], expectedDrains[i])
+				}
+			}
+			if end := file.Records[len(file.Records)-1]; end.Kind != recording.End || end.Payload[0] != terminal {
+				t.Fatalf("terminal record=%v expected=%d", end, terminal)
+			}
 		})
 	}
 }
@@ -373,26 +415,42 @@ func TestRealCanonicalSenderBacklogReplay(t *testing.T) {
 	p.send(closeTick(t, 1, 0, 1, 1))
 	p.flush(40000, transport.Unreliable{Stamp: 1, Items: [][]byte{item(t, 1, 2, true)}}, sim)
 	p.deliver(sim, 40000)
-	p.turn(40000)
+	if out := p.turn(40000); out != "OK ok error=0 journal=0" {
+		t.Fatal(out)
+	}
 	p.take(40001)
-	for seq := uint32(1); seq <= 1024; seq++ {
+	commit := encoded(t, wire.ApplicationCommitFields{Stream: 88, Epoch: 1, Tick: 1, EventEnd: 0})
+	if len(p.reliable) != 1 || len(commit) != 30 || !bytes.Equal(p.reliable[0], commit) {
+		t.Fatalf("initial real application control=%x expected=%x", p.reliable, commit)
+	}
+	for seq := uint32(1); seq <= 1023; seq++ {
 		out := p.pickup(40002+uint64(seq), seq)
-		if !strings.Contains(out, "error=0") {
-			t.Fatal(out)
+		if expected := fmt.Sprintf("OK ok error=0 journal=%d", seq); out != expected {
+			t.Fatalf("accepted seq%d outcome=%q expected=%q", seq, out, expected)
 		}
 	}
-	if out := p.turn(80000); !strings.Contains(out, "error=4") {
-		t.Fatalf("real sender backlog did not close %s", out)
+	if out := p.pickup(41026, 1024); out != "OK ok error=4 journal=1023" {
+		t.Fatalf("1024th attempted command must refuse without admission: %s", out)
 	}
 	file := p.finish()
-	commands := 0
+	commands, acceptedBytes := 0, 0
 	for _, r := range file.Records {
 		if r.Kind == recording.Command {
 			commands++
+			expected := encoded(t, wire.PickupFields{Seq: uint32(commands), Item: wire.ItemId{Index: 7, Gen: 1}})
+			if r.Time != 40002+uint64(commands) || len(r.Payload) != 8 || !bytes.Equal(r.Payload, expected) {
+				t.Fatalf("canonical attempted command%d time=%d bytes=%x expected=%x", commands, r.Time, r.Payload, expected)
+			}
+			if commands <= 1023 {
+				acceptedBytes += len(r.Payload)
+			}
 		}
 	}
-	if commands != 1024 {
-		t.Fatalf("command records %d", commands)
+	if commands != 1024 || acceptedBytes != 8184 {
+		t.Fatalf("attempted commands=%d accepted bytes=%d", commands, acceptedBytes)
+	}
+	if end := file.Records[len(file.Records)-1]; end.Kind != recording.End || end.Payload[0] != 4 {
+		t.Fatalf("actual terminal transport record=%v", end)
 	}
 }
 func (p *peer) seal(header, body []byte) []byte {
