@@ -422,6 +422,53 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
     out += "MotionMode(" + std::to_string(static_cast<std::uint32_t>(v)) + ")";
 }
 
+[[maybe_unused]] bool valid(ResetFailure v) {
+    switch (v) {
+    case ResetFailure::history:
+    case ResetFailure::capacity:
+    case ResetFailure::deadline:
+    case ResetFailure::lease:
+    case ResetFailure::invalid:
+        return true;
+    }
+    return false;
+}
+
+[[maybe_unused]] void write(codec::Writer& w, ResetFailure v) {
+    if (!valid(v)) {
+        w.fail(codec::Error::bad_enum);
+        return;
+    }
+    w.varint(static_cast<std::uint32_t>(v));
+}
+
+[[maybe_unused]] ResetFailure read_ResetFailure(codec::Reader& r) {
+    const auto v = static_cast<ResetFailure>(r.varint());
+    if (!r.error() && !valid(v)) r.fail(codec::Error::bad_enum);
+    return v;
+}
+
+[[maybe_unused]] void text(std::string& out, ResetFailure v) {
+    switch (v) {
+    case ResetFailure::history:
+        out += "history";
+        return;
+    case ResetFailure::capacity:
+        out += "capacity";
+        return;
+    case ResetFailure::deadline:
+        out += "deadline";
+        return;
+    case ResetFailure::lease:
+        out += "lease";
+        return;
+    case ResetFailure::invalid:
+        out += "invalid";
+        return;
+    }
+    out += "ResetFailure(" + std::to_string(static_cast<std::uint32_t>(v)) + ")";
+}
+
 [[maybe_unused]] void write(codec::Writer& w, const EntityId& v) {
     switch (v.index()) {
     case 0:
@@ -904,6 +951,252 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
 }
 
 [[maybe_unused]] void text(std::string& out, const Look& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const EntitySnapshotFields& f) {
+    write(w, f.id);
+    write(w, f.transform);
+    w.boolean(f.vitals.has_value());
+    if (f.vitals) {
+        write(w, (*f.vitals));
+    }
+    w.boolean(f.gear.has_value());
+    if (f.gear) {
+        write(w, (*f.gear));
+    }
+    w.boolean(f.cast.has_value());
+    if (f.cast) {
+        write(w, (*f.cast));
+    }
+    w.boolean(f.look.has_value());
+    if (f.look) {
+        write(w, (*f.look));
+    }
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const EntitySnapshot& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] EntitySnapshot read_EntitySnapshot(codec::Reader& r) {
+    auto v_id = read_EntityId(r);
+    auto v_transform = read_Transform(r);
+    auto v_vitals = read_opt(r, [](codec::Reader& r) { return read_Vitals(r); });
+    auto v_gear = read_opt(r, [](codec::Reader& r) { return read_Gear(r); });
+    auto v_cast = read_opt(r, [](codec::Reader& r) { return read_CastBar(r); });
+    auto v_look = read_opt(r, [](codec::Reader& r) { return read_Look(r); });
+    EntitySnapshotFields f{std::move(v_id), std::move(v_transform), std::move(v_vitals), std::move(v_gear), std::move(v_cast), std::move(v_look)};
+    return detail::Access::make<EntitySnapshot>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const EntitySnapshotFields& f) {
+    out += "EntitySnapshot{id:";
+    text(out, f.id);
+    out += " transform:";
+    text(out, f.transform);
+    out += " vitals:";
+    if (f.vitals) {
+        text(out, (*f.vitals));
+    } else {
+        out += '_';
+    }
+    out += " gear:";
+    if (f.gear) {
+        text(out, (*f.gear));
+    } else {
+        out += '_';
+    }
+    out += " cast:";
+    if (f.cast) {
+        text(out, (*f.cast));
+    } else {
+        out += '_';
+    }
+    out += " look:";
+    if (f.look) {
+        text(out, (*f.look));
+    } else {
+        out += '_';
+    }
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const EntitySnapshot& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const MotionBaselineFields& f) {
+    w.u64(f.stream);
+    if (!w.error() && !(f.stream >= std::uint64_t{1ULL})) w.fail(codec::Error::rule);
+    w.u64(f.epoch);
+    if (!w.error() && !(f.epoch >= std::uint64_t{1ULL})) w.fail(codec::Error::rule);
+    write(w, f.player);
+    w.u32(f.tick);
+    if (!w.error() && !(f.tick <= std::uint32_t{4294967294})) w.fail(codec::Error::rule);
+    w.u32(f.input_seq);
+    if (!w.error() && !(f.input_seq <= std::uint32_t{4294967294})) w.fail(codec::Error::rule);
+    w.f32(f.x);
+    w.f32(f.y);
+    w.f32(f.z);
+    w.f32(f.vy);
+    w.f32(f.dx);
+    w.f32(f.dz);
+    w.boolean(f.grounded);
+    write(w, f.mode);
+    w.u32(f.cast_end);
+    if (!w.error() && !(f.cast_end <= std::uint32_t{4294967294})) w.fail(codec::Error::rule);
+    w.string(f.map_id, 64);
+    w.u32(f.map_revision);
+    if (!w.error() && !(f.map_revision >= std::uint32_t{1})) w.fail(codec::Error::rule);
+    w.f32(f.half_extent);
+    w.f32(f.ground_y);
+    w.u32(f.tick_interval_us);
+    if (!w.error() && !(f.tick_interval_us >= std::uint32_t{33334} && f.tick_interval_us <= std::uint32_t{50000})) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const MotionBaseline& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] MotionBaseline read_MotionBaseline(codec::Reader& r) {
+    auto v_stream = r.u64();
+    if (!r.error() && !(v_stream >= std::uint64_t{1ULL})) r.fail(codec::Error::rule);
+    auto v_epoch = r.u64();
+    if (!r.error() && !(v_epoch >= std::uint64_t{1ULL})) r.fail(codec::Error::rule);
+    auto v_player = read_PlayerId(r);
+    auto v_tick = r.u32();
+    if (!r.error() && !(v_tick <= std::uint32_t{4294967294})) r.fail(codec::Error::rule);
+    auto v_input_seq = r.u32();
+    if (!r.error() && !(v_input_seq <= std::uint32_t{4294967294})) r.fail(codec::Error::rule);
+    auto v_x = r.f32();
+    auto v_y = r.f32();
+    auto v_z = r.f32();
+    auto v_vy = r.f32();
+    auto v_dx = r.f32();
+    auto v_dz = r.f32();
+    auto v_grounded = r.boolean();
+    auto v_mode = read_MotionMode(r);
+    auto v_cast_end = r.u32();
+    if (!r.error() && !(v_cast_end <= std::uint32_t{4294967294})) r.fail(codec::Error::rule);
+    auto v_map_id = r.string(64);
+    auto v_map_revision = r.u32();
+    if (!r.error() && !(v_map_revision >= std::uint32_t{1})) r.fail(codec::Error::rule);
+    auto v_half_extent = r.f32();
+    auto v_ground_y = r.f32();
+    auto v_tick_interval_us = r.u32();
+    if (!r.error() && !(v_tick_interval_us >= std::uint32_t{33334} && v_tick_interval_us <= std::uint32_t{50000})) r.fail(codec::Error::rule);
+    MotionBaselineFields f{std::move(v_stream), std::move(v_epoch), std::move(v_player), std::move(v_tick), std::move(v_input_seq), std::move(v_x), std::move(v_y), std::move(v_z), std::move(v_vy), std::move(v_dx), std::move(v_dz), std::move(v_grounded), std::move(v_mode), std::move(v_cast_end), std::move(v_map_id), std::move(v_map_revision), std::move(v_half_extent), std::move(v_ground_y), std::move(v_tick_interval_us)};
+    return detail::Access::make<MotionBaseline>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const MotionBaselineFields& f) {
+    out += "MotionBaseline{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " epoch:";
+    out += std::to_string(static_cast<unsigned long long>(f.epoch));
+    out += " player:";
+    text(out, f.player);
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " input_seq:";
+    out += std::to_string(static_cast<unsigned long long>(f.input_seq));
+    out += " x:";
+    codec::text_f32(out, f.x);
+    out += " y:";
+    codec::text_f32(out, f.y);
+    out += " z:";
+    codec::text_f32(out, f.z);
+    out += " vy:";
+    codec::text_f32(out, f.vy);
+    out += " dx:";
+    codec::text_f32(out, f.dx);
+    out += " dz:";
+    codec::text_f32(out, f.dz);
+    out += " grounded:";
+    out += f.grounded ? "true" : "false";
+    out += " mode:";
+    text(out, f.mode);
+    out += " cast_end:";
+    out += std::to_string(static_cast<unsigned long long>(f.cast_end));
+    out += " map_id:";
+    codec::text_quoted(out, f.map_id);
+    out += " map_revision:";
+    out += std::to_string(static_cast<unsigned long long>(f.map_revision));
+    out += " half_extent:";
+    codec::text_f32(out, f.half_extent);
+    out += " ground_y:";
+    codec::text_f32(out, f.ground_y);
+    out += " tick_interval_us:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick_interval_us));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const MotionBaseline& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetCertificateFields& f) {
+    w.u64(f.stream);
+    if (!w.error() && !(f.stream >= std::uint64_t{1ULL})) w.fail(codec::Error::rule);
+    w.u64(f.epoch);
+    if (!w.error() && !(f.epoch >= std::uint64_t{1ULL})) w.fail(codec::Error::rule);
+    w.u64(f.lease);
+    if (!w.error() && !(f.lease >= std::uint64_t{1ULL})) w.fail(codec::Error::rule);
+    w.u64(f.baseline);
+    if (!w.error() && !(f.baseline >= std::uint64_t{1ULL})) w.fail(codec::Error::rule);
+    w.u32(f.tick);
+    if (!w.error() && !(f.tick <= std::uint32_t{4294967294})) w.fail(codec::Error::rule);
+    w.u64(f.event_end);
+    if (!w.error() && !(f.event_end <= std::uint64_t{18446744073709551614ULL})) w.fail(codec::Error::rule);
+    w.u32(f.next_intent);
+    if (!w.error() && !(f.next_intent >= std::uint32_t{1})) w.fail(codec::Error::rule);
+    w.u32(f.parts);
+    if (!w.error() && !(f.parts <= std::uint32_t{1024})) w.fail(codec::Error::rule);
+    w.u32(f.entities);
+    if (!w.error() && !(f.entities <= std::uint32_t{100000})) w.fail(codec::Error::rule);
+    if (!w.error() && !(f.parts <= f.entities)) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetCertificate& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] ResetCertificate read_ResetCertificate(codec::Reader& r) {
+    auto v_stream = r.u64();
+    if (!r.error() && !(v_stream >= std::uint64_t{1ULL})) r.fail(codec::Error::rule);
+    auto v_epoch = r.u64();
+    if (!r.error() && !(v_epoch >= std::uint64_t{1ULL})) r.fail(codec::Error::rule);
+    auto v_lease = r.u64();
+    if (!r.error() && !(v_lease >= std::uint64_t{1ULL})) r.fail(codec::Error::rule);
+    auto v_baseline = r.u64();
+    if (!r.error() && !(v_baseline >= std::uint64_t{1ULL})) r.fail(codec::Error::rule);
+    auto v_tick = r.u32();
+    if (!r.error() && !(v_tick <= std::uint32_t{4294967294})) r.fail(codec::Error::rule);
+    auto v_event_end = r.u64();
+    if (!r.error() && !(v_event_end <= std::uint64_t{18446744073709551614ULL})) r.fail(codec::Error::rule);
+    auto v_next_intent = r.u32();
+    if (!r.error() && !(v_next_intent >= std::uint32_t{1})) r.fail(codec::Error::rule);
+    auto v_parts = r.u32();
+    if (!r.error() && !(v_parts <= std::uint32_t{1024})) r.fail(codec::Error::rule);
+    auto v_entities = r.u32();
+    if (!r.error() && !(v_entities <= std::uint32_t{100000})) r.fail(codec::Error::rule);
+    ResetCertificateFields f{std::move(v_stream), std::move(v_epoch), std::move(v_lease), std::move(v_baseline), std::move(v_tick), std::move(v_event_end), std::move(v_next_intent), std::move(v_parts), std::move(v_entities)};
+    if (!r.error() && !(f.parts <= f.entities)) r.fail(codec::Error::rule);
+    return detail::Access::make<ResetCertificate>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetCertificateFields& f) {
+    out += "ResetCertificate{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " epoch:";
+    out += std::to_string(static_cast<unsigned long long>(f.epoch));
+    out += " lease:";
+    out += std::to_string(static_cast<unsigned long long>(f.lease));
+    out += " baseline:";
+    out += std::to_string(static_cast<unsigned long long>(f.baseline));
+    out += " tick:";
+    out += std::to_string(static_cast<unsigned long long>(f.tick));
+    out += " event_end:";
+    out += std::to_string(static_cast<unsigned long long>(f.event_end));
+    out += " next_intent:";
+    out += std::to_string(static_cast<unsigned long long>(f.next_intent));
+    out += " parts:";
+    out += std::to_string(static_cast<unsigned long long>(f.parts));
+    out += " entities:";
+    out += std::to_string(static_cast<unsigned long long>(f.entities));
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetCertificate& v) { text(out, detail::Access::fields(v)); }
 
 [[maybe_unused]] void write(codec::Writer& w, const InputFields& f) {
     w.quant(f.dx, quant_wish);
@@ -2595,6 +2888,181 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
 
 [[maybe_unused]] void text(std::string& out, const OwnerMotion& v) { text(out, detail::Access::fields(v)); }
 
+[[maybe_unused]] void write(codec::Writer& w, const EntityReplaceFields& f) {
+    write(w, f.entity);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const EntityReplace& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] EntityReplace read_EntityReplace(codec::Reader& r) {
+    auto v_entity = read_EntitySnapshot(r);
+    EntityReplaceFields f{std::move(v_entity)};
+    return detail::Access::make<EntityReplace>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const EntityReplaceFields& f) {
+    out += "entity_replace{entity:";
+    text(out, f.entity);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const EntityReplace& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetBeginFields& f) {
+    write(w, f.certificate);
+    write(w, f.motion);
+    if (!w.error() && !(f.motion.stream() == f.certificate.stream())) w.fail(codec::Error::rule);
+    if (!w.error() && !(f.motion.epoch() == f.certificate.epoch())) w.fail(codec::Error::rule);
+    if (!w.error() && !(f.motion.tick() == f.certificate.tick())) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetBegin& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] ResetBegin read_ResetBegin(codec::Reader& r) {
+    auto v_certificate = read_ResetCertificate(r);
+    auto v_motion = read_MotionBaseline(r);
+    ResetBeginFields f{std::move(v_certificate), std::move(v_motion)};
+    if (!r.error() && !(f.motion.stream() == f.certificate.stream())) r.fail(codec::Error::rule);
+    if (!r.error() && !(f.motion.epoch() == f.certificate.epoch())) r.fail(codec::Error::rule);
+    if (!r.error() && !(f.motion.tick() == f.certificate.tick())) r.fail(codec::Error::rule);
+    return detail::Access::make<ResetBegin>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetBeginFields& f) {
+    out += "reset_begin{certificate:";
+    text(out, f.certificate);
+    out += " motion:";
+    text(out, f.motion);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetBegin& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetPartFields& f) {
+    write(w, f.certificate);
+    w.u32(f.index);
+    if (!w.error() && !(f.index <= std::uint32_t{1023})) w.fail(codec::Error::rule);
+    w.count(f.entities.size(), 64);
+    for (const auto& e : f.entities) {
+        write(w, e);
+    }
+    if (!w.error() && !codec::unique(f.entities.size(), [&](std::size_t i, std::size_t j) { return f.entities[i].id() == f.entities[j].id(); })) w.fail(codec::Error::rule);
+    if (!w.error() && !(f.index < f.certificate.parts())) w.fail(codec::Error::rule);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetPart& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] ResetPart read_ResetPart(codec::Reader& r) {
+    auto v_certificate = read_ResetCertificate(r);
+    auto v_index = r.u32();
+    if (!r.error() && !(v_index <= std::uint32_t{1023})) r.fail(codec::Error::rule);
+    std::vector<EntitySnapshot> v_entities;
+    const std::size_t n_v_entities = r.count(64, 19);
+    v_entities.reserve(n_v_entities);
+    for (std::size_t i = 0; i < n_v_entities; ++i) {
+        v_entities.push_back(read_EntitySnapshot(r));
+    }
+    if (!r.error() && !codec::unique(v_entities.size(), [&](std::size_t i, std::size_t j) { return v_entities[i].id() == v_entities[j].id(); })) r.fail(codec::Error::rule);
+    ResetPartFields f{std::move(v_certificate), std::move(v_index), std::move(v_entities)};
+    if (!r.error() && !(f.index < f.certificate.parts())) r.fail(codec::Error::rule);
+    return detail::Access::make<ResetPart>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetPartFields& f) {
+    out += "reset_part{certificate:";
+    text(out, f.certificate);
+    out += " index:";
+    out += std::to_string(static_cast<unsigned long long>(f.index));
+    out += " entities:";
+    out += '[';
+    for (std::size_t i = 0; i < f.entities.size(); ++i) {
+        if (i > 0) out += ' ';
+        text(out, f.entities[i]);
+    }
+    out += ']';
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetPart& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetCloseFields& f) {
+    write(w, f.certificate);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetClose& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] ResetClose read_ResetClose(codec::Reader& r) {
+    auto v_certificate = read_ResetCertificate(r);
+    ResetCloseFields f{std::move(v_certificate)};
+    return detail::Access::make<ResetClose>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetCloseFields& f) {
+    out += "reset_close{certificate:";
+    text(out, f.certificate);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetClose& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetUnavailableFields& f) {
+    w.u64(f.stream);
+    if (!w.error() && !(f.stream >= std::uint64_t{1ULL})) w.fail(codec::Error::rule);
+    w.u64(f.epoch);
+    if (!w.error() && !(f.epoch >= std::uint64_t{1ULL})) w.fail(codec::Error::rule);
+    w.u64(f.lease);
+    if (!w.error() && !(f.lease >= std::uint64_t{1ULL})) w.fail(codec::Error::rule);
+    write(w, f.reason);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetUnavailable& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] ResetUnavailable read_ResetUnavailable(codec::Reader& r) {
+    auto v_stream = r.u64();
+    if (!r.error() && !(v_stream >= std::uint64_t{1ULL})) r.fail(codec::Error::rule);
+    auto v_epoch = r.u64();
+    if (!r.error() && !(v_epoch >= std::uint64_t{1ULL})) r.fail(codec::Error::rule);
+    auto v_lease = r.u64();
+    if (!r.error() && !(v_lease >= std::uint64_t{1ULL})) r.fail(codec::Error::rule);
+    auto v_reason = read_ResetFailure(r);
+    ResetUnavailableFields f{std::move(v_stream), std::move(v_epoch), std::move(v_lease), std::move(v_reason)};
+    return detail::Access::make<ResetUnavailable>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetUnavailableFields& f) {
+    out += "reset_unavailable{stream:";
+    out += std::to_string(static_cast<unsigned long long>(f.stream));
+    out += " epoch:";
+    out += std::to_string(static_cast<unsigned long long>(f.epoch));
+    out += " lease:";
+    out += std::to_string(static_cast<unsigned long long>(f.lease));
+    out += " reason:";
+    text(out, f.reason);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetUnavailable& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetCommitFields& f) {
+    write(w, f.certificate);
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const ResetCommit& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] ResetCommit read_ResetCommit(codec::Reader& r) {
+    auto v_certificate = read_ResetCertificate(r);
+    ResetCommitFields f{std::move(v_certificate)};
+    return detail::Access::make<ResetCommit>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetCommitFields& f) {
+    out += "reset_commit{certificate:";
+    text(out, f.certificate);
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const ResetCommit& v) { text(out, detail::Access::fields(v)); }
+
 }
 
 std::expected<BagEntry, codec::Error> BagEntry::build(BagEntryFields f) {
@@ -2777,6 +3245,45 @@ std::expected<Look, codec::Error> Look::build(LookFields f) {
 }
 
 std::string to_text(const Look& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<EntitySnapshot, codec::Error> EntitySnapshot::build(EntitySnapshotFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<EntitySnapshot>(std::move(f));
+}
+
+std::string to_text(const EntitySnapshot& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<MotionBaseline, codec::Error> MotionBaseline::build(MotionBaselineFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<MotionBaseline>(std::move(f));
+}
+
+std::string to_text(const MotionBaseline& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<ResetCertificate, codec::Error> ResetCertificate::build(ResetCertificateFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<ResetCertificate>(std::move(f));
+}
+
+std::string to_text(const ResetCertificate& v) {
     std::string out;
     text(out, v);
     return out;
@@ -3411,6 +3918,84 @@ std::string to_text(const OwnerMotion& v) {
     return out;
 }
 
+std::expected<EntityReplace, codec::Error> EntityReplace::build(EntityReplaceFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<EntityReplace>(std::move(f));
+}
+
+std::string to_text(const EntityReplace& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<ResetBegin, codec::Error> ResetBegin::build(ResetBeginFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<ResetBegin>(std::move(f));
+}
+
+std::string to_text(const ResetBegin& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<ResetPart, codec::Error> ResetPart::build(ResetPartFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<ResetPart>(std::move(f));
+}
+
+std::string to_text(const ResetPart& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<ResetClose, codec::Error> ResetClose::build(ResetCloseFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<ResetClose>(std::move(f));
+}
+
+std::string to_text(const ResetClose& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<ResetUnavailable, codec::Error> ResetUnavailable::build(ResetUnavailableFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<ResetUnavailable>(std::move(f));
+}
+
+std::string to_text(const ResetUnavailable& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<ResetCommit, codec::Error> ResetCommit::build(ResetCommitFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<ResetCommit>(std::move(f));
+}
+
+std::string to_text(const ResetCommit& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
 std::expected<void, codec::Error> encode(const Input& m, std::vector<std::uint8_t>& out) {
     codec::Writer w{out};
     w.varint(Input::message_id);
@@ -3747,6 +4332,48 @@ std::expected<void, codec::Error> encode(const OwnerMotion& m, std::vector<std::
     return w.finish();
 }
 
+std::expected<void, codec::Error> encode(const EntityReplace& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(EntityReplace::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const ResetBegin& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(ResetBegin::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const ResetPart& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(ResetPart::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const ResetClose& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(ResetClose::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const ResetUnavailable& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(ResetUnavailable::message_id);
+    write(w, m);
+    return w.finish();
+}
+
+std::expected<void, codec::Error> encode(const ResetCommit& m, std::vector<std::uint8_t>& out) {
+    codec::Writer w{out};
+    w.varint(ResetCommit::message_id);
+    write(w, m);
+    return w.finish();
+}
+
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r) {
     std::optional<StateMsg> m;
     switch (r.varint()) {
@@ -3773,6 +4400,9 @@ std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r) {
         break;
     case OwnerMotion::message_id:
         m.emplace(read_OwnerMotion(r));
+        break;
+    case EntityReplace::message_id:
+        m.emplace(read_EntityReplace(r));
         break;
     default:
         r.fail(codec::Error::unknown_message);
@@ -3848,6 +4478,18 @@ std::expected<EventsMsg, codec::Error> decode_next_events(codec::Reader& r) {
         break;
     case InviteClear::message_id:
         m.emplace(read_InviteClear(r));
+        break;
+    case ResetBegin::message_id:
+        m.emplace(read_ResetBegin(r));
+        break;
+    case ResetPart::message_id:
+        m.emplace(read_ResetPart(r));
+        break;
+    case ResetClose::message_id:
+        m.emplace(read_ResetClose(r));
+        break;
+    case ResetUnavailable::message_id:
+        m.emplace(read_ResetUnavailable(r));
         break;
     default:
         r.fail(codec::Error::unknown_message);
@@ -3974,6 +4616,9 @@ std::expected<IntentsMsg, codec::Error> decode_next_intents(codec::Reader& r) {
         break;
     case CastNpc::message_id:
         m.emplace(read_CastNpc(r));
+        break;
+    case ResetCommit::message_id:
+        m.emplace(read_ResetCommit(r));
         break;
     default:
         r.fail(codec::Error::unknown_message);

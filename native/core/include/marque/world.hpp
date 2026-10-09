@@ -372,8 +372,15 @@ public:
     }
     Read reader() const { return Read(slot_, config_.jitter_delay); }
     std::expected<Tick, ApplyError> apply(CompleteTick<Catalog, Events> batch) {
+        return apply_batch(std::move(batch), false);
+    }
+    std::expected<Tick, ApplyError> apply_certified_reset(CompleteTick<Catalog, Events> batch) {
+        return apply_batch(std::move(batch), true);
+    }
+private:
+    std::expected<Tick, ApplyError> apply_batch(CompleteTick<Catalog, Events> batch, bool certified_reset) {
         const auto old_publication = slot_->pair.current;
-        if (old_publication && batch.tick.value <= old_publication->tick().value) return std::unexpected(ApplyError::stale_tick);
+        if (old_publication && (batch.tick.value < old_publication->tick().value || (!certified_reset && batch.tick.value == old_publication->tick().value))) return std::unexpected(ApplyError::stale_tick);
         Time time = batch.received_at;
         if (old_publication) {
             const auto delta = static_cast<std::int64_t>(batch.tick.value - old_publication->tick().value) * config_.tick_interval.count();
@@ -385,7 +392,8 @@ public:
         auto world = reduce(data, batch.changes, typename Catalog::components{});
         if (!world) return std::unexpected(world.error());
         auto publication = std::shared_ptr<const Publication>(new Publication(batch.tick, time, std::move(*world), std::move(batch.events)));
-        typename Read::Pair pair{old_publication, std::move(publication)};
+        const auto previous = old_publication && batch.tick == old_publication->tick() ? slot_->pair.previous : old_publication;
+        typename Read::Pair pair{previous, std::move(publication)};
         slot_->pair = std::move(pair);
         return batch.tick;
     }

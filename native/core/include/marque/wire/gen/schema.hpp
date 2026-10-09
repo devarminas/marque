@@ -15,7 +15,7 @@
 
 namespace marque::wire {
 
-inline constexpr std::uint64_t schema_hash = 0xa6e251d9e4e60702ULL;
+inline constexpr std::uint64_t schema_hash = 0xcaf535412c3bd1cbULL;
 
 namespace detail {
 struct Access;
@@ -110,6 +110,14 @@ enum class MotionMode : std::uint32_t {
     free = 1,
     rooted = 2,
     interrupt_on_move = 3,
+};
+
+enum class ResetFailure : std::uint32_t {
+    history = 1,
+    capacity = 2,
+    deadline = 3,
+    lease = 4,
+    invalid = 5,
 };
 
 using EntityId = std::variant<PlayerId, NpcId, ItemId, NodeId>;
@@ -474,6 +482,137 @@ private:
     explicit Look(LookFields f) : f_(std::move(f)) {}
 
     LookFields f_;
+};
+
+struct EntitySnapshotFields {
+    EntityId id{};
+    Transform transform;
+    std::optional<Vitals> vitals{};
+    std::optional<Gear> gear{};
+    std::optional<CastBar> cast{};
+    std::optional<Look> look{};
+
+    bool operator==(const EntitySnapshotFields&) const = default;
+};
+
+class EntitySnapshot {
+public:
+    static std::expected<EntitySnapshot, codec::Error> build(EntitySnapshotFields f);
+
+    EntitySnapshot() = delete;
+
+    const EntityId& id() const { return f_.id; }
+    const Transform& transform() const { return f_.transform; }
+    const std::optional<Vitals>& vitals() const { return f_.vitals; }
+    const std::optional<Gear>& gear() const { return f_.gear; }
+    const std::optional<CastBar>& cast() const { return f_.cast; }
+    const std::optional<Look>& look() const { return f_.look; }
+
+    bool operator==(const EntitySnapshot&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit EntitySnapshot(EntitySnapshotFields f) : f_(std::move(f)) {}
+
+    EntitySnapshotFields f_;
+};
+
+struct MotionBaselineFields {
+    std::uint64_t stream = 0;
+    std::uint64_t epoch = 0;
+    PlayerId player{};
+    std::uint32_t tick = 0;
+    std::uint32_t input_seq = 0;
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    float vy = 0;
+    float dx = 0;
+    float dz = 0;
+    bool grounded = false;
+    MotionMode mode{};
+    std::uint32_t cast_end = 0;
+    std::string map_id{};
+    std::uint32_t map_revision = 0;
+    float half_extent = 0;
+    float ground_y = 0;
+    std::uint32_t tick_interval_us = 0;
+
+    bool operator==(const MotionBaselineFields&) const = default;
+};
+
+class MotionBaseline {
+public:
+    static std::expected<MotionBaseline, codec::Error> build(MotionBaselineFields f);
+
+    MotionBaseline() = delete;
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& epoch() const { return f_.epoch; }
+    const PlayerId& player() const { return f_.player; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::uint32_t& input_seq() const { return f_.input_seq; }
+    const float& x() const { return f_.x; }
+    const float& y() const { return f_.y; }
+    const float& z() const { return f_.z; }
+    const float& vy() const { return f_.vy; }
+    const float& dx() const { return f_.dx; }
+    const float& dz() const { return f_.dz; }
+    const bool& grounded() const { return f_.grounded; }
+    const MotionMode& mode() const { return f_.mode; }
+    const std::uint32_t& cast_end() const { return f_.cast_end; }
+    const std::string& map_id() const { return f_.map_id; }
+    const std::uint32_t& map_revision() const { return f_.map_revision; }
+    const float& half_extent() const { return f_.half_extent; }
+    const float& ground_y() const { return f_.ground_y; }
+    const std::uint32_t& tick_interval_us() const { return f_.tick_interval_us; }
+
+    bool operator==(const MotionBaseline&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit MotionBaseline(MotionBaselineFields f) : f_(std::move(f)) {}
+
+    MotionBaselineFields f_;
+};
+
+struct ResetCertificateFields {
+    std::uint64_t stream = 0;
+    std::uint64_t epoch = 0;
+    std::uint64_t lease = 0;
+    std::uint64_t baseline = 0;
+    std::uint32_t tick = 0;
+    std::uint64_t event_end = 0;
+    std::uint32_t next_intent = 0;
+    std::uint32_t parts = 0;
+    std::uint32_t entities = 0;
+
+    bool operator==(const ResetCertificateFields&) const = default;
+};
+
+class ResetCertificate {
+public:
+    static std::expected<ResetCertificate, codec::Error> build(ResetCertificateFields f);
+
+    ResetCertificate() = delete;
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& epoch() const { return f_.epoch; }
+    const std::uint64_t& lease() const { return f_.lease; }
+    const std::uint64_t& baseline() const { return f_.baseline; }
+    const std::uint32_t& tick() const { return f_.tick; }
+    const std::uint64_t& event_end() const { return f_.event_end; }
+    const std::uint32_t& next_intent() const { return f_.next_intent; }
+    const std::uint32_t& parts() const { return f_.parts; }
+    const std::uint32_t& entities() const { return f_.entities; }
+
+    bool operator==(const ResetCertificate&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit ResetCertificate(ResetCertificateFields f) : f_(std::move(f)) {}
+
+    ResetCertificateFields f_;
 };
 
 struct InputFields {
@@ -1984,10 +2123,178 @@ private:
     OwnerMotionFields f_;
 };
 
-using StateMsg = std::variant<Pose, Hp, Entity, Gone, Swing, CastPhase, GatherStart, OwnerMotion>;
-using EventsMsg = std::variant<Inventory, Equipment, Class, Skills, QuestLog, Dialog, Party, Invite, AdminReply, Cooldown, Refused, TickClose, ResumeBoundary, DialogClear, PartyClear, InviteClear>;
+struct EntityReplaceFields {
+    EntitySnapshot entity;
+
+    bool operator==(const EntityReplaceFields&) const = default;
+};
+
+class EntityReplace {
+public:
+    static constexpr std::uint32_t message_id = 22;
+    static constexpr codec::Channel channel = codec::Channel::state;
+
+    static std::expected<EntityReplace, codec::Error> build(EntityReplaceFields f);
+
+    EntityReplace() = delete;
+
+    const EntitySnapshot& entity() const { return f_.entity; }
+
+    bool operator==(const EntityReplace&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit EntityReplace(EntityReplaceFields f) : f_(std::move(f)) {}
+
+    EntityReplaceFields f_;
+};
+
+struct ResetBeginFields {
+    ResetCertificate certificate;
+    MotionBaseline motion;
+
+    bool operator==(const ResetBeginFields&) const = default;
+};
+
+class ResetBegin {
+public:
+    static constexpr std::uint32_t message_id = 144;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<ResetBegin, codec::Error> build(ResetBeginFields f);
+
+    ResetBegin() = delete;
+
+    const ResetCertificate& certificate() const { return f_.certificate; }
+    const MotionBaseline& motion() const { return f_.motion; }
+
+    bool operator==(const ResetBegin&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit ResetBegin(ResetBeginFields f) : f_(std::move(f)) {}
+
+    ResetBeginFields f_;
+};
+
+struct ResetPartFields {
+    ResetCertificate certificate;
+    std::uint32_t index = 0;
+    std::vector<EntitySnapshot> entities{};
+
+    bool operator==(const ResetPartFields&) const = default;
+};
+
+class ResetPart {
+public:
+    static constexpr std::uint32_t message_id = 145;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<ResetPart, codec::Error> build(ResetPartFields f);
+
+    ResetPart() = delete;
+
+    const ResetCertificate& certificate() const { return f_.certificate; }
+    const std::uint32_t& index() const { return f_.index; }
+    const std::vector<EntitySnapshot>& entities() const { return f_.entities; }
+
+    bool operator==(const ResetPart&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit ResetPart(ResetPartFields f) : f_(std::move(f)) {}
+
+    ResetPartFields f_;
+};
+
+struct ResetCloseFields {
+    ResetCertificate certificate;
+
+    bool operator==(const ResetCloseFields&) const = default;
+};
+
+class ResetClose {
+public:
+    static constexpr std::uint32_t message_id = 146;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<ResetClose, codec::Error> build(ResetCloseFields f);
+
+    ResetClose() = delete;
+
+    const ResetCertificate& certificate() const { return f_.certificate; }
+
+    bool operator==(const ResetClose&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit ResetClose(ResetCloseFields f) : f_(std::move(f)) {}
+
+    ResetCloseFields f_;
+};
+
+struct ResetUnavailableFields {
+    std::uint64_t stream = 0;
+    std::uint64_t epoch = 0;
+    std::uint64_t lease = 0;
+    ResetFailure reason{};
+
+    bool operator==(const ResetUnavailableFields&) const = default;
+};
+
+class ResetUnavailable {
+public:
+    static constexpr std::uint32_t message_id = 147;
+    static constexpr codec::Channel channel = codec::Channel::events;
+
+    static std::expected<ResetUnavailable, codec::Error> build(ResetUnavailableFields f);
+
+    ResetUnavailable() = delete;
+
+    const std::uint64_t& stream() const { return f_.stream; }
+    const std::uint64_t& epoch() const { return f_.epoch; }
+    const std::uint64_t& lease() const { return f_.lease; }
+    const ResetFailure& reason() const { return f_.reason; }
+
+    bool operator==(const ResetUnavailable&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit ResetUnavailable(ResetUnavailableFields f) : f_(std::move(f)) {}
+
+    ResetUnavailableFields f_;
+};
+
+struct ResetCommitFields {
+    ResetCertificate certificate;
+
+    bool operator==(const ResetCommitFields&) const = default;
+};
+
+class ResetCommit {
+public:
+    static constexpr std::uint32_t message_id = 279;
+    static constexpr codec::Channel channel = codec::Channel::intents;
+
+    static std::expected<ResetCommit, codec::Error> build(ResetCommitFields f);
+
+    ResetCommit() = delete;
+
+    const ResetCertificate& certificate() const { return f_.certificate; }
+
+    bool operator==(const ResetCommit&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit ResetCommit(ResetCommitFields f) : f_(std::move(f)) {}
+
+    ResetCommitFields f_;
+};
+
+using StateMsg = std::variant<Pose, Hp, Entity, Gone, Swing, CastPhase, GatherStart, OwnerMotion, EntityReplace>;
+using EventsMsg = std::variant<Inventory, Equipment, Class, Skills, QuestLog, Dialog, Party, Invite, AdminReply, Cooldown, Refused, TickClose, ResumeBoundary, DialogClear, PartyClear, InviteClear, ResetBegin, ResetPart, ResetClose, ResetUnavailable>;
 using InputMsg = std::variant<Input>;
-using IntentsMsg = std::variant<Pickup, Drop, Equip, Unequip, Gather, UseSelf, AttackPlayer, Respawn, CastSelf, Talk, DialogOption, Give, PartyInvite, PartyAccept, PartyDecline, PartyLeave, PartyKick, Admin, ApplicationCommit, UseStation, AttackNpc, CastPlayer, CastNpc>;
+using IntentsMsg = std::variant<Pickup, Drop, Equip, Unequip, Gather, UseSelf, AttackPlayer, Respawn, CastSelf, Talk, DialogOption, Give, PartyInvite, PartyAccept, PartyDecline, PartyLeave, PartyKick, Admin, ApplicationCommit, UseStation, AttackNpc, CastPlayer, CastNpc, ResetCommit>;
 
 std::expected<void, codec::Error> encode(const Input& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const Pose& m, std::vector<std::uint8_t>& out);
@@ -2037,6 +2344,12 @@ std::expected<void, codec::Error> encode(const AttackNpc& m, std::vector<std::ui
 std::expected<void, codec::Error> encode(const CastPlayer& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const CastNpc& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const OwnerMotion& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const EntityReplace& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const ResetBegin& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const ResetPart& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const ResetClose& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const ResetUnavailable& m, std::vector<std::uint8_t>& out);
+std::expected<void, codec::Error> encode(const ResetCommit& m, std::vector<std::uint8_t>& out);
 
 std::string to_text(const BagEntry& v);
 std::string to_text(const WornName& v);
@@ -2052,6 +2365,9 @@ std::string to_text(const Gear& v);
 std::string to_text(const Casting& v);
 std::string to_text(const CastBar& v);
 std::string to_text(const Look& v);
+std::string to_text(const EntitySnapshot& v);
+std::string to_text(const MotionBaseline& v);
+std::string to_text(const ResetCertificate& v);
 std::string to_text(const Input& v);
 std::string to_text(const Pose& v);
 std::string to_text(const Hp& v);
@@ -2100,6 +2416,12 @@ std::string to_text(const AttackNpc& v);
 std::string to_text(const CastPlayer& v);
 std::string to_text(const CastNpc& v);
 std::string to_text(const OwnerMotion& v);
+std::string to_text(const EntityReplace& v);
+std::string to_text(const ResetBegin& v);
+std::string to_text(const ResetPart& v);
+std::string to_text(const ResetClose& v);
+std::string to_text(const ResetUnavailable& v);
+std::string to_text(const ResetCommit& v);
 
 std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r);
 std::expected<StateMsg, codec::Error> decode_state(std::span<const std::uint8_t> bytes);

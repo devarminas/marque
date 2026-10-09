@@ -10,7 +10,7 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-const SchemaHash uint64 = 0xa6e251d9e4e60702
+const SchemaHash uint64 = 0xcaf535412c3bd1cb
 
 type Message interface {
 	MessageID() uint32
@@ -434,6 +434,56 @@ func (v MotionMode) encode(w *codec.Writer) {
 
 func decodeMotionMode(r *codec.Reader) MotionMode {
 	v := MotionMode(r.Varint())
+	if r.Err() == nil && !v.valid() {
+		r.Fail(codec.ErrBadEnum)
+	}
+	return v
+}
+
+type ResetFailure uint32
+
+const (
+	ResetFailureHistory  ResetFailure = 1
+	ResetFailureCapacity ResetFailure = 2
+	ResetFailureDeadline ResetFailure = 3
+	ResetFailureLease    ResetFailure = 4
+	ResetFailureInvalid  ResetFailure = 5
+)
+
+func (v ResetFailure) String() string {
+	switch v {
+	case ResetFailureHistory:
+		return "history"
+	case ResetFailureCapacity:
+		return "capacity"
+	case ResetFailureDeadline:
+		return "deadline"
+	case ResetFailureLease:
+		return "lease"
+	case ResetFailureInvalid:
+		return "invalid"
+	}
+	return fmt.Sprintf("ResetFailure(%d)", uint32(v))
+}
+
+func (v ResetFailure) valid() bool {
+	switch v {
+	case ResetFailureHistory, ResetFailureCapacity, ResetFailureDeadline, ResetFailureLease, ResetFailureInvalid:
+		return true
+	}
+	return false
+}
+
+func (v ResetFailure) encode(w *codec.Writer) {
+	if !v.valid() {
+		w.Fail(codec.ErrBadEnum)
+		return
+	}
+	w.Varint(uint32(v))
+}
+
+func decodeResetFailure(r *codec.Reader) ResetFailure {
+	v := ResetFailure(r.Varint())
 	if r.Err() == nil && !v.valid() {
 		r.Fail(codec.ErrBadEnum)
 	}
@@ -1288,6 +1338,472 @@ func (f LookFields) appendText(b []byte) []byte {
 }
 
 func (v Look) String() string { return string(v.f.appendText(nil)) }
+
+type EntitySnapshotFields struct {
+	Id        EntityId
+	Transform Transform
+	Vitals    codec.Opt[Vitals]
+	Gear      codec.Opt[Gear]
+	Cast      codec.Opt[CastBar]
+	Look      codec.Opt[Look]
+}
+
+type EntitySnapshot struct {
+	f EntitySnapshotFields
+}
+
+func (f EntitySnapshotFields) Build() (EntitySnapshot, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return EntitySnapshot{}, err
+	}
+	return EntitySnapshot{f}, nil
+}
+
+func (v EntitySnapshot) Id() EntityId { return v.f.Id }
+
+func (v EntitySnapshot) Transform() Transform { return v.f.Transform }
+
+func (v EntitySnapshot) Vitals() codec.Opt[Vitals] { return v.f.Vitals }
+
+func (v EntitySnapshot) Gear() codec.Opt[Gear] { return v.f.Gear }
+
+func (v EntitySnapshot) Cast() codec.Opt[CastBar] { return v.f.Cast }
+
+func (v EntitySnapshot) Look() codec.Opt[Look] { return v.f.Look }
+
+func (f EntitySnapshotFields) encode(w *codec.Writer) {
+	encodeEntityId(w, f.Id)
+	f.Transform.f.encode(w)
+	if v, ok := f.Vitals.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Gear.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Cast.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+	if v, ok := f.Look.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+}
+
+func decodeEntitySnapshot(r *codec.Reader) EntitySnapshot {
+	var f EntitySnapshotFields
+	f.Id = decodeEntityId(r)
+	f.Transform = decodeTransform(r)
+	f.Vitals = codec.ReadOpt(r, func(r *codec.Reader) Vitals { return decodeVitals(r) })
+	f.Gear = codec.ReadOpt(r, func(r *codec.Reader) Gear { return decodeGear(r) })
+	f.Cast = codec.ReadOpt(r, func(r *codec.Reader) CastBar { return decodeCastBar(r) })
+	f.Look = codec.ReadOpt(r, func(r *codec.Reader) Look { return decodeLook(r) })
+	return EntitySnapshot{f}
+}
+
+func (f EntitySnapshotFields) appendText(b []byte) []byte {
+	b = append(b, "EntitySnapshot{id:"...)
+	b = appendEntityIdText(b, f.Id)
+	b = append(b, " transform:"...)
+	b = f.Transform.f.appendText(b)
+	b = append(b, " vitals:"...)
+	if v, ok := f.Vitals.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " gear:"...)
+	if v, ok := f.Gear.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " cast:"...)
+	if v, ok := f.Cast.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	b = append(b, " look:"...)
+	if v, ok := f.Look.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	return append(b, '}')
+}
+
+func (v EntitySnapshot) String() string { return string(v.f.appendText(nil)) }
+
+type MotionBaselineFields struct {
+	Stream         uint64
+	Epoch          uint64
+	Player         PlayerId
+	Tick           uint32
+	InputSeq       uint32
+	X              float32
+	Y              float32
+	Z              float32
+	Vy             float32
+	Dx             float32
+	Dz             float32
+	Grounded       bool
+	Mode           MotionMode
+	CastEnd        uint32
+	MapId          string
+	MapRevision    uint32
+	HalfExtent     float32
+	GroundY        float32
+	TickIntervalUs uint32
+}
+
+type MotionBaseline struct {
+	f MotionBaselineFields
+}
+
+func (f MotionBaselineFields) Build() (MotionBaseline, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return MotionBaseline{}, err
+	}
+	return MotionBaseline{f}, nil
+}
+
+func (v MotionBaseline) Stream() uint64 { return v.f.Stream }
+
+func (v MotionBaseline) Epoch() uint64 { return v.f.Epoch }
+
+func (v MotionBaseline) Player() PlayerId { return v.f.Player }
+
+func (v MotionBaseline) Tick() uint32 { return v.f.Tick }
+
+func (v MotionBaseline) InputSeq() uint32 { return v.f.InputSeq }
+
+func (v MotionBaseline) X() float32 { return v.f.X }
+
+func (v MotionBaseline) Y() float32 { return v.f.Y }
+
+func (v MotionBaseline) Z() float32 { return v.f.Z }
+
+func (v MotionBaseline) Vy() float32 { return v.f.Vy }
+
+func (v MotionBaseline) Dx() float32 { return v.f.Dx }
+
+func (v MotionBaseline) Dz() float32 { return v.f.Dz }
+
+func (v MotionBaseline) Grounded() bool { return v.f.Grounded }
+
+func (v MotionBaseline) Mode() MotionMode { return v.f.Mode }
+
+func (v MotionBaseline) CastEnd() uint32 { return v.f.CastEnd }
+
+func (v MotionBaseline) MapId() string { return v.f.MapId }
+
+func (v MotionBaseline) MapRevision() uint32 { return v.f.MapRevision }
+
+func (v MotionBaseline) HalfExtent() float32 { return v.f.HalfExtent }
+
+func (v MotionBaseline) GroundY() float32 { return v.f.GroundY }
+
+func (v MotionBaseline) TickIntervalUs() uint32 { return v.f.TickIntervalUs }
+
+func (f MotionBaselineFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	if w.Err() == nil && !(f.Stream >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U64(f.Epoch)
+	if w.Err() == nil && !(f.Epoch >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	f.Player.encode(w)
+	w.U32(f.Tick)
+	if w.Err() == nil && !(f.Tick <= 4294967294) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U32(f.InputSeq)
+	if w.Err() == nil && !(f.InputSeq <= 4294967294) {
+		w.Fail(codec.ErrRule)
+	}
+	w.F32(f.X)
+	w.F32(f.Y)
+	w.F32(f.Z)
+	w.F32(f.Vy)
+	w.F32(f.Dx)
+	w.F32(f.Dz)
+	w.Bool(f.Grounded)
+	f.Mode.encode(w)
+	w.U32(f.CastEnd)
+	if w.Err() == nil && !(f.CastEnd <= 4294967294) {
+		w.Fail(codec.ErrRule)
+	}
+	w.String(f.MapId, 64)
+	w.U32(f.MapRevision)
+	if w.Err() == nil && !(f.MapRevision >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	w.F32(f.HalfExtent)
+	w.F32(f.GroundY)
+	w.U32(f.TickIntervalUs)
+	if w.Err() == nil && !(f.TickIntervalUs >= 33334 && f.TickIntervalUs <= 50000) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeMotionBaseline(r *codec.Reader) MotionBaseline {
+	var f MotionBaselineFields
+	f.Stream = r.U64()
+	if r.Err() == nil && !(f.Stream >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Epoch = r.U64()
+	if r.Err() == nil && !(f.Epoch >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Player = decodePlayerId(r)
+	f.Tick = r.U32()
+	if r.Err() == nil && !(f.Tick <= 4294967294) {
+		r.Fail(codec.ErrRule)
+	}
+	f.InputSeq = r.U32()
+	if r.Err() == nil && !(f.InputSeq <= 4294967294) {
+		r.Fail(codec.ErrRule)
+	}
+	f.X = r.F32()
+	f.Y = r.F32()
+	f.Z = r.F32()
+	f.Vy = r.F32()
+	f.Dx = r.F32()
+	f.Dz = r.F32()
+	f.Grounded = r.Bool()
+	f.Mode = decodeMotionMode(r)
+	f.CastEnd = r.U32()
+	if r.Err() == nil && !(f.CastEnd <= 4294967294) {
+		r.Fail(codec.ErrRule)
+	}
+	f.MapId = r.String(64)
+	f.MapRevision = r.U32()
+	if r.Err() == nil && !(f.MapRevision >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.HalfExtent = r.F32()
+	f.GroundY = r.F32()
+	f.TickIntervalUs = r.U32()
+	if r.Err() == nil && !(f.TickIntervalUs >= 33334 && f.TickIntervalUs <= 50000) {
+		r.Fail(codec.ErrRule)
+	}
+	return MotionBaseline{f}
+}
+
+func (f MotionBaselineFields) appendText(b []byte) []byte {
+	b = append(b, "MotionBaseline{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " epoch:"...)
+	b = strconv.AppendUint(b, uint64(f.Epoch), 10)
+	b = append(b, " player:"...)
+	b = f.Player.appendText(b)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " input_seq:"...)
+	b = strconv.AppendUint(b, uint64(f.InputSeq), 10)
+	b = append(b, " x:"...)
+	b = strconv.AppendFloat(b, float64(f.X), 'g', -1, 32)
+	b = append(b, " y:"...)
+	b = strconv.AppendFloat(b, float64(f.Y), 'g', -1, 32)
+	b = append(b, " z:"...)
+	b = strconv.AppendFloat(b, float64(f.Z), 'g', -1, 32)
+	b = append(b, " vy:"...)
+	b = strconv.AppendFloat(b, float64(f.Vy), 'g', -1, 32)
+	b = append(b, " dx:"...)
+	b = strconv.AppendFloat(b, float64(f.Dx), 'g', -1, 32)
+	b = append(b, " dz:"...)
+	b = strconv.AppendFloat(b, float64(f.Dz), 'g', -1, 32)
+	b = append(b, " grounded:"...)
+	b = strconv.AppendBool(b, f.Grounded)
+	b = append(b, " mode:"...)
+	b = append(b, f.Mode.String()...)
+	b = append(b, " cast_end:"...)
+	b = strconv.AppendUint(b, uint64(f.CastEnd), 10)
+	b = append(b, " map_id:"...)
+	b = strconv.AppendQuoteToASCII(b, f.MapId)
+	b = append(b, " map_revision:"...)
+	b = strconv.AppendUint(b, uint64(f.MapRevision), 10)
+	b = append(b, " half_extent:"...)
+	b = strconv.AppendFloat(b, float64(f.HalfExtent), 'g', -1, 32)
+	b = append(b, " ground_y:"...)
+	b = strconv.AppendFloat(b, float64(f.GroundY), 'g', -1, 32)
+	b = append(b, " tick_interval_us:"...)
+	b = strconv.AppendUint(b, uint64(f.TickIntervalUs), 10)
+	return append(b, '}')
+}
+
+func (v MotionBaseline) String() string { return string(v.f.appendText(nil)) }
+
+type ResetCertificateFields struct {
+	Stream     uint64
+	Epoch      uint64
+	Lease      uint64
+	Baseline   uint64
+	Tick       uint32
+	EventEnd   uint64
+	NextIntent uint32
+	Parts      uint32
+	Entities   uint32
+}
+
+type ResetCertificate struct {
+	f ResetCertificateFields
+}
+
+func (f ResetCertificateFields) Build() (ResetCertificate, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return ResetCertificate{}, err
+	}
+	return ResetCertificate{f}, nil
+}
+
+func (v ResetCertificate) Stream() uint64 { return v.f.Stream }
+
+func (v ResetCertificate) Epoch() uint64 { return v.f.Epoch }
+
+func (v ResetCertificate) Lease() uint64 { return v.f.Lease }
+
+func (v ResetCertificate) Baseline() uint64 { return v.f.Baseline }
+
+func (v ResetCertificate) Tick() uint32 { return v.f.Tick }
+
+func (v ResetCertificate) EventEnd() uint64 { return v.f.EventEnd }
+
+func (v ResetCertificate) NextIntent() uint32 { return v.f.NextIntent }
+
+func (v ResetCertificate) Parts() uint32 { return v.f.Parts }
+
+func (v ResetCertificate) Entities() uint32 { return v.f.Entities }
+
+func (f ResetCertificateFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	if w.Err() == nil && !(f.Stream >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U64(f.Epoch)
+	if w.Err() == nil && !(f.Epoch >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U64(f.Lease)
+	if w.Err() == nil && !(f.Lease >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U64(f.Baseline)
+	if w.Err() == nil && !(f.Baseline >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U32(f.Tick)
+	if w.Err() == nil && !(f.Tick <= 4294967294) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U64(f.EventEnd)
+	if w.Err() == nil && !(f.EventEnd <= 18446744073709551614) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U32(f.NextIntent)
+	if w.Err() == nil && !(f.NextIntent >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U32(f.Parts)
+	if w.Err() == nil && !(f.Parts <= 1024) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U32(f.Entities)
+	if w.Err() == nil && !(f.Entities <= 100000) {
+		w.Fail(codec.ErrRule)
+	}
+	if w.Err() == nil && !(f.Parts <= f.Entities) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeResetCertificate(r *codec.Reader) ResetCertificate {
+	var f ResetCertificateFields
+	f.Stream = r.U64()
+	if r.Err() == nil && !(f.Stream >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Epoch = r.U64()
+	if r.Err() == nil && !(f.Epoch >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Lease = r.U64()
+	if r.Err() == nil && !(f.Lease >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Baseline = r.U64()
+	if r.Err() == nil && !(f.Baseline >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Tick = r.U32()
+	if r.Err() == nil && !(f.Tick <= 4294967294) {
+		r.Fail(codec.ErrRule)
+	}
+	f.EventEnd = r.U64()
+	if r.Err() == nil && !(f.EventEnd <= 18446744073709551614) {
+		r.Fail(codec.ErrRule)
+	}
+	f.NextIntent = r.U32()
+	if r.Err() == nil && !(f.NextIntent >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Parts = r.U32()
+	if r.Err() == nil && !(f.Parts <= 1024) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Entities = r.U32()
+	if r.Err() == nil && !(f.Entities <= 100000) {
+		r.Fail(codec.ErrRule)
+	}
+	if r.Err() == nil && !(f.Parts <= f.Entities) {
+		r.Fail(codec.ErrRule)
+	}
+	return ResetCertificate{f}
+}
+
+func (f ResetCertificateFields) appendText(b []byte) []byte {
+	b = append(b, "ResetCertificate{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " epoch:"...)
+	b = strconv.AppendUint(b, uint64(f.Epoch), 10)
+	b = append(b, " lease:"...)
+	b = strconv.AppendUint(b, uint64(f.Lease), 10)
+	b = append(b, " baseline:"...)
+	b = strconv.AppendUint(b, uint64(f.Baseline), 10)
+	b = append(b, " tick:"...)
+	b = strconv.AppendUint(b, uint64(f.Tick), 10)
+	b = append(b, " event_end:"...)
+	b = strconv.AppendUint(b, uint64(f.EventEnd), 10)
+	b = append(b, " next_intent:"...)
+	b = strconv.AppendUint(b, uint64(f.NextIntent), 10)
+	b = append(b, " parts:"...)
+	b = strconv.AppendUint(b, uint64(f.Parts), 10)
+	b = append(b, " entities:"...)
+	b = strconv.AppendUint(b, uint64(f.Entities), 10)
+	return append(b, '}')
+}
+
+func (v ResetCertificate) String() string { return string(v.f.appendText(nil)) }
 
 type InputFields struct {
 	Dx   float64
@@ -4932,6 +5448,418 @@ func (v OwnerMotion) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
+type EntityReplaceFields struct {
+	Entity EntitySnapshot
+}
+
+type EntityReplace struct {
+	f EntityReplaceFields
+}
+
+func (f EntityReplaceFields) Build() (EntityReplace, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return EntityReplace{}, err
+	}
+	return EntityReplace{f}, nil
+}
+
+func (v EntityReplace) Entity() EntitySnapshot { return v.f.Entity }
+
+func (f EntityReplaceFields) encode(w *codec.Writer) {
+	f.Entity.f.encode(w)
+}
+
+func decodeEntityReplace(r *codec.Reader) EntityReplace {
+	var f EntityReplaceFields
+	f.Entity = decodeEntitySnapshot(r)
+	return EntityReplace{f}
+}
+
+func (f EntityReplaceFields) appendText(b []byte) []byte {
+	b = append(b, "entity_replace{entity:"...)
+	b = f.Entity.f.appendText(b)
+	return append(b, '}')
+}
+
+func (v EntityReplace) String() string { return string(v.f.appendText(nil)) }
+
+func (EntityReplace) MessageID() uint32 { return 22 }
+
+func (EntityReplace) Channel() codec.Channel { return codec.ChannelState }
+
+func (EntityReplace) stateMsg() {}
+
+func (v EntityReplace) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(22)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type ResetBeginFields struct {
+	Certificate ResetCertificate
+	Motion      MotionBaseline
+}
+
+type ResetBegin struct {
+	f ResetBeginFields
+}
+
+func (f ResetBeginFields) Build() (ResetBegin, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return ResetBegin{}, err
+	}
+	return ResetBegin{f}, nil
+}
+
+func (v ResetBegin) Certificate() ResetCertificate { return v.f.Certificate }
+
+func (v ResetBegin) Motion() MotionBaseline { return v.f.Motion }
+
+func (f ResetBeginFields) encode(w *codec.Writer) {
+	f.Certificate.f.encode(w)
+	f.Motion.f.encode(w)
+	if w.Err() == nil && !(f.Motion.f.Stream == f.Certificate.f.Stream) {
+		w.Fail(codec.ErrRule)
+	}
+	if w.Err() == nil && !(f.Motion.f.Epoch == f.Certificate.f.Epoch) {
+		w.Fail(codec.ErrRule)
+	}
+	if w.Err() == nil && !(f.Motion.f.Tick == f.Certificate.f.Tick) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeResetBegin(r *codec.Reader) ResetBegin {
+	var f ResetBeginFields
+	f.Certificate = decodeResetCertificate(r)
+	f.Motion = decodeMotionBaseline(r)
+	if r.Err() == nil && !(f.Motion.f.Stream == f.Certificate.f.Stream) {
+		r.Fail(codec.ErrRule)
+	}
+	if r.Err() == nil && !(f.Motion.f.Epoch == f.Certificate.f.Epoch) {
+		r.Fail(codec.ErrRule)
+	}
+	if r.Err() == nil && !(f.Motion.f.Tick == f.Certificate.f.Tick) {
+		r.Fail(codec.ErrRule)
+	}
+	return ResetBegin{f}
+}
+
+func (f ResetBeginFields) appendText(b []byte) []byte {
+	b = append(b, "reset_begin{certificate:"...)
+	b = f.Certificate.f.appendText(b)
+	b = append(b, " motion:"...)
+	b = f.Motion.f.appendText(b)
+	return append(b, '}')
+}
+
+func (v ResetBegin) String() string { return string(v.f.appendText(nil)) }
+
+func (ResetBegin) MessageID() uint32 { return 144 }
+
+func (ResetBegin) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (ResetBegin) eventsMsg() {}
+
+func (v ResetBegin) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(144)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type ResetPartFields struct {
+	Certificate ResetCertificate
+	Index       uint32
+	Entities    []EntitySnapshot
+}
+
+type ResetPart struct {
+	f ResetPartFields
+}
+
+func (f ResetPartFields) Build() (ResetPart, error) {
+	f.Entities = codec.Clone(f.Entities)
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return ResetPart{}, err
+	}
+	return ResetPart{f}, nil
+}
+
+func (v ResetPart) Certificate() ResetCertificate { return v.f.Certificate }
+
+func (v ResetPart) Index() uint32 { return v.f.Index }
+
+func (v ResetPart) Entities() codec.List[EntitySnapshot] { return codec.ListOf(v.f.Entities) }
+
+func (f ResetPartFields) encode(w *codec.Writer) {
+	f.Certificate.f.encode(w)
+	w.U32(f.Index)
+	if w.Err() == nil && !(f.Index <= 1023) {
+		w.Fail(codec.ErrRule)
+	}
+	w.Count(len(f.Entities), 64)
+	for _, e := range f.Entities {
+		e.f.encode(w)
+	}
+	if w.Err() == nil && !codec.Unique(len(f.Entities), func(i, j int) bool { return f.Entities[i].f.Id == f.Entities[j].f.Id }) {
+		w.Fail(codec.ErrRule)
+	}
+	if w.Err() == nil && !(f.Index < f.Certificate.f.Parts) {
+		w.Fail(codec.ErrRule)
+	}
+}
+
+func decodeResetPart(r *codec.Reader) ResetPart {
+	var f ResetPartFields
+	f.Certificate = decodeResetCertificate(r)
+	f.Index = r.U32()
+	if r.Err() == nil && !(f.Index <= 1023) {
+		r.Fail(codec.ErrRule)
+	}
+	if n := r.Count(64, 19); n > 0 {
+		f.Entities = make([]EntitySnapshot, n)
+		for i := range f.Entities {
+			f.Entities[i] = decodeEntitySnapshot(r)
+		}
+	}
+	if r.Err() == nil && !codec.Unique(len(f.Entities), func(i, j int) bool { return f.Entities[i].f.Id == f.Entities[j].f.Id }) {
+		r.Fail(codec.ErrRule)
+	}
+	if r.Err() == nil && !(f.Index < f.Certificate.f.Parts) {
+		r.Fail(codec.ErrRule)
+	}
+	return ResetPart{f}
+}
+
+func (f ResetPartFields) appendText(b []byte) []byte {
+	b = append(b, "reset_part{certificate:"...)
+	b = f.Certificate.f.appendText(b)
+	b = append(b, " index:"...)
+	b = strconv.AppendUint(b, uint64(f.Index), 10)
+	b = append(b, " entities:"...)
+	b = append(b, '[')
+	for i, e := range f.Entities {
+		if i > 0 {
+			b = append(b, ' ')
+		}
+		b = e.f.appendText(b)
+	}
+	b = append(b, ']')
+	return append(b, '}')
+}
+
+func (v ResetPart) String() string { return string(v.f.appendText(nil)) }
+
+func (ResetPart) MessageID() uint32 { return 145 }
+
+func (ResetPart) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (ResetPart) eventsMsg() {}
+
+func (v ResetPart) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(145)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type ResetCloseFields struct {
+	Certificate ResetCertificate
+}
+
+type ResetClose struct {
+	f ResetCloseFields
+}
+
+func (f ResetCloseFields) Build() (ResetClose, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return ResetClose{}, err
+	}
+	return ResetClose{f}, nil
+}
+
+func (v ResetClose) Certificate() ResetCertificate { return v.f.Certificate }
+
+func (f ResetCloseFields) encode(w *codec.Writer) {
+	f.Certificate.f.encode(w)
+}
+
+func decodeResetClose(r *codec.Reader) ResetClose {
+	var f ResetCloseFields
+	f.Certificate = decodeResetCertificate(r)
+	return ResetClose{f}
+}
+
+func (f ResetCloseFields) appendText(b []byte) []byte {
+	b = append(b, "reset_close{certificate:"...)
+	b = f.Certificate.f.appendText(b)
+	return append(b, '}')
+}
+
+func (v ResetClose) String() string { return string(v.f.appendText(nil)) }
+
+func (ResetClose) MessageID() uint32 { return 146 }
+
+func (ResetClose) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (ResetClose) eventsMsg() {}
+
+func (v ResetClose) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(146)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type ResetUnavailableFields struct {
+	Stream uint64
+	Epoch  uint64
+	Lease  uint64
+	Reason ResetFailure
+}
+
+type ResetUnavailable struct {
+	f ResetUnavailableFields
+}
+
+func (f ResetUnavailableFields) Build() (ResetUnavailable, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return ResetUnavailable{}, err
+	}
+	return ResetUnavailable{f}, nil
+}
+
+func (v ResetUnavailable) Stream() uint64 { return v.f.Stream }
+
+func (v ResetUnavailable) Epoch() uint64 { return v.f.Epoch }
+
+func (v ResetUnavailable) Lease() uint64 { return v.f.Lease }
+
+func (v ResetUnavailable) Reason() ResetFailure { return v.f.Reason }
+
+func (f ResetUnavailableFields) encode(w *codec.Writer) {
+	w.U64(f.Stream)
+	if w.Err() == nil && !(f.Stream >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U64(f.Epoch)
+	if w.Err() == nil && !(f.Epoch >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	w.U64(f.Lease)
+	if w.Err() == nil && !(f.Lease >= 1) {
+		w.Fail(codec.ErrRule)
+	}
+	f.Reason.encode(w)
+}
+
+func decodeResetUnavailable(r *codec.Reader) ResetUnavailable {
+	var f ResetUnavailableFields
+	f.Stream = r.U64()
+	if r.Err() == nil && !(f.Stream >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Epoch = r.U64()
+	if r.Err() == nil && !(f.Epoch >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Lease = r.U64()
+	if r.Err() == nil && !(f.Lease >= 1) {
+		r.Fail(codec.ErrRule)
+	}
+	f.Reason = decodeResetFailure(r)
+	return ResetUnavailable{f}
+}
+
+func (f ResetUnavailableFields) appendText(b []byte) []byte {
+	b = append(b, "reset_unavailable{stream:"...)
+	b = strconv.AppendUint(b, uint64(f.Stream), 10)
+	b = append(b, " epoch:"...)
+	b = strconv.AppendUint(b, uint64(f.Epoch), 10)
+	b = append(b, " lease:"...)
+	b = strconv.AppendUint(b, uint64(f.Lease), 10)
+	b = append(b, " reason:"...)
+	b = append(b, f.Reason.String()...)
+	return append(b, '}')
+}
+
+func (v ResetUnavailable) String() string { return string(v.f.appendText(nil)) }
+
+func (ResetUnavailable) MessageID() uint32 { return 147 }
+
+func (ResetUnavailable) Channel() codec.Channel { return codec.ChannelEvents }
+
+func (ResetUnavailable) eventsMsg() {}
+
+func (v ResetUnavailable) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(147)
+	v.f.encode(&w)
+	return w.Result()
+}
+
+type ResetCommitFields struct {
+	Certificate ResetCertificate
+}
+
+type ResetCommit struct {
+	f ResetCommitFields
+}
+
+func (f ResetCommitFields) Build() (ResetCommit, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return ResetCommit{}, err
+	}
+	return ResetCommit{f}, nil
+}
+
+func (v ResetCommit) Certificate() ResetCertificate { return v.f.Certificate }
+
+func (f ResetCommitFields) encode(w *codec.Writer) {
+	f.Certificate.f.encode(w)
+}
+
+func decodeResetCommit(r *codec.Reader) ResetCommit {
+	var f ResetCommitFields
+	f.Certificate = decodeResetCertificate(r)
+	return ResetCommit{f}
+}
+
+func (f ResetCommitFields) appendText(b []byte) []byte {
+	b = append(b, "reset_commit{certificate:"...)
+	b = f.Certificate.f.appendText(b)
+	return append(b, '}')
+}
+
+func (v ResetCommit) String() string { return string(v.f.appendText(nil)) }
+
+func (ResetCommit) MessageID() uint32 { return 279 }
+
+func (ResetCommit) Channel() codec.Channel { return codec.ChannelIntents }
+
+func (ResetCommit) intentsMsg() {}
+
+func (v ResetCommit) Append(dst []byte) ([]byte, error) {
+	w := codec.NewWriter(dst)
+	w.Varint(279)
+	v.f.encode(&w)
+	return w.Result()
+}
+
 func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 	var m StateMsg
 	switch r.Varint() {
@@ -4951,6 +5879,8 @@ func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 		m = decodeGatherStart(r)
 	case 21:
 		m = decodeOwnerMotion(r)
+	case 22:
+		m = decodeEntityReplace(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
 	}
@@ -5007,6 +5937,14 @@ func DecodeNextEvents(r *codec.Reader) (EventsMsg, error) {
 		m = decodePartyClear(r)
 	case 143:
 		m = decodeInviteClear(r)
+	case 144:
+		m = decodeResetBegin(r)
+	case 145:
+		m = decodeResetPart(r)
+	case 146:
+		m = decodeResetClose(r)
+	case 147:
+		m = decodeResetUnavailable(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
 	}
@@ -5103,6 +6041,8 @@ func DecodeNextIntents(r *codec.Reader) (IntentsMsg, error) {
 		m = decodeCastPlayer(r)
 	case 278:
 		m = decodeCastNpc(r)
+	case 279:
+		m = decodeResetCommit(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
 	}

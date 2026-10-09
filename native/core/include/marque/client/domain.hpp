@@ -61,7 +61,15 @@ struct Publication {
     std::size_t retained_bytes;
 };
 
-enum class DomainError { malformed, identity, sequence, cursor, state_count, capacity, world, recovery_required };
+enum class DomainError { malformed, identity, sequence, cursor, state_count, capacity, world, recovery_required, unavailable, deadline };
+enum class DomainPhase { live, reset_pending, unavailable };
+struct ResetLimits {
+    std::size_t parts = 1024;
+    std::size_t entities = 4096;
+    std::size_t encoded_bytes = 4*1024*1024;
+    std::size_t decoded_bytes = 8*1024*1024;
+    std::int64_t timeout_us = 30000000;
+};
 struct DomainLimits {
     std::size_t slices = 256;
     std::size_t boundaries = 256;
@@ -78,6 +86,25 @@ class Assembler {
     std::size_t bytes_ = 0;
     DomainLimits limits_;
     world::Applier<Catalog, Events> world_;
+    struct ResetStage {
+        std::optional<wire::ResetBegin> begin;
+        std::vector<std::optional<wire::ResetPart>> parts;
+        std::size_t encoded_bytes = 0;
+        bool closed = false;
+        world::Time received{};
+    };
+    ResetLimits reset_limits_;
+    DomainPhase phase_ = DomainPhase::live;
+    std::uint64_t lease_ = 0;
+    wire::PlayerId player_{};
+    world::Time lease_started_{};
+    std::optional<ResetStage> reset_;
+    std::optional<wire::ResetCertificate> committed_reset_;
+    std::vector<std::uint8_t> reset_commit_;
+    bool reset_commit_pending_ = false;
+    std::optional<wire::ResetFailure> unavailable_;
+    std::expected<void, DomainError> reset_unavailable(wire::ResetFailure reason, DomainError error);
+    std::expected<void, DomainError> receive_reset(const std::vector<wire::EventsMsg>& messages, world::Time now);
     std::uint64_t stream_ = 0;
     std::uint64_t epoch_ = 0;
     std::uint64_t applied_ = 0;
@@ -91,6 +118,14 @@ public:
     static Assembler create(DomainLimits limits = {});
     std::expected<void, DomainError> receive(const transport::Received& packet, world::Time now);
     using ValidatePublication=std::function<std::expected<void,DomainError>(const Events&,world::Tick)>;
+    std::expected<void, DomainError> replace_lease(std::uint64_t stream, std::uint64_t epoch, std::uint64_t lease, wire::PlayerId player, world::Time now, ResetLimits limits = {});
+    std::expected<void, DomainError> advance_reset(world::Time now);
+    DomainPhase phase() const { return phase_; }
+    std::optional<wire::ResetFailure> unavailable_reason() const { return unavailable_; }
+    std::optional<std::vector<std::uint8_t>> take_reset_commit();
+private:
+    std::expected<std::optional<Publication>, DomainError> publish_reset(std::size_t available_bytes,const ValidatePublication& validate);
+public:
     std::expected<std::optional<Publication>, DomainError> publish(std::size_t available_bytes,const ValidatePublication& validate={});
     std::shared_ptr<const Tick> latest() const { return world_.reader().latest(); }
     void admitted_frontier(std::uint32_t next) { frontier_ = next; }

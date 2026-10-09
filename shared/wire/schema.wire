@@ -477,3 +477,89 @@ message owner_motion = 21 on state s2c {
   ground_y f32
   tick_interval_us u32 where 33334..50000
 }
+
+struct EntitySnapshot {
+  id EntityId
+  transform Transform
+  vitals opt(Vitals)
+  gear opt(Gear)
+  cast opt(CastBar)
+  look opt(Look)
+}
+
+message entity_replace = 22 on state s2c {
+  entity EntitySnapshot
+}
+
+struct MotionBaseline {
+  stream u64 where 1..18446744073709551615
+  epoch u64 where 1..18446744073709551615
+  player PlayerId
+  tick u32 where 0..4294967294
+  input_seq u32 where 0..4294967294
+  x f32
+  y f32
+  z f32
+  vy f32
+  dx f32
+  dz f32
+  grounded bool
+  mode MotionMode
+  cast_end u32 where 0..4294967294
+  map_id string(64)
+  map_revision u32 where 1..4294967295
+  half_extent f32
+  ground_y f32
+  tick_interval_us u32 where 33334..50000
+}
+
+struct ResetCertificate {
+  stream u64 where 1..18446744073709551615
+  epoch u64 where 1..18446744073709551615
+  lease u64 where 1..18446744073709551615
+  baseline u64 where 1..18446744073709551615
+  tick u32 where 0..4294967294
+  event_end u64 where 0..18446744073709551614
+  next_intent u32 where 1..4294967295
+  parts u32 where 0..1024
+  entities u32 where 0..100000
+  rule parts <= entities
+}
+
+message reset_begin = 144 on events s2c {
+  certificate ResetCertificate
+  motion MotionBaseline
+  rule motion.stream == certificate.stream
+  rule motion.epoch == certificate.epoch
+  rule motion.tick == certificate.tick
+}
+
+message reset_part = 145 on events s2c {
+  certificate ResetCertificate
+  index u32 where 0..1023
+  entities list(EntitySnapshot, 64) where unique(id)
+  rule index < certificate.parts
+}
+
+message reset_close = 146 on events s2c {
+  certificate ResetCertificate
+}
+
+enum ResetFailure {
+  history = 1
+  capacity = 2
+  deadline = 3
+  lease = 4
+  invalid = 5
+}
+
+message reset_unavailable = 147 on events s2c {
+  stream u64 where 1..18446744073709551615
+  epoch u64 where 1..18446744073709551615
+  lease u64 where 1..18446744073709551615
+  reason ResetFailure
+}
+
+message reset_commit = 279 on intents c2s {
+  certificate ResetCertificate
+}

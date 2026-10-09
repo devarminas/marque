@@ -45,6 +45,13 @@ Assembler Assembler::create(DomainLimits limits) {
 }
 
 std::expected<void, DomainError> Assembler::receive(const transport::Received& packet, world::Time now) {
+    if (phase_ == DomainPhase::unavailable) return std::unexpected(DomainError::unavailable);
+    std::size_t incoming=0;
+    if (packet.reliable.size()>256) return std::unexpected(DomainError::capacity);
+    for (const auto& bytes:packet.reliable) {
+        if (bytes.size()>65536 || bytes.size()>limits_.staged_bytes || incoming>limits_.staged_bytes-bytes.size()) return std::unexpected(DomainError::capacity);
+        incoming+=bytes.size();
+    }
     std::optional<Slice> slice;
     std::vector<wire::EventsMsg> reliable;
     std::size_t added=0;
@@ -64,6 +71,10 @@ std::expected<void, DomainError> Assembler::receive(const transport::Received& p
         if (!record) return std::unexpected(DomainError::malformed);
         reliable.push_back(std::move(*record));
     }
+    if (phase_ == DomainPhase::reset_pending) {
+        if (packet.unreliable && !packet.unreliable->items.empty()) return std::unexpected(DomainError::recovery_required);
+        return receive_reset(reliable, now);
+    }
     if (added>limits_.staged_bytes || bytes_>limits_.staged_bytes-added)
         return std::unexpected(DomainError::capacity);
     if (slice && slices_.contains(packet.unreliable->stamp)) return std::unexpected(DomainError::sequence);
@@ -74,10 +85,16 @@ std::expected<void, DomainError> Assembler::receive(const transport::Received& p
     std::vector<OwnerEvent> facts;
     std::vector<wire::TickClose> closes;
     std::size_t message_index=0;
+    bool duplicate_reset_commit=false;
     for (const auto& message:reliable) {
         auto valid=std::visit([&](const auto& value) -> std::expected<void,DomainError> {
             using T=std::decay_t<decltype(value)>;
-            if constexpr (std::is_same_v<T,wire::ResumeBoundary>) return std::unexpected(DomainError::recovery_required);
+            if constexpr (std::is_same_v<T,wire::ResetClose>) {
+                if (!committed_reset_ || value.certificate() != *committed_reset_) return std::unexpected(DomainError::identity);
+                duplicate_reset_commit = true;
+                return {};
+            } else if constexpr (std::is_same_v<T,wire::ResetBegin> || std::is_same_v<T,wire::ResetPart> || std::is_same_v<T,wire::ResetUnavailable>) return std::unexpected(DomainError::recovery_required);
+            else if constexpr (std::is_same_v<T,wire::ResumeBoundary>) return std::unexpected(DomainError::recovery_required);
             else {
                 if (!value.stream() || (next_stream && value.stream()!=next_stream))
                     return std::unexpected(DomainError::identity);
@@ -122,10 +139,13 @@ std::expected<void, DomainError> Assembler::receive(const transport::Received& p
     stream_=next_stream;
     epoch_=next_epoch;
     received_=next_received;
+    reset_commit_pending_ = reset_commit_pending_ || duplicate_reset_commit;
     return {};
 }
 
 std::expected<std::optional<Publication>, DomainError> Assembler::publish(std::size_t available_bytes,const ValidatePublication& validate) {
+    if (phase_ == DomainPhase::unavailable) return std::unexpected(DomainError::unavailable);
+    if (phase_ == DomainPhase::reset_pending) return publish_reset(available_bytes, validate);
     auto chosen=boundaries_.end();
     for (auto it=boundaries_.begin();it!=boundaries_.end();++it) {
         const auto slice=slices_.find(it->tick());
@@ -169,7 +189,13 @@ std::expected<std::optional<Publication>, DomainError> Assembler::publish(std::s
         for (const auto& record:slice.records) {
             auto valid=std::visit([&](const auto& value) -> bool {
                 using T=std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T,wire::Entity> || std::is_same_v<T,wire::Gone>) {
+                if constexpr (std::is_same_v<T,wire::EntityReplace>) {
+                    const auto& full = value.entity();
+                    const auto id = entity(full.id());
+                    auto& row = load(id);
+                    if (world::generation(id) < world::generation(row.id)) return true;
+                    row = Row{id,true,true,{full.transform(),full.vitals(),full.gear(),full.cast(),full.look()}};
+                } else if constexpr (std::is_same_v<T,wire::Entity> || std::is_same_v<T,wire::Gone>) {
                     const auto id=entity(value.id());
                     auto& row=load(id);
                     if (world::generation(id)<world::generation(row.id)) return true;

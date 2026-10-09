@@ -159,7 +159,7 @@ bool Session::admit(std::span<const std::uint8_t> bytes, std::uint64_t now) {
   const bool valid = std::visit(
       [&](const auto &value) {
         using M = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<M, wire::ApplicationCommit>)
+        if constexpr (std::is_same_v<M, wire::ApplicationCommit> || std::is_same_v<M, wire::ResetCommit>)
           return false;
         else
           return value.seq() == next_intent_;

@@ -107,7 +107,7 @@ std::expected<Replay, Error> Replay::load(const std::filesystem::path &path) {
           record.payload.size() > transport::kMaxMessage)
         return std::unexpected(Error::command);
       auto value = wire::decode_intents(record.payload);
-      if (!value || std::holds_alternative<wire::ApplicationCommit>(*value))
+      if (!value || std::holds_alternative<wire::ApplicationCommit>(*value) || std::holds_alternative<wire::ResetCommit>(*value))
         return std::unexpected(Error::command);
     } else if (record.kind == Kind::input) {
       if (record.payload.size() != 17)
