@@ -68,7 +68,7 @@ struct Fixture {
         }
         auto peer=transport::session_seal(transport::Role::server,keys(1));
         server=must(transport::Endpoint::create(transport::Role::server,transport::default_config(wire::schema_hash),std::move(peer.opener),std::move(peer.sealer),400000));
-        transport::Unreliable state{10,{bytes(*wire::EntityReplace::build({row(0)})),bytes(owner(1,10,0,0,sampled ? 0 : 1))}};
+        transport::Unreliable state{10,{bytes(*client::complete_entity(row(0))),bytes(owner(1,10,0,0,sampled ? 0 : 1))}};
         check(server->send(bytes(*wire::Inventory::build({88,1,9,28,{*wire::BagEntry::build({0,"sword"})}}))).has_value() &&
             server->send(bytes(*wire::TickClose::build({88,1,10,1,2,1}))).has_value(),"cold real owner prefix and close queued");
         auto packets=server->flush(400000,state);

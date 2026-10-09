@@ -50,7 +50,7 @@ func TestInterestStopsAtCellBorders(t *testing.T) {
 	f = wolves(32)
 	f.Tick = 2
 	items := l.step(f, Focus{}, true)
-	entering := `entity{id:NpcId(8/0) transform:Transform{x:95.99 y:0 z:0.5} vitals:Vitals{hp:100 max_hp:100 mana:10 max_mana:10} gear:_ cast:CastBar{casting:_} look:Look{kind:"wolf"}}`
+	entering := `entity{id:NpcId(8/0) transform:Transform{x:95.99 y:0 z:0.5} vitals:VitalsUpdate{value:Vitals{hp:100 max_hp:100 mana:10 max_mana:10}} gear:GearUpdate{value:_} cast:CastUpdate{value:CastBar{casting:_}} look:LookUpdate{value:Look{kind:"wolf"}}}`
 	if !slices.Contains(items, entering) {
 		t.Fatalf("entering wolf 8 lacks a component: %v", items)
 	}
@@ -88,14 +88,14 @@ func TestDeltasFollowTheAcknowledgedTick(t *testing.T) {
 		want    []string
 	}{
 		{frame(1, 5, 100), true, true, []string{
-			`entity{id:PlayerId(1/0) transform:Transform{x:0 y:0 z:0} vitals:Vitals{hp:100 max_hp:100 mana:10 max_mana:10} gear:Gear{helmet:_ chest:_ trousers:_ feet:_ left_hand:_ right_hand:"sword"} cast:CastBar{casting:_} look:_}`,
-			`entity{id:NpcId(9/0) transform:Transform{x:5 y:0 z:0} vitals:Vitals{hp:100 max_hp:100 mana:10 max_mana:10} gear:_ cast:CastBar{casting:_} look:Look{kind:"wolf"}}`,
+			`entity{id:PlayerId(1/0) transform:Transform{x:0 y:0 z:0} vitals:VitalsUpdate{value:Vitals{hp:100 max_hp:100 mana:10 max_mana:10}} gear:GearUpdate{value:Gear{helmet:_ chest:_ trousers:_ feet:_ left_hand:_ right_hand:"sword"}} cast:CastUpdate{value:CastBar{casting:_}} look:LookUpdate{value:_}}`,
+			`entity{id:NpcId(9/0) transform:Transform{x:5 y:0 z:0} vitals:VitalsUpdate{value:Vitals{hp:100 max_hp:100 mana:10 max_mana:10}} gear:GearUpdate{value:_} cast:CastUpdate{value:CastBar{casting:_}} look:LookUpdate{value:Look{kind:"wolf"}}}`,
 		}},
 		{frame(2, 6, 100), false, false, []string{
 			`entity{id:NpcId(9/0) transform:Transform{x:6 y:0 z:0} vitals:_ gear:_ cast:_ look:_}`,
 		}},
 		{frame(3, 6, 90), true, true, []string{
-			`entity{id:NpcId(9/0) transform:Transform{x:6 y:0 z:0} vitals:Vitals{hp:90 max_hp:100 mana:10 max_mana:10} gear:_ cast:_ look:_}`,
+			`entity{id:NpcId(9/0) transform:Transform{x:6 y:0 z:0} vitals:VitalsUpdate{value:Vitals{hp:90 max_hp:100 mana:10 max_mana:10}} gear:_ cast:_ look:_}`,
 		}},
 		{frame(4, 6, 90), true, false, nil},
 		{frame(5, 7, 90), true, true, []string{
@@ -236,7 +236,7 @@ func TestBoundaryTransformSnapsBeforeValidationAndRebuildsInsideEntity(t *testin
 	got := l.step(Frame{Tick: 1, Entities: []Entity{
 		Player(me, edge, vitals(100), must(wire.GearFields{}.Build()), idle()),
 	}}, Focus{}, true)
-	want := []string{`entity{id:PlayerId(1/0) transform:Transform{x:4096 y:-4096 z:-4096} vitals:Vitals{hp:100 max_hp:100 mana:10 max_mana:10} gear:Gear{helmet:_ chest:_ trousers:_ feet:_ left_hand:_ right_hand:_} cast:CastBar{casting:_} look:_}`}
+	want := []string{`entity{id:PlayerId(1/0) transform:Transform{x:4096 y:-4096 z:-4096} vitals:VitalsUpdate{value:Vitals{hp:100 max_hp:100 mana:10 max_mana:10}} gear:GearUpdate{value:Gear{helmet:_ chest:_ trousers:_ feet:_ left_hand:_ right_hand:_}} cast:CastUpdate{value:CastBar{casting:_}} look:LookUpdate{value:_}}`}
 	if !slices.Equal(got, want) {
 		t.Fatalf("entity at the pos grid edges:\ngot  %v\nwant %v", got, want)
 	}
@@ -294,7 +294,7 @@ func TestSkippedEntitiesGainPriorityUntilSent(t *testing.T) {
 	}
 	got := fmt.Sprintf("sent=%d target_gap=%d mate_gap=%d worst_gap=%d worst=%s per_tick=%v",
 		len(gap), gap["entity{id:NpcId(150/0)"], gap["entity{id:PlayerId(2/0)"], worst, worstID, perTick)
-	want := "sent=152 target_gap=2 mate_gap=3 worst_gap=7 worst=entity{id:NpcId(114/0) per_tick=map[24:1 25:3 26:1 30:1 35:1 48:2 49:51]"
+	want := "sent=152 target_gap=2 mate_gap=3 worst_gap=8 worst=entity{id:NpcId(119/0) per_tick=map[22:1 23:4 24:1 32:1 41:1 48:4 49:48]"
 	if got != want {
 		t.Fatalf("crowd of 150 wolves over %d ticks:\ngot  %s\nwant %s", ticks, got, want)
 	}
@@ -360,7 +360,7 @@ func TestPackedCrowdPayloadFitsOneDatagram(t *testing.T) {
 		sizes = append(sizes, fmt.Sprintf("%d/%d", len(u.Items), len(fl.Datagrams[0])))
 	}
 	got := strings.Join(sizes, " ")
-	want := "11/1132 15/1144 15/1136 15/1144 15/1144 15/1144 15/1136 15/1144 15/1144 15/1144 15/1144 15/1144 15/1144 15/1144 15/1136 15/1144 15/1144 15/1144 15/1144 15/1144"
+	want := "11/1140 15/1148 15/1140 15/1148 15/1148 15/1148 15/1140 15/1148 15/1148 15/1148 15/1148 15/1148 15/1148 15/1148 15/1140 15/1148 15/1148 15/1148 15/1148 15/1148"
 	if got != want {
 		t.Fatalf("items/datagram bytes per tick:\ngot  %s\nwant %s", got, want)
 	}
@@ -451,9 +451,9 @@ func TestMinimumBudgetStillSendsRemovalsAndEntities(t *testing.T) {
 		l.ack()
 	}
 	want := []string{
-		"1:gone=0 entities=8", "2:gone=0 entities=9", "3:gone=0 entities=9", "4:gone=0 entities=11",
-		"5:gone=0 entities=9", "6:gone=0 entities=11", "7:gone=0 entities=13", "8:gone=0 entities=13",
-		"9:gone=13 entities=10", "10:gone=13 entities=10", "11:gone=13 entities=10", "12:gone=2 entities=10",
+		"1:gone=0 entities=8", "2:gone=0 entities=8", "3:gone=0 entities=8", "4:gone=0 entities=12",
+		"5:gone=0 entities=8", "6:gone=0 entities=10", "7:gone=0 entities=12", "8:gone=0 entities=15",
+		"9:gone=13 entities=10", "10:gone=13 entities=10", "11:gone=13 entities=10", "12:gone=0 entities=10",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("budget %d:\ngot\n%s\nwant\n%s", cfg.Budget, strings.Join(got, "\n"), strings.Join(want, "\n"))

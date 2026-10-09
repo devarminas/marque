@@ -14,7 +14,7 @@ wire::Entity player(std::uint32_t generation,double x,bool vitals=true){
     wire::EntityFields fields;
     fields.id=wire::PlayerId{7,generation};
     fields.transform=*wire::Transform::build({x,2,3});
-    if(vitals) fields.vitals=*wire::Vitals::build({90,100,10,20});
+    if(vitals) fields.vitals=*wire::VitalsUpdate::build({*wire::Vitals::build({90,100,10,20})});
     return *wire::Entity::build(std::move(fields));
 }
 transport::Received slice(std::uint32_t tick,std::vector<std::vector<std::uint8_t>> items){
@@ -56,7 +56,7 @@ int main(){
     close(core,4,1,1,2);
     check(core.publish(128*1024*1024)->has_value(),"gone published");
     check(!core.latest()->world().contains(world::Player{7,1}),"gone hidden");
-    auto stale=wire::Entity::build({wire::PlayerId{7,1},{},*wire::Vitals::build({1,100,0,20}),{},{},{}});
+    auto stale=wire::Entity::build({wire::PlayerId{7,1},{},*wire::VitalsUpdate::build({*wire::Vitals::build({1,100,0,20})}),{},{},{}});
     check(core.receive(slice(5,{bytes(*stale)}),{200000}).has_value(),"retired stale partial accepted for generation fence");
     close(core,5,1,1,2);
     check(core.publish(128*1024*1024)->has_value(),"stale partial does not resurrect");
@@ -114,6 +114,69 @@ int main(){
           motion_atomic.latest()->events().next_intent==1 && !motion_atomic.latest()->events().owner->inventory &&
           motion_atomic.latest()->world().table<wire::Transform>().find(world::Player{7,1})->x()==1 &&
           motion_atomic.staged_bytes()==staged_bad_motion,"invalid motion preserves world owner cursor and staged transaction");
+    {
+        const auto id=wire::PlayerId{7,1};
+        const auto full=*wire::EntitySnapshot::build({id,*wire::Transform::build({1,2,3}),
+            *wire::Vitals::build({90,100,10,20}),*wire::Gear::build({{},{},{},{},{} ,"sword"}),
+            *wire::CastBar::build({*wire::Casting::build({"fireball",1,38})}),*wire::Look::build({"human"})});
+        for(int component=0;component<4;++component){
+            auto operations=client::Assembler::create();
+            check(operations.receive(slice(1,{bytes(*client::complete_entity(full))}),{40000}).has_value(),"complete Entity bytes stage");
+            close(operations,1,0,1);check(operations.publish(128*1024*1024)->has_value(),"complete Entity publishes");
+            const auto pin=operations.latest();
+            wire::EntityFields patch;patch.id=id;
+            if(component==0) patch.vitals=*wire::VitalsUpdate::build({});
+            if(component==1) patch.gear=*wire::GearUpdate::build({});
+            if(component==2) patch.cast=*wire::CastUpdate::build({});
+            if(component==3) patch.look=*wire::LookUpdate::build({});
+            check(operations.receive(slice(2,{bytes(*wire::Entity::build(patch))}),{80000}).has_value(),"clear-only Entity bytes stage");
+            close(operations,2,0,1);check(operations.publish(128*1024*1024)->has_value(),"clear-only Entity publishes");
+            const auto& after=operations.latest()->world();
+            check(bool(after.table<wire::Vitals>().find(world::Player{7,1}))==(component!=0) &&
+                bool(after.table<wire::Gear>().find(world::Player{7,1}))==(component!=1) &&
+                bool(after.table<wire::CastBar>().find(world::Player{7,1}))==(component!=2) &&
+                bool(after.table<wire::Look>().find(world::Player{7,1}))==(component!=3),"clear changes exactly selected outer column");
+            check(after.table<wire::Transform>().find(world::Player{7,1})->x()==1 &&
+                pin->world().table<wire::Vitals>().find(world::Player{7,1})->hp()==90 &&
+                pin->world().table<wire::Gear>().find(world::Player{7,1})->right_hand()==std::optional<std::string>{"sword"} &&
+                pin->world().table<wire::CastBar>().find(world::Player{7,1})->casting() &&
+                pin->world().table<wire::Look>().find(world::Player{7,1})->kind()=="human","immutable pin retains complete literal row");
+            check(operations.receive(slice(3,{bytes(*wire::Entity::build({id,{},{},{},{},{}}))}),{120000}).has_value(),"omitted operations stage");
+            close(operations,3,0,1);check(operations.publish(128*1024*1024)->has_value(),"omitted operations publish without restoring cleared column");
+            check(bool(operations.latest()->world().table<wire::Vitals>().find(world::Player{7,1}))==(component!=0) &&
+                bool(operations.latest()->world().table<wire::Gear>().find(world::Player{7,1}))==(component!=1) &&
+                bool(operations.latest()->world().table<wire::CastBar>().find(world::Player{7,1}))==(component!=2) &&
+                bool(operations.latest()->world().table<wire::Look>().find(world::Player{7,1}))==(component!=3),"omitted operations preserve exact presence");
+        }
+        auto empty=client::Assembler::create();
+        check(empty.receive(slice(1,{bytes(*wire::Entity::build({id,{},{},*wire::GearUpdate::build({}),{}, {}}))}),{40000}).has_value(),"missing Transform clear stages");
+        close(empty,1,0,1);check(!empty.publish(128*1024*1024) && !empty.latest(),"clear-only row cannot create visible entry");
+        auto hidden=client::Assembler::create();
+        check(hidden.receive(slice(1,{bytes(*client::complete_entity(full))}),{40000}).has_value(),"generation fence full row stages");
+        close(hidden,1,0,1);check(hidden.publish(128*1024*1024)->has_value(),"generation fence full row publishes");
+        check(hidden.receive(slice(2,{bytes(*wire::Gone::build({id}))}),{80000}).has_value(),"generation fence Gone stages");
+        close(hidden,2,0,1);check(hidden.publish(128*1024*1024)->has_value(),"generation fence Gone publishes");
+        check(hidden.receive(slice(3,{bytes(*wire::Entity::build({id,{},{},{},*wire::CastUpdate::build({}),{}}))}),{120000}).has_value(),"hidden same-generation clear stages");
+        close(hidden,3,0,1);check(hidden.publish(128*1024*1024)->has_value() && !hidden.latest()->world().contains(world::Player{7,1}),"clear-only update cannot resurrect hidden row");
+        const auto hidden_pin=hidden.latest();
+        check(hidden.receive(slice(4,{bytes(*wire::Entity::build({wire::PlayerId{7,2},{},{},{},*wire::CastUpdate::build({}),{}}))}),{160000}).has_value(),"new generation clear-only stages");
+        close(hidden,4,0,1);check(!hidden.publish(128*1024*1024) && hidden.latest()==hidden_pin,"new-generation clear requires Transform and preserves prior publication");
+        auto generation=client::Assembler::create();
+        check(generation.receive(slice(1,{bytes(player(2,9))}),{40000}).has_value(),"new generation ordinary entry stages");
+        close(generation,1,0,1);check(generation.publish(128*1024*1024)->has_value(),"new generation ordinary entry publishes");
+        check(generation.receive(slice(2,{bytes(*client::complete_entity(full)),bytes(*wire::Gone::build({id}))}),{80000}).has_value(),"old generation full Entity and Gone stage");
+        close(generation,2,0,2);check(generation.publish(128*1024*1024)->has_value() && generation.latest()->world().contains(world::Player{7,2}) &&
+            generation.latest()->world().table<wire::Transform>().find(world::Player{7,2})->x()==9,"old-generation Entity and Gone cannot alter newer literal pose");
+        auto inner=client::Assembler::create();
+        check(inner.receive(slice(1,{bytes(*client::complete_entity(full))}),{40000}).has_value(),"inner clear full row stages");
+        close(inner,1,0,1);check(inner.publish(128*1024*1024)->has_value(),"inner clear full row publishes");
+        check(inner.receive(slice(2,{bytes(*wire::Entity::build({id,{},{},*wire::GearUpdate::build({*wire::Gear::build({})}),*wire::CastUpdate::build({*wire::CastBar::build({})}),{}}))}),{80000}).has_value(),"empty inner values stage");
+        close(inner,2,0,1);check(inner.publish(128*1024*1024)->has_value(),"empty inner values publish");
+        check(inner.latest()->world().table<wire::Gear>().find(world::Player{7,1}) &&
+            !inner.latest()->world().table<wire::Gear>().find(world::Player{7,1})->right_hand() &&
+            inner.latest()->world().table<wire::CastBar>().find(world::Player{7,1}) &&
+            !inner.latest()->world().table<wire::CastBar>().find(world::Player{7,1})->casting(),"empty inner Gear and CastBar retain outer columns");
+    }
     auto action=client::encode_action(wire::PickupFields{0,{11,3}},27);
     check(action.has_value(),"typed action encoding");
     auto decoded=wire::decode_intents(*action);

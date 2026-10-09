@@ -64,11 +64,12 @@ public:
               return wire::NodeId{id.index, id.generation};
           },
           row.entity);
-      auto entity = std::apply(
-          [&](const auto &...values) {
-            return wire::Entity::build({id, values...});
-          },
-          row.values);
+      auto entity = wire::Entity::build({id,
+          std::get<std::optional<wire::Transform>>(row.values),
+          *wire::VitalsUpdate::build({std::get<std::optional<wire::Vitals>>(row.values)}),
+          *wire::GearUpdate::build({std::get<std::optional<wire::Gear>>(row.values)}),
+          *wire::CastUpdate::build({std::get<std::optional<wire::CastBar>>(row.values)}),
+          *wire::LookUpdate::build({std::get<std::optional<wire::Look>>(row.values)})});
       if (!entity)
         throw std::logic_error("canonical entity");
       message(*entity);

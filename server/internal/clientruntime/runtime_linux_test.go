@@ -46,6 +46,15 @@ func encoded[M wire.Message](t *testing.T, message M, err error) []byte {
 	return value
 }
 
+func vitalsUpdate(t *testing.T, value wire.Vitals) wire.VitalsUpdate {
+	t.Helper()
+	update, err := (wire.VitalsUpdateFields{Value: codec.Some(value)}).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return update
+}
+
 func TestGodotAutomaticRuntime(t *testing.T) {
 	for _, mode := range []string{"positive", "nested", "arena", "unknown", "recovery"} {
 		t.Run(mode, func(t *testing.T) { godotRuntime(t, mode) })
@@ -262,7 +271,7 @@ func godotRuntime(t *testing.T, mode string) {
 			ids := []wire.EntityId{wire.PlayerId{Index: 7, Gen: 1}, wire.NpcId{Index: 1000001, Gen: 1}, wire.ItemId{Index: 11, Gen: 3}, wire.NodeId{Index: 21, Gen: 1}}
 			var items [][]byte
 			for _, id := range ids {
-				m, e := wire.EntityFields{Id: id, Transform: codec.Some(transform), Vitals: codec.Some(vitals)}.Build()
+				m, e := wire.EntityFields{Id: id, Transform: codec.Some(transform), Vitals: codec.Some(vitalsUpdate(t, vitals))}.Build()
 				items = append(items, encoded(t, m, e))
 			}
 			entry, e := wire.BagEntryFields{Slot: 0, Kind: "sword"}.Build()

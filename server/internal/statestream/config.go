@@ -87,10 +87,10 @@ var maxEntityCost = func() int {
 	m := must(wire.EntityFields{
 		Id:        wire.PlayerId{Index: math.MaxUint32, Gen: math.MaxUint32},
 		Transform: codec.Some(t),
-		Vitals:    codec.Some(v),
-		Gear:      codec.Some(g),
-		Cast:      codec.Some(c),
-		Look:      codec.Some(l),
+		Vitals:    codec.Some(must(wire.VitalsUpdateFields{Value: codec.Some(v)}.Build())),
+		Gear:      codec.Some(must(wire.GearUpdateFields{Value: codec.Some(g)}.Build())),
+		Cast:      codec.Some(must(wire.CastUpdateFields{Value: codec.Some(c)}.Build())),
+		Look:      codec.Some(must(wire.LookUpdateFields{Value: codec.Some(l)}.Build())),
 	}.Build())
 	return itemCost(len(must(m.Append(nil))))
 }()

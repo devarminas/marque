@@ -29,6 +29,34 @@ func keep[T any](old, next codec.Opt[T]) codec.Opt[T] {
 	return old
 }
 
+func applyVitals(old codec.Opt[wire.Vitals], update codec.Opt[wire.VitalsUpdate]) codec.Opt[wire.Vitals] {
+	if value, ok := update.Get(); ok {
+		return value.Value()
+	}
+	return old
+}
+
+func applyGear(old codec.Opt[wire.Gear], update codec.Opt[wire.GearUpdate]) codec.Opt[wire.Gear] {
+	if value, ok := update.Get(); ok {
+		return value.Value()
+	}
+	return old
+}
+
+func applyCast(old codec.Opt[wire.CastBar], update codec.Opt[wire.CastUpdate]) codec.Opt[wire.CastBar] {
+	if value, ok := update.Get(); ok {
+		return value.Value()
+	}
+	return old
+}
+
+func applyLook(old codec.Opt[wire.Look], update codec.Opt[wire.LookUpdate]) codec.Opt[wire.Look] {
+	if value, ok := update.Get(); ok {
+		return value.Value()
+	}
+	return old
+}
+
 type testClient struct {
 	world  map[wire.EntityId]rebuilt
 	facts  map[string]bool
@@ -49,10 +77,10 @@ func (c *testClient) apply(stamp uint32, items [][]byte) {
 			e := c.world[m.Id()]
 			c.world[m.Id()] = rebuilt{
 				transform: keep(e.transform, m.Transform()),
-				vitals:    keep(e.vitals, m.Vitals()),
-				gear:      keep(e.gear, m.Gear()),
-				cast:      keep(e.cast, m.Cast()),
-				look:      keep(e.look, m.Look()),
+				vitals:    applyVitals(e.vitals, m.Vitals()),
+				gear:      applyGear(e.gear, m.Gear()),
+				cast:      applyCast(e.cast, m.Cast()),
+				look:      applyLook(e.look, m.Look()),
 			}
 		case wire.Gone:
 			delete(c.world, m.Id())
@@ -63,7 +91,7 @@ func (c *testClient) apply(stamp uint32, items [][]byte) {
 	}
 	snap := map[string]string{}
 	for id, e := range c.world {
-		m, err := wire.EntityFields{Id: id, Transform: e.transform, Vitals: e.vitals, Gear: e.gear, Cast: e.cast, Look: e.look}.Build()
+		m, err := wire.EntityFields{Id: id, Transform: e.transform, Vitals: codec.Some(must(wire.VitalsUpdateFields{Value: e.vitals}.Build())), Gear: codec.Some(must(wire.GearUpdateFields{Value: e.gear}.Build())), Cast: codec.Some(must(wire.CastUpdateFields{Value: e.cast}.Build())), Look: codec.Some(must(wire.LookUpdateFields{Value: e.look}.Build()))}.Build()
 		if err != nil {
 			c.errors = append(c.errors, fmt.Sprintf("tick %d: rebuilt %v: %v", stamp, id, err))
 			continue
@@ -76,7 +104,7 @@ func (c *testClient) apply(stamp uint32, items [][]byte) {
 func serverView(w *World) map[string]string {
 	out := map[string]string{}
 	for id, r := range w.interest(me) {
-		out[fmt.Sprint(id)] = must(r.entity.message(r.entity.components())).String()
+		out[fmt.Sprint(id)] = must(r.entity.message(allComponents)).String()
 	}
 	return out
 }

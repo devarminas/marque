@@ -64,15 +64,7 @@ func isSome[T any](o codec.Opt[T]) bool {
 	return ok
 }
 
-func (e Entity) components() mask {
-	return maskOf([numComponents]bool{
-		compTransform: true,
-		compVitals:    isSome(e.vitals),
-		compGear:      isSome(e.gear),
-		compCast:      isSome(e.cast),
-		compLook:      isSome(e.look),
-	})
-}
+const allComponents mask = (1 << numComponents) - 1
 
 func (e Entity) differs(o Entity) mask {
 	return maskOf([numComponents]bool{
@@ -90,16 +82,16 @@ func (e Entity) message(m mask) (wire.Entity, error) {
 		f.Transform = codec.Some(e.transform)
 	}
 	if m.has(compVitals) {
-		f.Vitals = e.vitals
+		f.Vitals = codec.Some(must(wire.VitalsUpdateFields{Value: e.vitals}.Build()))
 	}
 	if m.has(compGear) {
-		f.Gear = e.gear
+		f.Gear = codec.Some(must(wire.GearUpdateFields{Value: e.gear}.Build()))
 	}
 	if m.has(compCast) {
-		f.Cast = e.cast
+		f.Cast = codec.Some(must(wire.CastUpdateFields{Value: e.cast}.Build()))
 	}
 	if m.has(compLook) {
-		f.Look = e.look
+		f.Look = codec.Some(must(wire.LookUpdateFields{Value: e.look}.Build()))
 	}
 	return f.Build()
 }
@@ -221,7 +213,7 @@ func (w *World) Commit(f Frame) error {
 			return fmt.Errorf("statestream: entity %v twice in frame %d", e.id, f.Tick)
 		}
 		r := &record{entity: e, cell: w.cellOf(e.transform)}
-		touched := e.components()
+		touched := allComponents
 		if old := w.records[e.id]; old != nil {
 			r.changed, touched = old.changed, e.differs(old.entity)
 			if touched == 0 {
@@ -229,7 +221,7 @@ func (w *World) Commit(f Frame) error {
 			}
 		}
 		if touched != 0 {
-			full := e.components()
+			full := allComponents
 			m, err := e.message(full)
 			var b []byte
 			if err == nil {

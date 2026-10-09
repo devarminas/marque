@@ -29,7 +29,7 @@ message pose = 2 on state s2c {              # message <name> = <id> on <channel
 }
 ```
 
-- Message ids are unique across both directions and never reused. A retired id stays retired.
+- Message ids are unique across both directions and never reused. A retired id stays retired. IDs 4 and 22 are retired in the shipped schema.
 - Channels and their directions are fixed by ADR 0018 section 1.3. `state` and `events` are `s2c`. `input` and `intents` are `c2s`. A mismatch is a generator error.
 - Type names (handles, enums, unions, structs) are PascalCase. Messages, fields, quants, enum members, and union members are snake_case.
 - Fields, enum members, and union members may not be C++ keywords. A field may not be named `message_id`, `channel`, `append`, `string`, or `build`. Type and message names may not become a name the Go generator emits (`Message`, `SchemaHash`, `StateMsg`, `DecodeState`, `DecodeNextState`, and the same for each channel), and a struct or message named `X` also claims `XFields`.
@@ -211,3 +211,9 @@ The owner-thread session collection defaults to 5000 live sessions, 262144 encod
 A caller supplies strictly increasing stream incarnation ids to each session collection. A network resume keeps that stream and increments its epoch. Cutover must allocate incarnations across process lifetimes and supply authenticated account and session identity. An expired session cannot resume. Token admission, fresh traffic keys, reader epoch binding, certified multi-part full reset, and the production client publication assembler belong to ARM-363.
 
 Capacity failure returns the explicit retired owners after preserving complete ticks for unaffected owners. The caller releases those game owners and continues with the accepted owner journals. Repeating the same batch is safe before removing the returned owner mappings. Invalid producer data changes no journal. Session expiry returns handles for World.ReleaseOwner. Pending actions continue while suspended, matching the existing game's suspension behavior.
+
+## Entity operations
+
+The Entity message at ID 16 carries optional Transform and named VitalsUpdate, GearUpdate, CastUpdate, and LookUpdate records. An absent update leaves the cached component unchanged. A present update with no value clears the component. A present value sets it. Present empty Gear and CastBar remain components with empty inner contents.
+
+A complete ordinary Entity carries Transform and every update, including clears for absent values. EntitySnapshot has mandatory Transform and plain optional components for certified reset rows. Message 22 has no decoder or compatibility path.

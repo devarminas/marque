@@ -258,13 +258,29 @@ struct Look {
   kind string(32)
 }
 
+struct VitalsUpdate {
+  value opt(Vitals)
+}
+
+struct GearUpdate {
+  value opt(Gear)
+}
+
+struct CastUpdate {
+  value opt(CastBar)
+}
+
+struct LookUpdate {
+  value opt(Look)
+}
+
 message entity = 16 on state s2c {
   id EntityId
   transform opt(Transform)
-  vitals opt(Vitals)
-  gear opt(Gear)
-  cast opt(CastBar)
-  look opt(Look)
+  vitals opt(VitalsUpdate)
+  gear opt(GearUpdate)
+  cast opt(CastUpdate)
+  look opt(LookUpdate)
 }
 
 message gone = 17 on state s2c {
@@ -485,10 +501,6 @@ struct EntitySnapshot {
   gear opt(Gear)
   cast opt(CastBar)
   look opt(Look)
-}
-
-message entity_replace = 22 on state s2c {
-  entity EntitySnapshot
 }
 
 struct MotionBaseline {

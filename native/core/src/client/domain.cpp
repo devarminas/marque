@@ -6,6 +6,17 @@
 #include <type_traits>
 
 namespace marque::client {
+std::expected<wire::Entity,wire::codec::Error> complete_entity(const wire::EntitySnapshot& row) {
+    auto vitals=wire::VitalsUpdate::build({row.vitals()});
+    auto gear=wire::GearUpdate::build({row.gear()});
+    auto cast=wire::CastUpdate::build({row.cast()});
+    auto look=wire::LookUpdate::build({row.look()});
+    if(!vitals) return std::unexpected(vitals.error());
+    if(!gear) return std::unexpected(gear.error());
+    if(!cast) return std::unexpected(cast.error());
+    if(!look) return std::unexpected(look.error());
+    return wire::Entity::build({row.id(),row.transform(),*vitals,*gear,*cast,*look});
+}
 
 world::Entity entity(const wire::EntityId& id) {
     return std::visit([](const auto& value) -> world::Entity {
@@ -189,13 +200,7 @@ std::expected<std::optional<Publication>, DomainError> Assembler::publish(std::s
         for (const auto& record:slice.records) {
             auto valid=std::visit([&](const auto& value) -> bool {
                 using T=std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T,wire::EntityReplace>) {
-                    const auto& full = value.entity();
-                    const auto id = entity(full.id());
-                    auto& row = load(id);
-                    if (world::generation(id) < world::generation(row.id)) return true;
-                    row = Row{id,true,true,{full.transform(),full.vitals(),full.gear(),full.cast(),full.look()}};
-                } else if constexpr (std::is_same_v<T,wire::Entity> || std::is_same_v<T,wire::Gone>) {
+                if constexpr (std::is_same_v<T,wire::Entity> || std::is_same_v<T,wire::Gone>) {
                     const auto id=entity(value.id());
                     auto& row=load(id);
                     if (world::generation(id)<world::generation(row.id)) return true;
@@ -204,7 +209,11 @@ std::expected<std::optional<Publication>, DomainError> Assembler::publish(std::s
                     else {
                         if (!row.visible && row.remembered && !value.transform()) return true;
                         auto replace=[&]<class C>(const std::optional<C>& component){if(component) std::get<std::optional<C>>(row.values)=*component;};
-                        replace(value.transform()); replace(value.vitals()); replace(value.gear()); replace(value.cast()); replace(value.look());
+                        replace(value.transform());
+                        if(value.vitals()) std::get<std::optional<wire::Vitals>>(row.values)=value.vitals()->value();
+                        if(value.gear()) std::get<std::optional<wire::Gear>>(row.values)=value.gear()->value();
+                        if(value.cast()) std::get<std::optional<wire::CastBar>>(row.values)=value.cast()->value();
+                        if(value.look()) std::get<std::optional<wire::Look>>(row.values)=value.look()->value();
                         if (!row.visible && !std::get<std::optional<wire::Transform>>(row.values)) return false;
                         row.visible=true;
                     }

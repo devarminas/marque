@@ -10,7 +10,7 @@ import (
 	"github.com/devarminas/marque/server/internal/wire/codec"
 )
 
-const SchemaHash uint64 = 0xcaf535412c3bd1cb
+const SchemaHash uint64 = 0xb5fe67cd420f6910
 
 type Message interface {
 	MessageID() uint32
@@ -1338,6 +1338,190 @@ func (f LookFields) appendText(b []byte) []byte {
 }
 
 func (v Look) String() string { return string(v.f.appendText(nil)) }
+
+type VitalsUpdateFields struct {
+	Value codec.Opt[Vitals]
+}
+
+type VitalsUpdate struct {
+	f VitalsUpdateFields
+}
+
+func (f VitalsUpdateFields) Build() (VitalsUpdate, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return VitalsUpdate{}, err
+	}
+	return VitalsUpdate{f}, nil
+}
+
+func (v VitalsUpdate) Value() codec.Opt[Vitals] { return v.f.Value }
+
+func (f VitalsUpdateFields) encode(w *codec.Writer) {
+	if v, ok := f.Value.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+}
+
+func decodeVitalsUpdate(r *codec.Reader) VitalsUpdate {
+	var f VitalsUpdateFields
+	f.Value = codec.ReadOpt(r, func(r *codec.Reader) Vitals { return decodeVitals(r) })
+	return VitalsUpdate{f}
+}
+
+func (f VitalsUpdateFields) appendText(b []byte) []byte {
+	b = append(b, "VitalsUpdate{value:"...)
+	if v, ok := f.Value.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	return append(b, '}')
+}
+
+func (v VitalsUpdate) String() string { return string(v.f.appendText(nil)) }
+
+type GearUpdateFields struct {
+	Value codec.Opt[Gear]
+}
+
+type GearUpdate struct {
+	f GearUpdateFields
+}
+
+func (f GearUpdateFields) Build() (GearUpdate, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return GearUpdate{}, err
+	}
+	return GearUpdate{f}, nil
+}
+
+func (v GearUpdate) Value() codec.Opt[Gear] { return v.f.Value }
+
+func (f GearUpdateFields) encode(w *codec.Writer) {
+	if v, ok := f.Value.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+}
+
+func decodeGearUpdate(r *codec.Reader) GearUpdate {
+	var f GearUpdateFields
+	f.Value = codec.ReadOpt(r, func(r *codec.Reader) Gear { return decodeGear(r) })
+	return GearUpdate{f}
+}
+
+func (f GearUpdateFields) appendText(b []byte) []byte {
+	b = append(b, "GearUpdate{value:"...)
+	if v, ok := f.Value.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	return append(b, '}')
+}
+
+func (v GearUpdate) String() string { return string(v.f.appendText(nil)) }
+
+type CastUpdateFields struct {
+	Value codec.Opt[CastBar]
+}
+
+type CastUpdate struct {
+	f CastUpdateFields
+}
+
+func (f CastUpdateFields) Build() (CastUpdate, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return CastUpdate{}, err
+	}
+	return CastUpdate{f}, nil
+}
+
+func (v CastUpdate) Value() codec.Opt[CastBar] { return v.f.Value }
+
+func (f CastUpdateFields) encode(w *codec.Writer) {
+	if v, ok := f.Value.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+}
+
+func decodeCastUpdate(r *codec.Reader) CastUpdate {
+	var f CastUpdateFields
+	f.Value = codec.ReadOpt(r, func(r *codec.Reader) CastBar { return decodeCastBar(r) })
+	return CastUpdate{f}
+}
+
+func (f CastUpdateFields) appendText(b []byte) []byte {
+	b = append(b, "CastUpdate{value:"...)
+	if v, ok := f.Value.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	return append(b, '}')
+}
+
+func (v CastUpdate) String() string { return string(v.f.appendText(nil)) }
+
+type LookUpdateFields struct {
+	Value codec.Opt[Look]
+}
+
+type LookUpdate struct {
+	f LookUpdateFields
+}
+
+func (f LookUpdateFields) Build() (LookUpdate, error) {
+	w := codec.NewChecker()
+	f.encode(&w)
+	if err := w.Err(); err != nil {
+		return LookUpdate{}, err
+	}
+	return LookUpdate{f}, nil
+}
+
+func (v LookUpdate) Value() codec.Opt[Look] { return v.f.Value }
+
+func (f LookUpdateFields) encode(w *codec.Writer) {
+	if v, ok := f.Value.Get(); ok {
+		w.Bool(true)
+		v.f.encode(w)
+	} else {
+		w.Bool(false)
+	}
+}
+
+func decodeLookUpdate(r *codec.Reader) LookUpdate {
+	var f LookUpdateFields
+	f.Value = codec.ReadOpt(r, func(r *codec.Reader) Look { return decodeLook(r) })
+	return LookUpdate{f}
+}
+
+func (f LookUpdateFields) appendText(b []byte) []byte {
+	b = append(b, "LookUpdate{value:"...)
+	if v, ok := f.Value.Get(); ok {
+		b = v.f.appendText(b)
+	} else {
+		b = append(b, '_')
+	}
+	return append(b, '}')
+}
+
+func (v LookUpdate) String() string { return string(v.f.appendText(nil)) }
 
 type EntitySnapshotFields struct {
 	Id        EntityId
@@ -3109,10 +3293,10 @@ func (v Refused) Append(dst []byte) ([]byte, error) {
 type EntityFields struct {
 	Id        EntityId
 	Transform codec.Opt[Transform]
-	Vitals    codec.Opt[Vitals]
-	Gear      codec.Opt[Gear]
-	Cast      codec.Opt[CastBar]
-	Look      codec.Opt[Look]
+	Vitals    codec.Opt[VitalsUpdate]
+	Gear      codec.Opt[GearUpdate]
+	Cast      codec.Opt[CastUpdate]
+	Look      codec.Opt[LookUpdate]
 }
 
 type Entity struct {
@@ -3132,13 +3316,13 @@ func (v Entity) Id() EntityId { return v.f.Id }
 
 func (v Entity) Transform() codec.Opt[Transform] { return v.f.Transform }
 
-func (v Entity) Vitals() codec.Opt[Vitals] { return v.f.Vitals }
+func (v Entity) Vitals() codec.Opt[VitalsUpdate] { return v.f.Vitals }
 
-func (v Entity) Gear() codec.Opt[Gear] { return v.f.Gear }
+func (v Entity) Gear() codec.Opt[GearUpdate] { return v.f.Gear }
 
-func (v Entity) Cast() codec.Opt[CastBar] { return v.f.Cast }
+func (v Entity) Cast() codec.Opt[CastUpdate] { return v.f.Cast }
 
-func (v Entity) Look() codec.Opt[Look] { return v.f.Look }
+func (v Entity) Look() codec.Opt[LookUpdate] { return v.f.Look }
 
 func (f EntityFields) encode(w *codec.Writer) {
 	encodeEntityId(w, f.Id)
@@ -3178,10 +3362,10 @@ func decodeEntity(r *codec.Reader) Entity {
 	var f EntityFields
 	f.Id = decodeEntityId(r)
 	f.Transform = codec.ReadOpt(r, func(r *codec.Reader) Transform { return decodeTransform(r) })
-	f.Vitals = codec.ReadOpt(r, func(r *codec.Reader) Vitals { return decodeVitals(r) })
-	f.Gear = codec.ReadOpt(r, func(r *codec.Reader) Gear { return decodeGear(r) })
-	f.Cast = codec.ReadOpt(r, func(r *codec.Reader) CastBar { return decodeCastBar(r) })
-	f.Look = codec.ReadOpt(r, func(r *codec.Reader) Look { return decodeLook(r) })
+	f.Vitals = codec.ReadOpt(r, func(r *codec.Reader) VitalsUpdate { return decodeVitalsUpdate(r) })
+	f.Gear = codec.ReadOpt(r, func(r *codec.Reader) GearUpdate { return decodeGearUpdate(r) })
+	f.Cast = codec.ReadOpt(r, func(r *codec.Reader) CastUpdate { return decodeCastUpdate(r) })
+	f.Look = codec.ReadOpt(r, func(r *codec.Reader) LookUpdate { return decodeLookUpdate(r) })
 	return Entity{f}
 }
 
@@ -5448,56 +5632,6 @@ func (v OwnerMotion) Append(dst []byte) ([]byte, error) {
 	return w.Result()
 }
 
-type EntityReplaceFields struct {
-	Entity EntitySnapshot
-}
-
-type EntityReplace struct {
-	f EntityReplaceFields
-}
-
-func (f EntityReplaceFields) Build() (EntityReplace, error) {
-	w := codec.NewChecker()
-	f.encode(&w)
-	if err := w.Err(); err != nil {
-		return EntityReplace{}, err
-	}
-	return EntityReplace{f}, nil
-}
-
-func (v EntityReplace) Entity() EntitySnapshot { return v.f.Entity }
-
-func (f EntityReplaceFields) encode(w *codec.Writer) {
-	f.Entity.f.encode(w)
-}
-
-func decodeEntityReplace(r *codec.Reader) EntityReplace {
-	var f EntityReplaceFields
-	f.Entity = decodeEntitySnapshot(r)
-	return EntityReplace{f}
-}
-
-func (f EntityReplaceFields) appendText(b []byte) []byte {
-	b = append(b, "entity_replace{entity:"...)
-	b = f.Entity.f.appendText(b)
-	return append(b, '}')
-}
-
-func (v EntityReplace) String() string { return string(v.f.appendText(nil)) }
-
-func (EntityReplace) MessageID() uint32 { return 22 }
-
-func (EntityReplace) Channel() codec.Channel { return codec.ChannelState }
-
-func (EntityReplace) stateMsg() {}
-
-func (v EntityReplace) Append(dst []byte) ([]byte, error) {
-	w := codec.NewWriter(dst)
-	w.Varint(22)
-	v.f.encode(&w)
-	return w.Result()
-}
-
 type ResetBeginFields struct {
 	Certificate ResetCertificate
 	Motion      MotionBaseline
@@ -5879,8 +6013,6 @@ func DecodeNextState(r *codec.Reader) (StateMsg, error) {
 		m = decodeGatherStart(r)
 	case 21:
 		m = decodeOwnerMotion(r)
-	case 22:
-		m = decodeEntityReplace(r)
 	default:
 		r.Fail(codec.ErrUnknownMessage)
 	}

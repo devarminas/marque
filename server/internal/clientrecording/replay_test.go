@@ -44,7 +44,7 @@ func item(t *testing.T, gen uint32, x float64, hp bool) []byte {
 	position := built(t, (wire.TransformFields{X: x, Y: 0, Z: 0}))
 	fields := wire.EntityFields{Id: wire.ItemId{Index: 7, Gen: gen}, Transform: codec.Some(position)}
 	if hp {
-		fields.Vitals = codec.Some(built(t, (wire.VitalsFields{Hp: 10, MaxHp: 10})))
+		fields.Vitals = codec.Some(built(t, wire.VitalsUpdateFields{Value: codec.Some(built(t, wire.VitalsFields{Hp: 10, MaxHp: 10}))}))
 	}
 	return encoded(t, fields)
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -324,6 +325,19 @@ func TestParseRejectsUnionsAndOpts(t *testing.T) {
 		_, err := Parse(c.src)
 		if err == nil || !strings.Contains(err.Error(), c.want) || !strings.HasPrefix(err.Error(), "schema line ") {
 			t.Errorf("Parse(%q) = %v, want error with a line number containing %q", c.src, err, c.want)
+		}
+	}
+}
+
+func TestShippedSchemaRetiredIDs(t *testing.T) {
+	data, err := os.ReadFile("../../../shared/wire/schema.wire")
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema := mustParse(t, string(data))
+	for _, message := range schema.Messages {
+		if message.ID == 4 || message.ID == 22 {
+			t.Fatalf("retired id %d used by %s", message.ID, message.Name)
 		}
 	}
 }

@@ -952,6 +952,114 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
 
 [[maybe_unused]] void text(std::string& out, const Look& v) { text(out, detail::Access::fields(v)); }
 
+[[maybe_unused]] void write(codec::Writer& w, const VitalsUpdateFields& f) {
+    w.boolean(f.value.has_value());
+    if (f.value) {
+        write(w, (*f.value));
+    }
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const VitalsUpdate& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] VitalsUpdate read_VitalsUpdate(codec::Reader& r) {
+    auto v_value = read_opt(r, [](codec::Reader& r) { return read_Vitals(r); });
+    VitalsUpdateFields f{std::move(v_value)};
+    return detail::Access::make<VitalsUpdate>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const VitalsUpdateFields& f) {
+    out += "VitalsUpdate{value:";
+    if (f.value) {
+        text(out, (*f.value));
+    } else {
+        out += '_';
+    }
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const VitalsUpdate& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const GearUpdateFields& f) {
+    w.boolean(f.value.has_value());
+    if (f.value) {
+        write(w, (*f.value));
+    }
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const GearUpdate& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] GearUpdate read_GearUpdate(codec::Reader& r) {
+    auto v_value = read_opt(r, [](codec::Reader& r) { return read_Gear(r); });
+    GearUpdateFields f{std::move(v_value)};
+    return detail::Access::make<GearUpdate>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const GearUpdateFields& f) {
+    out += "GearUpdate{value:";
+    if (f.value) {
+        text(out, (*f.value));
+    } else {
+        out += '_';
+    }
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const GearUpdate& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const CastUpdateFields& f) {
+    w.boolean(f.value.has_value());
+    if (f.value) {
+        write(w, (*f.value));
+    }
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const CastUpdate& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] CastUpdate read_CastUpdate(codec::Reader& r) {
+    auto v_value = read_opt(r, [](codec::Reader& r) { return read_CastBar(r); });
+    CastUpdateFields f{std::move(v_value)};
+    return detail::Access::make<CastUpdate>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const CastUpdateFields& f) {
+    out += "CastUpdate{value:";
+    if (f.value) {
+        text(out, (*f.value));
+    } else {
+        out += '_';
+    }
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const CastUpdate& v) { text(out, detail::Access::fields(v)); }
+
+[[maybe_unused]] void write(codec::Writer& w, const LookUpdateFields& f) {
+    w.boolean(f.value.has_value());
+    if (f.value) {
+        write(w, (*f.value));
+    }
+}
+
+[[maybe_unused]] void write(codec::Writer& w, const LookUpdate& v) { write(w, detail::Access::fields(v)); }
+
+[[maybe_unused]] LookUpdate read_LookUpdate(codec::Reader& r) {
+    auto v_value = read_opt(r, [](codec::Reader& r) { return read_Look(r); });
+    LookUpdateFields f{std::move(v_value)};
+    return detail::Access::make<LookUpdate>(std::move(f));
+}
+
+[[maybe_unused]] void text(std::string& out, const LookUpdateFields& f) {
+    out += "LookUpdate{value:";
+    if (f.value) {
+        text(out, (*f.value));
+    } else {
+        out += '_';
+    }
+    out += '}';
+}
+
+[[maybe_unused]] void text(std::string& out, const LookUpdate& v) { text(out, detail::Access::fields(v)); }
+
 [[maybe_unused]] void write(codec::Writer& w, const EntitySnapshotFields& f) {
     write(w, f.id);
     write(w, f.transform);
@@ -1869,10 +1977,10 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
 [[maybe_unused]] Entity read_Entity(codec::Reader& r) {
     auto v_id = read_EntityId(r);
     auto v_transform = read_opt(r, [](codec::Reader& r) { return read_Transform(r); });
-    auto v_vitals = read_opt(r, [](codec::Reader& r) { return read_Vitals(r); });
-    auto v_gear = read_opt(r, [](codec::Reader& r) { return read_Gear(r); });
-    auto v_cast = read_opt(r, [](codec::Reader& r) { return read_CastBar(r); });
-    auto v_look = read_opt(r, [](codec::Reader& r) { return read_Look(r); });
+    auto v_vitals = read_opt(r, [](codec::Reader& r) { return read_VitalsUpdate(r); });
+    auto v_gear = read_opt(r, [](codec::Reader& r) { return read_GearUpdate(r); });
+    auto v_cast = read_opt(r, [](codec::Reader& r) { return read_CastUpdate(r); });
+    auto v_look = read_opt(r, [](codec::Reader& r) { return read_LookUpdate(r); });
     EntityFields f{std::move(v_id), std::move(v_transform), std::move(v_vitals), std::move(v_gear), std::move(v_cast), std::move(v_look)};
     return detail::Access::make<Entity>(std::move(f));
 }
@@ -2888,26 +2996,6 @@ auto read_opt(codec::Reader& r, Read read) -> std::optional<decltype(read(r))> {
 
 [[maybe_unused]] void text(std::string& out, const OwnerMotion& v) { text(out, detail::Access::fields(v)); }
 
-[[maybe_unused]] void write(codec::Writer& w, const EntityReplaceFields& f) {
-    write(w, f.entity);
-}
-
-[[maybe_unused]] void write(codec::Writer& w, const EntityReplace& v) { write(w, detail::Access::fields(v)); }
-
-[[maybe_unused]] EntityReplace read_EntityReplace(codec::Reader& r) {
-    auto v_entity = read_EntitySnapshot(r);
-    EntityReplaceFields f{std::move(v_entity)};
-    return detail::Access::make<EntityReplace>(std::move(f));
-}
-
-[[maybe_unused]] void text(std::string& out, const EntityReplaceFields& f) {
-    out += "entity_replace{entity:";
-    text(out, f.entity);
-    out += '}';
-}
-
-[[maybe_unused]] void text(std::string& out, const EntityReplace& v) { text(out, detail::Access::fields(v)); }
-
 [[maybe_unused]] void write(codec::Writer& w, const ResetBeginFields& f) {
     write(w, f.certificate);
     write(w, f.motion);
@@ -3245,6 +3333,58 @@ std::expected<Look, codec::Error> Look::build(LookFields f) {
 }
 
 std::string to_text(const Look& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<VitalsUpdate, codec::Error> VitalsUpdate::build(VitalsUpdateFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<VitalsUpdate>(std::move(f));
+}
+
+std::string to_text(const VitalsUpdate& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<GearUpdate, codec::Error> GearUpdate::build(GearUpdateFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<GearUpdate>(std::move(f));
+}
+
+std::string to_text(const GearUpdate& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<CastUpdate, codec::Error> CastUpdate::build(CastUpdateFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<CastUpdate>(std::move(f));
+}
+
+std::string to_text(const CastUpdate& v) {
+    std::string out;
+    text(out, v);
+    return out;
+}
+
+std::expected<LookUpdate, codec::Error> LookUpdate::build(LookUpdateFields f) {
+    codec::Writer w;
+    write(w, f);
+    if (auto err = w.error()) return std::unexpected(*err);
+    return detail::Access::make<LookUpdate>(std::move(f));
+}
+
+std::string to_text(const LookUpdate& v) {
     std::string out;
     text(out, v);
     return out;
@@ -3918,19 +4058,6 @@ std::string to_text(const OwnerMotion& v) {
     return out;
 }
 
-std::expected<EntityReplace, codec::Error> EntityReplace::build(EntityReplaceFields f) {
-    codec::Writer w;
-    write(w, f);
-    if (auto err = w.error()) return std::unexpected(*err);
-    return detail::Access::make<EntityReplace>(std::move(f));
-}
-
-std::string to_text(const EntityReplace& v) {
-    std::string out;
-    text(out, v);
-    return out;
-}
-
 std::expected<ResetBegin, codec::Error> ResetBegin::build(ResetBeginFields f) {
     codec::Writer w;
     write(w, f);
@@ -4332,13 +4459,6 @@ std::expected<void, codec::Error> encode(const OwnerMotion& m, std::vector<std::
     return w.finish();
 }
 
-std::expected<void, codec::Error> encode(const EntityReplace& m, std::vector<std::uint8_t>& out) {
-    codec::Writer w{out};
-    w.varint(EntityReplace::message_id);
-    write(w, m);
-    return w.finish();
-}
-
 std::expected<void, codec::Error> encode(const ResetBegin& m, std::vector<std::uint8_t>& out) {
     codec::Writer w{out};
     w.varint(ResetBegin::message_id);
@@ -4400,9 +4520,6 @@ std::expected<StateMsg, codec::Error> decode_next_state(codec::Reader& r) {
         break;
     case OwnerMotion::message_id:
         m.emplace(read_OwnerMotion(r));
-        break;
-    case EntityReplace::message_id:
-        m.emplace(read_EntityReplace(r));
         break;
     default:
         r.fail(codec::Error::unknown_message);

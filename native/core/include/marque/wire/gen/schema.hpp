@@ -15,7 +15,7 @@
 
 namespace marque::wire {
 
-inline constexpr std::uint64_t schema_hash = 0xcaf535412c3bd1cbULL;
+inline constexpr std::uint64_t schema_hash = 0xb5fe67cd420f6910ULL;
 
 namespace detail {
 struct Access;
@@ -482,6 +482,98 @@ private:
     explicit Look(LookFields f) : f_(std::move(f)) {}
 
     LookFields f_;
+};
+
+struct VitalsUpdateFields {
+    std::optional<Vitals> value{};
+
+    bool operator==(const VitalsUpdateFields&) const = default;
+};
+
+class VitalsUpdate {
+public:
+    static std::expected<VitalsUpdate, codec::Error> build(VitalsUpdateFields f);
+
+    VitalsUpdate() = delete;
+
+    const std::optional<Vitals>& value() const { return f_.value; }
+
+    bool operator==(const VitalsUpdate&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit VitalsUpdate(VitalsUpdateFields f) : f_(std::move(f)) {}
+
+    VitalsUpdateFields f_;
+};
+
+struct GearUpdateFields {
+    std::optional<Gear> value{};
+
+    bool operator==(const GearUpdateFields&) const = default;
+};
+
+class GearUpdate {
+public:
+    static std::expected<GearUpdate, codec::Error> build(GearUpdateFields f);
+
+    GearUpdate() = delete;
+
+    const std::optional<Gear>& value() const { return f_.value; }
+
+    bool operator==(const GearUpdate&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit GearUpdate(GearUpdateFields f) : f_(std::move(f)) {}
+
+    GearUpdateFields f_;
+};
+
+struct CastUpdateFields {
+    std::optional<CastBar> value{};
+
+    bool operator==(const CastUpdateFields&) const = default;
+};
+
+class CastUpdate {
+public:
+    static std::expected<CastUpdate, codec::Error> build(CastUpdateFields f);
+
+    CastUpdate() = delete;
+
+    const std::optional<CastBar>& value() const { return f_.value; }
+
+    bool operator==(const CastUpdate&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit CastUpdate(CastUpdateFields f) : f_(std::move(f)) {}
+
+    CastUpdateFields f_;
+};
+
+struct LookUpdateFields {
+    std::optional<Look> value{};
+
+    bool operator==(const LookUpdateFields&) const = default;
+};
+
+class LookUpdate {
+public:
+    static std::expected<LookUpdate, codec::Error> build(LookUpdateFields f);
+
+    LookUpdate() = delete;
+
+    const std::optional<Look>& value() const { return f_.value; }
+
+    bool operator==(const LookUpdate&) const = default;
+
+private:
+    friend struct detail::Access;
+    explicit LookUpdate(LookUpdateFields f) : f_(std::move(f)) {}
+
+    LookUpdateFields f_;
 };
 
 struct EntitySnapshotFields {
@@ -1086,10 +1178,10 @@ private:
 struct EntityFields {
     EntityId id{};
     std::optional<Transform> transform{};
-    std::optional<Vitals> vitals{};
-    std::optional<Gear> gear{};
-    std::optional<CastBar> cast{};
-    std::optional<Look> look{};
+    std::optional<VitalsUpdate> vitals{};
+    std::optional<GearUpdate> gear{};
+    std::optional<CastUpdate> cast{};
+    std::optional<LookUpdate> look{};
 
     bool operator==(const EntityFields&) const = default;
 };
@@ -1105,10 +1197,10 @@ public:
 
     const EntityId& id() const { return f_.id; }
     const std::optional<Transform>& transform() const { return f_.transform; }
-    const std::optional<Vitals>& vitals() const { return f_.vitals; }
-    const std::optional<Gear>& gear() const { return f_.gear; }
-    const std::optional<CastBar>& cast() const { return f_.cast; }
-    const std::optional<Look>& look() const { return f_.look; }
+    const std::optional<VitalsUpdate>& vitals() const { return f_.vitals; }
+    const std::optional<GearUpdate>& gear() const { return f_.gear; }
+    const std::optional<CastUpdate>& cast() const { return f_.cast; }
+    const std::optional<LookUpdate>& look() const { return f_.look; }
 
     bool operator==(const Entity&) const = default;
 
@@ -2123,32 +2215,6 @@ private:
     OwnerMotionFields f_;
 };
 
-struct EntityReplaceFields {
-    EntitySnapshot entity;
-
-    bool operator==(const EntityReplaceFields&) const = default;
-};
-
-class EntityReplace {
-public:
-    static constexpr std::uint32_t message_id = 22;
-    static constexpr codec::Channel channel = codec::Channel::state;
-
-    static std::expected<EntityReplace, codec::Error> build(EntityReplaceFields f);
-
-    EntityReplace() = delete;
-
-    const EntitySnapshot& entity() const { return f_.entity; }
-
-    bool operator==(const EntityReplace&) const = default;
-
-private:
-    friend struct detail::Access;
-    explicit EntityReplace(EntityReplaceFields f) : f_(std::move(f)) {}
-
-    EntityReplaceFields f_;
-};
-
 struct ResetBeginFields {
     ResetCertificate certificate;
     MotionBaseline motion;
@@ -2291,7 +2357,7 @@ private:
     ResetCommitFields f_;
 };
 
-using StateMsg = std::variant<Pose, Hp, Entity, Gone, Swing, CastPhase, GatherStart, OwnerMotion, EntityReplace>;
+using StateMsg = std::variant<Pose, Hp, Entity, Gone, Swing, CastPhase, GatherStart, OwnerMotion>;
 using EventsMsg = std::variant<Inventory, Equipment, Class, Skills, QuestLog, Dialog, Party, Invite, AdminReply, Cooldown, Refused, TickClose, ResumeBoundary, DialogClear, PartyClear, InviteClear, ResetBegin, ResetPart, ResetClose, ResetUnavailable>;
 using InputMsg = std::variant<Input>;
 using IntentsMsg = std::variant<Pickup, Drop, Equip, Unequip, Gather, UseSelf, AttackPlayer, Respawn, CastSelf, Talk, DialogOption, Give, PartyInvite, PartyAccept, PartyDecline, PartyLeave, PartyKick, Admin, ApplicationCommit, UseStation, AttackNpc, CastPlayer, CastNpc, ResetCommit>;
@@ -2344,7 +2410,6 @@ std::expected<void, codec::Error> encode(const AttackNpc& m, std::vector<std::ui
 std::expected<void, codec::Error> encode(const CastPlayer& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const CastNpc& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const OwnerMotion& m, std::vector<std::uint8_t>& out);
-std::expected<void, codec::Error> encode(const EntityReplace& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const ResetBegin& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const ResetPart& m, std::vector<std::uint8_t>& out);
 std::expected<void, codec::Error> encode(const ResetClose& m, std::vector<std::uint8_t>& out);
@@ -2365,6 +2430,10 @@ std::string to_text(const Gear& v);
 std::string to_text(const Casting& v);
 std::string to_text(const CastBar& v);
 std::string to_text(const Look& v);
+std::string to_text(const VitalsUpdate& v);
+std::string to_text(const GearUpdate& v);
+std::string to_text(const CastUpdate& v);
+std::string to_text(const LookUpdate& v);
 std::string to_text(const EntitySnapshot& v);
 std::string to_text(const MotionBaseline& v);
 std::string to_text(const ResetCertificate& v);
@@ -2416,7 +2485,6 @@ std::string to_text(const AttackNpc& v);
 std::string to_text(const CastPlayer& v);
 std::string to_text(const CastNpc& v);
 std::string to_text(const OwnerMotion& v);
-std::string to_text(const EntityReplace& v);
 std::string to_text(const ResetBegin& v);
 std::string to_text(const ResetPart& v);
 std::string to_text(const ResetClose& v);

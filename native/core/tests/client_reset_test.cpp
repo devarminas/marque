@@ -39,8 +39,8 @@ wire::ResetBegin begin(const wire::ResetCertificate& c,float x=5,float y=0,float
 client::Assembler prior() {
     auto core=client::Assembler::create();
     transport::Received p{};
-    p.unreliable=transport::Unreliable{10,{bytes(*wire::EntityReplace::build({row(wire::PlayerId{7,1},1,true)})),
-        bytes(*wire::EntityReplace::build({row(wire::ItemId{3,1},2)})),bytes(*wire::Gone::build({wire::NodeId{77,3}}))}};
+    p.unreliable=transport::Unreliable{10,{bytes(*client::complete_entity(row(wire::PlayerId{7,1},1,true))),
+        bytes(*client::complete_entity(row(wire::ItemId{3,1},2))),bytes(*wire::Gone::build({wire::NodeId{77,3}}))}};
     p.reliable={bytes(*wire::Inventory::build({88,1,9,28,{*wire::BagEntry::build({0,"sword"})}})),bytes(*wire::TickClose::build({88,1,10,1,3,1}))};
     check(core.receive(p,{400000}).has_value(),"initial checkpoint received");
     auto published=core.publish(128*1024*1024);
@@ -102,8 +102,8 @@ int main() {
         const auto decoded_motion=wire::decode_state(bytes(encoded_motion));
         check(decoded_motion && std::holds_alternative<wire::OwnerMotion>(*decoded_motion),"source double motion roundtrips actual generated OwnerMotion codec");
         const auto& source_motion=std::get<wire::OwnerMotion>(*decoded_motion);
-        const auto decoded_entity=wire::decode_state(bytes(*wire::EntityReplace::build({owner_row})));
-        check(decoded_entity && std::get<wire::EntityReplace>(*decoded_entity).entity().transform()==owner_row.transform(),"source double Transform roundtrips actual generated entity codec");
+        const auto decoded_entity=wire::decode_state(bytes(*client::complete_entity(owner_row)));
+        check(decoded_entity && *std::get<wire::Entity>(*decoded_entity).transform()==owner_row.transform(),"source double Transform roundtrips actual generated entity codec");
         check(rounded.replace_lease(88,2,42,{7,1},{400000}).has_value() &&
             receive(rounded,begin(c,source_motion.x(),source_motion.y(),source_motion.z())) &&
             receive(rounded,*wire::ResetPart::build({c,0,{owner_row}})) && receive(rounded,*wire::ResetClose::build({c})),"one source double independently encoded into f32 motion and grid snapshot");
@@ -168,17 +168,20 @@ int main() {
     check(receive(core,*wire::ResetClose::build({certificate})),"lost commit duplicate close accepted");
     check(!core.publish(128*1024*1024)->has_value() && core.latest()==current,"duplicate close creates no second publication");
     check(core.take_reset_commit()==std::optional{(**value).application_commit} && !core.take_reset_commit(),"one bounded idempotent commit retry");
-    transport::Received delta{};delta.unreliable=transport::Unreliable{11,{bytes(*wire::EntityReplace::build({row(wire::PlayerId{7,1},6,true)}))}};
+    transport::Received delta{};delta.unreliable=transport::Unreliable{11,{bytes(*client::complete_entity(row(wire::PlayerId{7,1},6,true)))}};
     delta.reliable={bytes(*wire::TickClose::build({88,2,11,2,1,1}))};
     check(core.receive(delta,{440000}).has_value() && core.publish(128*1024*1024)->has_value(),"ordinary explicit complete replacement admitted");
     delta.unreliable=transport::Unreliable{12,{bytes(*wire::Entity::build({wire::PlayerId{7,1},*wire::Transform::build({8,0,0}),{},{},{},{}}))}};
     delta.reliable={bytes(*wire::TickClose::build({88,2,12,2,1,1}))};
     check(core.receive(delta,{480000}).has_value() && core.publish(128*1024*1024)->has_value(),"ordinary partial delta admitted");
     check(core.latest()->world().table<wire::Vitals>().find(world::Player{7,1})->hp()==90,"ordinary omission still retains components");
-    delta.unreliable=transport::Unreliable{13,{bytes(*wire::EntityReplace::build({row(wire::PlayerId{7,1},9)}))}};
+    delta.unreliable=transport::Unreliable{13,{bytes(*client::complete_entity(row(wire::PlayerId{7,1},9)))}};
     delta.reliable={bytes(*wire::TickClose::build({88,2,13,2,1,1}))};
     check(core.receive(delta,{520000}).has_value() && core.publish(128*1024*1024)->has_value(),"ordinary replacement removal published");
-    check(!core.latest()->world().table<wire::Vitals>().find(world::Player{7,1}),"ordinary explicit replacement clears optional component");
+    check(!core.latest()->world().table<wire::Vitals>().find(world::Player{7,1}) &&
+        !core.latest()->world().table<wire::Gear>().find(world::Player{7,1}) &&
+        !core.latest()->world().table<wire::CastBar>().find(world::Player{7,1}) &&
+        !core.latest()->world().table<wire::Look>().find(world::Player{7,1}),"ordinary complete Entity and certified reset yield identical optional absence");
 
     auto stale=prior();const auto before=stale.latest();
     check(stale.replace_lease(88,2,42,{7,1},{400000}).has_value(),"stale fixture lease");

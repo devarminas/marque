@@ -13,6 +13,8 @@
 
 namespace marque::client {
 
+std::expected<wire::Entity,wire::codec::Error> complete_entity(const wire::EntitySnapshot& row);
+
 struct Catalog : world::Components<wire::Transform, wire::Vitals, wire::Gear, wire::CastBar, wire::Look> {
     template<class T> static constexpr bool required(world::Kind) { return std::is_same_v<T, wire::Transform>; }
     static wire::Transform interpolate(const wire::Transform& a, const wire::Transform& b, double alpha) {

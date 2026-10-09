@@ -165,7 +165,7 @@ func TestLiveRuntimeFailure(t *testing.T) {
 							if e != nil {
 								t.Fatal(e)
 							}
-							entity, e := wire.EntityFields{Id: wire.PlayerId{Index: 7, Gen: 1}, Transform: codec.Some(transform), Vitals: codec.Some(vitals)}.Build()
+							entity, e := wire.EntityFields{Id: wire.PlayerId{Index: 7, Gen: 1}, Transform: codec.Some(transform), Vitals: codec.Some(vitalsUpdate(t, vitals))}.Build()
 							close, ce := wire.TickCloseFields{Stream: 88, Epoch: 1, Tick: 1, StateItems: 1, NextIntent: 1}.Build()
 							if e := endpoint.Send(encoded(t, close, ce)); e != nil {
 								t.Fatal(e)
@@ -216,7 +216,7 @@ func TestLiveRuntimeFailure(t *testing.T) {
 							if e != nil {
 								t.Fatal(e)
 							}
-							entity, e := wire.EntityFields{Id: wire.PlayerId{Index: 7, Gen: 1}, Vitals: codec.Some(vitals)}.Build()
+							entity, e := wire.EntityFields{Id: wire.PlayerId{Index: 7, Gen: 1}, Vitals: codec.Some(vitalsUpdate(t, vitals))}.Build()
 							swing, se := wire.SwingFields{Tick: 2, Attacker: wire.PlayerId{Index: 7, Gen: 1}, Target: wire.NpcId{Index: 9, Gen: 1}, Amount: 17, Crit: true}.Build()
 							cast, ce := wire.CastPhaseFields{Tick: 2, Caster: wire.PlayerId{Index: 7, Gen: 1}, Ability: "fireball", Step: wire.CastStepBegin}.Build()
 							gather, ge := wire.GatherStartFields{Tick: 2, Player: wire.PlayerId{Index: 7, Gen: 1}, Node: wire.NodeId{Index: 21, Gen: 1}}.Build()
